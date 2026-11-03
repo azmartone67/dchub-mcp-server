@@ -31255,12 +31255,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         //   gemini_cli   `httpUrl`   — `url` is the SSE form; a Streamable-HTTP
         //                              server under `url` is dialled with the
         //                              wrong transport and never connects.
-        //   antigravity  `serverUrl` — `url` and `httpUrl` are both rejected;
-        //                              the block parses as JSON and registers
-        //                              nothing. Same shape as Windsurf above.
+        //   antigravity  `serverUrl` — `url` also works; `httpUrl` is not
+        //                              supported, so a Gemini CLI block parses
+        //                              as JSON and registers nothing. File:
+        //                              ~/.gemini/config/mcp_config.json (the
+        //                              ~/.gemini/antigravity/ path is gone from
+        //                              Google's docs, re-read 2026-11-02).
         // Verified against the vendors' own published docs, not from memory:
         //   https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
-        //   https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-antigravity.md
+        //   https://antigravity.google/docs/mcp.md
         // Both read a `headers` object, which is why they are header-capable
         // and get a key-bearing snippet at all rather than a connect_url.
         gemini_cli: {
@@ -31270,7 +31273,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         },
         antigravity: {
           label: 'Antigravity (Google)',
-          file: '~/.gemini/antigravity/mcp_config.json · or .agents/mcp_config.json in the workspace',
+          file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
           snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
       },
