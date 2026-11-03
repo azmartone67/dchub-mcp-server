@@ -19428,6 +19428,11 @@ export const _CITY_ISO_META = {
   'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
   'las vegas': { iso: 'WECC', slug: 'las-vegas-nv' },
   reno: { iso: 'WECC', slug: 'reno-nv' },
+  // 2026-11-03 (Grok #117536): the regional names agents use for the same two
+  // metros. "in Southern Nevada" bound no geography and execute_plan answered
+  // unscoped. Henderson / Apex are left out: bare "henderson" also names KY/TX.
+  'southern nevada': { iso: 'WECC', slug: 'las-vegas-nv' },
+  'northern nevada': { iso: 'WECC', slug: 'reno-nv' },
   'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
   sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
   'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
