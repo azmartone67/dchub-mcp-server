@@ -59,8 +59,8 @@ export const TIGHT_MAX = 160;
 export const PRICE_LINE = 'Paid plans: dchub.cloud/pricing';  // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
-export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'price_line', 'endpoints', 'capacity_blurb'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'price_line', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live'];
 
 /** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
