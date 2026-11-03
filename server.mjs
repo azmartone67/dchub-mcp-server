@@ -28020,7 +28020,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const slug = slugify(a.market_slug) || '';
       const params = { market: slug };
       if (a.horizon_quarters) params.horizon = Math.max(1, Math.min(8, parseInt(a.horizon_quarters, 10)));
-      const data = await callAPI('/api/v1/dcpi/forecast', params);
+      // serverView: this layer masks the forecast per caller (bands from the values).
+      const data = await callAPI('/api/v1/dcpi/forecast', params, { serverView: true });
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     });
 
@@ -29270,7 +29271,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         _args = { ...a, target_mw: RETIREMENT_DEFAULT_TARGET_MW };
         _ignored = true;
       }
-      let data = await callAPI('/api/v1/retirement-headroom', _args);
+      // serverView: _maskRetirementHeadroom / the pack ladder below decide this caller's view.
+      let data = await callAPI('/api/v1/retirement-headroom', _args, { serverView: true });
       if (_packPaid && data && typeof data === 'object' && Array.isArray(data.data)) {
         _burnCredits(_c, 'get_retirement_headroom', _creditCost('get_retirement_headroom'));
       }
@@ -30111,7 +30113,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // callAPI does NOT throw on 404 — it returns {error:'API 404'} — so this
         // is checked by SHAPE, not by try/catch.
         const row = slug
-          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true })
           : null;
         const res = _locationPoint(rawLocation, slug, row);
         // P1-10: the market the location named, for the teaser to print beside the site verdict.
@@ -30409,7 +30411,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // callAPI does NOT throw on 404 — it returns {error:'API 404'} — so this
         // is checked by SHAPE, not by try/catch.
         const row = slug
-          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true })
           : null;
         const res = _locationPoint(rawLocation, slug, row);
         if (!res.ok) {
@@ -30493,7 +30495,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // so this is checked by shape, not by try/catch.
         const slug = slugify(rawMarket);
         const row = slug
-          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true })
           : null;
         const iso = (row && !row.error && typeof row.iso === 'string') ? row.iso.trim() : '';
         if (!iso) {
@@ -30798,7 +30800,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         min_capacity_mw: a.min_capacity_mw || 0,
         // a caller who cannot read total_mw is not ranked by it (see READ_ORDERED_TOOLS)
         visible_order:   (() => { try { return getCtx()._visible_order ? 1 : undefined; } catch (_) { return undefined; } })(),
-      });
+      // serverView: this tool orders and masks the rows per caller (visible_order, READ_ORDERED_TOOLS).
+      }, { serverView: true });
       // Say the floor was left out (see the normalisation in trackedTool): a silent drop would
       // read as "every market qualifies".
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
@@ -33255,7 +33258,7 @@ export function _coreDeps() {
     async resolveLocation(text) {
       const slug = _coreSlugify(text);
       if (!slug) return { ok: false };
-      const row = await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true });
+      const row = await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true });
       const r = _locationPoint(text, slug, row);
       if (!r.ok) return { ok: false };
       return { ok: true, lat: r.lat, lon: r.lon, state: r.state || null, market_slug: slug,
