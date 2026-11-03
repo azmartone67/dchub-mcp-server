@@ -6692,6 +6692,29 @@ export { callAPI as _callAPIForTest, callAPIWrite as _callAPIWriteForTest };
 // Test seam for test/own-test-telemetry-tag.test.mjs (driven inside _ctxALS.run).
 export { signalPaywall as _signalPaywallForTest, trackPaidHit as _trackPaidHitForTest };
 
+// ★ Owner 2026-11-03, "pass caller tier through": the backend counted THIS server's
+// X-Internal-Key as Pro in its shared paid checks (routes/dcpi._dcpi_caller_plan, so
+// util/dcpi_gate.caller_is_paid, and util/substation_detail.caller_sees_substation_detail),
+// so this layer had to re-mask every such answer itself. Every callAPI /
+// callAPIWrite now says whose call it is: the END USER's tier, as this server resolved it
+// (c.tier; no key = anonymous). The backend reads it ONLY next to a valid X-Internal-Key and
+// still resolves the forwarded X-API-Key itself, so a paying key is never read down.
+// opts.serverView skips it for a read that fills a cache shared by every caller and is masked
+// per caller on the way out (the scoreboard's DCPI join, _scoreboardForCaller).
+// Kill switch: DCHUB_FORWARD_CALLER_TIER=0 (both MCP services); the backend then keeps the
+// old rule.
+export const CALLER_TIER_HEADER = 'X-DCHub-Caller-Tier';
+export function _callerTierFor(c) {
+  if (!c || typeof c !== 'object' || !c.api_key) return 'anonymous';
+  const t = String(c.tier || 'free').trim().toLowerCase();
+  return /^[a-z_]{1,32}$/.test(t) ? t : 'free';
+}
+function _forwardCallerTier(headers, c, opts) {
+  if (opts && opts.serverView) return;
+  if (String(process.env.DCHUB_FORWARD_CALLER_TIER ?? '1').trim() === '0') return;
+  headers[CALLER_TIER_HEADER] = _callerTierFor(c);
+}
+
 async function callAPI(path, params = {}, opts = {}) {
   const url = new URL(path, API_BASE);
   for (const [k, v] of Object.entries(params)) {
@@ -6707,6 +6730,7 @@ async function callAPI(path, params = {}, opts = {}) {
   if (c.platform) headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session'] = c.session_id;
   if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
+  _forwardCallerTier(headers, c, opts);
   // r70 (2026-06-03): {internal:true} callers present a dchub- User-Agent so the
   // backend's server-to-server bypass (main.py:2465 phase19b_grid_intelligence —
   // _is_internal is UA/IP-based, NOT X-Internal-Key-based) returns UNGATED data.
@@ -6977,6 +7001,7 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   if (c.platform)   headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session']  = c.session_id;
   if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
+  _forwardCallerTier(headers, c, opts);
   // r-durable-key (2026-07-06): forward the REAL caller IP on writes so the
   // backend's /keys/claim dedupe ( metadata->>'ip', flask_mcp_endpoints.py )
   // keys on the actual agent — not this MCP server's shared proxy egress, which
@@ -28263,7 +28288,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const _p_kr  = callAPI('/api/v1/iso/kr/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
         const _p_br  = callAPI('/api/v1/iso/br/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
         const _p_sg  = callAPI('/api/v1/iso/sg/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
-        const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison').catch(() => null);
+        // serverView: this build is one cache entry served to every caller; the DCPI
+        // aggregates are masked per caller on the way out (_scoreboardForCaller).
+        const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison', {}, { serverView: true }).catch(() => null);
         const _p_q   = callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null);
         const _p_gas = callAPI('/api/v1/gas/eu/snapshot').catch(() => null);
         const results = await Promise.all(_US_ISOS.map(iso =>
@@ -30047,8 +30074,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       limit: LIMIT },
     async (a) => withFreshness(
       { content: [{ type: 'text',
+        // serverView: _findSitesForCaller is this caller's mask (anchor lock below Pro, the
+        // coordinate / time-to-power ladder with the pack balance and email seat), so the
+        // backend's own below-Pro view (dchub-backend#8218) would read a pack holder down.
         text: JSON.stringify(_annotateFindSites(await _findSitesForCaller(
-          await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx()), _sitesArgHint.getStore() || {})) }] },
+          await callAPI('/api/v1/sites/find', _foldCoordArgs(a), { serverView: true }), getCtx()), _sitesArgHint.getStore() || {})) }] },
       'find_sites'));
 
   trackedTool(srv, 'analyze_site', 'Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a free key adds factor bands, substation distance bands and a few free full site reports each month; other scores and figures need a paid DC Hub plan. Ex: "Score 33.45,-112.07 for 100 MW."',
