@@ -354,6 +354,123 @@ export const TARGETS = [
     alphabetical: false,
     entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
   },
+  // ── AUTO-DISCOVERED open-energy-transition/Awesome-Electrical-Grid-Mapping (★168) — VET BEFORE ENABLING ──
+  // A curated dataset of global electrical grid maps, datasets and resources.
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-electrical-grid-mapping', upstream: 'open-energy-transition/Awesome-Electrical-Grid-Mapping', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED rebase-energy/awesome-weather-models (★147) — VET BEFORE ENABLING ──
+  // 🌦️ A catalogue and categorization of AI-based weather forecasting models. 
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-weather-models', upstream: 'rebase-energy/awesome-weather-models', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED open-energy-transition/Awesome-Grid-Model-Data (★77) — VET BEFORE ENABLING ──
+  // Open catalogue of power grid datasets for testing tool interoperability and reproducibility
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-grid-model-data', upstream: 'open-energy-transition/Awesome-Grid-Model-Data', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED open-energy-transition/Awesome-Electricity-Demand (★74) — VET BEFORE ENABLING ──
+  // A curated collection of resources on hourly and sub-hourly electricity demand.
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-electricity-demand', upstream: 'open-energy-transition/Awesome-Electricity-Demand', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED cuge1995/awesome-energy-forecasting (★67) — VET BEFORE ENABLING ──
+  // list of papers, code, and other resources
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-energy-forecasting', upstream: 'cuge1995/awesome-energy-forecasting', base: 'master', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED chenweilong915/awesome_energy_LLM (★62) — VET BEFORE ENABLING ──
+  // energy paper with LLM
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-energy-llm', upstream: 'chenweilong915/awesome_energy_LLM', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED bpetit/awesome-energy (★52) — VET BEFORE ENABLING ──
+  // ICT focussed energy-related list of publications
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-energy', upstream: 'bpetit/awesome-energy', base: 'master', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED mohammadhashemii/awesome-agentic-AI-for-Geospatial-Data (★42) — VET BEFORE ENABLING ──
+  // Papers about agentic AI geospatial data.
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-agentic-ai-for-geospatial-data', upstream: 'mohammadhashemii/awesome-agentic-AI-for-Geospatial-Data', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED rebase-energy/awesome-energy-models (★41) — VET BEFORE ENABLING ──
+  // 💡 A catalogue and categorization of open-source, Python-based energy models. 
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-energy-models', upstream: 'rebase-energy/awesome-energy-models', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
