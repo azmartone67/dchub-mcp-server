@@ -171,3 +171,25 @@ describe('server-view reads that this layer masks per caller', () => {
     for (const h of hits) expect(h.headers['x-dchub-caller-tier']).toBeUndefined();
   });
 });
+
+// Reads whose backend surface answers through serve_full_or_tease, which (after
+// the backend companion) teases a below-Pro forwarded tier, while this layer
+// already decides the caller's view from the full values: the forecast bands,
+// the retirement-headroom pack ladder, rank_markets' visible order, and the
+// market → centroid lookups behind analyze_site location=.
+describe('server-view reads on the backend tease surfaces', () => {
+  const cases = [
+    ['predict_market_trajectory', { market_slug: 'northern-virginia' }, '/api/v1/dcpi/forecast'],
+    ['get_retirement_headroom', { region_iso: 'PJM', target_mw: 50, horizon_months: 24 }, '/api/v1/retirement-headroom'],
+    ['rank_markets', { limit: 3 }, '/api/v1/mcp/tools/rank_markets'],
+    ['analyze_site', { location: 'northern-virginia' }, '/api/v1/dcpi/scores/northern-virginia'],
+  ];
+  it.each(cases)('%s reads its surface without the header', async (name, args, path) => {
+    const hits = (await toolCall(name, args, 10)).filter((s) => s.path === path);
+    expect(hits.length, `${name} never read ${path}`).toBeGreaterThan(0);
+    for (const h of hits) {
+      expect(h.headers['x-internal-key']).toBe(INTERNAL);
+      expect(h.headers['x-dchub-caller-tier']).toBeUndefined();
+    }
+  });
+});
