@@ -213,6 +213,10 @@ describe('over the real app (stub backend, no network)', () => {
     expect(sc.next_call && sc.next_call.tool, 'next_call is set').toBeTruthy();
     expect(sc.next_call.tool, 'next_call does not loop to the walled tool').not.toBe('get_grid_intelligence');
     expect(sc.next_call.tool, 'next_call is the email ask, not the wall\'s unlock tool').toBe('bind_email');
+    // Grok #117521 (11-02): the lean step keeps _upgrade.next_tool, which still said unlock_more_data.
+    const up = sc._upgrade || b0._upgrade;
+    expect(up && up.next_tool, '_upgrade.next_tool agrees with next_call').toBe('bind_email');
+    expect(b0._upgrade ? b0._upgrade.next_tool : 'bind_email', 'block 0 _upgrade agrees too').toBe('bind_email');
     const prose = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
     expect(prose.indexOf('Give your user this free answer first: '), 'the free figure comes first in the prose').toBeGreaterThan(-1);
     expect(prose.indexOf('Give your user this free answer first: ')).toBeLessThan(prose.indexOf('`bind_email`'));
