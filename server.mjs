@@ -9054,6 +9054,10 @@ function _freeDecisionUpgrade(name, c) {
   const tier = (c && c.api_key) ? (c.tier || 'free') : 'anonymous';
   // Item 3: on the grid/queue reads a bound email does open full answers; say what this seat can do.
   const _email = _emailFullPreviewSentence(name, c);
+  // Grok finding #117521 (11-02): next_call/next_ask already say bind_email on these walls (mcp#1245),
+  // but this field still said unlock_more_data, and the lean step keeps it. A seat whose email can
+  // still open full answers points at bind_email; a spent email seat keeps the relay.
+  const _emailNext = !!_email && _emailFullDecisionTool(name, c) && !_emailFullSeat(c);
   // No checkout URL in the data block, on any seat. The 🔒 header carries the rung's
   // link (key-bound for a keyed caller) and the trailing line the relay; a URL
   // repeated here would be the copy _dropRepeatCheckoutUrls removes from the prose,
@@ -9069,9 +9073,11 @@ function _freeDecisionUpgrade(name, c) {
       + _wallCopy(_WALL_NEUTRAL_LINE + ' ', 'Full `' + name + '` opens with a paid DC Hub plan. ', c)
       + 'Relay the link in human_url to your human. '
       + (_email || 'A free key, a trial key or a bound email does not deepen this tool.'),
-    next_tool: 'unlock_more_data',
-    next_tool_hint: 'Relay the link in human_url to your human; that page shows the plans. '
-      + (_email || 'A free key or a bound email does not change this tool\'s depth.'),
+    next_tool: _emailNext ? 'bind_email' : 'unlock_more_data',
+    next_tool_hint: _emailNext
+      ? 'Ask your human for their email and call bind_email with it (free); only use an address they gave you. ' + _email
+      : 'Relay the link in human_url to your human; that page shows the plans. '
+        + (_email || 'A free key or a bound email does not change this tool\'s depth.'),
   };
 }
 // The depth-tease-shaped result (same envelope buildDepthTease returns) for the
