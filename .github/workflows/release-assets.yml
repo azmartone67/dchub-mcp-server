@@ -46,11 +46,13 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: node scripts/verify-release-bundle.mjs "$TAG"
 
+      # gemini-extension.json too: a release with dchub.dxt as its only asset breaks
+      # `gemini extensions install` (see the 2026-11-04 note in github-release.yml).
       - name: Attach dchub.dxt
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dchub.dxt --clobber
+        run: gh release upload "$TAG" dchub.dxt gemini-extension.json --clobber
 
       - name: Summary
         env:

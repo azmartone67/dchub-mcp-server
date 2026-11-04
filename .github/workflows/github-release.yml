@@ -21,6 +21,14 @@
 # the bundle itself. A bundle that fails the guard is NOT attached: the release
 # is still created (it is what Glama reads) and the job then fails red.
 #
+# ★2026-11-04 (Gemini install). `gemini extensions install <this repo URL>` reads the LATEST
+# release. With exactly one asset it installs that asset, and dchub.dxt is not an archive it can
+# extract ("Unsupported file extension"); its git-clone fallback then fails on the non-empty temp
+# dir, so the plain install command failed for everyone. With two or more assets and no
+# darwin./linux./win32. prefix it installs the release's source tarball instead, which carries
+# gemini-extension.json at the root. So every release also carries gemini-extension.json, and a
+# release must never carry dchub.dxt alone (test/github-release-per-version.test.mjs).
+#
 # ★ Values reach the shell through env:, never by ${{ }} inside `run:`.
 name: github release
 
@@ -110,8 +118,9 @@ jobs:
           TITLE="v$VERSION"
           if [ -n "$TOOLS" ]; then TITLE="v$VERSION — $TOOLS tools"; fi
           NOTES="Remote server: https://dchub.cloud/mcp · npm: dchub-mcp-server@$VERSION"
-          ASSETS=()
-          if [ "$ATTACH" = "true" ]; then ASSETS=(dchub.dxt); fi
+          # gemini-extension.json rides every release (see the note at the top).
+          ASSETS=(gemini-extension.json)
+          if [ "$ATTACH" = "true" ]; then ASSETS=(dchub.dxt gemini-extension.json); fi
           gh release create "v$VERSION" "${ASSETS[@]}" \
             --target "$SHA" \
             --title "$TITLE" \
