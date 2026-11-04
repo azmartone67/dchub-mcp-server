@@ -488,6 +488,7 @@ test/site-market-verdict.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs
+test/skill-source-heals-canon-1104.test.mjs
 test/smithery-canon-guard.test.mjs
 test/smithery-credential-fallback.test.mjs
 test/smithery-drift-guard.test.mjs
