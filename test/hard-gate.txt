@@ -415,6 +415,7 @@ test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
+test/rank-markets-email-rows-ask.test.mjs
 test/rank-markets-unreadable-floor.test.mjs
 test/rank-markets-value-strip.test.mjs
 test/rank-markets-visible-order.test.mjs

@@ -171,7 +171,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand,
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
-import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
+import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
@@ -1699,6 +1699,7 @@ const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|
 const _PAID_HEADER_RE = /## 📊 Your agent just answered[\s\S]*?\n\n---(?:\n\n|\n*$)/;
 // The closing rule and whatever followed it, kept exactly as found when the header is swapped.
 const _rule = (m) => { const t = /\n\n---\n*$/.exec(m); return t ? t[0] : '\n\n---\n\n'; };
+const _rankEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_RANK_EMAIL_ASK || ''));
 function _paidSellOn() {
   return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_PAID_SELL_LINE || ''));
 }
@@ -1755,8 +1756,14 @@ export function _paidSellStep(result, name) {
         scoreHidden: rows.some((r) => r && r._score_in_pro === true), mwHidden: rows.some((r) => r && r._total_mw_in_pro === true), url: buy });
     }
     if (!sentence) return result;                      // nothing honest to name: keep the old line
-    const agentLine = _paidAgentLine(name, unlocked ? unlocked.length : 0, !hasLine, wallLink,
+    let agentLine = _paidAgentLine(name, unlocked ? unlocked.length : 0, !hasLine, wallLink,
       unlocked ? 'continuation.gated.fields_unlocked' : 'the _in_pro markers');
+    // Honest rows ask (owner 2026-11-04, lib/paid-sell-line.rankEmailClause): first wall only, and not
+    // where the grid email line is withheld too (Grok contract, directory / Claude / core profiles).
+    const emailClause = name === 'rank_markets' && hasLine && _rankEmailAskOn() && c && !_pcIsGrok(c.platform)
+      && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE
+      ? _rankEmailClause({ total: sc._results_total_in_pro, perDay: IDENTIFIED_DAILY_FULL_CAP }) : null;
+    if (emailClause) agentLine = agentLine.replace(' After they pay,', ' ' + emailClause + ' After they pay,');
     let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -1777,6 +1784,7 @@ export function _paidSellStep(result, name) {
       return t === b.text ? b : { ...b, text: t };
     });
     if (!wrote && !swapped) return result;
+    if (emailClause && swapped) _markEmailAsk(c, 'line');   // option E: the wall-hit row says it asked
     let out = _swapUrl(sc, url, buy);
     if (wrote) {
       out = { ...out, user_message: sentence, show_to_user: true,
