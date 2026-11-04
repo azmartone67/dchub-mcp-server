@@ -115,10 +115,24 @@ describe('github-release.yml — a GitHub Release per version', () => {
     expect(allSteps[v].body).toContain('node scripts/verify-release-bundle.mjs "v$VERSION"');
     expect(v).toBeLessThan(find(/^Create the release/));
     const c = allSteps[find(/^Create the release/)].body;
-    expect(c).toMatch(/if \[ "\$ATTACH" = "true" \]; then ASSETS=\(dchub\.dxt\); fi/);
+    expect(c).toMatch(/if \[ "\$ATTACH" = "true" \]; then ASSETS=\(dchub\.dxt gemini-extension\.json\); fi/);
     const f = find(/^Fail if dchub\.dxt was withheld/);
     expect(f).toBeGreaterThan(find(/^Create the release/));
     expect(allSteps[f].body).toMatch(/exit 1/);
+  });
+
+  // 2026-11-04: gemini extensions install takes a release's ONLY asset as the extension, and
+  // cannot extract dchub.dxt. Two or more unprefixed assets make it use the source tarball.
+  it('never leaves dchub.dxt as a release\'s only asset (Gemini CLI install)', () => {
+    const c = allSteps[find(/^Create the release/)].body;
+    expect(c).toMatch(/^\s*ASSETS=\(gemini-extension\.json\)\s*$/m);
+    for (const m of c.matchAll(/ASSETS=\(([^)]*)\)/g)) {
+      const names = m[1].trim().split(/\s+/).filter(Boolean);
+      expect(names, 'ASSETS=(' + m[1] + ')').toContain('gemini-extension.json');
+      for (const n of names) expect(n).not.toMatch(/^(darwin|linux|win32)\./);
+    }
+    const ra = readFileSync(new URL('../.github/workflows/release-assets.yml', import.meta.url), 'utf8');
+    expect(ra).toMatch(/gh release upload "\$TAG" dchub\.dxt gemini-extension\.json --clobber/);
   });
 
   it('never interpolates ${{ }} inside a run: block', () => {
