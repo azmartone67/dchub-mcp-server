@@ -1204,6 +1204,15 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
     'scripts/tier3_presence.sh', 'skills/README.md',
     'skills/dc-hub-data-center-intelligence/SKILL.md',
+    // ★2026-11-04: the SOURCE of that SKILL.md. The skill block further down
+    // re-renders skill.md, skills/…/SKILL.md and kiro-power/…/SKILL.md from
+    // canonical/skill.md, and pend() is last-write-wins — so the healed copy
+    // this loop pended for skills/…/SKILL.md was overwritten by a render of the
+    // UNHEALED source. When canon moved deals 1,800+ -> 1,700+ (11-01), every
+    // surface healed except that one, the guard flagged it as an OVERCLAIM,
+    // and the daily job failed its hard gate every day. Heal the source here
+    // (this loop runs first), and every rendered copy inherits the number.
+    'canonical/skill.md',
     // ★2026-07-30 additions — all pure current-claim copy:
     'integrations/README.md', 'integrations/chatgpt/README.md',
     'integrations/cohere/README.md', 'integrations/copilot/dchub-mcp.yaml',
