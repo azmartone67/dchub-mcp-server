@@ -13387,6 +13387,19 @@ function _isFigure(v) {
 // score (_bandForMaskedScore, the same function). `deep` walks the whole
 // forecast block: its projections carry the same sub-scores, one level down,
 // which the keyless trim already reached and this mask did not.
+// ── DCGI paid set (owner 2026-11-04, "Gate it") ──────────────────────────
+// dchub-backend routes/dcgi.py _DCGI_MASK_FIELDS, matched exactly: the backend
+// masks these below a paid plan on the list and the single state (be#8300) but
+// serves this server whole (X-Internal-Key), so get_gas_index applies the same
+// set here. Measured live 2026-11-04 10:44Z, anonymous {limit: 2}: only the two
+// `_score` keys were withheld, and dcgi, gas_price, pipelines, operators and
+// interstate went out in the clear. state, verdict, data_as_of and the price
+// window stay free.
+export const DCGI_PAID_KEYS = new Set(['dcgi', 'gas_access_score', 'gas_cost_score', 'pipelines',
+  'operators', 'interstate', 'gas_price', 'gas_price_sector', 'gas_price_series', 'gas_price_period']);
+function _dcgiPaidKey(toolName, k, v) {
+  return toolName === 'get_gas_index' && DCGI_PAID_KEYS.has(k) && v != null;
+}
 function _nullFreeFigures(row, toolName = '', inRate = false, deep = false) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return { value: row, changed: false };
   let changed = false;
@@ -13414,6 +13427,9 @@ function _nullFreeFigures(row, toolName = '', inRate = false, deep = false) {
       // withheld by the same name rule as a bare number (see trimForTrial).
       _noteMaskedKey(k, v.value);
       out[k] = { ...v, value: null }; out[`_${k}_in_pro`] = true; changed = true;
+    } else if (_dcgiPaidKey(toolName, k, v)) {
+      _noteMaskedKey(k, v);
+      out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
     } else if (k === 'value' && typeof v === 'string') {
       // rank_markets' display string keeps only its free words (_freeRankValue)
       const next = _freeRankValue(v);
@@ -13495,6 +13511,12 @@ const _FREE_NUMERIC_SHAPES = {
     return g.changed ? { value: _publishCountSortScores(p, g.value), changed: true } : g;
   },
   get_market_dcpi_rank: (p) => _nullFreeFigures(p, 'get_market_dcpi_rank'),
+  // The list (`states[]`) and the single state (`score`), one rule (DCGI_PAID_KEYS).
+  get_gas_index: (p) => {
+    const g = _nullFreeRows(p, ['states'], 'get_gas_index');
+    const s = _nullFreeFigures(g.value && g.value.score, 'get_gas_index');
+    return s.changed ? { value: { ...g.value, score: s.value }, changed: true } : g;
+  },
 };
 const _FREE_NUMERIC_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
 // Both channels of a tool result, or the SAME object when nothing changed.
@@ -14545,6 +14567,11 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       // whole block on the live keyless find_sites (measured 2026-10-24 07:0xZ), band included. Trim
       // inside it instead: the months go (headroom gate, _in_pro marker), the free band stays.
       out[k] = { ...trimForTrial(v, toolName, _inRate), time_to_power_band: v.time_to_power_band };
+    } else if (toolName === 'get_gas_index' && k === 'score' && v && typeof v === 'object' && !Array.isArray(v)) {
+      // Owner 2026-11-04: the single-state DCGI row. `score` matches the depth gate,
+      // which nulled the whole row keyless, verdict and data_as_of with it. Trim
+      // inside it, as the list rows are: the paid set goes, the verdict stays.
+      out[k] = trimForTrial(v, toolName, _inRate);
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
@@ -14569,6 +14596,11 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = null;
       out[`_${k}_in_pro`] = true;
       if (_band) out[`${k}_band`] = _band;
+    } else if (_dcgiPaidKey(toolName, k, v)) {
+      _noteWithheld(k, v);
+      _noteMaskedKey(k, v);
+      out[k] = null;                          // DCGI paid set (DCGI_PAID_KEYS)
+      out[`_${k}_in_pro`] = true;
     } else if (_DCPI_ISO_PAID_KEYS.has(k) || _dcpiPaidDetail(k, v)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);
