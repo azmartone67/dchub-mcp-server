@@ -150,18 +150,9 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 | `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
 | `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
 
-## Why DC Hub vs other directories
+## What DC Hub adds
 
-|                          | DC Hub | datacenters.com | dcbyte | baxtel |
-|--------------------------|:------:|:---------------:|:------:|:------:|
-| Live grid data           |   ✅   |        ❌       |   ❌   |   ❌   |
-| MCP / AI integration     |   ✅   |        ❌       |   ❌   |   ❌   |
-| Facility + infra + grid  |   ✅   |        ❌       |   ❌   |   ❌   |
-| Real-time API            |   ✅   |        ❌       |   ❌   |   ❌   |
-| NEPA filings             |   ✅   |        ❌       |   ❌   |   ❌   |
-| Free dev tier            |   ✅   |        ❌       |   ❌   |   ✅   |
-
-Their strength: directories of facilities you can browse. Our strength: an API your AI assistant can query in real time across the full infrastructure stack.
+Facility directories list sites you can browse. DC Hub adds the power side, queryable live: grid demand and fuel mix, interconnection queues, substations and transmission, energy prices, and a daily power-availability verdict for 300+ markets (DCPI). It's the same data on the web pages, over REST and over MCP; results carry an `as_of` date. Where each layer comes from is listed under [Data sources](#data-sources).
 
 ## Install
 
@@ -271,7 +262,7 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 
 ## Data sources
 
-EIA hourly RTO data · HIFLD substation database · OpenStreetMap · PeeringDB · DC Hub proprietary news + facility pipeline · regulations.gov NEPA filings · USGS · EPA eGRID · FEMA NRI
+EIA hourly RTO data · OpenStreetMap substations, transmission lines and gas pipelines (ODbL 1.0; earlier HIFLD records gap-filled, HIFLD Open closed August 2025) · PeeringDB · DC Hub proprietary news + facility pipeline · regulations.gov NEPA filings · USGS · EPA eGRID · FEMA NRI
 
 ## Open source
 
@@ -279,6 +270,6 @@ This MCP server's transport layer is open source. The data + business logic live
 
 ## Contact
 
-azmartone@gmail.com — Jonathan Martone — Martone Advisors LLC
+jonathan@dchub.cloud — Jonathan Martone — Martone Advisors LLC
 
 <!-- registry-rebuild: 2026-07-16 — Glama builder ECONNRESET x2 on 091afc4 (empty logs, infra-side); commit verified clean locally -->
