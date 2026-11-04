@@ -236,7 +236,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
          // Item 3 (owner draft 2026-10-16): email-bound keys get capped full grid/queue answers (market intel joined 2026-10-19).
          EMAIL_FULL_DECISION_TOOLS as _EMAIL_FULL_DECISION_LIST, EMAIL_DECISION_DAILY_FULL_DEFAULT, emailFullDecisionOn, maskBrokerRatesBelowPro as _maskBrokerRatesBelowPro, maskPricingBlock as _maskPricingBlock,
-         freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
+         freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY, chatgptListedMwOn } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
@@ -9039,6 +9039,7 @@ function _freeDecisionTasteObject(name, parsed, ctx, args) {
     bandFor: (k, v) => _bandForMaskedScore(k, v, parsed, name, false),
     emailFullCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0,   // item 3
     legacyWallCopy: _legacyWallCopy(ctx),
+    listedMw: chatgptListedMwOn() && _chatgptFrozenSeat(ctx),   // Grok #117623
   });
   if (!built || !built.envelope) return null;
   _noteGate('free_decision_preview');
