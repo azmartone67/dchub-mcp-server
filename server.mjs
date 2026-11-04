@@ -20670,7 +20670,12 @@ export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEO
 // returned Ashburn DCPI 19.3 / AVOID at STEP 3, and (their words) "the planner
 // did not lead with that as the answer". The honest answer to that question is
 // that Ashburn is a bad place to put it. Now the guide names the verdict first.
-export function _execAnswerGuide(executed) {
+// ★2026-11-04 (Grok #117661): a verdict whose own ISO falls outside the run's
+// constraint_iso is not an answer to the question. "power outlook for Las Vegas"
+// (WECC) rejected get_dchub_recommendation's ERCOT mint at C1, yet the guide still
+// said "LEAD WITH THE VERDICT — Midland–Odessa: BUILD". A verdict with no iso is
+// kept: nothing here can judge it.
+export function _execAnswerGuide(executed, constraintIso = []) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
@@ -20678,6 +20683,8 @@ export function _execAnswerGuide(executed) {
     + 'of data — DC Hub stopped waiting while that tool was still running. Say so and '
     + 'name the tool to call directly; never report its subject as unavailable.';
   try {
+    const allowed = (Array.isArray(constraintIso) ? constraintIso : [])
+      .map((x) => String(x).toUpperCase());
     const found = [];
     const scan = (o, depth) => {
       if (!o || depth > 4 || found.length >= 3) return;
@@ -20685,8 +20692,12 @@ export function _execAnswerGuide(executed) {
       if (typeof o !== 'object') return;
       const v = o.verdict, nm = o.market || o.name || o.slug || o.market_slug;
       if (typeof v === 'string' && /^(BUILD|CAUTION|AVOID)$/i.test(v.trim())) {
-        found.push({ verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' ? nm : null,
-                     score: (typeof o.composite_score === 'number') ? o.composite_score : null });
+        const iso = typeof o.iso === 'string' ? o.iso.trim().toUpperCase() : null;
+        const outside = iso && allowed.length && !allowed.includes(iso);
+        if (!outside) {
+          found.push({ verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' ? nm : null,
+                       score: (typeof o.composite_score === 'number') ? o.composite_score : null });
+        }
       }
       for (const val of Object.values(o)) scan(val, depth + 1);
     };
@@ -27945,7 +27956,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
-        answer_guide: _execAnswerGuide(executed) + (_rb ? ' ' + _rb.sentence : ''),
+        answer_guide: _execAnswerGuide(executed, constraintIsoSet) + (_rb ? ' ' + _rb.sentence : ''),
         ...(_rb ? { route_back: _rb.entries } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
