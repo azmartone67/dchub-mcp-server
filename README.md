@@ -190,7 +190,7 @@ Or add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp"
+      "url": "https://dchub.cloud/mcp/github"
     }
   }
 }
@@ -208,7 +208,7 @@ DC Hub is the data-center and energy layer beside other research sources: power,
 
 There is no separate xAI app-store listing path yet. Point Grok / Grok Bot at the hosted MCP:
 
-- URL: `https://dchub.cloud/mcp`
+- URL: `https://dchub.cloud/mcp/github`
 - Transport: Streamable HTTP
 - Auth: none required to start (optional `X-API-Key`)
 
@@ -225,11 +225,11 @@ Positioning: data-center and energy intelligence — DCPI, grid, interconnection
 
 ### Mistral Le Chat
 
-Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
+Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp/github`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
 
 ### LobeHub
 
-DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp`. If the card looks stale, re-sync from the claimed listing while signed in.
+DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp/github`. If the card looks stale, re-sync from the claimed listing while signed in.
 
 ### Cline / Continue.dev
 
