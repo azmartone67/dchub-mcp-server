@@ -567,6 +567,7 @@ test/wall-tag.test.mjs
 test/wall-transport.test.mjs
 test/wall-user-line-hard-wall.test.mjs
 test/wall-user-line.test.mjs
+test/wall-via-tag-claim-bind.test.mjs
 test/watch-line-full-answers.test.mjs
 test/watch-next-ask.test.mjs
 test/watch-onecall.test.mjs
