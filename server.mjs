@@ -18243,7 +18243,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -19494,6 +19494,11 @@ export const _CITY_ISO_META = {
   'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
   'las vegas': { iso: 'WECC', slug: 'las-vegas-nv' },
   reno: { iso: 'WECC', slug: 'reno-nv' },
+  // Live 2026-11-05: "75-100 MW of buildable land with power in Southern
+  // Nevada" named no city here, so the verdict step took find_sites' nearest
+  // DCPI market and led with "Enterprise". The regions name their metro.
+  'southern nevada': { iso: 'WECC', slug: 'las-vegas-nv' },
+  'northern nevada': { iso: 'WECC', slug: 'reno-nv' },
   'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
   sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
   'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
@@ -19815,6 +19820,7 @@ const _GEO_POINT_KEYS = ['lat', 'lon', 'lng', 'latitude', 'longitude'];
 // geo_injected, a plain field). Never overwrites what the planner, the caller
 // or a minted hand-off already bound.
 export function _execInjectGeo(tool, args, sig) {
+  if (tool === 'get_retirement_headroom') return _execInjectRetirementBa(args, sig);
   const spec = _EXEC_GEO_ARGS[tool];
   if (!spec || !sig || !args || typeof args !== 'object') return [];
   const set = [];
@@ -19831,6 +19837,21 @@ export function _execInjectGeo(tool, args, sig) {
     args[spec.state] = st; set.push(spec.state);
   }
   return set;
+}
+// get_retirement_headroom takes no state, but region_iso matches the
+// generator's EIA balancing-authority code. A state outside every RTO gets no
+// ISO injected, so the step read the whole country and the state cut kept
+// nothing: live 2026-11-05, "land with power in Southern Nevada" kept 0 rows
+// while region_iso=NEVP returns Fort Churchill (Lyon County, NV). Only states
+// whose BA was read live are listed; NEVP is NV Energy, most of Nevada.
+export const _STATE_RETIREMENT_BA = { NV: 'NEVP' };
+function _execInjectRetirementBa(args, sig) {
+  if (!sig || !args || typeof args !== 'object' || args.region_iso != null) return [];
+  const st = sig.state || sig.stateFromPlace;
+  const ba = st && _STATE_RETIREMENT_BA[String(st).toUpperCase()];
+  if (!ba) return [];
+  args.region_iso = ba;
+  return ['region_iso'];
 }
 // P0-1 (Grok 2026-10-18): a state-less tool (retirement headroom, refined queue) hands back rows
 // from everywhere. When the intent resolved to one state, cut them to it and say so on the step.
@@ -19986,7 +20007,29 @@ export const _PLAN_CORRIDOR_META = {
   // Middlesex County also exists in MA, CT and VA: bound only when the text
   // names New Jersey or another NJ corridor place matched.
   'middlesex county':      { label: 'Middlesex County, NJ',      state: 'NJ', lat: 40.4400, lon: -74.4100, radius_km: 25, needs: 'NJ' },
+  // Nevada (live 2026-11-05): "Southern Nevada" and "near Las Vegas" bound no
+  // point, so find_sites searched the whole state (Reno included) and the plan
+  // widened to WECC. Henderson, Sparks, Clark County and Apex also exist in
+  // other states: bound only beside Nevada or another Nevada place.
+  'southern nevada':       { label: 'Southern Nevada (Las Vegas Valley), NV', state: 'NV', lat: 36.1716, lon: -115.1391, radius_km: 50 },
+  'las vegas valley':      { label: 'Southern Nevada (Las Vegas Valley), NV', state: 'NV', lat: 36.1716, lon: -115.1391, radius_km: 50 },
+  'las vegas':             { label: 'Las Vegas, NV',             state: 'NV', lat: 36.1716, lon: -115.1391, radius_km: 30 },
+  'north las vegas':       { label: 'North Las Vegas, NV',       state: 'NV', lat: 36.1989, lon: -115.1175, radius_km: 12 },
+  'henderson':             { label: 'Henderson, NV',             state: 'NV', lat: 36.0395, lon: -114.9817, radius_km: 15, needs: 'NV' },
+  'apex industrial park':  { label: 'Apex Industrial Park, NV',  state: 'NV', lat: 36.3600, lon: -114.9200, radius_km: 12, needs: 'NV' },
+  'clark county':          { label: 'Clark County, NV',          state: 'NV', lat: 36.1716, lon: -115.1391, radius_km: 50, needs: 'NV' },
+  'northern nevada':       { label: 'Northern Nevada (Reno-Sparks), NV', state: 'NV', lat: 39.5300, lon: -119.6200, radius_km: 50 },
+  'reno':                  { label: 'Reno, NV',                  state: 'NV', lat: 39.5296, lon: -119.8138, radius_km: 20 },
+  'sparks':                { label: 'Sparks, NV',                state: 'NV', lat: 39.5349, lon: -119.7527, radius_km: 10, needs: 'NV' },
+  'tahoe reno industrial center': { label: 'Tahoe Reno Industrial Center, NV', state: 'NV', lat: 39.5450, lon: -119.4400, radius_km: 15 },
+  'storey county':         { label: 'Storey County, NV',         state: 'NV', lat: 39.4467, lon: -119.5284, radius_km: 30 },
+  'washoe county':         { label: 'Washoe County, NV',         state: 'NV', lat: 39.5296, lon: -119.8138, radius_km: 40 },
 };
+// Full state names for a `needs` code ('NV' -> ['nevada']), so "Henderson,
+// Nevada" binds as well as "Henderson, NV".
+function _planStateNamesFor(code) {
+  return Object.keys(_PLAN_STATE_NAMES).filter((n) => _PLAN_STATE_NAMES[n] === code);
+}
 
 function _kmBetween(a, b) {
   const r = (x) => x * Math.PI / 180;
@@ -20015,7 +20058,8 @@ export function _planCorridor(text) {
     // An ambiguous name binds only beside its state (named, or another place).
     for (const { m } of deferred) {
       const stateNamed = m.needs === 'NJ' ? /\bNJ\b|new jersey/i.test(String(text || ''))
-        : new RegExp('\\b' + m.needs + '\\b').test(String(text || ''));
+        : new RegExp('\\b' + m.needs + '\\b').test(String(text || ''))
+          || _planStateNamesFor(m.needs).some((n) => new RegExp('\\b' + n + '\\b', 'i').test(String(text || '')));
       if ((stateNamed || hits.some((h) => h.state === m.needs))
           && !hits.some((h) => h.label === m.label)) hits.push(m);
     }
@@ -20476,7 +20520,11 @@ export function _planWorkflowConfidence(seq, d) {
 //         requires_* code from the canonical taxonomy (why_live_reasons);
 //         replay adds why_live_code, why_live_data becomes the code's canon
 //         phrase. OUTPUT-only rev: routing unchanged, schema stays 1.
-export const PLANNER_VERSION = '5.13';
+//  5.14 = NEVADA GEOGRAPHY: Southern/Northern Nevada, Las Vegas, Reno and
+//         their counties bind a point + radius (corridor table); the two
+//         regions name their metro (las-vegas-nv / reno-nv);
+//         get_retirement_headroom gets region_iso=NEVP on a Nevada intent.
+export const PLANNER_VERSION = '5.14';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
