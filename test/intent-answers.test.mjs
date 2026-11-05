@@ -187,6 +187,27 @@ describe('state-scoped steps (Grok 2026-10-18 P0-1 follow-up)', () => {
   it('an unscoped step still quotes its count', () => {
     const a = buildIntentAnswer(ctx('how soon can I get 100 MW of power in ERCOT', 'capacity_search', { constraint_iso: ['ERCOT'] }), [retire, queue('2026-08-31'), grid, skipped], null, NOW);
     expect(a.evidence.join(' ')).toContain('1 filed generator retirements near substations');
-    expect(a.evidence.join(' ')).toContain('1433 active interconnection-queue projects match');
+    expect(a.evidence.join(' ')).toContain('1433 active interconnection-queue projects');
+  });
+});
+
+describe('queue MW floor (Grok QA 2026-11-05)', () => {
+  // Live anon execute_plan "300 MW in Northern Virginia": the step sent min_mw=300, the preview
+  // answered filters_applied.min_mw=null and counted every size, and the answer still said
+  // "311 ... match the 300 MW floor".
+  const q = (min_mw) => step('get_refined_queue', { iso: 'PJM', state: 'VA', min_mw: 300 }, {
+    count_total_matching: 311, source_as_of: '2026-11-05', freshness_by_iso: { PJM: { source_as_of: '2026-11-05' } },
+    filters_applied: { min_mw, state: 'VA' }, results: [] });
+  const intent = 'find a site for a 300 MW data center in Northern Virginia';
+  const ev = (min_mw) => buildIntentAnswer(ctx(intent, 'capacity_search', { constraint_iso: ['PJM'] }), [q(min_mw)], null, NOW).evidence.join(' ');
+  it('does not claim the floor when the preview dropped it', () => {
+    expect(ev(null)).not.toContain('match the 300 MW floor');
+    expect(ev(null)).toContain('the 300 MW floor was not applied to this count');
+  });
+  it('claims the floor only when filters_applied carries it', () => {
+    expect(ev(300)).toContain('311 active interconnection-queue projects match the 300 MW floor');
+  });
+  it('a lower floor than asked is not the asked floor', () => {
+    expect(ev(100)).not.toContain('match the 300 MW floor');
   });
 });
