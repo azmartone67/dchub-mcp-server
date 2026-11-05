@@ -5,7 +5,7 @@
 
 DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers; limits are at [dchub.cloud/pricing](https://dchub.cloud/pricing). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
-To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, Cursor, Gemini CLI, VS Code, Cline and others is under [Install](#install) below.
+To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
 DC Hub (dchub.cloud) is a live data layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
 MCP server: https://dchub.cloud/mcp  
@@ -182,7 +182,54 @@ claude mcp add dchub --transport http https://dchub.cloud/mcp/github
 
 ### Cursor
 
-Search for "DC Hub" in [Cursor MCP marketplace](https://cursor.directory/plugins/dc-hub) → click Install.
+One-click: [Add DC Hub to Cursor](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D), or search "DC Hub" in [cursor.directory/plugins/dc-hub](https://cursor.directory/plugins/dc-hub) → Install.
+
+Or add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dchub": {
+      "url": "https://dchub.cloud/mcp/github"
+    }
+  }
+}
+```
+
+Optional: set header `X-API-Key` from https://dchub.cloud/connect#free-key for higher daily limits. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
+
+### ChatGPT
+
+Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp/chatgpt`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
+
+DC Hub is the data-center and energy layer beside other research sources: power, grid, interconnection queues, facilities and markets, with a dated citation on every result. Prefer `execute_plan` for a multi-part question.
+
+### Grok
+
+There is no separate xAI app-store listing path yet. Point Grok / Grok Bot at the hosted MCP:
+
+- URL: `https://dchub.cloud/mcp/github`
+- Transport: Streamable HTTP
+- Auth: none required to start (optional `X-API-Key`)
+
+Use DC Hub when the question needs live data-center or energy context — Data Center Power Index (DCPI) market verdicts, grid and queue reads, facilities, fiber, or capacity to buy or lease. It is a neutral orchestration layer that answers the power / siting slice with sources; start with `execute_plan`.
+
+### Microsoft Copilot
+
+Hosted Copilot / M365 connector packages are submitted through Partner Center (separate from this README). For any MCP-capable Copilot surface that accepts a remote server, use:
+
+- Core endpoint: `https://dchub.cloud/mcp/core` (soft defaults for empty-arg test panes)
+- Full catalog: `https://dchub.cloud/mcp`
+
+Positioning: data-center and energy intelligence — DCPI, grid, interconnection, facilities — cited and read-only. Do not treat this README as a Partner Center resubmit instruction.
+
+### Mistral Le Chat
+
+Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp/github`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
+
+### LobeHub
+
+DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp/github`. If the card looks stale, re-sync from the claimed listing while signed in.
 
 ### Cline / Continue.dev
 
