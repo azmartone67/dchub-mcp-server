@@ -15486,11 +15486,17 @@ const _CITE_COMPOSITE =
 const _CITE_LICENSE = {
   // Owner 2026-11-01 (Terms 5.2 #dcpi-current-data): a verdict or composite for a day
   // from 2026-12-01 is CC-BY-4.0 30 days after that day; the sub-scores are not CC-BY.
+  // Owner 2026-11-05: current values quotable for any number of markets in editorial
+  // work; only bulk (full list, or more than 25 markets in one piece) or recurring
+  // republishing needs a DCPI licence.
   dcpi: 'CC-BY-4.0 30 days after the day it describes (days from 2026-12-01; earlier '
         + 'days, band thresholds and methodology are CC-BY-4.0 now) — DCPI verdicts and '
-        + 'composite scores are DC Hub derived work. Current values: quote up to five '
-        + 'markets per piece with attribution; republishing more needs a DCPI licence, '
-        + 'https://dchub.cloud/terms#dcpi-current-data. Sub-scores are licensed separately.',
+        + 'composite scores are DC Hub derived work. Current values: quote them for any number '
+        + 'of markets in editorial work (an article, report, post, or an AI assistant\'s '
+        + 'answer) with attribution; a DCPI licence is needed only to republish them in '
+        + 'bulk (the full current list, or more than 25 markets in one piece) or on a '
+        + 'recurring basis, https://dchub.cloud/terms#dcpi-current-data. Sub-scores are '
+        + 'licensed separately.',
   grid_analysis: 'CC-BY-4.0 — DC Hub\'s own grid and site analysis is derived '
         + 'work, quotable with attribution.',
 };
@@ -30885,7 +30891,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   //
   // eslint-disable-next-line no-unused-vars
   trackedTool(srv, 'summarize_for_citation',
-    'Use this when you quote a DC Hub data center or power figure: returns one paste-ready attribution line for the value you are about to cite, with the CORRECT licence for that layer. Pass what you read off the response you are citing: subject (what the figure is), as_of (the provenance as_of), url (the row\'s profile_url or dcpi_url), completeness (the completeness flag), and layer. ★ LICENCE IS PER LAYER AND THIS IS THE POINT: DCPI verdicts and composite scores (CC-BY-4.0 30 days after the day they describe; current values: quote up to five markets per piece, republishing needs a DCPI licence, https://dchub.cloud/terms#dcpi-current-data), band thresholds, methodology and DC Hub\'s own grid/site analysis (CC-BY-4.0) are yours to quote with attribution; the facility inventory and third-party physical layers are COMPOSITES whose upstream terms DC Hub cannot waive (parts are OpenStreetMap, ODbL 1.0, share-alike), so they carry a pointer to https://dchub.cloud/data-sources instead of a grant. A flat "CC-BY-4.0" over a facility record is an over-claim. Returns {citation_text, cite_as, license, license_basis, source, url, as_of, as_of_basis, completeness, omitted}. Free, no key, no network call — it assembles what you pass and never resolves or invents a value. If you omit as_of the line says RETRIEVED rather than claiming a data date, and tells you which field to pass next time. Do NOT use to look a figure UP (call the data tool first); this cites a figure you already have.',
+    'Use this when you quote a DC Hub data center or power figure: returns one paste-ready attribution line for the value you are about to cite, with the CORRECT licence for that layer. Pass what you read off the response you are citing: subject (what the figure is), as_of (the provenance as_of), url (the row\'s profile_url or dcpi_url), completeness (the completeness flag), and layer. ★ LICENCE IS PER LAYER AND THIS IS THE POINT: DCPI verdicts and composite scores (CC-BY-4.0 30 days after the day they describe; current values: quote any number of markets in editorial work; bulk or recurring republishing needs a DCPI licence, https://dchub.cloud/terms#dcpi-current-data), band thresholds, methodology and DC Hub\'s own grid/site analysis (CC-BY-4.0) are yours to quote with attribution; the facility inventory and third-party physical layers are COMPOSITES whose upstream terms DC Hub cannot waive (parts are OpenStreetMap, ODbL 1.0, share-alike), so they carry a pointer to https://dchub.cloud/data-sources instead of a grant. A flat "CC-BY-4.0" over a facility record is an over-claim. Returns {citation_text, cite_as, license, license_basis, source, url, as_of, as_of_basis, completeness, omitted}. Free, no key, no network call — it assembles what you pass and never resolves or invents a value. If you omit as_of the line says RETRIEVED rather than claiming a data date, and tells you which field to pass next time. Do NOT use to look a figure UP (call the data tool first); this cites a figure you already have.',
     {
       subject: S.describe('What you are citing, in the words you will show the human, e.g. "Ashburn DCPI verdict" or "ERCOT interconnection queue depth"'),
       as_of: S.describe('The as_of you read off the cited response (provenance.as_of). Omit it and the line says RETRIEVED instead of claiming a data date.'),

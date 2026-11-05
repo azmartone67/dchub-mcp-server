@@ -61,6 +61,13 @@ describe('DCPI licence timing (owner 2026-11-01, Terms 5.2 #dcpi-current-data)',
     expect(b.license).toContain('https://dchub.cloud/terms#dcpi-current-data');
     expect(b.license).toMatch(/Sub-scores are licensed separately/);
   });
+  it('current values: any number of markets in editorial work; licence only for bulk or recurring (owner 2026-11-05)', () => {
+    const b = _citationBlock({ subject: 'Ashburn DCPI verdict', layer: 'dcpi' });
+    expect(b.license).not.toMatch(/up to five/i);
+    expect(b.license).toContain('for any number of markets in editorial work');
+    expect(b.license).toContain('more than 25 markets in one piece');
+    expect(b.license).toMatch(/or on a recurring basis/);
+  });
   it('the grid analysis layer keeps its CC-BY grant', () => {
     expect(_citationBlock({ subject: 'x', layer: 'grid_analysis' }).license).toMatch(/^CC-BY-4\.0 — /);
   });
