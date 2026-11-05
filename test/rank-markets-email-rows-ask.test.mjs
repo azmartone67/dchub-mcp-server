@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { rankEmailClause } from '../lib/paid-sell-line.mjs';
+import { leanResponseStep } from '../lib/lean-response.mjs';
 
 const fx = (n) => JSON.parse(readFileSync(new URL('./fixtures/paid-sell/' + n + '.json', import.meta.url), 'utf8'));
 const mk = (n) => { const f = fx(n); return { content: [{ type: 'text', text: f.text }, { type: 'text', text: '🧭 **Next:** execute_plan' }], structuredContent: f.sc }; };
@@ -65,5 +66,22 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
         expect(text(run(mk(n), n, c))).not.toMatch(/shows all \d+ markets/);
       }
     } finally { restore(); }
+  });
+  // #117703 (Grok, live 2026-11-05): production's wall carries human_url, so the lean step kept the human
+  // line as its one ask and cut this one, while the wall-hit row read email_ask 'line'.
+  it('survives the lean step beside the human line, as production shapes it', () => {
+    const restore = on(); const lean = setEnv('DCHUB_LEAN_RESPONSES', undefined);
+    try {
+      const c = ctx();
+      const r = run(mk('rank_markets'), 'rank_markets', c);
+      const human = text(r).split('\n').find((l) => l.includes('For your human'));
+      const url = human.match(/https:\/\/dchub\.cloud\/\S+/)[0];
+      const t = text(leanResponseStep({ ...r, structuredContent: { ...r.structuredContent, human_url: url, human_message: r.structuredContent.user_message } }, 'rank_markets'));
+      expect(c._emailAsk).toBe('line');
+      expect(t).toContain('`bind_email` with it shows all 10 markets in this ranking');
+      expect(t).toContain(human);
+      expect(t.indexOf('bind_email')).toBeLessThan(t.indexOf('For your human'));   // "the next line" is the human's
+      expect(t.split('bind_email').length - 1).toBe(1);
+    } finally { lean(); restore(); }
   });
 });
