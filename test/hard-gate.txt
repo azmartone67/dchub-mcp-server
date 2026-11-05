@@ -25,6 +25,7 @@ test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
+test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
 test/arcade-integration.test.mjs
 test/arg-aliases.test.mjs
