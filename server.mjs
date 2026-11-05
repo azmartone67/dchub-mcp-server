@@ -171,7 +171,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand,
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
-import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
+import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
@@ -1796,8 +1796,48 @@ export function _paidSellStep(result, name) {
     return { ...result, content, structuredContent: out };
   } catch (_) { return result; }
 }
+// #117703 (Grok 11-05): the keyless ai_capacity_index wall carried no email ask on the wire. The
+// same honest rows ask as rank_markets (lib/paid-sell-line.aiCapacityEmailClause): an email-bound
+// free key gets the full index, every market scored, up to IDENTIFIED_DAILY_FULL_CAP a day (the
+// trial_taste cap once c.email is bound). The tool is not a PAID_SELL tool, so the line is its own:
+// one agent paragraph directly above the human line, which stays as it is. Same conditions as the
+// rank_markets ask: keyless seat, first wall only (the human line is in this response), not Grok,
+// not the directory / Claude / core profiles; also not a clean platform or an execute_plan step,
+// which carry no ask lines. The row count comes from the response; unknown, no clause.
+// Kill switch DCHUB_AICAP_EMAIL_ASK=0.
+const _aicapEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_AICAP_EMAIL_ASK || ''));
+export function _aicapEmailAskStep(result, name) {
+  try {
+    if (name !== 'ai_capacity_index' || !_aicapEmailAskOn()) return result;
+    const c = getCtx();
+    if (!c || c.api_key || c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
+    if (!sc.preview_is_partial && !sc.trial_preview) return result;
+    const total = typeof sc._markets_total_in_pro === 'number' ? sc._markets_total_in_pro : sc._markets_total_available;
+    const clause = _aiCapacityEmailClause({ total, perDay: IDENTIFIED_DAILY_FULL_CAP });
+    if (!clause) return result;
+    const isText = (b) => b && b.type === 'text' && typeof b.text === 'string';
+    if (result.content.some((b) => isText(b) && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;   // once
+    let wrote = false;
+    const content = result.content.map((b) => {
+      if (wrote || !isText(b)) return b;
+      const lines = b.text.split('\n');
+      const k = lines.findIndex((l) => l.includes(HUMAN_FIRST_MARKER));
+      if (k < 0) return b;
+      lines[k] = _AICAP_EMAIL_LINE_HEAD + clause + '\n\n' + lines[k];
+      wrote = true;
+      return { ...b, text: lines.join('\n') };
+    });
+    if (!wrote) return result;                         // a repeat wall (no human line): no ask, no tag
+    _markEmailAsk(c, 'line');                          // option E: the wall-hit row says it asked
+    return { ...result, content };
+  } catch (_) { return result; }
+}
 export function _gridSellStep(result, name) {
   try {
+    if (name === 'ai_capacity_index') return _aicapEmailAskStep(result, name);
     if (_PAID_SELL_TOOLS.has(name) || _PRO_WALL_TOOLS.has(name)) return _paidSellStep(result, name);
     const isGrid = name === 'get_grid_intelligence', isFiber = name === 'get_fiber_intel';
     if ((!isGrid && !isFiber) || !_gridSellOn()) return result;

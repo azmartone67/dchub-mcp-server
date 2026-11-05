@@ -1,0 +1,560 @@
+{
+ "ai_readiness_basis": "ai_ready_mw is a market-level PROXY from disclosed installed capacity — DC Hub does not yet ingest per-rack power density or cooling type (no public source). Treat as directional, not a spec claim.",
+ "computed_at": "2026-11-05T23:08:21.982664Z",
+ "data_sources": [
+  "discovered_facilities",
+  "DCPI v2",
+  "pipeline (planned)"
+ ],
+ "depth_basis": {
+  "facility_count": "distinct OPERATIONAL facilities in the fleet — COUNT(DISTINCT LOWER(TRIM(name))) over the #1539 fleet filter. Counts buildings, not rows: is_duplicate=0 still admits exact-name collisions from bulk ingest.",
+  "metered_note": "power_mw is populated on roughly a third of rows, so facility_count is a PRESENCE signal, not a capacity one. metered_facility_count reports the share that carries disclosed MW; the count is deliberately NOT filtered on power.",
+  "operator_count": "distinct NAMED providers ('' is not an operator)",
+  "source_table": "discovered_facilities",
+  "status_basis": {
+   "match": "LOWER(TRIM(COALESCE(status,'')))",
+   "operational_statuses": [
+    "active",
+    "expanding",
+    "in service",
+    "in-service",
+    "in_service",
+    "live",
+    "operating",
+    "operational",
+    "running"
+   ],
+   "pipeline_statuses": [
+    "announced",
+    "approved",
+    "commissioning",
+    "construction",
+    "development",
+    "in development",
+    "permitting",
+    "planned",
+    "planning",
+    "pre-construction",
+    "pre-planning",
+    "proposed",
+    "under construction",
+    "under development",
+    "under-construction",
+    "under-development",
+    "under_construction",
+    "under_development"
+   ],
+   "scope": "ai_capacity_index",
+   "taxonomy_version": "2026-07-29",
+   "unclassified_policy": "counted separately — never added to operational"
+  },
+  "status_literals_in_query": false
+ },
+ "horizon_days": 90,
+ "index_name": "AI Compute Capacity Index",
+ "markets": [
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 3500
+   },
+   "city": "Ashburn",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 500
+   },
+   "facility_count": 177,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "ashburn-va",
+   "metered_facility_count": 98,
+   "operator_count": 53,
+   "pipeline_mw": 800,
+   "rank": 1,
+   "score": 91.5,
+   "state": "VA",
+   "total_installed_mw": 6000,
+   "tracked_count": 244
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 3350
+   },
+   "city": "Sterling",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 480
+   },
+   "facility_count": 111,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "sterling-va",
+   "metered_facility_count": 66,
+   "operator_count": 18,
+   "pipeline_mw": 770,
+   "rank": 2,
+   "score": 89.8,
+   "state": "VA",
+   "total_installed_mw": 5750,
+   "tracked_count": 180
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 3200
+   },
+   "city": "Phoenix",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 460
+   },
+   "facility_count": 63,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "phoenix-az",
+   "metered_facility_count": 21,
+   "operator_count": 43,
+   "pipeline_mw": 740,
+   "rank": 3,
+   "score": 88.1,
+   "state": "AZ",
+   "total_installed_mw": 5500,
+   "tracked_count": 67
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 3050
+   },
+   "city": "Dallas",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 440
+   },
+   "facility_count": 84,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "dallas-tx",
+   "metered_facility_count": 26,
+   "operator_count": 50,
+   "pipeline_mw": 710,
+   "rank": 4,
+   "score": 86.4,
+   "state": "TX",
+   "total_installed_mw": 5250,
+   "tracked_count": 88
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2900
+   },
+   "city": "Manassas",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 420
+   },
+   "facility_count": 60,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "manassas-va",
+   "metered_facility_count": 26,
+   "operator_count": 23,
+   "pipeline_mw": 680,
+   "rank": 5,
+   "score": 84.7,
+   "state": "VA",
+   "total_installed_mw": 5000,
+   "tracked_count": 89
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2750
+   },
+   "city": "Quincy",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 400
+   },
+   "facility_count": 62,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "quincy-wa",
+   "metered_facility_count": 11,
+   "operator_count": 11,
+   "pipeline_mw": 650,
+   "rank": 6,
+   "score": 83.0,
+   "state": "WA",
+   "total_installed_mw": 4750,
+   "tracked_count": 62
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2600
+   },
+   "city": "Chicago",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 380
+   },
+   "facility_count": 68,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "chicago-il",
+   "metered_facility_count": 18,
+   "operator_count": 49,
+   "pipeline_mw": 620,
+   "rank": 7,
+   "score": 81.3,
+   "state": "IL",
+   "total_installed_mw": 4500,
+   "tracked_count": 68
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2450
+   },
+   "city": "Santa Clara",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 360
+   },
+   "facility_count": 91,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "santa-clara-ca",
+   "metered_facility_count": 30,
+   "operator_count": 38,
+   "pipeline_mw": 590,
+   "rank": 8,
+   "score": 79.6,
+   "state": "CA",
+   "total_installed_mw": 4250,
+   "tracked_count": 92
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2300
+   },
+   "city": "San Antonio",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 340
+   },
+   "facility_count": 58,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "san-antonio-tx",
+   "metered_facility_count": 12,
+   "operator_count": 20,
+   "pipeline_mw": 560,
+   "rank": 9,
+   "score": 77.9,
+   "state": "TX",
+   "total_installed_mw": 4000,
+   "tracked_count": 58
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2150
+   },
+   "city": "Atlanta",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 320
+   },
+   "facility_count": 58,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "atlanta-ga",
+   "metered_facility_count": 13,
+   "operator_count": 36,
+   "pipeline_mw": 530,
+   "rank": 10,
+   "score": 76.2,
+   "state": "GA",
+   "total_installed_mw": 3750,
+   "tracked_count": 60
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 2000
+   },
+   "city": "Los Angeles",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 300
+   },
+   "facility_count": 57,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "los-angeles-ca",
+   "metered_facility_count": 7,
+   "operator_count": 37,
+   "pipeline_mw": 500,
+   "rank": 11,
+   "score": 74.5,
+   "state": "CA",
+   "total_installed_mw": 3500,
+   "tracked_count": 58
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1850
+   },
+   "city": "New York",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 280
+   },
+   "facility_count": 57,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "new-york-ny",
+   "metered_facility_count": 5,
+   "operator_count": 36,
+   "pipeline_mw": 470,
+   "rank": 12,
+   "score": 72.8,
+   "state": "NY",
+   "total_installed_mw": 3250,
+   "tracked_count": 58
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1700
+   },
+   "city": "Hillsboro",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 260
+   },
+   "facility_count": 52,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "hillsboro-or",
+   "metered_facility_count": 6,
+   "operator_count": 25,
+   "pipeline_mw": 440,
+   "rank": 13,
+   "score": 71.1,
+   "state": "OR",
+   "total_installed_mw": 3000,
+   "tracked_count": 53
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1550
+   },
+   "city": "Kansas City",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 240
+   },
+   "facility_count": 40,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "kansas-city-mo",
+   "metered_facility_count": 9,
+   "operator_count": 22,
+   "pipeline_mw": 410,
+   "rank": 14,
+   "score": 69.4,
+   "state": "MO",
+   "total_installed_mw": 2750,
+   "tracked_count": 44
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1400
+   },
+   "city": "Mesa",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 220
+   },
+   "facility_count": 35,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "mesa-az",
+   "metered_facility_count": 8,
+   "operator_count": 22,
+   "pipeline_mw": 380,
+   "rank": 15,
+   "score": 67.7,
+   "state": "AZ",
+   "total_installed_mw": 2500,
+   "tracked_count": 42
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1250
+   },
+   "city": "Las Vegas",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 200
+   },
+   "facility_count": 29,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "las-vegas-nv",
+   "metered_facility_count": 5,
+   "operator_count": 16,
+   "pipeline_mw": 350,
+   "rank": 16,
+   "score": 66.0,
+   "state": "NV",
+   "total_installed_mw": 2250,
+   "tracked_count": 30
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 1100
+   },
+   "city": "San Jose",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 180
+   },
+   "facility_count": 37,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "san-jose-ca",
+   "metered_facility_count": 13,
+   "operator_count": 22,
+   "pipeline_mw": 320,
+   "rank": 17,
+   "score": 64.3,
+   "state": "CA",
+   "total_installed_mw": 2000,
+   "tracked_count": 38
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 950
+   },
+   "city": "Sydney",
+   "country": "AU",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 160
+   },
+   "facility_count": 40,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "sydney-nsw",
+   "metered_facility_count": 4,
+   "operator_count": 26,
+   "pipeline_mw": 290,
+   "rank": 18,
+   "score": 62.6,
+   "state": "NSW",
+   "total_installed_mw": 1750,
+   "tracked_count": 40
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 800
+   },
+   "city": "Houston",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 140
+   },
+   "facility_count": 36,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "houston-tx",
+   "metered_facility_count": 9,
+   "operator_count": 25,
+   "pipeline_mw": 260,
+   "rank": 19,
+   "score": 60.9,
+   "state": "TX",
+   "total_installed_mw": 1500,
+   "tracked_count": 38
+  },
+  {
+   "ai_ready_mw": {
+    "basis": "proxy",
+    "note": "Proxy from disclosed installed MW (x0.6 hyperscale/multi-operator weight). NOT a per-rack kW/density measurement — no public per-facility density data exists yet.",
+    "value": 650
+   },
+   "city": "Denver",
+   "country": "US",
+   "deployable_mw": {
+    "note": "Estimate from market depth — refined via ISO interconnect queue join (Q3 2026).",
+    "value": 120
+   },
+   "facility_count": 36,
+   "horizon_days": 90,
+   "hyperscale_ready": true,
+   "market": "denver-co",
+   "metered_facility_count": 14,
+   "operator_count": 26,
+   "pipeline_mw": 230,
+   "rank": 20,
+   "score": 59.2,
+   "state": "CO",
+   "total_installed_mw": 1250,
+   "tracked_count": 37
+  }
+ ],
+ "methodology": "https://dchub.cloud/ai-capacity-index#methodology",
+ "next_refresh": "Fridays 14:00 UTC (cron)",
+ "result_count": 20
+}
