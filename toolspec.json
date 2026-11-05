@@ -1957,7 +1957,7 @@
   },
   {
     "name": "get_refined_queue",
-    "description": "Use this when you need interconnection queue projects filtered server-side. Instead of pulling the raw queue into context to filter (token-expensive, error-prone), push the predicates to the data layer and get back ONLY the survivors. Filter by min_mw, max_ttp_months (ISO-level avg interconnection wait), iso (comma-union), baseload_only (firm/dispatchable — excludes wind/solar/storage), fuel_type (isolate a specific fuel, e.g. gas or nuclear), and the spatial predicates max_fiber_km + geocoded_only. Returns _entity=queue_results: per-project name, ISO, state/county, fuel_type, capacity_mw, queue_status, estimated_ttp_months, fuel_class, plus (~83% of rows) lat/lng, coordinate_precision, fiber_km, and a compact per-survivor site_evaluation_handoff (ready-to-pipe analyze_site + get_water_risk args) + a by_iso/by_fuel summary. Answers \"show me 1 GW+ gas projects that can connect in under three years\", \"what is in the queue that actually fits my timeline\". Try: get_refined_queue min_mw=1000 fuel_type=gas max_ttp_months=34 — \"1 GW+ gas in ISOs under 34-month time-to-power.\" NOTE max_ttp_months is a HARD ISO cut (SPP ~24 is the only ISO under 30, so <=30 can return nothing); use >=34 to include MISO/ERCOT/ISO-NE.",
+    "description": "Use this when you need interconnection queue projects filtered server-side. Instead of pulling the raw queue into context to filter (token-expensive, error-prone), push the predicates to the data layer and get back ONLY the survivors. Filter by min_mw, max_ttp_months (ISO-level avg interconnection wait), iso (comma-union), state (the project's own US state), baseload_only (firm/dispatchable — excludes wind/solar/storage), fuel_type (isolate a specific fuel, e.g. gas or nuclear), and the spatial predicates max_fiber_km + geocoded_only. Returns _entity=queue_results: per-project name, ISO, state/county, fuel_type, capacity_mw, queue_status, estimated_ttp_months, fuel_class, plus (~83% of rows) lat/lng, coordinate_precision, fiber_km, and a compact per-survivor site_evaluation_handoff (ready-to-pipe analyze_site + get_water_risk args) + a by_iso/by_fuel summary. Answers \"show me 1 GW+ gas projects that can connect in under three years\", \"what is in the queue that actually fits my timeline\". Try: get_refined_queue min_mw=1000 fuel_type=gas max_ttp_months=34 — \"1 GW+ gas in ISOs under 34-month time-to-power.\" NOTE max_ttp_months is a HARD ISO cut (SPP ~24 is the only ISO under 30, so <=30 can return nothing); use >=34 to include MISO/ERCOT/ISO-NE.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1973,6 +1973,10 @@
         },
         "iso": {
           "description": "Restrict to one or more ISOs, comma-separated for a union: PJM, ERCOT, MISO, CAISO, SPP, NYISO, ISONE (ISO-NE). e.g. iso=ERCOT,PJM. Omit for all; combines with max_ttp_months as an intersection",
+          "type": "string"
+        },
+        "state": {
+          "description": "Restrict to projects in one or more US states, by the project's own state (two-letter code or full name, comma-separated for a union), e.g. state=NV. An ISO spans states (CAISO holds Nevada and Arizona projects), so use this for a state question; an unknown state is an error, never an unfiltered answer",
           "type": "string"
         },
         "baseload_only": {
