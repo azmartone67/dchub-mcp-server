@@ -100,7 +100,7 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
 
   it('claim_free_key consults the held-key map BEFORE it mints', () => {
     const lookup = sole(TOOL, '_heldKeyFor(_fp)', 'held lookup');
-    const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body)", 'mint');
+    const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body, { wallVia: true })", 'mint');
     expect(lookup).toBeLessThan(mint);
   });
   it('returns the held key flagged already_held; a REJECTED key is forgotten and re-minted', () => {
@@ -122,7 +122,7 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     expect(TOOL).toContain('key_confirmed:           _ok,');
   });
   it('remembers every fresh mint for the fingerprint', () => {
-    const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body)", 'mint');
+    const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body, { wallVia: true })", 'mint');
     const remember = sole(TOOL, '_rememberHeldKey(_fp, key,', 'remember');
     expect(remember).toBeGreaterThan(mint);
   });

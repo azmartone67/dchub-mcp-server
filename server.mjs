@@ -200,6 +200,7 @@ import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, w
 import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
+import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -7068,6 +7069,16 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // mcp-wall) is forwarded as X-DCHub-Via and counted as that channel's unlock / key (dchub-backend
   // routes/via_funnel.py). Only these closed-set names; any other via keeps counting where it did.
   { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; }
+  // 2026-11-05 (owner, "ship ... MCP-side via tag"): a session that was handed a wall link credits its later
+  // claim_free_key / bind_email to mcp-wall (lib/wall-via-tag.mjs). Only the two call sites that pass
+  // opts.wallVia; a via the connector URL declared wins; no wall seen, no session id or a QA caller: nothing.
+  if (opts && opts.wallVia && !headers['X-DCHub-Via']) {
+    try {
+      const _wv = wallViaHeaderFor({ on: wallViaTagOn(), explicitVia: getVia(), qa: _isQaCaller(c),
+        sawWall: !!_wallViaMemo.get(c.session_id) });
+      if (_wv) headers['X-DCHub-Via'] = _wv;
+    } catch (_) { /* attribution never touches the claim */ }
+  }
   try {
     const resp = await fetch(url.toString(), {
       method: opts.method || 'POST',
@@ -21625,6 +21636,9 @@ function _sourceLineCb(name, fn) {
 // `fn`; the source line, lean and plan-free-field steps after it never touch the link. So here the
 // parked wall row (lib/wall-link-track.mjs) leaves with the hash of the link this result hands out
 // (the /u/ short link resolves to its token through _SHORT_LINK_TARGET).
+const _wallViaMemo = createWallViaMemo();   // session id -> the wall link it was handed (lib/wall-via-tag.mjs)
+export const _wallViaSeenFor = (sid) => _wallViaMemo.get(sid);      // test seam
+export const _noteWallViaForTest = (sid, wall) => _wallViaMemo.note(sid, wall);   // test seam
 async function _wallOuterStep(fn, args, extra, name) {
   const c = getCtx() || {};
   let out;
@@ -21641,6 +21655,11 @@ async function _wallOuterStep(fn, args, extra, name) {
       const _wallType = wallTagOn() ? wallTypeForResult(c._wallStatus, out) : null;
       out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)), wall: _wallType });
       if (_wallType) out = tagResultLinks(out, _wallType);   // any long relay link the step did not swap
+      // 2026-11-05: note the session that was handed the wall link, so its later claim / bind is credited to
+      // mcp-wall (callAPIWrite opts.wallVia). Never QA callers or the relay-readout exclusions.
+      if (_wallType && wallViaTagOn() && wallLinkIssued(out) && !_isQaCaller(c) && !_excludedFromRelayReadout(c)) {
+        _wallViaMemo.note(c.session_id, _wallType);
+      }
     }
     return out;
   } finally {
@@ -31647,7 +31666,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         body.email_source = _retEmailSourceFor(getCtx());
         body.consent_purpose = WEEKLY_SUMMARY_PURPOSE;   // the claim description discloses the summary
       }
-      const r = await callAPIWrite('/api/v1/keys/claim', body);
+      const r = await callAPIWrite('/api/v1/keys/claim', body, { wallVia: true });
       const key = r && (r.api_key || r.key);
       if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
@@ -31961,7 +31980,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         } catch (_) { /* the mint result stands as returned */ }
         return _minted;
       }
-      const r = await callAPIWrite('/api/v1/keys/identify', body);
+      const r = await callAPIWrite('/api/v1/keys/identify', body, { wallVia: true });
       // SOFT-FAIL contract: relay any backend ok:false / error calmly; never throw,
       // never isError — the key keeps working, email is optional and gates nothing.
       const _ok = r && r.ok !== false && !r.error;
