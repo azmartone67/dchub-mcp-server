@@ -1976,7 +1976,7 @@
           "type": "string"
         },
         "state": {
-          "description": "Restrict to projects in one or more US states, by the project's own state (two-letter code or full name, comma-separated for a union), e.g. state=NV. An ISO spans states (CAISO holds Nevada and Arizona projects), so use this for a state question; an unknown state is an error, never an unfiltered answer",
+          "description": "Restrict to projects in one or more US states, by the project's own state (two-letter code or full name, comma-separated for a union), e.g. state=NV.",
           "type": "string"
         },
         "baseload_only": {
