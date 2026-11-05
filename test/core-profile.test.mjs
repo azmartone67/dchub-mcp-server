@@ -326,10 +326,14 @@ describe('/mcp/core tools/call responses', () => {
     expect(r2.body.error && r2.body.error.code).toBe(-32602);
   });
 
-  it('answers an input error as a tool error, not a crash', async () => {
+  // Soft defaults (MS ticket 5864963): Copilot Studio often calls with {}.
+  // Empty / under-filled args must return useful preview content, not -32602.
+  it('soft-defaults empty grid_power to a PJM overview (not invalid_input)', async () => {
     const r = await callCore('grid_power', {});
-    expect(r.result.isError).toBe(true);
-    expect(r.env.error).toBe('invalid_input');
+    expect(r.result.isError).not.toBe(true);
+    expect(r.env.error).toBeUndefined();
+    expect(r.env.query.iso).toBe('PJM');
+    expect((r.env.notes || []).join(' ')).toMatch(/defaulted to iso=PJM/i);
   });
 
   it('answers prompts/list and resources/list with empty lists', async () => {
