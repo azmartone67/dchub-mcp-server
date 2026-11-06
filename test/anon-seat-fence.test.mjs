@@ -178,7 +178,6 @@ describe('anon-seat fence — published counts match canon', () => {
   const CLAIMS = [
     ['markets',    /([\d][\d,]*\+)\s+markets/gi],
     ['countries',  /([\d][\d,]*\+)\s+countries/gi],
-    ['deals',      /([\d][\d,]*\+)\s+(?:tracked\s+)?deals/gi],
   ];
 
   for (const [key, re] of CLAIMS) {
@@ -193,4 +192,22 @@ describe('anon-seat fence — published counts match canon', () => {
       }
     });
   }
+
+  // ★2026-11-06 (owner): list_transactions dropped its "1,800+ tracked deals" floor (the
+  // tool's own total_count said 451) and points at total_count instead. That was the only
+  // served deals claim, so zero is now the expected count, not a stale regex: the CONTROL
+  // below proves the regex still reads every shape the claim took, and any claim that comes
+  // back must still equal canon.
+  const DEALS_CLAIM = /([\d][\d,]*\+)\s+(?:tracked\s+)?deals/gi;
+  it(`every "+N deals" claim an agent can be served equals canon (${canon.deals}); none today`, () => {
+    for (const c of ['1,800+ tracked deals', '1,700+ deals']) {
+      expect([...c.matchAll(DEALS_CLAIM)].length, c).toBe(1);
+    }
+    expect(canon.deals, "canon snapshot missing 'deals'").toBeTruthy();
+    for (const m of code.matchAll(DEALS_CLAIM)) {
+      expect(m[1], `stale deals claim "${m[1]}" served to agents (canon: ${canon.deals})`).toBe(canon.deals);
+    }
+    // The list_transactions description is on a code line and names total_count instead.
+    expect(code).toMatch(/'list_transactions', '[^\n]*total_count/);
+  });
 });

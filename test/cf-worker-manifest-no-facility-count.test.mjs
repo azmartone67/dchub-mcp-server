@@ -198,7 +198,10 @@ describe('against the committed live tool surface', () => {
       // fewer descriptions carry a magnitude. The must-keep fixtures above are
       // literals, not corpus reads, so this only needs SOME magnitude to exist.
       // 2026-10-09: 2 -> 1, the $10 pack line left the unlock_more_data description (owner call).
-      .toBeGreaterThan(1);
+      // 2026-11-06: 1 -> 0, list_transactions dropped its "1,800+ tracked deals" floor (owner
+      // call: it disagreed with the tool's own total_count). The KEEPER fixture still carries
+      // non-facility magnitudes through the bake, so the must-keep claim keeps its subject.
+      .toBeGreaterThan(0);
   });
 
   it('moves a description only when the fence objects to it', () => {
@@ -393,11 +396,14 @@ describe('the rebuilt worker carries no baked facility count', () => {
   it('bakes every other magnitude through untouched', () => {
     const by = new Map(baked(synced.out).map((t) => [t.name, t.description]));
     expect(by.get(KEEPER.name)).toBe(KEEPER.description);
-    // The deal floor walks (2,200+ -> 1,600+ on 2026-09-21): read it the way the
-    // heal does instead of typing it, or every walk turns this red.
-    const deals = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),
-      '..', 'canonical', 'canon_phrases.json'), 'utf8')).deals;
-    expect(by.get('list_transactions')).toContain(`${deals} tracked deals`);
+    // 2026-11-06 (owner): list_transactions no longer states a deal floor (it said 1,800+
+    // while the tool's own total_count said 451); it points at total_count instead. It must
+    // still bake through byte-identical, and the floor must not come back.
+    const lt = served.find((t) => t.name === 'list_transactions');
+    expect(lt, 'list_transactions missing from toolspec.json').toBeTruthy();
+    expect(by.get('list_transactions')).toBe(lt.description);
+    expect(by.get('list_transactions')).toMatch(/total_count/);
+    expect(by.get('list_transactions')).not.toMatch(/\d[\d,]*\+?\s+tracked deals/);
     expect(by.get('why_dchub')).toContain('330,000+ mapped power/grid/gas/fiber assets');
     expect(by.get(HAZARD.name)).toMatch(/facilities in one clause/);
     expect(FENCE.test(by.get(HAZARD.name))).toBe(false);
