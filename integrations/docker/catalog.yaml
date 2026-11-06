@@ -158,7 +158,7 @@ registry:
       - name: "list_standing_intents"
         description: "Use this when the user asks which data center watches are registered on their key: webhook watches, plus your capacity requirements (kind \"capacity\", intent_id cap_...)."
       - name: "list_transactions"
-        description: "Use this when the user asks about data center M&A, acquisitions or capital deals — 1,700+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed)."
+        description: "Use this when the user asks about data center M&A, acquisitions or capital deals — 1,800+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed)."
       - name: "plan_fiber_leadin"
         description: "Use this when the user asks how to get diverse fiber into a data center site: plans road-following lead-in routes from a candidate data-center site to a carrier hotel / POP, with indicative build…"
       - name: "plan_query"
