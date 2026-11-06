@@ -43,6 +43,7 @@ test/auto-trial-mint-off-by-default.test.mjs
 test/automint-trial-rungs.test.mjs
 test/b1-free-key-daily-allowance.test.mjs
 test/b2-analyze-site-keyless-headline.test.mjs
+test/backend-breaker-keyed-handshake.test.mjs
 test/band-matches-verdict.test.mjs
 test/bind-copy-preview-only.test.mjs
 test/bind-midcall-facility-mask.test.mjs
