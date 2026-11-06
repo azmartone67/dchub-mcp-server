@@ -5209,6 +5209,49 @@ const _keyValidateInflight = new Map();      // api_key → Promise<validation>
 // { count: true } here keeps the pre-fix meaning (a cache miss is a counted
 // validate) for the two paths that do not go through that chokepoint — the
 // frozen /mcp/chatgpt profile and /mcp/core. See _freeKeyCallRefusal.
+// ── r-backend-breaker (2026-11-06) ──────────────────────────────────────────
+// The backend jammed 04:24-07:58Z and again from 08:00Z. Every KEYED initialize
+// still paid the /keys/validate hop (3 s timeout, never cached on failure) and
+// every keyed call the monthly-usage hop (1.5 s): /mcp p50 went 0.2 s -> 1.5 s
+// and p90 hit the 30 s cap from 04:30Z, and Glama's hourly check (initialize +
+// tools/list with our test-profile key, 30 s budget) timed out twice and marked
+// the connector unhealthy. Anonymous handshakes stayed at ~0 s throughout.
+// So: after BREAKER_FAILS consecutive failed backend hops, skip them for
+// BREAKER_OPEN_MS. While open (or when a hop fails) a key we validated before
+// keeps its last answer for up to KEY_STALE_MAX_MS (a paying caller is not
+// demoted by our outage); a key we never saw is INDETERMINATE (free, not
+// rejected), exactly what a failed hop already returned. Quota fails open, as
+// before. Kill switch: DCHUB_BACKEND_BREAKER_DISABLE=1.
+const BREAKER_FAILS = 3;
+const BREAKER_OPEN_MS = 30_000;
+const KEY_STALE_MAX_MS = 6 * 60 * 60 * 1000;
+// One breaker PER HOP: a dead monthly-usage endpoint must not stop key validation.
+export const _backendBreakers = { validate: { fails: 0, openUntil: 0 }, quota: { fails: 0, openUntil: 0 } };
+const _breakerDisabled = () =>
+  /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_BACKEND_BREAKER_DISABLE || ''));
+export function _backendBreakerOpen(hop, now = Date.now()) {
+  return !_breakerDisabled() && now < _backendBreakers[hop].openUntil;
+}
+export function _backendBreakerNote(hop, ok, now = Date.now()) {
+  const b = _backendBreakers[hop];
+  if (ok) { b.fails = 0; return; }
+  if (++b.fails >= BREAKER_FAILS) {
+    if (now >= b.openUntil) console.error(`[backend-breaker] ${hop} OPEN for ${BREAKER_OPEN_MS / 1000}s after ${b.fails} failed hops`);
+    b.openUntil = now + BREAKER_OPEN_MS;
+    b.fails = 0;
+  }
+}
+// Only a hop that HUNG or never connected counts: a fast 503 costs nothing, and the
+// outage cost was the timeout itself.
+export function _hopUnreachable(err) {
+  const n = err && err.name;
+  return n === 'TimeoutError' || n === 'AbortError' || err instanceof TypeError;
+}
+export function _staleKeyOrIndeterminate(hit, now = Date.now()) {
+  if (hit && hit.valid && now - hit.exp < KEY_STALE_MAX_MS) return { ...hit, stale: true };
+  return { valid: false, tier: 'free', key_rejected: false, indeterminate: true };
+}
+
 async function validateKey(api_key, opts = {}) {
   // key_rejected = the BACKEND authoritatively said this credential is not a
   // key. It is deliberately NOT the same as `!valid`: `valid:false` is also
@@ -5217,11 +5260,13 @@ async function validateKey(api_key, opts = {}) {
   if (!api_key) return { valid: false, tier: 'free', key_rejected: false };
   const hit = keyCache.get(api_key);
   if (hit && hit.exp > Date.now()) return hit;
+  if (_backendBreakerOpen('validate')) return _staleKeyOrIndeterminate(hit);   // backend down: no 3 s hop
   const count = opts.count === true;
   const flightKey = (count ? 'c:' : 'r:') + api_key;
   const inflight = _keyValidateInflight.get(flightKey);
   if (inflight) return inflight;
   const p = _validateKeyUncached(api_key, { count })
+    .then((r) => { _backendBreakerNote('validate', !r.unreachable); const { unreachable: _u, ...out } = r; return out.indeterminate ? _staleKeyOrIndeterminate(hit) : out; })
     .finally(() => _keyValidateInflight.delete(flightKey));
   _keyValidateInflight.set(flightKey, p);
   return p;
@@ -5320,7 +5365,7 @@ async function _validateKeyUncached(api_key, opts = {}) {
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
     // Timeout / DNS / socket error → INDETERMINATE (see A2 above).
-    return { valid: false, tier: 'free', key_rejected: false, indeterminate: true };
+    return { valid: false, tier: 'free', key_rejected: false, indeterminate: true, unreachable: _hopUnreachable(err) };
   }
 }
 
@@ -5592,13 +5637,16 @@ export async function checkMonthlyQuota(api_key, tier) {
   if (hit && hit.exp > Date.now() && !_quotaTierStale(api_key, hit)) return hit.d;
   const inflight = _quotaInflight.get(api_key);
   if (inflight) return inflight;                  // collapse a burst into one hop
+  if (_backendBreakerOpen('quota')) return _QUOTA_OPEN;  // backend down: fail open without the 1.5 s hop
   const p = (async () => {
     try {
       const d = await _monthlyQuotaUncached(api_key, tier);
+      _backendBreakerNote('quota', true);
       QUOTA_CACHE.set(api_key, { d, exp: Date.now() + _quotaTtlMs(d), at: Date.now() });
       return d;
     } catch (err) {
       // Never cache a failure — see the fail-open note above.
+      if (_hopUnreachable(err)) _backendBreakerNote('quota', false);
       console.error('[monthlyQuota] failed, allowing call:', err.message);
       return _QUOTA_OPEN;
     } finally {
