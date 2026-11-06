@@ -319,6 +319,10 @@ EIA hourly RTO data · OpenStreetMap substations, transmission lines and gas pip
 
 This MCP server's transport layer is open source. The data + business logic lives at [dchub.cloud](https://dchub.cloud). Issues: [GitHub Issues](https://github.com/azmartone67/dchub-mcp-server/issues).
 
+## Complementary MCP servers
+
+Builders working across energy and infrastructure often pair wholesale grid and facility power context with retail tariff and meter telemetry. [octo-mcp](https://github.com/JamesWoolfenden/octo-mcp) is a read-only Go MCP server for Octopus Energy account usage, solar export, Flux and tariff unit rates, standing charges, and meter gap diagnostics. It sits beside DC Hub's wholesale grid, interconnection, facility inventory, DCGI, and Data Center Power Index (DCPI) reference layer: the two cover different sides of the same energy stack and do not overlap.
+
 ## Contact
 
 jonathan@dchub.cloud — Jonathan Martone — Martone Advisors LLC
