@@ -2,14 +2,16 @@
 //
 // Claude offers sign-in only when an HTTP request fails with 401 + WWW-Authenticate
 // (resource_metadata). On /mcp/claude a keyless tools/call whose result is a PREVIEW is
-// now answered that way; a keyless call whose answer is complete is still served, and
-// any credential at all is never challenged here. /mcp and /mcp/chatgpt are unchanged.
+// answered that way WHEN DCHUB_CLAUDE_LAZY_AUTH=1; a keyless call whose answer is complete is
+// still served, and any credential at all is never challenged here. /mcp and /mcp/chatgpt are
+// unchanged. OPT-IN since 2026-11-06 (owner): with the flag unset, keyless tools/call on
+// /mcp/claude is served 200 with its preview, like /mcp and /mcp/chatgpt ("default" below).
 //
 // The fake backend answers a keyless data route with a withheld field (_score_in_pro) —
 // a preview — unless the request asks for the planted COMPLETE news query, which comes back
 // with nothing withheld. OAuth is real: jose signs RS256 JWTs with a key the fake backend
 // publishes as the AuthKit JWKS. Loopback only, no disk writes.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import {
   CLAUDE_PRM_URL, CLAUDE_RESOURCE, CLAUDE_PLANS_NOTICE, CLAUDE_LAZY_AUTH_CHALLENGE,
@@ -68,19 +70,23 @@ describe('the challenge itself', () => {
     expect(r.body).toEqual({ jsonrpc: '2.0', error: { code: -32001, message: expect.stringMatching(/^Sign in/) }, id: 7 });
   });
 
-  it('eligibility: tools/call, no credential, OAuth on, kill switch off', () => {
-    const base = { method: 'tools/call', hasCredential: false, workosEnabled: true, env: {} };
+  it('eligibility: tools/call, no credential, OAuth on, flag on (opt-in)', () => {
+    const base = { method: 'tools/call', hasCredential: false, workosEnabled: true, env: { DCHUB_CLAUDE_LAZY_AUTH: '1' } };
     expect(claudeLazyAuthEligible(base)).toBe(true);
     for (const m of ['initialize', 'tools/list', 'prompts/list', 'ping', 'resources/list']) {
       expect(claudeLazyAuthEligible({ ...base, method: m }), m).toBe(false);
     }
     expect(claudeLazyAuthEligible({ ...base, hasCredential: true })).toBe(false);
     expect(claudeLazyAuthEligible({ ...base, workosEnabled: false })).toBe(false);
-    for (const off of ['0', 'false', 'no', 'off', 'OFF', ' 0 ']) {
-      expect(claudeLazyAuthEligible({ ...base, env: { DCHUB_CLAUDE_LAZY_AUTH: off } }), off).toBe(false);
+    // Default OFF since 2026-11-06: unset or empty is off, as is anything not an explicit yes.
+    expect(claudeLazyAuthEligible({ ...base, env: {} }), 'unset').toBe(false);
+    for (const off of [undefined, '', '0', 'false', 'no', 'off', 'OFF', ' 0 ', 'maybe']) {
+      expect(claudeLazyAuthEligible({ ...base, env: off === undefined ? {} : { DCHUB_CLAUDE_LAZY_AUTH: off } }), String(off)).toBe(false);
+      expect(claudeLazyAuthEnabled(off === undefined ? {} : { DCHUB_CLAUDE_LAZY_AUTH: off }), String(off)).toBe(false);
     }
-    for (const on of [undefined, '', '1', 'true', 'on']) {
-      expect(claudeLazyAuthEnabled(on === undefined ? {} : { DCHUB_CLAUDE_LAZY_AUTH: on }), String(on)).toBe(true);
+    for (const on of ['1', 'true', 'TRUE', 'yes', 'on', ' 1 ']) {
+      expect(claudeLazyAuthEnabled({ DCHUB_CLAUDE_LAZY_AUTH: on }), String(on)).toBe(true);
+      expect(claudeLazyAuthEligible({ ...base, env: { DCHUB_CLAUDE_LAZY_AUTH: on } }), String(on)).toBe(true);
     }
   });
 
@@ -98,7 +104,42 @@ describe('the challenge itself', () => {
   });
 });
 
-describe('keyless on /mcp/claude', () => {
+describe('default (DCHUB_CLAUDE_LAZY_AUTH unset): keyless tools/call is never a 401 (owner 2026-11-06)', () => {
+  beforeEach(() => { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; });
+
+  it('/mcp, /mcp/claude and /mcp/chatgpt each answer a keyless preview 200 with no challenge (WorkOS on)', async () => {
+    for (const p of ['/mcp', DIR, '/mcp/chatgpt']) {
+      for (const [tool, args] of [['get_market_intel', { market: 'northern-virginia' }], ['get_news', { query: 'data center' }]]) {
+        const r = await H.call(p, tool, args, { 'user-agent': 'node' });
+        expect(r.status, `${p} ${tool}`).toBe(200);
+        expect(r.headers.get('www-authenticate'), `${p} ${tool}`).toBeNull();
+        expect(r.msg.error, `${p} ${tool}`).toBeUndefined();
+        expect(r.msg.result, `${p} ${tool}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('/mcp/claude as Claude itself sees it: the preview with the plans notice, not a sign-in', async () => {
+    for (const [tool, args] of [['get_market_intel', { market: 'northern-virginia' }], ['analyze_site', { lat: 39.04, lon: -77.48 }]]) {
+      const r = await H.call(DIR, tool, args, { 'user-agent': 'Claude-User' });
+      expect(r.status, tool).toBe(200);
+      expect(r.headers.get('www-authenticate'), tool).toBeNull();
+      expect(JSON.stringify(r.msg.result), tool).toContain(CLAUDE_PLANS_NOTICE);
+    }
+  });
+
+  it('OAuth stays optional: a WorkOS bearer for /mcp/claude still gets the full answer', async () => {
+    const tok = await jwt(CLAUDE_RESOURCE, { sub: 'user_lazy_default_off' });
+    const r = await H.call(DIR, 'get_market_intel', { market: 'northern-virginia' }, { authorization: `Bearer ${tok}` });
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(r.msg.result)).not.toContain(CLAUDE_PLANS_NOTICE);
+  });
+});
+
+describe('keyless on /mcp/claude, lazy auth ON (DCHUB_CLAUDE_LAZY_AUTH=1)', () => {
+  beforeEach(() => { process.env.DCHUB_CLAUDE_LAZY_AUTH = '1'; });
+  afterEach(() => { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; });
+
   it('initialize and tools/list are served 200 with no challenge', async () => {
     const i = await H.init(DIR, 'claude-ai', { 'user-agent': 'Claude-User' });
     expect(i.status).toBe(200);
@@ -136,7 +177,7 @@ describe('keyless on /mcp/claude', () => {
     expect(JSON.stringify(r.msg.result)).not.toContain(CLAUDE_PLANS_NOTICE);
   });
 
-  it('kill switch DCHUB_CLAUDE_LAZY_AUTH=0 restores the 200 preview byte-for-byte in shape', async () => {
+  it('DCHUB_CLAUDE_LAZY_AUTH=0 restores the 200 preview byte-for-byte in shape', async () => {
     process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
     try {
       const r = await H.call(DIR, 'get_market_intel', { market: 'northern-virginia' });
@@ -188,7 +229,10 @@ describe('after sign-in, and every other credential', () => {
   });
 });
 
-describe('other paths are unchanged', () => {
+describe('other paths are unchanged, even with lazy auth ON', () => {
+  beforeEach(() => { process.env.DCHUB_CLAUDE_LAZY_AUTH = '1'; });
+  afterEach(() => { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; });
+
   it('/mcp, /mcp/chatgpt and /mcp/core keyless previews stay 200 with no challenge', async () => {
     for (const p of ['/mcp', '/mcp/chatgpt', '/mcp/core']) {
       const r = await H.call(p, 'get_market_intel', { market: 'northern-virginia' }, { 'user-agent': 'node' });
