@@ -13,6 +13,10 @@ Start with execute_plan(intent="<the user's question>"): it picks and chains the
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub)
 
+### Live Production Telemetry / Verifiable Proof
+
+DC Hub has served **over 900,000** external AI-platform and MCP requests. That total is the sum of AI-platform crawler and citation fetches plus MCP-transport requests; the two buckets are tracked separately from distinct weekly MCP agents. The audited split and definitions are on [the 2026-11-05 release note](https://dchub.cloud/news/2026-11-05-dc-hub-901721-ai-platform-and-mcp-requests) and [AI methodology](https://dchub.cloud/ai/methodology). Figures refresh live, with no API key, at `https://dchub.cloud/api/public/mcp-count` (request totals) and `https://dchub.cloud/api/v1/stats/live-proof` (distinct weekly agents and related MCP proof).
+
 ---
 
 ## Using DC Hub data without MCP
