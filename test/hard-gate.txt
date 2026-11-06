@@ -327,6 +327,7 @@ test/mcp-oauth-own-resource.test.mjs
 test/mcp-oauth-path.test.mjs
 test/mcp-packs.test.mjs
 test/metered-note-not-full-fidelity.test.mjs
+test/min-mw-floor-carried.test.mjs
 test/mint-forwards-caller-ip.test.mjs
 test/mint-sends-paywall-arm.test.mjs
 test/monthly-quota-gateway.test.mjs
