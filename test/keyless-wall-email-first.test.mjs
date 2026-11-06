@@ -78,14 +78,13 @@ function relayFields(url) {
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
   return { fields: Buffer.from(m[1], 'base64url').toString().split('|'), sigOk: sig === m[2] };
 }
-// Agent-facing copy rules: no plan name, no price, no "/mo", no checkout link.
+// Agent-facing copy rules (owner 2026-11-05): walls MAY name the $10 pack and Pro.
+// Still ban Developer/Starter/Founding and raw Stripe checkout hosts in wall prose.
 function copyViolations(res) {
   const s = JSON.stringify(res);
   const out = [];
-  if (/\bPro\b|Developer|Starter|Founding/.test(s)) out.push('plan name');
-  if (/\$\s?\d|USD\s?\d/.test(s)) out.push('price');
-  if (/\/mo\b|per month/i.test(s)) out.push('/mo');
-  if (/\/go\/c\/|buy\.stripe\.com/.test(s)) out.push('checkout link');
+  if (/\bDeveloper\b|\bStarter\b|\bFounding\b/.test(s)) out.push('plan name');
+  if (/buy\.stripe\.com/.test(s)) out.push('checkout link');
   return out;
 }
 
