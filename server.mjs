@@ -24151,6 +24151,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // drop the cached (possibly zero) balance so the post-payment call
               // re-checks credits immediately instead of riding a stale 0 for 2 min.
               _dropCreditCache(c);
+              // Option E telemetry (2026-11-06): the unbound free over-cap message above asks for
+              // the human's email (`bind_email`), so the quota_wall_hit row must say it asked.
+              // No mark for a paid taste or a bound key: neither response asks for an email.
+              if (_trialCapAsksEmail(_paidTaste, _bound)) _markEmailAsk(c, 'bind_field');
               // ── r-cap-signal (2026-09-07): WRITE THE SIGNAL FOR THE BIGGEST WALL
               //
               // This branch is the deprivation moment and it has been firing
@@ -26118,6 +26122,9 @@ export function _relayContractStep(result, name) {
 // Pro-only / Land & Power: no marker (the backend's rule 1 decides 'pro' by tool).
 const _WALL_KIND_CAPACITY_ERRORS = new Set(['quota_exceeded', 'daily_limit', 'anon_hard_wall', 'metered_enforced', 'metered_over_threshold']);
 const _WALL_KIND_CAPACITY_UPGRADE_TIERS = new Set(['anon_daily_cap', 'credits_depleted']);
+// The trial_cap_exceeded over-cap copy carries the free `bind_email` ask only for an unbound,
+// non-paid caller; that is exactly when its quota_wall_hit should carry email_ask 'bind_field'.
+export function _trialCapAsksEmail(paidTaste, bound) { return !paidTaste && !bound; }
 export function _wallKindFor(sc, c, name) {
   try {
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return '';
