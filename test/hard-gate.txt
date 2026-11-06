@@ -565,6 +565,7 @@ test/wall-no-required-plan-e2e.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs
 test/wall-transport.test.mjs
+test/wall-upgrade-offer.test.mjs
 test/wall-user-line-hard-wall.test.mjs
 test/wall-user-line.test.mjs
 test/wall-via-tag-claim-bind.test.mjs

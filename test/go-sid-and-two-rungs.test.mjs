@@ -222,8 +222,9 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
   });
 
   it('r-pro-only-sku: the free over-cap wall names Pro on a Pro-only tool', () => {
-    // The over-cap wall is built inline in the tools/call handler; pin the branch.
-    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'the DC Hub plan that opens \\`' + name + '\\`'");
+    // Owner 2026-11-05: over-cap wall offers PACK_PRICE / PRO_NAME from wall-upgrade-offer.
+    expect(SRC).toContain("${_proOnlyTool(name) ? (PRO_NAME + ' (' + PRO_PRICE + ') to open \\`' + name + '\\`')");
+    expect(SRC).toContain('PRO_NAME + \' (\' + PRO_PRICE + \') for \' + PRO_NAME + \'-only tools');
   });
 
   it('clean platform (ChatGPT/OpenAI): the $10 rung stays the informational /upgrade/h page', () => {

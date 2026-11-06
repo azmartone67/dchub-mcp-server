@@ -220,6 +220,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
+import { PACK_PRICE, PACK_NAME, PRO_NAME, PRO_PRICE } from './lib/wall-upgrade-offer.mjs';
 import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
@@ -22145,8 +22146,12 @@ function trackedTool(srv, name, description, schema, handler) {
         const _capLink = await _keylessCapEmailLink(c, name, tier);
         if (_capLink) {
           const _exitH = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
+          const _sidCap = c.session_id || 'no-session';
           const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
             exitShown: _exitH, perDay: FREE_TIER.identified_calls_per_day, market: _wallAlertMarket(c),
+            packUrl: _packCheckoutUrl(_sidCap),
+            proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidCap) : '',
+            wallKind: 'anon_hard_wall',
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
@@ -23637,7 +23642,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               : (_missedUpgradeFor(trimmed, undefined, { strict: true }) || _missedUpgradeFor(trimmed));
             trimmed._upgrade = _coachSellsPack ? {
               tier: 'anon_daily_cap',
-              message: _coachHead + " Want more today? 💳 a one-time pack of 1,000 API credits (no subscription) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.",
+              message: _coachHead + ` Want more today? 💳 the ${PACK_PRICE} ${PACK_NAME} (usage capacity only, no subscription) or ${PRO_NAME} (${PRO_PRICE}) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.`,
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
@@ -23663,9 +23668,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const _capLinkS = await _keylessCapEmailLink(c, name, tier, { wide: true });
             if (_capLinkS) {
               const _exitS = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
+              const _sidSoft = c.session_id || 'no-session';
               const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS, exitShown: _exitS,
                                                                  perDay: FREE_TIER.identified_calls_per_day,
-                                                                 market: _wallAlertMarket(c) });
+                                                                 market: _wallAlertMarket(c),
+                                                                 packUrl: _packCheckoutUrl(_sidSoft),
+                                                                 proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
@@ -24081,7 +24089,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // still serves it full per call (the pair is not Pro-only any more).
                 message: _paidTaste
                   ? `You've used the ${_cap} full \`${name}\` answers included with your plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth comes with a paid DC Hub plan → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 a one-time pack of 1,000 API credits (capacity, paid per call, no subscription) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. More full answers today: 💳 a one-time pack of 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Relay the link in human_url to your human (also ⚡ ${_proOnlyTool(name) ? 'the DC Hub plan that opens \`' + name + '\`' : 'a paid DC Hub plan'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. More full answers today: 💳 the ${PACK_PRICE} ${PACK_NAME} (usage capacity only, no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Or ⚡ ${_proOnlyTool(name) ? (PRO_NAME + ' (' + PRO_PRICE + ') to open \`' + name + '\`') : (PRO_NAME + ' (' + PRO_PRICE + ') for ' + PRO_NAME + '-only tools and a higher daily allowance')} → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Credits do not unlock ${PRO_NAME}-only tools. Relay the link in human_url to your human.${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: 'A one-time pack of 1,000 API credits, no subscription — API capacity, paid per call (less than two coffees; DataCenterHawk is an annual analyst contract).',
