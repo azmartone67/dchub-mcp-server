@@ -433,6 +433,7 @@ test/rank-markets-value-strip.test.mjs
 test/rank-markets-visible-order.test.mjs
 test/ranked-answer-e2e.test.mjs
 test/ranked-answer.test.mjs
+test/readme-agent-policy.test.mjs
 test/readme-leads-with-dcpi.test.mjs
 test/readme-links-are-not-dead-ends.test.mjs
 test/recipe-lifecycle.test.mjs
