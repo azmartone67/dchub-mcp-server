@@ -1128,7 +1128,7 @@ describe('source_capacity — search by size and location', () => {
     const lines = renderedLines(r);
     expect(lines).toContain('Filters applied: min_kw=500; region=europe; delivery_type=colocation; available_by=2027-06; limit=25');
     expect(lines).toContain('Capacity by listing:');
-    expect(lines).toContain('- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — Link: https://dchub.cloud/listings?l=fra-500kw-colocation');
+    expect(lines).toContain('- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — freshness unavailable — Link: https://dchub.cloud/listings?l=fra-500kw-colocation');
     const first = JSON.parse(r.content[0].text);
     expect(first.filters).toEqual(FILTERS_EU);
     expect(first.items[0]).toEqual(TEASER_EU);
@@ -1142,7 +1142,7 @@ describe('source_capacity — search by size and location', () => {
     responder = () => json(200, listWithItems(1));
     const r = await call(READ, {});
     const lines = renderedLines(r);
-    expect(lines).toContain('- dfw-40mw-powered-shell: 40 MW in Dallas, TX, US — Link: https://dchub.cloud/listings?l=dfw-40mw-powered-shell');
+    expect(lines).toContain('- dfw-40mw-powered-shell: 40 MW in Dallas, TX, US — freshness unavailable — Link: https://dchub.cloud/listings?l=dfw-40mw-powered-shell');
     expect(lines.some((l) => l.startsWith('Filters applied'))).toBe(false);
   });
 });
@@ -1153,7 +1153,7 @@ describe('source_capacity — search by size and location', () => {
 // contract). The backend matches a requested size against THEM, not against the
 // headline total, so a card that shows only the total cannot explain its own
 // hit or miss. Each half renders independently: both, either one, or neither,
-// and neither must render exactly what it rendered before this existed.
+// and neither adds fit wording; the separate freshness label still renders.
 describe('source_capacity — contiguous_kw and min_contract_kw beside the capacity', () => {
   const card = (over) => ({ ...TEASER_EU, ...over });
   const feed = (over) => ({ ...LIST_FILTERED, items: [card(over)] });
@@ -1184,7 +1184,7 @@ describe('source_capacity — contiguous_kw and min_contract_kw beside the capac
     const { r, lines } = await render(feed({ contiguous_kw: 400, min_contract_kw: 100 }));
     expect(rowsOf(lines)).toEqual([
       '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)'
-      + ' — largest contiguous block 400 kW, smallest contract 100 kW',
+      + ' — largest contiguous block 400 kW, smallest contract 100 kW — freshness unavailable',
     ]);
     expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
     // The payload is the backend's, unchanged, and the wider fields still pass
@@ -1197,7 +1197,7 @@ describe('source_capacity — contiguous_kw and min_contract_kw beside the capac
   it('contiguous only: the contiguous block alone, no smallest-contract phrase', async () => {
     const { lines } = await render(feed({ contiguous_kw: 400 }));
     expect(rowsOf(lines)).toEqual([
-      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — largest contiguous block 400 kW',
+      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — largest contiguous block 400 kW — freshness unavailable',
     ]);
     expect(rowsOf(lines).some((l) => l.includes('smallest contract'))).toBe(false);
     expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
@@ -1206,15 +1206,15 @@ describe('source_capacity — contiguous_kw and min_contract_kw beside the capac
   it('smallest chunk only: the smallest contract alone, no contiguous phrase', async () => {
     const { lines } = await render(feed({ min_contract_kw: 100 }));
     expect(rowsOf(lines)).toEqual([
-      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — smallest contract 100 kW',
+      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — smallest contract 100 kW — freshness unavailable',
     ]);
     expect(rowsOf(lines).some((l) => l.includes('contiguous'))).toBe(false);
     expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
   });
 
-  it('neither declared: the line is what it was, and nothing explains a number that is not there', async () => {
+  it('neither declared: no fit wording, with freshness unavailable explicitly labelled', async () => {
     const { lines } = await render(feed({}));
-    expect(rowsOf(lines)).toEqual(['- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)']);
+    expect(rowsOf(lines)).toEqual(['- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — freshness unavailable']);
     expect(lines.some((l) => /contiguous|smallest contract/.test(l)), 'the fit phrases leaked onto a card that declares neither').toBe(false);
     expect(lines.some((l) => l.startsWith(FIT_NOTE_HEAD))).toBe(false);
   });
@@ -1226,7 +1226,7 @@ describe('source_capacity — contiguous_kw and min_contract_kw beside the capac
     const lines = renderedLines(r);
     noBrokenLine(lines);
     expect(rowsOf(lines)).toEqual([
-      '- fra-500kw-colocation: largest contiguous block 400 kW in Frankfurt, DE (europe)',
+      '- fra-500kw-colocation: largest contiguous block 400 kW in Frankfurt, DE (europe) — freshness unavailable',
     ]);
   });
 
