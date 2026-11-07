@@ -6,9 +6,9 @@ const UA = { 'user-agent': 'Claude-User' };
 const VERDICT = { 'columbus-oh': ['BUILD', 71.2], columbus: ['BUILD', 71.2], akron: ['CAUTION', 40], canton: ['CAUTION', 38] };
 
 let H, fence; const out = {};
-async function run(path, name, intent, platform = 'claude-ai', ua = UA) {
+async function run(path, name, intent, platform = 'claude-ai', ua = UA, extra = {}) {
   const init = await H.init(path, platform, ua);
-  const res = await H.call(path, 'execute_plan', { intent }, { ...ua, 'mcp-session-id': init.headers.get('mcp-session-id') });
+  const res = await H.call(path, 'execute_plan', { intent, ...extra }, { ...ua, 'mcp-session-id': init.headers.get('mcp-session-id') });
   const line = res.raw.split('\n').find((l) => l.startsWith('data:')) || res.raw;
   out[name] = { raw: res.raw, sc: JSON.parse(line.replace(/^data:\s*/, '')).result.structuredContent };
 }
@@ -27,6 +27,8 @@ beforeAll(async () => {
   await run('/mcp', 'timing', 'how soon can I get 100 MW of power in ERCOT');
   await run('/mcp', 'siting', 'find a site for a 150 MW data center in Ohio');
   await run('/mcp', 'market', 'is Columbus a good market for a data center');
+  // Grok QA 2026-11-06: a typed size beats the figure in the text (the queue step runs at it).
+  await run('/mcp', 'sized', 'find a site for a 100 MW data center in Ohio', 'claude-ai', UA, { context: { min_mw: 150 } });
   await run('/mcp/chatgpt', 'chatgpt', 'how soon can I get 100 MW of power in ERCOT', 'chatgpt', { 'user-agent': 'openai-mcp' });
 }, 180_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
@@ -62,6 +64,17 @@ describe('execute_plan intent_answer', () => {
     expect(a.verdict).toMatchObject({ value: 'BUILD', scope: 'market' });
     expect(a.verdict.subject).toMatch(/columbus/);
     expect(a.headline).toMatch(/^Columbus/);
+  });
+});
+
+describe('a typed size (Grok QA 2026-11-06)', () => {
+  it('context min_mw=150 runs the queue step at 150 and the answer speaks of 150 MW, not the 100 in the text', () => {
+    const q = out.sized.sc.executed.find((e) => e.tool === 'get_refined_queue');
+    expect(q, 'the plan ran no queue step').toBeTruthy();
+    expect(q.args.min_mw).toBe(150);
+    const a = out.sized.sc.intent_answer;
+    expect(a && a.kind).toBe('siting');
+    expect(a.requested_mw).toBe(150);
   });
 });
 

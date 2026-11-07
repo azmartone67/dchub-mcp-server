@@ -5,10 +5,10 @@
 // stays), so the answer was marked partial and every wall step fired on it: "Your AI assistant hit
 // DC Hub's paid data boundary on analyze_site", and next_ask "open the link first, then ask again
 // for the full answer" (which spends the second run for the same partial answer). On /mcp/claude
-// the lazy-auth filter swaps any keyless partial answer for a 401 sign-in, so the run never reached
-// the caller there. Real server.mjs app on loopback, stub backend whose site-score withholds the
+// the lazy-auth filter (opt-in since 11-06, DCHUB_CLAUDE_LAZY_AUTH=1) swaps any keyless partial
+// answer for a 401 sign-in, so the run never reached the caller there. Real server.mjs app on loopback, stub backend whose site-score withholds the
 // months the way util/site_market_verdict does; caller IP from X-Forwarded-For, as in production.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { WALL_NEXT_ASK_QUESTION } from '../lib/short-wall-link.mjs';
 import { isKeylessSiteRun } from '../lib/keyless-full-trial.mjs';
@@ -96,6 +96,10 @@ describe('/mcp: the free run carries no wall copy', () => {
 });
 
 describe('/mcp/claude: the free run is served, not swapped for a sign-in', () => {
+  // Lazy auth is opt-in since 2026-11-06 (default off); these pin the exemption WITH it on.
+  beforeEach(() => { process.env.DCHUB_CLAUDE_LAZY_AUTH = '1'; });
+  afterEach(() => { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; });
+
   it('a keyless free run is 200 with the full answer', async () => {
     const r = await H.call('/mcp/claude', 'analyze_site', ARGS, { 'user-agent': 'Claude-User', 'x-forwarded-for': freshIp() });
     expect(r.status).toBe(200);

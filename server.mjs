@@ -227,7 +227,7 @@ import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, a
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
-import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
+import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
@@ -19974,9 +19974,15 @@ const _sitesArgHint = new AsyncLocalStorage();
 export function _sitesRawHint(body) {
   const p = body && body.method === 'tools/call' && body.params;
   if (!p || p.name !== 'find_sites' || !p.arguments || typeof p.arguments !== 'object') return null;
-  const raw = p.arguments.target_mw != null ? p.arguments.target_mw : p.arguments.capacity_mw;
-  const n = typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
-  return Number.isFinite(n) ? { target_mw: n } : null;
+  const fig = (raw) => (typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN));
+  const n = fig(p.arguments.target_mw != null ? p.arguments.target_mw : p.arguments.capacity_mw);
+  // Grok QA 2026-11-06 (item 10): min_mw, the queue tools' floor name, was stripped the same way and
+  // never reported; it is parked under its own name so the answer says that one was ignored.
+  const m = fig(p.arguments.min_mw);
+  const out = {};
+  if (Number.isFinite(n)) out.target_mw = n;
+  if (Number.isFinite(m)) out.min_mw = m;
+  return Object.keys(out).length ? out : null;
 }
 export function _execIntentState(intentText, sig) {
   const direct = sig && (sig.state || sig.stateFromPlace);
@@ -20348,6 +20354,10 @@ export function _planSignals(intent, context) {
   })();
   const mw = (() => {
     if (Number.isFinite(Number(c.capacity_mw))) return Number(c.capacity_mw);
+    // Grok QA 2026-11-06: context {min_mw:150} on "100 MW sites in Ohio" ran the queue step at
+    // min_mw=100 (the intent's figure, minted into the step's literal args, beat the caller's own).
+    // A caller-typed floor is the size ask; null/'' is not a figure (Number(null) is 0).
+    if (c.min_mw != null && c.min_mw !== '' && Number.isFinite(Number(c.min_mw)) && Number(c.min_mw) > 0) return Number(c.min_mw);
     const m = text.match(_PLAN_MW_RE);
     if (!m) return null;
     const n = Number(m[1]);
@@ -22453,8 +22463,9 @@ function trackedTool(srv, name, description, schema, handler) {
       if (hasReadGatedFilter(name, args) || READ_ORDERED_TOOLS.has(name)) {
         let _canRead = _isPaidDepthTier(_gateTier);
         if (!_canRead) { try { _canRead = await _anonWallPaidCall(c, extra, _mppArgs); } catch (_) { _canRead = false; } }
+        const _asked = readGatedValues(name, args);   // before the drop deletes them
         const _ignored = dropUnreadableFilters(name, args, _canRead);
-        if (_ignored.length) { try { c._params_not_applied = _ignored; } catch (_) { /* ctx is best-effort */ } }
+        if (_ignored.length) { try { c._params_not_applied = _ignored; c._params_not_applied_values = _asked; } catch (_) { /* ctx is best-effort */ } }
         if (READ_ORDERED_TOOLS.has(name) && !_canRead) { try { c._visible_order = true; } catch (_) { /* ctx is best-effort */ } }
       }
       let gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
@@ -28094,7 +28105,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
         ...(() => { const _ia = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
                       : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
-                          constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap }, executed, fullByEntry);
+                          constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
+                          requested_mw: _sig && _sig.mw }, executed, fullByEntry);
                     return _ia ? { intent_answer: _ia } : {}; })(),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
@@ -29461,7 +29473,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
-      if (_ig && _ig.length && sc === data) { sc._params_not_applied = _ig; sc._params_note = `${_ig.join(', ')} filter${_ig.length === 1 ? 's' : ''} on figures this tier does not read; not applied.`; }
+      if (_ig && _ig.length && sc === data) {
+        sc._params_not_applied = _ig; sc._params_note = `${_ig.join(', ')} filter${_ig.length === 1 ? 's' : ''} on figures this tier does not read; not applied.`;
+        // The same word where the filter is echoed: filters_applied.min_mw null alone read as "no floor asked".
+        let _iv = null; try { _iv = getCtx()._params_not_applied_values; } catch (_) { _iv = null; }
+        if (sc.filters_applied) sc.filters_applied = markNotApplied(sc.filters_applied, _ig, _iv);
+      }
       // r-error-envelope (2026-07-12, Gemini error_version:1): when the backend
       // returns an _error_mitigation block (the TTP zero-cut reference case),
       // flip isError:true so the agent treats it as an actionable error state
