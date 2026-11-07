@@ -476,6 +476,15 @@ describe('source_capacity', () => {
     expect(ok.ok, ok.issues).toBe(true);
   });
 
+  it('an empty browse says no listing matches first, with the free requirement option', async () => {
+    responder = () => json(200, { ...LIST_UPCOMING_EMPTY, filters: { market: 'Reno' } });
+    const lines = (await call(READ, { market: 'Reno' })).content[1].text.split('\n');
+    expect(lines[0]).toBe(S.LISTING_NO_MATCH_LINE);
+    expect(lines[0]).toContain('request_capacity_intro without a slug');
+    expect(S._listingLines(listWithItems(2)).join('\n')).not.toContain('No listing matches');
+    expect(S._listingLines({ ok: false, items: [] })).toEqual([]);
+  });
+
   it('an anonymous caller gets EVERY teaser row with capacity_mw intact (not the anon trim)', async () => {
     const n = S.TRIAL_PREVIEW_ROWS + 2;
     const fixture = listWithItems(n);
@@ -1521,6 +1530,16 @@ describe('browse-path access block → next_steps', () => {
     expect(sc.next_steps_note).toMatch(/email your human explicitly gives you/);
     const ok = await accepts(READ, sc);
     expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('an empty gated browse leads with no match and the requirement option, then the sign-in steps', async () => {
+    responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_SIGN_IN });
+    const r = await call(READ, {});
+    expect(r.structuredContent.next_steps_note.startsWith(S.LISTING_NO_MATCH_LINE + ' ')).toBe(true);
+    expect(r.structuredContent.next_steps_note).toContain('claim_free_key, then bind_email');
+    // Control: a gated browse WITH listings keeps the plain sign-in note.
+    responder = () => json(200, browseWith(BROWSE_ACCESS_SIGN_IN));
+    expect((await call(READ, {})).structuredContent.next_steps_note).not.toContain('No listing matches');
   });
 
   it('the block is read from caller_access, the key the backend actually publishes', async () => {
