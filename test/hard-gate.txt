@@ -191,6 +191,7 @@ test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
+test/find-sites-min-mw.test.mjs
 test/find-sites-target-mw-e2e.test.mjs
 test/for-your-human-soft.test.mjs
 test/forward-via-channel-to-claim.test.mjs

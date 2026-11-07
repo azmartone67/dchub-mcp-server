@@ -19974,9 +19974,15 @@ const _sitesArgHint = new AsyncLocalStorage();
 export function _sitesRawHint(body) {
   const p = body && body.method === 'tools/call' && body.params;
   if (!p || p.name !== 'find_sites' || !p.arguments || typeof p.arguments !== 'object') return null;
-  const raw = p.arguments.target_mw != null ? p.arguments.target_mw : p.arguments.capacity_mw;
-  const n = typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
-  return Number.isFinite(n) ? { target_mw: n } : null;
+  const fig = (raw) => (typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN));
+  const n = fig(p.arguments.target_mw != null ? p.arguments.target_mw : p.arguments.capacity_mw);
+  // Grok QA 2026-11-06 (item 10): min_mw, the queue tools' floor name, was stripped the same way and
+  // never reported; it is parked under its own name so the answer says that one was ignored.
+  const m = fig(p.arguments.min_mw);
+  const out = {};
+  if (Number.isFinite(n)) out.target_mw = n;
+  if (Number.isFinite(m)) out.min_mw = m;
+  return Object.keys(out).length ? out : null;
 }
 export function _execIntentState(intentText, sig) {
   const direct = sig && (sig.state || sig.stateFromPlace);
