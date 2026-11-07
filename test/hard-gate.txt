@@ -192,6 +192,7 @@ test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
+test/find-sites-min-mw.test.mjs
 test/find-sites-target-mw-e2e.test.mjs
 test/for-your-human-soft.test.mjs
 test/forward-via-channel-to-claim.test.mjs
@@ -306,6 +307,7 @@ test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
+test/list-transactions-no-deal-floor.test.mjs
 test/listing-canon.test.mjs
 test/listing-copy.test.mjs
 test/listing-links-receipt.test.mjs
@@ -328,6 +330,7 @@ test/mcp-oauth-own-resource.test.mjs
 test/mcp-oauth-path.test.mjs
 test/mcp-packs.test.mjs
 test/metered-note-not-full-fidelity.test.mjs
+test/min-mw-floor-carried.test.mjs
 test/mint-forwards-caller-ip.test.mjs
 test/mint-sends-paywall-arm.test.mjs
 test/monthly-quota-gateway.test.mjs
