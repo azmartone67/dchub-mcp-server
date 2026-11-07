@@ -7393,6 +7393,31 @@ export const LISTING_FIT_NOTE = 'Fit: a size search is matched against the block
   + 'deliver — no larger than its largest contiguous block, no smaller than its smallest contract — not '
   + 'against its headline total. A listing that declares neither is matched on its total.';
 
+// Evidence labels are not availability or authorization claims. Pending takes
+// precedence even when the age-based state is "fresh".
+const _FRESHNESS_TYPES = {
+  state: 'string', verified_at: 'string', age_days: 'number', update_cadence: 'string',
+  next_update_due: 'string', overdue: 'boolean', verification_pending: 'boolean',
+  pending_since: 'string', withdraw_after: 'string', lapsed: 'boolean',
+};
+function _publicFreshness(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(_FRESHNESS_TYPES)
+    .filter(([k, type]) => Object.hasOwn(value, k)
+      && (value[k] === null || (typeof value[k] === type
+        && (type !== 'number' || Number.isFinite(value[k])))))
+    .map(([k]) => [k, value[k]]));
+}
+function _listingFreshnessText(value) {
+  const f = _publicFreshness(value);
+  let label = 'freshness unavailable';
+  if (f.lapsed === true) label = 'freshness lapsed';
+  else if (f.verification_pending === true) label = 'verification pending';
+  else if (f.state === 'unverified') label = 'unverified';
+  else if (['fresh', 'aging', 'stale'].includes(f.state)) label = 'freshness ' + f.state;
+  return label;
+}
+
 function _listingCardLine(card) {
   const cap = _listingCapacityText(card);
   const fit = _listingFitText(card);
@@ -7405,7 +7430,8 @@ function _listingCardLine(card) {
   // that slot rather than trailing an empty one.
   const link = _listingOwnUrl(card.tracked_url) || _listingOwnUrl(card.url);
   return '- ' + label + ': ' + (cap || fit) + (where ? ' in ' + where : '')
-    + (cap && fit ? ' — ' + fit : '') + (link ? ' — Link: ' + link : '');
+    + (cap && fit ? ' — ' + fit : '') + ' — ' + _listingFreshnessText(card.freshness)
+    + (link ? ' — Link: ' + link : '');
 }
 
 function _listingFiltersText(filters) {
@@ -7464,6 +7490,7 @@ export function _listingLines(body) {
   if (b.filters !== undefined && b.filters !== null) {
     lines.push('Filters applied: ' + (_listingFiltersText(b.filters) || 'none'));
   }
+  if (_listingStr(b.availability_note)) lines.push(_listingStr(b.availability_note));
   if (Array.isArray(b.items)) {
     const rows = b.items.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
       .map((x) => ({ line: _listingCardLine(x), fit: !!_listingFitText(x) })).filter((x) => x.line);
@@ -7485,6 +7512,7 @@ export function _listingLines(body) {
   }
   if (fitShown) lines.push(LISTING_FIT_NOTE);
   if (listing) {
+    lines.push('Listing evidence: ' + _listingFreshnessText(listing.freshness) + '.');
     const link = _listingOwnUrl(listing.tracked_url) || _listingOwnUrl(listing.url);
     if (link) lines.push('Link: ' + link);
   }
@@ -7996,6 +8024,7 @@ function _matchScrubLeg(leg) {
   if (!leg || typeof leg !== 'object' || Array.isArray(leg)) return leg;
   const out = { ...leg };
   for (const k of _MATCH_IDENTITY_KEYS) delete out[k];
+  if (Object.hasOwn(out, 'freshness')) out.freshness = _publicFreshness(out.freshness);
   return out;
 }
 
@@ -8028,7 +8057,7 @@ function _matchLegLine(leg) {
   return '  - ' + (slug || _listingStr(leg.ref) || 'listing') + ': ' + (_matchKw(leg.kw) || 'kW not stated')
     + (where ? ' in ' + where : '')
     + (when ? ', available from ' + when : ', no availability date listed')
-    + (label ? ' [' + label + ']' : '');
+    + (label ? ' [' + label + ']' : '') + ' — ' + _listingFreshnessText(leg.freshness);
 }
 
 // Every listing the answer names, in order of first appearance, with each
@@ -8124,6 +8153,11 @@ export function _matchLines(body) {
   }
   if (!exact.length && !bundles.length && !sf) lines.push('No listing matched.');
 
+  if (b.data_as_of_basis === 'newest_listing_updated_at') {
+    lines.push('Data as of: ' + (_listingStr(b.data_as_of) || 'unavailable')
+      + ' (newest listing update, not operator reconfirmation).');
+  }
+  lines.push('Per-listing freshness is evidence, not a commitment of availability or authorization.');
   const listings = _matchByListing(b);
   if (listings.length) {
     lines.push('By listing (next step for each):');
@@ -32209,7 +32243,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       region: S.describe('Browse filter: comma-separated regions from north_america, latin_america, europe, asia_pacific and middle_east_africa; the aliases emea, apac, latam and americas also work, e.g. "europe" or "emea, apac"'),
       location: S.describe('Browse filter: comma-separated free text matched against each listing\'s region, country, state and metro, e.g. "Germany" or "Texas, Phoenix"'),
       delivery_type: z.enum(_CAPACITY_GPU_ON ? ['land', 'powered_shell', 'turnkey', 'colocation', 'gpu_compute'] : ['land', 'powered_shell', 'turnkey', 'colocation']).optional().describe(_CAPACITY_GPU_ON ? 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey, colocation or gpu_compute' : 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey or colocation'),
-      available_by: S.describe('Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD. With a target it is the date the whole requirement must be deliverable by'),
+      available_by: S.describe('Month-granular deadline (YYYY-MM or YYYY-MM-DD; day ignored). Browse keeps listings with some scheduled capacity by that month, not necessarily the full requested amount. With target_mw or target_kw, the whole requirement must be deliverable by that month'),
       ..._CAPACITY_GPU_ON ? {
         gpu_model: S.describe('Browse filter, gpu_compute listings: GPU model, e.g. H100, H200, B200, GB200, MI300X'),
         min_gpus: N.describe('Browse filter, gpu_compute listings: at least this many GPUs available'),

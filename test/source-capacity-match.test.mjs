@@ -420,3 +420,84 @@ describe('registration', () => {
     expect(d).toContain('providers stay anonymised until an introduction is accepted');
   });
 });
+
+// Additive evidence labels: fixtures only, no operator availability claims.
+describe('per-listing public freshness evidence', () => {
+  const cases = [
+    [undefined, 'freshness unavailable'], [null, 'freshness unavailable'],
+    [{}, 'freshness unavailable'], [{ state: 'unknown' }, 'freshness unavailable'],
+    [{ state: 'pending' }, 'freshness unavailable'],
+    [{ state: 'unverified' }, 'unverified'],
+    [{ state: 'fresh' }, 'freshness fresh'], [{ state: 'aging' }, 'freshness aging'],
+    [{ state: 'stale' }, 'freshness stale'],
+    [{ state: 'fresh', verification_pending: true }, 'verification pending'],
+    [{ state: 'unverified', verification_pending: true }, 'verification pending'],
+    [{ state: 'fresh', verification_pending: true, lapsed: true }, 'freshness lapsed'],
+    [{ state: { provider: 'PRIVATE' }, lapsed: { contact: 'PRIVATE' } }, 'freshness unavailable'],
+  ];
+  it.each(cases)('renders match evidence %j as %s', (freshness, expected) => {
+    const line = S._matchLines(envelope({ exact: [leg({ freshness })] })).join('\n');
+    expect(line).toContain('— ' + expected);
+    expect(line).not.toMatch(/currently available|operator-confirmed|authorized/);
+  });
+  it.each(cases)('renders browse and opened listing evidence %j as %s', (freshness, expected) => {
+    const card = { slug: 'test', capacity_kw: 1000, freshness };
+    expect(S._listingLines({ items: [card] }).join('\n')).toContain('— ' + expected);
+    expect(S._listingLines({ listing: card }).join('\n')).toContain('Listing evidence: ' + expected);
+  });
+  it('keeps mixed bundle and shortfall evidence per leg', () => {
+    const pending = leg({ listing: 'pending', freshness: { state: 'fresh', verification_pending: true } });
+    const stale = leg({ listing: 'stale', freshness: { state: 'stale' } });
+    const body = envelope({ bundles: [{ legs: [pending, stale] }], shortfall: { legs: [pending, stale] } });
+    const lines = S._matchLines(body).join('\n');
+    expect(lines).toMatch(/pending:.*verification pending/);
+    expect(lines).toMatch(/stale:.*freshness stale/);
+  });
+  it('allowlists scalar freshness in every structured match path', async () => {
+    const freshness = { state: 'fresh', verified_at: '2026-11-01', age_days: 6,
+      update_cadence: 'weekly', next_update_due: '2026-11-10', overdue: false,
+      verification_pending: false, pending_since: null, withdraw_after: '2026-11-19', lapsed: false };
+    const dirty = leg({ freshness: { ...freshness, verified_by: 'PRIVATE', method: 'PRIVATE',
+      documents: [{ contact: 'PRIVATE' }], provider: 'PRIVATE', contact: 'PRIVATE', paid: 'PRIVATE' } });
+    const body = envelope({ exact: [dirty], bundles: [{ legs: [dirty] }], shortfall: { legs: [dirty] } });
+    responder = () => json(200, body);
+    const r = await call({ target_kw: 40000 }, seat());
+    expect(JSON.stringify(r)).not.toContain('PRIVATE');
+    const clean = S._matchScrub(body);
+    expect(r.structuredContent.exact[0].freshness).toEqual(freshness);
+    expect(clean.exact[0].freshness).toEqual(freshness);
+    expect(clean.bundles[0].legs[0].freshness).toEqual(freshness);
+    expect(clean.shortfall.legs[0].freshness).toEqual(freshness);
+    expect(body.exact[0].freshness.verified_by).toBe('PRIVATE'); // no mutation
+  });
+  it.each([[], 'PRIVATE', { state: { provider: 'PRIVATE' }, age_days: ['PRIVATE'],
+    verified_at: { contact: 'PRIVATE' }, overdue: 'PRIVATE', lapsed: { paid: 'PRIVATE' } }])(
+    'rejects arbitrary nested objects or wrong freshness types: %j', (freshness) => {
+      const clean = S._matchScrub(envelope({ exact: [leg({ freshness })] }));
+      expect(clean.exact[0].freshness).toEqual({});
+      expect(JSON.stringify(clean)).not.toContain('PRIVATE');
+    });
+  it('labels newest update provenance separately from reconfirmation', () => {
+    const lines = S._matchLines(envelope({ exact: [leg({ freshness: { state: 'unverified' } })],
+      data_as_of_basis: 'newest_listing_updated_at' })).join('\n');
+    expect(lines).toContain('newest listing update, not operator reconfirmation');
+    expect(lines).toContain('— unverified');
+    expect(lines).toContain('not a commitment of availability or authorization');
+  });
+  it('renders browse deadline clarity and preserves it in structured output', () => {
+    const availability_note = 'Browse results have some scheduled capacity by the requested month, not necessarily the full requested amount. Dates use month precision, including YYYY-MM-DD inputs. Use target matching to check the full requirement.';
+    const body = { ...LIST_EMPTY, filters: { available_by: '2027-06-01' }, availability_note,
+      items: [{ slug: 'ramp', capacity_kw: 10000, freshness: { state: 'unverified' } }] };
+    expect(S._listingLines(body)).toContain(availability_note);
+    const result = S._listingsToolResult('source_capacity', { http_status: 200, body });
+    expect(JSON.stringify(result)).toContain(availability_note);
+  });
+  it('describes month precision and some-versus-whole requirement in the live schema', () => {
+    const schema = TOOLS.source_capacity;
+    const available = schema.inputSchema.shape.available_by;
+    expect(available.description).toContain('Month-granular');
+    expect(available.description).toContain('some scheduled capacity');
+    expect(available.description).toContain('day ignored');
+    expect(available.description).toContain('target_mw or target_kw');
+  });
+});
