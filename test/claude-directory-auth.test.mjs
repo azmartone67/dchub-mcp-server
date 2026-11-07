@@ -79,15 +79,19 @@ describe('?api_key= on /mcp/claude authenticates exactly like the header', () =>
       expect(o, `first difference at ${i}: header=${a.slice(i - 80, i + 80)} | query=${o.slice(i - 80, i + 80)}`).toBe(a);
     }
     // CONTROL: keyless is the plans notice, so equality above is not "all anonymous".
-    // (With lazy auth on, a keyless preview is a 401 sign-in challenge instead; the
-    // kill switch shows the preview it replaces. test/claude-directory-lazy-auth.test.mjs.)
+    // (With lazy auth on, DCHUB_CLAUDE_LAZY_AUTH=1, a keyless preview is a 401 sign-in
+    // challenge instead; =0 shows the preview it replaces. test/claude-directory-lazy-auth.test.mjs.)
     process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
     try {
       const anon = await H.call(DIR, 'analyze_site', args);
       expect(anon.msg.result.content.map((c) => c.text)).toEqual([CLAUDE_PLANS_NOTICE]);
     } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
-    const anon401 = await H.call(DIR, 'analyze_site', args);
-    expect(anon401.status).toBe(401);
+    // Lazy auth is opt-in since 2026-11-06: only with DCHUB_CLAUDE_LAZY_AUTH=1 is the preview a 401.
+    process.env.DCHUB_CLAUDE_LAZY_AUTH = '1';
+    try {
+      const anon401 = await H.call(DIR, 'analyze_site', args);
+      expect(anon401.status).toBe(401);
+    } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
   }, 60_000);
 
   it('a Bearer carrying a DC Hub key works too', async () => {
@@ -191,16 +195,21 @@ describe('OAuth (AuthKit bearer) on /mcp/claude', () => {
   // Lazy auth (owner 2026-10-20): the anonymous-connector N-call challenge of /mcp
   // still never runs here; a keyless preview is answered 401 instead (every time,
   // no N), and a complete keyless answer is served. See claude-directory-lazy-auth.
-  it('keyless Claude connector: initialize served; a preview is a 401 sign-in challenge on every call, not after N', async () => {
+  it('keyless Claude connector, lazy auth ON: initialize served; a preview is a 401 sign-in challenge on every call, not after N', async () => {
     const ua = { 'user-agent': 'Claude-User' };
     const init = await H.init(DIR, 'claude-ai', ua);
     expect(init.status).toBe(200);
     expect(init.headers.get('www-authenticate')).toBeNull();
-    for (let i = 0; i < 4; i++) {
-      const r = await H.call(DIR, 'get_news', { query: 'data center' }, ua);
-      expect(r.status, `call ${i + 1}`).toBe(401);
-      expect(r.headers.get('www-authenticate'), `call ${i + 1}`).toContain(`resource_metadata="${CLAUDE_PRM_URL}"`);
-    }
+    // Opt-in since 2026-11-06 (DCHUB_CLAUDE_LAZY_AUTH=1); default off is pinned in
+    // test/claude-directory-lazy-auth.test.mjs ("default").
+    process.env.DCHUB_CLAUDE_LAZY_AUTH = '1';
+    try {
+      for (let i = 0; i < 4; i++) {
+        const r = await H.call(DIR, 'get_news', { query: 'data center' }, ua);
+        expect(r.status, `call ${i + 1}`).toBe(401);
+        expect(r.headers.get('www-authenticate'), `call ${i + 1}`).toContain(`resource_metadata="${CLAUDE_PRM_URL}"`);
+      }
+    } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
     process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
     try {
       for (let i = 0; i < 8; i++) {
