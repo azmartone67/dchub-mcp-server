@@ -129,6 +129,13 @@ async function call(args, key) {
 const rowsOf = (sc) => (Array.isArray(sc.states) ? sc.states : (sc.score ? [sc.score] : []));
 const FIXTURE = { TX, NM };
 
+// The wall's signed /upgrade/h/<base64url>.<32 hex> link changes every call (session id,
+// timestamp, HMAC). Read as text it can spell a paid fragment by chance: smoke on mcp#1303
+// (2026-11-07) failed "leaked 0.37" on ...OTQ0.3757d53b..., a token, not a gas price.
+// Blank the token before the substring scan; the row checks above already prove the mask.
+const RELAY_TOKEN = /\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/g;
+const scrubRelayTokens = (s) => s.replace(RELAY_TOKEN, '/upgrade/h/<token>');
+
 function expectMasked(sc, result, label) {
   const rows = rowsOf(sc);
   expect(rows.length, `${label}: no rows\n${JSON.stringify(sc).slice(0, 400)}`).toBeGreaterThan(0);
@@ -142,7 +149,7 @@ function expectMasked(sc, result, label) {
       expect(r[k], `${label} ${r.state}.${k} kept`).toEqual(src[k]);
     }
   }
-  const all = JSON.stringify(result);
+  const all = scrubRelayTokens(JSON.stringify(result));
   for (const frag of PAID_FRAGMENTS) expect(all, `${label}: leaked ${frag}`).not.toContain(frag);
   expect(all, `${label}: a plan price in the text`).not.toMatch(/\$\d/);
 }
@@ -182,6 +189,13 @@ describe('get_gas_index below a paid seat withholds the whole backend DCGI paid 
         expect(r.verdict, `${form} ${r.state}.verdict`).toBe(FIXTURE[r.state].verdict);
       }
     }
+  });
+
+  it('the leak scan ignores a relay token that spells a fragment, and still sees a real value', () => {
+    const tok = 'https://dchub.cloud/upgrade/h/ZnJlZXwxNzk0MDMyOTQ0.3757d53bea556ae15b4cc875c8764f3d';
+    expect(tok).toContain('0.37');
+    expect(scrubRelayTokens(JSON.stringify({ human_url: tok }))).not.toContain('0.37');
+    expect(scrubRelayTokens(JSON.stringify({ human_url: tok, gas_price: 0.37 }))).toContain('0.37');
   });
 
   it('the server field list is the backend tuple, exactly', () => {
