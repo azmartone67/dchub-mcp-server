@@ -24,6 +24,7 @@
 //   I) lib/keyless-full-trial.mjs parsing and the seat predicate.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
+import { scrubRelayTokens } from './helpers/relay-token.mjs';
 import * as K from '../lib/keyless-full-trial.mjs';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
@@ -373,7 +374,7 @@ describe('G) paid-only fields stay masked on a trial answer', () => {
     flagOn();
     const r = await call('get_facility', seat());
     expect(r.isError).not.toBe(true);
-    const t = text(r) + JSON.stringify(r.structuredContent || {});
+    const t = scrubRelayTokens(text(r) + JSON.stringify(r.structuredContent || {}));
     expect(t).toContain('Trial DC 77');
     for (const f of FACILITY_PAID_FRAGS) expect(t, f).not.toContain(f);
     for (const k of FACILITY_PAID_KEYS) expect(t, k).not.toMatch(new RegExp('\\\\?"' + k + '\\\\?":(?!null)'));
@@ -385,8 +386,17 @@ describe('G) paid-only fields stay masked on a trial answer', () => {
     const h = head(r);
     expect(h.verdict).toBe('CAUTION');
     expect(h.composite_score).toBe(41.9);
-    const t = text(r) + JSON.stringify(r.structuredContent || {});
+    const t = scrubRelayTokens(text(r) + JSON.stringify(r.structuredContent || {}));
     for (const f of DCPI_PAID_FRAGS) expect(t, f).not.toContain(f);
+  });
+});
+
+describe('G) the leak scan reads values, not the relay token', () => {
+  it('a token that spells a paid fragment is blanked; a real value still trips the scan', () => {
+    const tok = 'https://dchub.cloud/upgrade/h/ZnJlZXwxNzk0MDMyOT41.5d53bea556ae15b4cc875c8764f3d123';
+    expect(tok).toContain('41.5');
+    expect(scrubRelayTokens(JSON.stringify({ human_url: tok }))).not.toContain('41.5');
+    expect(scrubRelayTokens(JSON.stringify({ human_url: tok, power_score: 41.5 }))).toContain('41.5');
   });
 });
 

@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import { scrubRelayTokens } from './helpers/relay-token.mjs';
 
 const foreign = [];
 const realConnect = net.Socket.prototype.connect;
@@ -128,13 +129,6 @@ async function call(args, key) {
 // The rows of an answer, in either form.
 const rowsOf = (sc) => (Array.isArray(sc.states) ? sc.states : (sc.score ? [sc.score] : []));
 const FIXTURE = { TX, NM };
-
-// The wall's signed /upgrade/h/<base64url>.<32 hex> link changes every call (session id,
-// timestamp, HMAC). Read as text it can spell a paid fragment by chance: smoke on mcp#1303
-// (2026-11-07) failed "leaked 0.37" on ...OTQ0.3757d53b..., a token, not a gas price.
-// Blank the token before the substring scan; the row checks above already prove the mask.
-const RELAY_TOKEN = /\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/g;
-const scrubRelayTokens = (s) => s.replace(RELAY_TOKEN, '/upgrade/h/<token>');
 
 function expectMasked(sc, result, label) {
   const rows = rowsOf(sc);
