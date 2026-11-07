@@ -308,6 +308,31 @@ describe('rendering a match', () => {
     expect(t).toContain('request_capacity_intro without a slug');
   });
 
+  it('shortfall with available_by: best reachable by the requested month, not now', async () => {
+    for (const [by, month] of [['2027-06', '2027-06'], ['2027-06-15', '2027-06']]) {
+      const dated = structuredClone(MATCH_SHORTFALL);
+      dated.request.available_by = by;
+      responder = () => json(200, dated);
+      const r = await call({ target_mw: 40, available_by: by }, seat());
+      const t = rendered(r);
+      expect(t).toContain('Shortfall: best reachable by ' + month + ' 25,000 kW of 40,000 kW (15,000 kW short)');
+      expect(t).not.toContain('reachable now');
+      expect(r.structuredContent.next_steps_note).toContain('best reachable by ' + month + ' is 25,000 kW of 40,000 kW');
+    }
+  });
+
+  it('a no-fit answer leads its note with the shortfall and the free requirement option', async () => {
+    responder = () => json(200, { ...MATCH_SHORTFALL, quota: QUOTA_FREE_USED });
+    const note = (await call({ target_mw: 40 }, seat())).structuredContent.next_steps_note;
+    expect(note.startsWith('Nothing delivers the whole requirement: best reachable now is 25,000 kW of 40,000 kW.')).toBe(true);
+    expect(note).toContain('request_capacity_intro without a slug registers the requirement (free)');
+    expect(note).toContain('To pursue a partial listing anyway');
+    expect(note).not.toMatch(/paid|upgrade|human_url/);
+    // Control: an exact fit keeps the proceed-on-a-listing note.
+    responder = () => json(200, MATCH_EXACT);
+    expect((await call({ target_mw: 40 }, seat())).structuredContent.next_steps_note).toMatch(/^To proceed on a listing/);
+  });
+
   it('a shortfall no schedule closes says so', async () => {
     const none = structuredClone(MATCH_SHORTFALL);
     none.shortfall.closes_at = null;

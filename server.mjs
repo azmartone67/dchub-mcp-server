@@ -7490,6 +7490,10 @@ export function _listingLines(body) {
   if (b.filters !== undefined && b.filters !== null) {
     lines.push('Filters applied: ' + (_listingFiltersText(b.filters) || 'none'));
   }
+  if (Array.isArray(b.items) && b.ok !== false
+      && !b.items.some((x) => x && typeof x === 'object' && !Array.isArray(x))) {
+    lines.unshift(LISTING_NO_MATCH_LINE);
+  }
   if (_listingStr(b.availability_note)) lines.push(_listingStr(b.availability_note));
   if (Array.isArray(b.items)) {
     const rows = b.items.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
@@ -7983,8 +7987,8 @@ function _listingBrowseAccess(tool, body) {
 // util/capacity_matcher.py) answers a WHOLE requirement: `exact` listings that
 // deliver it alone (at most five), `bundles` of listings that deliver it
 // together (at most three; only when max_sites allows more than one), and,
-// when neither exists, `shortfall` — the most reachable now and when scheduled
-// capacity closes the gap. It is identified-only and rate/harvest limited on
+// when neither exists, `shortfall` — the most reachable now (or by the
+// requested month, with available_by) and when scheduled capacity closes the gap. It is identified-only and rate/harvest limited on
 // the backend; this side sends the requirement and renders the answer.
 //
 // ★ NO PROVIDER NAMES. The backend labels providers "Provider A", "Provider
@@ -8097,6 +8101,20 @@ function _matchQuotaLine(body) {
     + (remaining === 0 ? ' More now: unlimited on a paid DC Hub plan (the link in human_url); a standing requirement stays free.' : '');
 }
 
+// When the shortfall's best_kw is counted. With available_by the backend
+// (util/capacity_matcher._shortfall) counts schedule entries up to THAT month,
+// so "now" would misdate a future requirement. Month precision, like the
+// backend: a YYYY-MM-DD input is quoted as its month.
+function _matchReachableWhen(req) {
+  const by = _listingStr(req && req.available_by);
+  return /^\d{4}-\d{2}/.test(by) ? 'by ' + by.slice(0, 7) : 'now';
+}
+
+// No listing in a browse answer: said first, with the free requirement option,
+// so an empty search does not read as a sign-in or plan limit.
+export const LISTING_NO_MATCH_LINE = 'No listing matches this search. To be told when matching capacity opens,'
+  + ' register the requirement with request_capacity_intro without a slug (free).';
+
 // The rendered lines for a 2xx match body.
 export function _matchLines(body) {
   const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
@@ -8133,7 +8151,7 @@ export function _matchLines(body) {
   }
   if (sf) {
     lines.push('No listing or bundle delivers ' + (target || 'the requirement') + ' within these limits.');
-    lines.push('Shortfall: best reachable now ' + (_matchKw(sf.best_kw) || '0 kW') + ' of ' + (_matchKw(sf.target_kw) || target)
+    lines.push('Shortfall: best reachable ' + _matchReachableWhen(req) + ' ' + (_matchKw(sf.best_kw) || '0 kW') + ' of ' + (_matchKw(sf.target_kw) || target)
       + (_listingNonNeg(sf.kw_short) !== null ? ' (' + _matchKw(sf.kw_short) + ' short)' : '')
       + (Number.isInteger(sf.sites) && sf.sites ? ' across ' + sf.sites + ' site' + (sf.sites === 1 ? '' : 's') : '') + '.');
     (Array.isArray(sf.legs) ? sf.legs : []).forEach((l) => lines.push(_matchLegLine(l)));
@@ -8190,7 +8208,17 @@ export function _matchToolResult(r) {
       ? Math.min(...scrubbed.bundles.map((x) => (x && Array.isArray(x.legs) ? new Set(x.legs.map(_matchListing)).size : 0)))
       : 0;
     let note;
-    if (slugs.length) {
+    const sf = scrubbed.shortfall && typeof scrubbed.shortfall === 'object' && !Array.isArray(scrubbed.shortfall)
+      && !(Array.isArray(scrubbed.exact) && scrubbed.exact.length)
+      && !(Array.isArray(scrubbed.bundles) && scrubbed.bundles.length) ? scrubbed.shortfall : null;
+    if (sf) {
+      // No fit: the shortfall and the free requirement option come first; a
+      // partial listing is the optional next step, not the answer.
+      note = 'Nothing delivers the whole requirement: best reachable ' + _matchReachableWhen(scrubbed.request)
+        + ' is ' + (_matchKw(sf.best_kw) || '0 kW') + ' of ' + (_matchKw(sf.target_kw) || 'the target') + '.'
+        + ' request_capacity_intro without a slug registers the requirement (free) so DC Hub can email your human when matching capacity opens.'
+        + (slugs.length ? ' To pursue a partial listing anyway, call request_capacity_intro with its slug.' : '');
+    } else if (slugs.length) {
       note = 'To proceed on a listing, call request_capacity_intro with that listing\'s slug (it asks for your human\'s name, company and agreement to the introduction terms). A bundle needs one introduction per listing.';
       if (limited && bundleNeeds > q.remaining) {
         note += ' The smallest bundle needs ' + bundleNeeds + ' introductions and this free account has ' + q.remaining
@@ -8239,6 +8267,8 @@ export function _listingsToolResult(tool, r, opts = {}) {
     // caller-level gate rides in the body rather than in the status.
     if (body && Array.isArray(body.items)) {
       const gate = _listingBrowseAccess(tool, body);
+      // An empty search leads with that, not with the sign-in steps.
+      if (gate && !body.items.length) gate.next_steps_note = LISTING_NO_MATCH_LINE + ' ' + gate.next_steps_note;
       if (gate) return _listingResult({ ...body, ...gate }, {}, _listingLines(body));
     }
     return _listingResult(body || { raw: String(r.text || '').slice(0, 2000) }, {}, _listingLines(body));
