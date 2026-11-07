@@ -90,7 +90,8 @@ describe('plan_query router (pure)', () => {
     // 5.11: state-scoped market_ranking routes to site_selection_canvas.
     // Routing changed → planner_version moves; the replay SHAPE did not, so
     // schema_version stays 1. Exactly the split this assertion exists to prove.
-    expect(r.planner_version).toBe('5.15');       // planner behavior rev...
+    // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
+    expect(r.planner_version).toBe('5.16');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
@@ -199,8 +200,12 @@ describe('plan_query router (pure)', () => {
     expect(p.intent_class).toBe('unknown');
     expect(p.intent_confidence).toBe(0.2);
     expect(p.workflow_confidence).toBeGreaterThanOrEqual(0.2);
-    expect(p.execution_waves).toEqual([[1, 2]]);
-    expect(p.parallelizable).toBe(true);
+    // #118011: the fallback runs the navigator only (get_dchub_recommendation
+    // picked its own market), so one wave of one step, not parallel.
+    expect(p.execution_waves).toEqual([[1]]);
+    expect(p.parallelizable).toBe(false);
+    expect(p.recommended_sequence.map((s) => s.tool)).toEqual(['discover_tools']);
+    expect(p.unresolved && p.unresolved.kind).toBe('no_intent_match');
     expect(p.alternatives[0].rejected_because).toBeTruthy();
   });
 
@@ -296,13 +301,12 @@ describe('plan_query router (pure)', () => {
 
     it('fallback branch: parallel_groups + estimate present and deterministic', () => {
       const p = _planQuery('zzz completely unrelated gibberish qqq', {});
-      expect(p.execution_strategy.parallel_groups).toEqual([
-        ['discover_tools', 'get_dchub_recommendation'],
-      ]);
+      // #118011: navigator only; get_dchub_recommendation is no longer run here.
+      expect(p.execution_strategy.parallel_groups).toEqual([['discover_tools']]);
       expect(p.execution_estimate).toEqual({
-        estimated_calls: 2,
-        estimated_latency_ms: 3000, // max(light discover_tools 500, heavy recommendation 3000)
-        parallelizable: true,
+        estimated_calls: 1,
+        estimated_latency_ms: 500, // light discover_tools
+        parallelizable: false,
       });
     });
 
@@ -556,11 +560,13 @@ describe('plan tier_preview (r-continuation item 4)', () => {
     // NO tier_preview at all — it silently reported nothing gated. Unmatched is
     // exactly where a confused caller lands, so a commercial signal that goes
     // missing precisely there is worse than one that never existed.
+    // #118011: the fallback no longer schedules get_dchub_recommendation, so it
+    // holds no gated step. The guard still pins that the branch is ANNOTATED, and
+    // a buy/lease fallback (which appends source_capacity) still previews.
     const p = _planQuery('latest data center news', {});
     expect(p.intent_class).toBe('unknown');
     for (const s of p.recommended_sequence) expect(s.access).toBeDefined();
-    expect(p.tier_preview).toBeTruthy();
-    expect(p.tier_preview.gated_tools).toContain('get_dchub_recommendation');
+    expect(p.recommended_sequence.map((s) => s.tool)).not.toContain('get_dchub_recommendation');
   });
 
   it('omits tier_preview entirely when nothing in the plan is gated', () => {

@@ -19018,6 +19018,59 @@ export const _PLAN_CLASSES = [
     coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
+    // ★2026-11-07 (Grok #118011, #117816/#117817): ONE NAMED METRO, read as itself.
+    // "What is the data center power outlook for San Antonio?" matched no class,
+    // fell to the unknown fallback, and its get_dchub_recommendation step answered
+    // "Midland–Odessa: BUILD". The #117661 guard drops a verdict from another ISO,
+    // but Midland–Odessa and San Antonio are both ERCOT, so an ISO check alone can
+    // never catch it: the market itself has to be held. This class reads the
+    // DCPI scorecard and market brief for the metro the text named (its slug from
+    // _CITY_ISO_META) and nothing else. A metro we do not track is not swapped for
+    // one we do: the steps stay unresolved and the plan says so (sc.unresolved).
+    // Single-market by definition, so a comparison or a ranking ask scores 0 here
+    // (see the boost loop in _planQuery).
+    id: 'market_outlook', recipe: 'market_selection',
+    patterns: [
+      [/\boutlook\b/i, 3], [/\bpower\s+(?:outlook|picture|situation|supply)\b/i, 2],
+      [/\btell\s+me\s+about\b/i, 2], [/\boverview\b/i, 2],
+      [/\bmarket\s+(?:report|brief|snapshot|conditions|overview|update)\b/i, 2],
+      [/\bhow\s+(?:is|does)\s+.{2,40}?\s+look(?:ing)?\b/i, 2],
+      [/\bwhat(?:'s|\s+is)\s+(?:happening|going\s+on)\s+(?:in|with)\b/i, 2],
+    ],
+    rationale: (d) => (d.market || d.__citySlug)
+      ? `The question is about one market, ${d.market || d.__citySlug}, so every read is pinned to it: its DCPI verdict and time-to-power, its market brief, and the grid it sits on. No ranking step runs, so no other market can stand in for it.`
+      : 'The question is about one market, but the place it names is not a market DC Hub tracks. The market steps are left unresolved instead of being answered for a different market.',
+    sequence: (d) => {
+      const slug = d.market || d.__citySlug || null;
+      const iso = d.iso || d.isoFromPlace || null;
+      const ph = '<market_slug of the metro named in the intent>';
+      // get_market_intel resolves the bare metro ('san-antonio'), not the
+      // state-suffixed DCPI slug ('san-antonio-tx' is a 404 there; DCPI accepts
+      // both). Measured live 2026-11-07. A caller-typed market passes as typed.
+      const intelMarket = d.market || (d.__citySlug ? d.__citySlug.replace(/-[a-z]{2}$/, '') : null);
+      return [
+        { step: 1, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+          why: 'DCPI verdict (BUILD/CAUTION/AVOID), composite_score and time-to-power for the market the intent named — the outlook, scored.',
+          args_hint: { market_slug: slug || ph } },
+        { step: 2, tool: 'get_market_intel', depends_on: [], estimated_calls: 1,
+          why: 'Market brief for the same market: tracked MW, pipeline, providers and pricing. Independent of step 1, same wave.',
+          args_hint: { market: intelMarket || ph } },
+        // Only a real RTO is a valid iso arg (v2.7.8 note at _EXEC_RTOS); a WECC or
+        // SERC metro gets no grid step rather than a call that fails.
+        (iso && _EXEC_RTOS.has(iso)) ? { step: 3, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+          why: `Grid headroom and time-to-power for ${iso}, the grid the market sits on. Grid context only: it does not score the market.`,
+          args_hint: { iso } } : null,
+      ];
+    },
+    alternatives: [
+      { tool: 'rank_markets', when: 'You want to compare this market against others, not read it alone.',
+        rejected_because: 'The intent named one market; a ranking answers a different question and can lead with another market.' },
+      { tool: 'get_dchub_recommendation', when: 'You want a one-call siting recommendation across markets.',
+        rejected_because: 'A recommendation picks its own market, which may not be the one asked about.' },
+    ],
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. A metro outside the tracked index is reported as unresolved, never replaced.',
+  },
+  {
     id: 'grid_headroom', recipe: 'grid_and_queue',
     patterns: [
       [/\bpower\s+(?:is\s+)?availab(?:le|ility)\b/i, 3], [/\bheadroom\b/i, 3],
@@ -19533,6 +19586,7 @@ export const _PLAN_CLASSES = [
 export const _CLASS_WHY_LIVE = {
   market_ranking: 'requires_current_market_scoring',
   market_comparison: 'requires_current_market_scoring',
+  market_outlook: 'requires_current_market_scoring',
   capacity_search: 'requires_live_queue_data',
   interconnection_queue: 'requires_live_queue_data',
   power_timeline: 'requires_live_queue_data',
@@ -20710,7 +20764,12 @@ export function _planWorkflowConfidence(seq, d) {
 //  5.15 = QUEUE STATE: get_refined_queue takes state=, and a state intent
 //         passes it (geo_injected); the after-the-call state cut stands down
 //         when the backend reports filters_applied.state.
-export const PLANNER_VERSION = '5.15';
+//  5.16 = ONE NAMED MARKET (#118011): market_outlook reads the metro the text
+//         named (DCPI + brief + its RTO), never a ranking; the unknown
+//         fallback no longer runs get_dchub_recommendation; a plan that could
+//         not bind says so in `unresolved` (no_intent_match /
+//         market_not_matched).
+export const PLANNER_VERSION = '5.16';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -20855,7 +20914,19 @@ export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEO
 // (WECC) rejected get_dchub_recommendation's ERCOT mint at C1, yet the guide still
 // said "LEAD WITH THE VERDICT — Midland–Odessa: BUILD". A verdict with no iso is
 // kept: nothing here can judge it.
-export function _execAnswerGuide(executed, constraintIso = []) {
+// ★2026-11-07 (#118011): the same check one level down. San Antonio and
+// Midland–Odessa are both ERCOT, so the iso test above passes a verdict for the
+// wrong market. When the question named ONE market (constraintSlug), a verdict
+// whose own market/slug names a different market is dropped too. A verdict with
+// no market name is kept, as above.
+export function _execSameMarket(subject, constraintSlug) {
+  const norm = (x) => String(x || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const want = norm(constraintSlug), got = norm(subject);
+  if (!want || !got) return true;
+  const bare = want.replace(/-[a-z]{2}$/, '');          // las-vegas-nv -> las-vegas
+  return got === want || got === bare || got.startsWith(bare + '-') || want.startsWith(got + '-');
+}
+export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
@@ -20873,7 +20944,8 @@ export function _execAnswerGuide(executed, constraintIso = []) {
       const v = o.verdict, nm = o.market || o.name || o.slug || o.market_slug;
       if (typeof v === 'string' && /^(BUILD|CAUTION|AVOID)$/i.test(v.trim())) {
         const iso = typeof o.iso === 'string' ? o.iso.trim().toUpperCase() : null;
-        const outside = iso && allowed.length && !allowed.includes(iso);
+        const outside = (iso && allowed.length && !allowed.includes(iso))
+          || (constraintSlug && typeof nm === 'string' && !_execSameMarket(nm, constraintSlug));
         if (!outside) {
           found.push({ verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' ? nm : null,
                        score: (typeof o.composite_score === 'number') ? o.composite_score : null });
@@ -21411,6 +21483,32 @@ export function _planReplay(sc, signals) {
 }
 
 // The router core — exported for unit tests. Pure function: no ctx, no network.
+// A ranking or multi-market ask: market_outlook stands down (see _planQuery).
+const _OUTLOOK_MULTI_RE = /\b(?:rank(?:ing|ed)?|best|top|shortlist|compare|vs\.?|versus|markets|metros|where\s+(?:should|can|do))\b/i;
+// The place a question names, best-effort, for the unresolved note only. It is
+// never used as an argument.
+function _planNamedPlace(text) {
+  const m = String(text || '').match(/\b(?:for|in|of|about|around|near)\s+(?:the\s+)?([A-Za-z][\w.'-]*(?:[\s-]+[A-Za-z][\w.'-]*){0,3}?)(?:\s+(?:data\s+cent(?:er|re)s?|markets?|area|region|metro))*\s*[?.!]*$/i);
+  return m ? m[1].trim() : null;
+}
+// ★2026-11-07 (#118011): what the plan could NOT bind, said plainly. Emitted
+// only when it fires.
+export function _planUnresolved(text, d, intentClass) {
+  if (intentClass === 'unknown') {
+    return { kind: 'no_intent_match',
+      note: 'No intent class matched, so no data tool was run for this question. '
+          + 'Use discover_tools to pick a tool, or rephrase naming the market, ISO or site. '
+          + 'Do not present a recommendation for another market as the answer.' };
+  }
+  if (intentClass === 'market_outlook' && !(d && (d.market || d.__citySlug))) {
+    const place = _planNamedPlace(text);
+    return { kind: 'market_not_matched', ...(place ? { phrase: place } : {}),
+      note: (place ? `"${place}" is` : 'The place named is') + ' not a market DC Hub tracks, so no market was read. '
+          + 'This answer is unresolved: it does not substitute another market. '
+          + 'Call rank_markets or search_facilities to find the nearest tracked market.' };
+  }
+  return null;
+}
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
   const d = _planSignals(text, context);
@@ -21444,6 +21542,17 @@ export function _planQuery(intent, context) {
     if (s.cls.id === 'grid_headroom' && d.iso && (d.isoFromText || !_anyTextMatch)) s.score += 1.5;
     if (s.cls.id === 'market_ranking' && d.market) s.score += 1.5;
     if (s.cls.id === 'market_comparison' && d.comparePair) s.score += 1.5;
+    // market_outlook is single-market: a head-to-head or a ranking ask is not it,
+    // and a named tracked metro is the evidence it is (+3 clears the ranking
+    // class's bare "market" credit by more than the 1-point ambiguity margin, so
+    // no runner-up ranking step is appended behind it).
+    if (s.cls.id === 'market_outlook') {
+      if (d.comparePair || _OUTLOOK_MULTI_RE.test(text)) s.score = 0;
+      else if (s.score > 0 && (d.market || d.__citySlug)) s.score += 3;
+      // No tracked metro AND no place phrase: nothing names a market, so this is
+      // not a market question (the unknown fallback says so instead).
+      else if (!_planNamedPlace(text)) s.score = 0;
+    }
     if (s.cls.id === 'changes_delta' && d.since) s.score += 2;
   }
   scored.sort((a, b) => b.score - a.score);
@@ -21457,12 +21566,15 @@ export function _planQuery(intent, context) {
   };
   if (!top || top.score <= 0) {
     // No class matched — honest fallback to the navigation layer, low confidence.
+    // ★2026-11-07 (Grok #118011, #117816/#117817): get_dchub_recommendation is
+    // no longer run here. It picks its own market, so an unmatched question about
+    // San Antonio, Phoenix or Las Vegas came back as "Midland–Odessa: BUILD" and
+    // the answer_guide led with it. An unmatched question now runs only the
+    // navigator and says it is unresolved (sc.unresolved); the recommendation
+    // stays an alternative the agent can choose on purpose.
     const fbSeq = [
       { step: 1, tool: 'discover_tools', depends_on: [], estimated_calls: 1,
         why: 'Browse the tool families for the closest fit.', args_hint: { query: text.slice(0, 80) } },
-      { step: 2, tool: 'get_dchub_recommendation', depends_on: [], estimated_calls: 1,
-        why: 'One-call server-side synthesis for open-ended siting questions. Independent — run in parallel.',
-        args_hint: { context: text.slice(0, 200) } },
     ];
     // Capacity Source (2026-09-14): the same buy/lease step as the routed path.
     try {
@@ -21480,13 +21592,14 @@ export function _planQuery(intent, context) {
       intent_confidence: 0.2,
       workflow_confidence: fbWc.workflow_confidence,
       workflow_confidence_basis: fbWc.basis,
-      reason: 'No intent class matched deterministically — route through the tool-family navigator, or let get_dchub_recommendation synthesize an answer server-side.',
-      planner_rationale: 'Both fallback tools take the raw intent verbatim, so navigation and server-side synthesis run as one parallel wave and whichever lands better leads.',
+      reason: 'No intent class matched deterministically — route through the tool-family navigator. Nothing else is run, so no answer for another market is substituted.',
+      planner_rationale: 'An unmatched question gets the navigator only. A server-side recommendation would pick its own market, which is a different answer from the one asked for.',
+      unresolved: _planUnresolved(text, d, 'unknown'),
       recommended_sequence: fbSeq,
       ...(_fbTierPreview ? { tier_preview: _fbTierPreview } : {}),
       // Counted, not hardcoded: a buy/lease intent adds a source_capacity step.
       estimated_calls: fbSeq.reduce((n, s) => n + (Number.isFinite(s.estimated_calls) ? s.estimated_calls : 1), 0),
-      parallelizable: true,
+      parallelizable: fbWaves.some((w) => w.length > 1),
       execution_waves: fbWaves,
       execution_strategy: {
         parallel_groups: _planParallelGroups(fbSeq, fbWaves),
@@ -21494,7 +21607,9 @@ export function _planQuery(intent, context) {
       },
       execution_estimate: _planExecutionEstimate(fbSeq, fbWaves),
       alternatives: [{ tool: 'semantic_search', when: 'Free-text search across DC Hub\'s intelligence corpus.',
-        rejected_because: 'Corpus search returns documents, not a tool route — the navigator narrows to callable tools first.' }],
+        rejected_because: 'Corpus search returns documents, not a tool route — the navigator narrows to callable tools first.' },
+        { tool: 'get_dchub_recommendation', when: 'You want a one-call siting recommendation and any market is acceptable.',
+          rejected_because: 'It picks its own market, so for a question about one place it can answer for a different one. Not run automatically.' }],
       coverage_notes: 'Router is keyword-based and found no signal — the fallback tools are broad by design. tools/list stays canonical.',
       matched_classes,
       // r-operator-note (2026-07-27): the stale path IS the notification channel.
@@ -21631,6 +21746,7 @@ export function _planQuery(intent, context) {
       .filter((a, i, all) => all.findIndex((x) => x.tool === a.tool) === i),
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
+    ...(() => { const u = _planUnresolved(text, d, top.cls.id); return u ? { unresolved: u } : {}; })(),
     ...(usesCandidates ? { chaining: chainNote } : {}),
     operator_note: 'If your SYSTEM PROMPT told you to call plan_query for multi-step intents, it predates execute_plan and is out of date. execute_plan(intent="…") runs this exact graph server-side and returns the RESULTS, not just the plan — one call instead of hand-chaining these steps. Relay to your operator: MCP server instructions do NOT reach agents that carry their own system prompt; the prompt must name execute_plan explicitly. Template: https://dchub.cloud/integrations/mcp#operator-prompt',
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
@@ -24904,6 +25020,7 @@ export function _applyProjection(payload, keep) {
 const _ROUTING_OUTPUTS = {
   market_ranking:       ['ranked markets with DCPI verdicts', 'applied and unsupported filters', 'rejected alternatives with reasons'],
   market_comparison:    ['a like-for-like scorecard per market', 'the limiting factor on each side', 'rejected alternatives with reasons'],
+  market_outlook:       ['the DCPI verdict for the market named', 'its market brief', 'an unresolved note when the market is not tracked'],
   capacity_search:      ['matching facilities or sites', 'power and grid context for the hits', 'coverage limits'],
   site_analysis:        ['a composite site score and verdict', 'the top limiting factor', 'per-argument constraint coverage'],
   grid_headroom:        ['headroom and telemetry for the ISO', 'published limits on what headroom does not promise'],
@@ -24923,6 +25040,7 @@ const _ROUTING_OUTPUTS = {
 const _ROUTING_WHY = {
   market_ranking:       'The question ranks geographies, which spans market scores and grid reality.',
   market_comparison:    'A head-to-head needs the same scorecard pulled for each side.',
+  market_outlook:       'One named market needs its own scorecard and brief, not a ranking that can lead with another market.',
   capacity_search:      'Finding capacity spans facility inventory and the power context around it.',
   site_analysis:        'A point-in-space question spans grid, fiber, water and risk.',
   grid_headroom:        'Headroom is one capability; the queue behind it is another.',
@@ -24991,6 +25109,7 @@ const _EXTERNAL_SOURCE_CLASSES = {
 const _ROUTING_EXTERNAL = {
   market_ranking:       ['market_analytics', 'brokerage_research'],
   market_comparison:    ['market_analytics', 'brokerage_research'],
+  market_outlook:       ['market_analytics', 'brokerage_research'],
   capacity_search:      ['operator_disclosure'],
   site_analysis:        ['utility_or_iso_filing', 'operator_disclosure'],
   grid_headroom:        ['utility_or_iso_filing'],
@@ -25012,7 +25131,7 @@ const _ROUTING_EXTERNAL = {
 export function _routingHint(intentClass, bestTool) {
   const cls = _ROUTING_OUTPUTS[intentClass] ? intentClass : 'unknown';
   // Multi-capability classes route to the planner; single-capability ones do not.
-  const MULTI = new Set(['market_ranking', 'market_comparison', 'capacity_search',
+  const MULTI = new Set(['market_ranking', 'market_comparison', 'market_outlook', 'capacity_search',
                          'site_analysis', 'grid_headroom', 'fiber_power_pairing']);
   return {
     problem: intentClass || 'unknown',
@@ -28159,7 +28278,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
-        answer_guide: _execAnswerGuide(executed, constraintIsoSet) + (_rb ? ' ' + _rb.sentence : ''),
+        // #118011: an unbound plan says so FIRST, so the agent does not compose an
+        // answer for a market nobody asked about. The sentence reaches every
+        // surface; the structured field follows the answer-block gate below.
+        answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
+          + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null) + (_rb ? ' ' + _rb.sentence : ''),
+        ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
@@ -28179,6 +28303,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         next_recipe: ({
           market_ranking: { prompt: 'grid_and_queue', why: 'Verify the winning market\'s ISO can actually deliver the power: headroom + interconnection queue.' },
           market_comparison: { prompt: 'site_analysis', why: 'Drill into the winning market with a full multi-factor site read (score, hazards, water).' },
+          market_outlook: { prompt: 'grid_and_queue', why: 'Check whether the market\'s grid can deliver: headroom + interconnection queue.' },
           grid_headroom: { prompt: 'market_selection', why: 'Turn the ISO headroom picture into a ranked market shortlist with DCPI verdicts.' },
           capacity_search: { prompt: 'site_analysis', why: 'Analyze the minted candidate site end-to-end — pass its candidate_id for zero transcription drift.' },
           site_analysis: { prompt: 'fiber_power_pairing', why: 'Check whether fiber density and grid headroom align around the site\'s market.' },
