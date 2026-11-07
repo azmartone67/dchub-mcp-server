@@ -3549,7 +3549,7 @@
           ]
         },
         "available_by": {
-          "description": "Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD. With a target it is the date the whole requirement must be deliverable by",
+          "description": "Month-granular deadline (YYYY-MM or YYYY-MM-DD; day ignored). Browse keeps listings with some scheduled capacity by that month, not necessarily the full requested amount.",
           "type": "string"
         },
         "limit": {
