@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { rankEmailClause } from '../lib/paid-sell-line.mjs';
 import { leanResponseStep } from '../lib/lean-response.mjs';
+import { quotaWallEventBody } from '../lib/keyless-wall.mjs';
 
 const fx = (n) => JSON.parse(readFileSync(new URL('./fixtures/paid-sell/' + n + '.json', import.meta.url), 'utf8'));
 const mk = (n) => { const f = fx(n); return { content: [{ type: 'text', text: f.text }, { type: 'text', text: '🧭 **Next:** execute_plan' }], structuredContent: f.sc }; };
@@ -83,5 +84,44 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
       expect(t.indexOf('bind_email')).toBeLessThan(t.indexOf('For your human'));   // "the next line" is the human's
       expect(t.split('bind_email').length - 1).toBe(1);
     } finally { lean(); restore(); }
+  });
+
+  // The funnel counts all wall calls, not just eligible first-wall asks. Keep
+  // visible copy and quota-wall telemetry in agreement for each actual seat.
+  it.each([
+    ['eligible keyless first wall', {}, true],
+    ['keyed identified free context', { api_key: 'fixture-bound-key', tier: 'identified' }, false],
+    ['paid keyed seat', { api_key: 'fixture-paid-key', tier: 'pro' }, false],
+    ['Grok platform suppression', { platform: 'grok' }, false],
+    ['Claude directory suppression', { profile: 'claude_directory' }, false],
+    ['ChatGPT directory suppression', { profile: 'chatgpt_directory' }, false],
+    ['core profile suppression', { profile: 'core_profile' }, false],
+  ])('%s: visible ask agrees with the wall event', (_name, overrides, expectedAsk) => {
+    const restore = on();
+    try {
+      const c = ctx(overrides);
+      const result = run(mk('rank_markets'), 'rank_markets', c);
+      const event = quotaWallEventBody({c, name: 'rank_markets', status: 'trial_used'});
+      expect(text(result).includes('`bind_email` with it shows all 10 markets')).toBe(expectedAsk);
+      expect(event.email_ask).toBe(expectedAsk ? 'line' : undefined);
+    } finally { restore(); }
+  });
+  it('repeat wall without the human line adds neither an email ask nor an ask event', () => {
+    const restore = on();
+    try {
+      const c = ctx(); const result = mk('rank_markets');
+      result.content[0].text = result.content[0].text.split('\n')
+        .filter(line => !line.includes('→ **For your human:**')).join('\n');
+      expect(text(run(result, 'rank_markets', c))).not.toMatch(/bind_email/);
+      expect(quotaWallEventBody({c, name: 'rank_markets', status: 'trial_used'}).email_ask).toBeUndefined();
+    } finally { restore(); }
+  });
+  it('the paid-sell feature switch remains intentional; default-off is not an eligible ask', () => {
+    const restore = setEnv('DCHUB_PAID_SELL_LINE', undefined);
+    try {
+      const c = ctx(); const original = mk('rank_markets');
+      expect(run(original, 'rank_markets', c)).toBe(original);
+      expect(quotaWallEventBody({c, name: 'rank_markets', status: 'trial_used'}).email_ask).toBeUndefined();
+    } finally { restore(); }
   });
 });
