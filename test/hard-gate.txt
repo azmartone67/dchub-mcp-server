@@ -145,6 +145,7 @@ test/dcpi-rank-human-line-own-block.test.mjs
 test/dcpi-rank-paid-bullets.test.mjs
 test/dcpi-subscores-pro-only.test.mjs
 test/deal-desk-automint.test.mjs
+test/deals-tool-tied-copy-no-floor.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
 test/deterministic-install.test.mjs

@@ -603,7 +603,7 @@
       "get": {
         "operationId": "getHyperscalerDeals",
         "summary": "Recent hyperscaler / $1B+ data-center deals (hyperscaler_activity)",
-        "description": "recipe hyperscaler_activity. Recent large-scale data-center and hyperscaler deals and news (actors, capacity, value_usd, source, published) from DC Hub's 1,800+ tracked M&A deals. Optionally cap with ?limit= or floor with ?min_value_usd=. Deeper deal autopsy detail may be gated. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe hyperscaler_activity. Recent large-scale data-center and hyperscaler deals and news (actors, capacity, value_usd, source, published) from DC Hub's deal and news tracking. Optionally cap with ?limit= or floor with ?min_value_usd=. Deeper deal autopsy detail may be gated. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "limit",

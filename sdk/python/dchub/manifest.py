@@ -106,8 +106,9 @@ TOOL_RETURNS = {
         "load, headroom, reserve margin, and queue. Fuller detail with an X-API-Key."
     ),
     "list_transactions": (
-        "List tracked data-center M&A / financing transactions (2,000+ deals). Returns "
-        "buyer, seller, value, MW, market, and date."
+        "List tracked data-center M&A / financing transactions with a named buyer and "
+        "seller (total_count in the answer is the live number). Returns buyer, seller, "
+        "value, MW, market, and date."
     ),
     "get_news": (
         "Recent curated data-center + energy news articles with title, source, summary, and URL."
