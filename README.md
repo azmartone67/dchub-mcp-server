@@ -1,7 +1,7 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
-**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; free to cite under CC BY 4.0.
+**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; quote with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
 DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers; limits are at [dchub.cloud/pricing](https://dchub.cloud/pricing). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
@@ -48,6 +48,14 @@ https://dchub.cloud/land-power-map
 https://dchub.cloud/dcpi
 https://dchub.cloud/connect
 ```
+
+### Data reuse and agent authorization
+
+DCPI verdicts/composites for days from 2026-12-01 become CC-BY-4.0 after 30 days; earlier days, thresholds, methodology and monthly Rankings are CC-BY-4.0. Current values may be quoted with attribution for any number of markets in editorial work; bulk (full current list or a table of more than 25 markets in one piece) or recurring republication needs a DCPI licence. Sub-scores/detail are licensed separately. Facility/third-party layers retain upstream terms (OpenStreetMap: ODbL 1.0, attribution/share-alike). https://dchub.cloud/terms#dcpi-current-data · https://dchub.cloud/data-sources. Editorial work includes articles, reports, research notes, posts, presentations and AI answers. The editorial quote rule is separate from bulk/recurring redistribution rights. Cite DC Hub, the source link, method_version where provided and the data date. Sub-scores, risk/opportunity detail, narratives and forecasts are not CC-BY-4.0: eligible subscribers may use them internally and in client deliverables with attribution; republication or a third-party product/dataset requires a redistribution licence. DC Hub-derived grid analysis is open under its layer's terms, not a grant over raw system-operator readings. No blanket redistribution grant covers the facility inventory or unresolved upstream rights. Capacity Source teasers have their separate CC-BY-4.0 grant; opened details, matches and introductions remain confidential. Access/plan limits remain separate from content licences. An API CC-BY label does not override the current-value terms.
+
+DC Hub complements existing agents, platforms and tools with data center and energy intelligence. Read-only research within the user's request and client permissions does not require separate approval for every lookup. Technical availability is not authorization: claim_free_key creates a credential and needs user authorization; bind_email uses only an email the user explicitly provides for that purpose. Show the current introduction terms and call accept_capacity_terms only after the user agrees to that version. Existing paid credentials may be used only within delegated scope and budget; connection alone does not authorize new charges. Payments (including mpp_pay/mpp_credential), credit packs or subscriptions require the user's spending authorization and any client approval required. request_capacity_intro and standing introduction requests require the user's authorization to request contact/share the supplied details, as well as the applicable introduction terms; provider acceptance still controls release of provider contacts. A continuation named agent_autonomous describes a technical path, not permission to spend, accept terms or contact anyone.
+
+MCP browse example: `source_capacity(min_mw=5, location="Germany")`. The MCP tool uses `location`, not the REST-only `country` filter.
 
 **Further documentation:** [`/llms.txt`](https://dchub.cloud/llms.txt) ·
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
