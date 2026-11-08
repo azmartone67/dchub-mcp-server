@@ -156,11 +156,12 @@ describe('digestAskLine / digestAskApplies (pure)', () => {
 });
 
 describe('depth wall tool set', () => {
-  it('the depth tools are in; tools where an email opens more, Pro-only, Land & Power and write tools are out', () => {
-    for (const t of ['list_transactions', 'compare_isos', 'get_pipeline', 'hyperscaler_deals', 'get_tax_incentives', 'get_market_dcpi_rank'])
+  it('the depth tools and Pro-only tools are in; tools where an email opens more, Land & Power and write tools are out', () => {
+    for (const t of ['list_transactions', 'compare_isos', 'get_pipeline', 'hyperscaler_deals', 'get_tax_incentives', 'get_market_dcpi_rank',
+      'get_dchub_recommendation', 'export_dataset'])
       expect(S._depthWallTool(t, {})).toBe(true);
     for (const t of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel', 'rank_markets', 'ai_capacity_index',
-      'get_fiber_intel', 'get_dchub_recommendation', 'analyze_site', 'compare_sites', 'get_composite_site_score', 'subscribe_digest', 'bind_email'])
+      'get_fiber_intel', 'analyze_site', 'compare_sites', 'get_composite_site_score', 'generate_site_analysis', 'subscribe_digest', 'bind_email'])
       expect(S._depthWallTool(t, {})).toBe(false);
   });
 });
