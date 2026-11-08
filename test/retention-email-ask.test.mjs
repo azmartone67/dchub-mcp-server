@@ -160,6 +160,7 @@ beforeAll(async () => {
 afterEach(() => {
   delete process.env.DCHUB_RETURN_NUDGE;
   delete process.env.DCHUB_PAYWALL_CONTRACT;
+  delete process.env.DCHUB_RESUME_STATE;
   claimResponse = null;
   S._resetReturnNudgeState();
 });
@@ -318,6 +319,9 @@ describe('maskEmail', () => {
 const TOOL = 'get_changes';
 describe('returning-key nudge', () => {
   it('flag off (default): no standing read, no line — same result object', async () => {
+    // The resume line (lib/resume-state.mjs, default on) reads standing on its own; off here so
+    // this pins the nudge alone. test/resume-state.test.mjs pins the resume line.
+    process.env.DCHUB_RESUME_STATE = '0';
     const before = standingHits;
     const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
     const r = await s.call(TOOL, { since: '7d' });
