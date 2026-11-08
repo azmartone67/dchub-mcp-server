@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { leanResponseStep, leanObject, humanLine, LEAN_SKIP_TOOLS } from '../lib/lean-response.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
+import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
 import { createServer } from 'node:http';
 import net from 'node:net';
 
@@ -304,9 +305,12 @@ describe('/mcp end to end: the same anonymous call with the step on and off', ()
       expect(on.text).not.toMatch(/Next question to offer|Watch offer|\u{1F9ED}|Try any of these verbatim/u);
       // One HUMAN ask. The item-3 email ask (owner 2026-10-16) is the agent's instruction and rides beside it
       // on the grid / queue previews (full-stack QA 2026-10-24: lean used to drop it from every production preview).
+      // The rows asks (rank_markets, ai_capacity_index, get_fiber_intel 2026-11-08) are the same kind, with their own
+      // lead; lean keeps either one (lib/lean-response.mjs emailAsk).
       const paras = askParas(on.result);
-      expect(paras.filter((p) => !p.includes(EMAIL_ASK)).length, `${tool}: human ask paragraphs`).toBeLessThanOrEqual(1);
-      expect(paras.filter((p) => p.includes(EMAIL_ASK)).length, `${tool}: the email ask, once`).toBeLessThanOrEqual(1);
+      const isEmailAsk = (p) => p.includes(EMAIL_ASK) || p.includes(RANK_EMAIL_ASK_LEAD);
+      expect(paras.filter((p) => !isEmailAsk(p)).length, `${tool}: human ask paragraphs`).toBeLessThanOrEqual(1);
+      expect(paras.filter(isEmailAsk).length, `${tool}: the email ask, once`).toBeLessThanOrEqual(1);
       if (off.sc.human_url) expect(scOn.human_url, `${tool}: the one human link stays`).toBeTruthy();
       expect(size(on), `${tool}: bytes on vs off`).toBeLessThan(size(off));
     }, 30_000);
