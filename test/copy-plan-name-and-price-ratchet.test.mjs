@@ -51,8 +51,11 @@ export function priceOffenders(src) {
 // 2026-10-10 (v14, owner: no plan name and no price in any tool-facing text): server.mjs 130 -> 1
 // (the one left is "Developer names come from ERCOTQueue", a project developer, not a plan), and
 // every lib file -> 0. The approved phrase above is retired with it: nothing may name a plan now.
+// 2026-11-08 (planner 5.17): lib/dcpi-markets.data.mjs 1 = "Enterprise", the DCPI market for
+// Enterprise, NV (generated from /api/v1/dcpi/scores), a place, not a plan.
 const PLAN_BASELINE = {
   'server.mjs': 1,
+  'lib/dcpi-markets.data.mjs': 1,
 };
 // 2026-10-09 (Grok A5): the "$10" credit-pack literals now read PACK_PRICE from lib/canon.mjs
 // (64 -> 11 in server.mjs; 6 lib files -> 0). What remains is not the pack: the x402 per-call
