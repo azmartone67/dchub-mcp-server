@@ -26,10 +26,11 @@ const PICKERS = ['get_dchub_recommendation', 'rank_markets', 'site_selection_can
 
 describe('a named tracked metro routes to its own reads', () => {
   const cases = [
-    ['What is the data center power outlook for San Antonio?', 'san-antonio-tx', 'san-antonio', 'ERCOT'],
-    ['power outlook for Phoenix', 'phoenix-az', 'phoenix', null],
-    ['What is the data center power outlook for Las Vegas?', 'las-vegas-nv', 'las-vegas', null],
-    ['Tell me about the San Antonio data center market', 'san-antonio-tx', 'san-antonio', 'ERCOT'],
+    // 5.17: both steps take the index's canonical slug (DCPI accepts it too).
+    ['What is the data center power outlook for San Antonio?', 'san-antonio', 'san-antonio', 'ERCOT'],
+    ['power outlook for Phoenix', 'phoenix', 'phoenix', null],
+    ['What is the data center power outlook for Las Vegas?', 'las-vegas', 'las-vegas', null],
+    ['Tell me about the San Antonio data center market', 'san-antonio', 'san-antonio', 'ERCOT'],
   ];
   for (const [q, dcpi, intel, iso] of cases) {
     it(q, () => {

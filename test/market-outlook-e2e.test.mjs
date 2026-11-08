@@ -17,8 +17,11 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     if (/recommend/.test(p)) return { status: 200, body: { top_pocket: { market: 'Midland–Odessa', iso: 'ERCOT', verdict: 'BUILD' } } };
     if (/dcpi/.test(p) && /san-antonio/.test(p)) {
       return { status: 200, body: { market_slug: 'san-antonio', market_name: 'San Antonio', iso: 'ERCOT', verdict: 'CAUTION', composite_score: 42.3,
+                                    as_of: '2026-11-08T05:13:51Z', computed_at: '2026-11-08T05:13:51Z',
                                     nearby: [{ market: 'Midland–Odessa', iso: 'ERCOT', verdict: 'BUILD' }] } };
     }
+    // A grid read with no data date, for the 5.17 undated-power check.
+    if (/grid/i.test(p) && /ercot/i.test(p)) return { status: 200, body: { iso: 'ERCOT', demand_mw: 50972 } };
     return undefined;
   };
   async function plan(intent) {
@@ -42,15 +45,24 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     const o = await plan('What is the data center power outlook for San Antonio?');
     expect(o && o._entity).toBe('plan_execution');
     expect(o.intent_class).toBe('market_outlook');
-    expect(o.planner_version).toBe('5.16');
+    expect(o.planner_version).toBe('5.17');
     const ran = o.executed.map((e) => e.tool);
     expect(ran).not.toContain('get_dchub_recommendation');
     expect(recommendHits()).toBe(before);
     const dcpi = o.executed.find((e) => e.tool === 'get_market_dcpi_rank');
-    expect(dcpi.args.market_slug).toBe('san-antonio-tx');
+    expect(dcpi.args.market_slug).toBe('san-antonio');
     expect(o.answer_guide).not.toMatch(/Midland/);
     expect(o.answer_guide).toMatch(/san-antonio: CAUTION/);
     expect(fence.foreign).toEqual([]);
+    // 5.17: the dated DCPI step passes; the grid step the stub left undated is
+    // named, never presented as a current reading.
+    const ev = Object.fromEntries((o.power_evidence || []).map((x) => [x.tool, x]));
+    expect(ev.get_market_dcpi_rank).toMatchObject({ iso: 'ERCOT', ok: true });
+    expect(ev.get_market_dcpi_rank.as_of).toBeTruthy();
+    // Anonymous: the grid step is a gated preview, which the agent still reads.
+    expect(o.executed.find((e) => e.tool === 'get_grid_intelligence').status).toBe('gated_preview');
+    expect(ev.get_grid_intelligence).toMatchObject({ iso: 'ERCOT', ok: false, missing: ['as_of'] });
+    expect(o.answer_guide).toMatch(/UNDATED — get_grid_intelligence \(step 3\) returned no as_of/);
   }, 120_000);
 
   it('an unmatched question says it is unresolved and runs no recommendation', async () => {
@@ -70,5 +82,28 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     expect(st.get_market_dcpi_rank).toBe('skipped_unresolved');
     expect(st.get_market_intel).toBe('skipped_unresolved');
     expect(o.answer_guide).toMatch(/^UNRESOLVED — "Timbuktu" is not a market DC Hub tracks/);
+  }, 120_000);
+
+  // 5.17: the executor must not fill the placeholders from the 'columbus'
+  // substring hit in _CITY_ISO_META (columbus-oh) when the plan said Columbus,
+  // GA is not tracked. Only the end-to-end run can see the executor's mint.
+  it('Columbus, GA: unresolved, and Columbus, OH is never read in its place', async () => {
+    const o = await plan('What is the data center power outlook for Columbus, GA?');
+    expect(o.intent_class).toBe('market_outlook');
+    const st = Object.fromEntries(o.executed.map((e) => [e.tool, e.status]));
+    expect(st.get_market_dcpi_rank).toBe('skipped_unresolved');
+    expect(st.get_market_intel).toBe('skipped_unresolved');
+    expect(H.hits.filter((h) => /columbus/.test(h.path))).toEqual([]);
+    expect(o.answer_guide).toMatch(/^UNRESOLVED — "Columbus, GA" is not a market DC Hub tracks\. The index tracks that name only as Columbus \(OH, columbus\)/);
+  }, 120_000);
+
+  it('Midland–Odessa, a market _CITY_ISO_META never had, is read as itself', async () => {
+    const o = await plan('What is the data center power outlook for Midland-Odessa?');
+    expect(o.intent_class).toBe('market_outlook');
+    const args = Object.fromEntries(o.executed.map((e) => [e.tool, e.args]));
+    expect(args.get_market_dcpi_rank).toEqual({ market_slug: 'midland-tx' });
+    expect(args.get_market_intel).toEqual({ market: 'midland-tx' });
+    expect(args.get_grid_intelligence).toEqual({ iso: 'ERCOT' });
+    expect(o.unresolved).toBeUndefined();
   }, 120_000);
 });

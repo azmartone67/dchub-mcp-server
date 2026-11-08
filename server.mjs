@@ -79,6 +79,7 @@
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
+import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // r-list-swr (2026-07-11): Client + InMemoryTransport are used ONLY to build the
@@ -19037,17 +19038,19 @@ export const _PLAN_CLASSES = [
       [/\bhow\s+(?:is|does)\s+.{2,40}?\s+look(?:ing)?\b/i, 2],
       [/\bwhat(?:'s|\s+is)\s+(?:happening|going\s+on)\s+(?:in|with)\b/i, 2],
     ],
-    rationale: (d) => (d.market || d.__citySlug)
-      ? `The question is about one market, ${d.market || d.__citySlug}, so every read is pinned to it: its DCPI verdict and time-to-power, its market brief, and the grid it sits on. No ranking step runs, so no other market can stand in for it.`
-      : 'The question is about one market, but the place it names is not a market DC Hub tracks. The market steps are left unresolved instead of being answered for a different market.',
+    rationale: (d) => (d.__outlook && d.__outlook.slug)
+      ? `The question is about one market, ${d.__outlook.slug}, so every read is pinned to it: its DCPI verdict and time-to-power, its market brief, and the grid it sits on. No ranking step runs, so no other market can stand in for it.`
+      : 'The question is about one market, but the place it names is not one market DC Hub tracks. The market steps are left unresolved instead of being answered for a different market.',
     sequence: (d) => {
-      const slug = d.market || d.__citySlug || null;
-      const iso = d.iso || d.isoFromPlace || null;
+      // 5.17: the market comes from _planOutlookMarket (caller, then the DCPI
+      // index, then _CITY_ISO_META). get_market_intel resolves the bare metro
+      // ('san-antonio'), not the state-suffixed slug ('san-antonio-tx' is a 404
+      // there; measured live 2026-11-07), so both steps take the canonical slug.
+      const o = (d.__outlook && d.__outlook.slug) ? d.__outlook : null;
+      const slug = o ? o.slug : null;
+      const iso = d.iso || (o && o.rto) || null;
       const ph = '<market_slug of the metro named in the intent>';
-      // get_market_intel resolves the bare metro ('san-antonio'), not the
-      // state-suffixed DCPI slug ('san-antonio-tx' is a 404 there; DCPI accepts
-      // both). Measured live 2026-11-07. A caller-typed market passes as typed.
-      const intelMarket = d.market || (d.__citySlug ? d.__citySlug.replace(/-[a-z]{2}$/, '') : null);
+      const intelMarket = o ? o.intel : null;
       return [
         { step: 1, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
           why: 'DCPI verdict (BUILD/CAUTION/AVOID), composite_score and time-to-power for the market the intent named — the outlook, scored.',
@@ -20584,8 +20587,10 @@ export function _planSignals(intent, context) {
     }
     return null;
   })();
+  // 5.17: the one market a market_outlook plan reads (or why it cannot).
+  const __outlook = _planOutlookMarket(text, { market, __citySlug, isoFromPlace });
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    radiusKm, placeScope, scopeWidened };
+    __outlook, radiusKm, placeScope, scopeWidened };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -20769,7 +20774,12 @@ export function _planWorkflowConfidence(seq, d) {
 //         fallback no longer runs get_dchub_recommendation; a plan that could
 //         not bind says so in `unresolved` (no_intent_match /
 //         market_not_matched).
-export const PLANNER_VERSION = '5.16';
+//  5.17 = EVERY TRACKED MARKET (owner priority 1, 2026-11-08): market_outlook
+//         binds any of the 336 DCPI markets (lib/dcpi-market-match.mjs), the
+//         same canonical slug on the DCPI and brief steps; a tracked name in
+//         another state, a name two markets share, or two markets named is
+//         unresolved, never the nearest tracked market.
+export const PLANNER_VERSION = '5.17';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -20923,10 +20933,60 @@ export function _execSameMarket(subject, constraintSlug) {
   const norm = (x) => String(x || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const want = norm(constraintSlug), got = norm(subject);
   if (!want || !got) return true;
+  // 5.17: a market the DCPI index tracks is judged by its own names, so
+  // aurora-co does not pass "Aurora" (IL) on a shared prefix.
+  const indexed = _namesDcpiMarket(subject, constraintSlug);
+  if (indexed !== null) return indexed;
   const bare = want.replace(/-[a-z]{2}$/, '');          // las-vegas-nv -> las-vegas
   return got === want || got === bare || got.startsWith(bare + '-') || want.startsWith(got + '-');
 }
-export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null) {
+// ★5.17 (owner priority 1, 2026-11-08): a power reading with no date must not
+// read as current. Live 11-08 05:19Z, anonymous, the #118011 run: the
+// get_dchub_recommendation step said "Right now DC Hub ranks Midland–Odessa …
+// BUILD" while its own provenance.as_of was null ("UNMEASURED"), and the guide
+// led with that verdict. Every executed grid/power step is checked here for the
+// grid it reads (iso) or a named source, and for a data date (as_of). An
+// undated or unsourced step is named first in answer_guide and its verdict is
+// not led with (_execAnswerGuide skipSteps). Reads the pre-slim result when the
+// executor kept one. Exported for tests. Pure, never throws.
+export const _EXEC_POWER_TOOLS = new Set([
+  'get_grid_intelligence', 'get_grid_data', 'get_grid_scoreboard', 'compare_isos',
+  'get_market_dcpi_rank', 'get_dchub_recommendation', 'get_power_availability_timeline',
+  'get_interconnection_queue', 'get_refined_queue', 'get_hosting_capacity',
+  'get_retirement_headroom', 'get_power_pipeline', 'get_energy_prices', 'grid_transition_radar',
+]);
+export function _execPowerEvidence(executed, fullByEntry = null) {
+  const out = [];
+  try {
+    const named = (x) => (typeof x === 'string' && x.trim() && !/^DC Hub$/i.test(x.trim())) ? x.trim() : null;
+    const dated = (x) => (typeof x === 'string' && x.trim() && !Number.isNaN(Date.parse(x))) ? x : null;
+    for (const e of (Array.isArray(executed) ? executed : [])) {
+      // A gated preview still hands its result to the agent, so it is checked too.
+      if (!e || !(e.status === 'executed' || e.status === 'gated_preview') || !_EXEC_POWER_TOOLS.has(e.tool)) continue;
+      const r = (fullByEntry && fullByEntry.get(e)) || e.result || {};
+      const p = (r && typeof r.provenance === 'object' && r.provenance) || {};
+      const asOf = dated(r.as_of) || dated(p.as_of) || dated(r.citation && r.citation.as_of)
+        || dated(r.dcpi_provenance && r.dcpi_provenance.as_of) || null;
+      const a = e.args || {};
+      const iso = [r.iso, r.region_id, a.iso, a.region_id].find((x) => typeof x === 'string' && x.trim()) || null;
+      const source = named(p.source) || named(r.source) || null;
+      const missing = [];
+      if (!asOf) missing.push('as_of');
+      if (!iso && !source) missing.push('iso_or_source');
+      out.push({ step: e.step, tool: e.tool, iso: iso ? iso.trim().toUpperCase() : null, source, as_of: asOf,
+                 ok: !missing.length, ...(missing.length ? { missing } : {}) });
+    }
+  } catch (_e) { /* evidence is advisory; never blocks the answer */ }
+  return out;
+}
+export function _execUndatedSentence(evidence) {
+  const bad = (Array.isArray(evidence) ? evidence : []).filter((x) => x && !x.ok);
+  if (!bad.length) return '';
+  const what = (x) => x.missing.map((m) => (m === 'as_of' ? 'no as_of' : 'no ISO or named source')).join(' and ');
+  return 'UNDATED — ' + bad.map((x) => `${x.tool} (step ${x.step}) returned ${what(x)}`).join('; ')
+    + '. Do not present those steps\' figures or verdicts as current; quote only dated steps, each with its as_of.';
+}
+export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
@@ -20953,7 +21013,10 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
       }
       for (const val of Object.values(o)) scan(val, depth + 1);
     };
-    for (const e of (Array.isArray(executed) ? executed : [])) scan(e && e.result, 0);
+    for (const e of (Array.isArray(executed) ? executed : [])) {
+      if (e && skipSteps && skipSteps.has(e.step)) continue;   // undated power step: not led with
+      scan(e && e.result, 0);
+    }
     if (!found.length) return BASE;
     const led = found.map((f) => `${f.subject ? f.subject + ': ' : ''}${f.verdict}`
                                  + (f.score != null ? ` (${f.score})` : '')).join(' · ');
@@ -21500,14 +21563,65 @@ export function _planUnresolved(text, d, intentClass) {
           + 'Use discover_tools to pick a tool, or rephrase naming the market, ISO or site. '
           + 'Do not present a recommendation for another market as the answer.' };
   }
-  if (intentClass === 'market_outlook' && !(d && (d.market || d.__citySlug))) {
+  if (intentClass === 'market_outlook') {
+    const o = d && d.__outlook;
+    if (o && o.slug) return null;
+    if (o && o.unresolved) return o.unresolved;
     const place = _planNamedPlace(text);
+    const isState = !!place && _US_STATE_NAME_RE.test(place);
     return { kind: 'market_not_matched', ...(place ? { phrase: place } : {}),
-      note: (place ? `"${place}" is` : 'The place named is') + ' not a market DC Hub tracks, so no market was read. '
-          + 'This answer is unresolved: it does not substitute another market. '
-          + 'Call rank_markets or search_facilities to find the nearest tracked market.' };
+      note: (place ? `"${place}" is` : 'The place named is') + (isState ? ' a state, not a market,' : ' not a market DC Hub tracks,')
+          + ' so no market was read. This answer is unresolved: it does not substitute another market. '
+          + (isState ? `Call rank_markets for the tracked markets in ${place}.`
+                     : 'Call rank_markets or search_facilities to find the nearest tracked market.') };
   }
   return null;
+}
+const _US_STATE_NAME_RE = /^(?:alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s+hampshire|new\s+jersey|new\s+mexico|north\s+carolina|north\s+dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s+island|south\s+carolina|south\s+dakota|tennessee|texas|utah|vermont|virginia|washington|west\s+virginia|wisconsin|wyoming)$/i;
+// ★5.17 (owner priority 1, 2026-11-08): the one market a market_outlook
+// question reads. In order: a caller-typed market; a market the DCPI index
+// tracks (all of them, word-bounded and state-qualified: lib/dcpi-market-match.mjs);
+// a _CITY_ISO_META metro the index has no market for (northern-virginia). A
+// tracked name in another state ("Columbus, GA"), a bare name two markets share
+// ("Portland") or two markets named comes back as `unresolved`, so the executor
+// mints nothing and the steps stay skipped_unresolved — never the nearest
+// tracked market. `rto` is the grid step's iso: a US RTO, else null.
+// Exported for tests. Pure, never throws.
+export function _planOutlookMarket(text, d) {
+  try {
+    if (d && d.market) {
+      const known = _dcpiMarketBySlug(d.market);
+      return { slug: d.market, intel: d.market, rto: known ? known.rto : null, basis: 'caller' };
+    }
+    const hit = _matchDcpiMarket(text);
+    if (hit && hit.kind === 'hit') {
+      return { slug: hit.slug, intel: hit.slug, name: hit.name, state: hit.state, iso: hit.iso, rto: hit.rto, basis: 'dcpi_index' };
+    }
+    if (hit) return { unresolved: _outlookUnresolvedNote(hit) };
+    if (d && d.__citySlug) {
+      const iso = d.isoFromPlace || null;
+      return { slug: d.__citySlug, intel: d.__citySlug.replace(/-[a-z]{2}$/, ''), iso,
+               rto: (iso && _EXEC_RTOS.has(iso)) ? iso : null, basis: 'city_table' };
+    }
+  } catch (_e) { /* fall through: nothing bound */ }
+  return null;
+}
+function _outlookUnresolvedNote(hit) {
+  const TAIL = ' No market was read: this answer is unresolved and does not substitute another market.';
+  const list = (ms) => ms.map((m) => m.slug ? `${m.name} (${m.state}, ${m.slug})` : m.phrase).join('; ');
+  if (hit.kind === 'conflict') {
+    return { kind: 'market_not_matched', phrase: hit.phrase, tracked_elsewhere: hit.tracked,
+      note: `"${hit.phrase}" is not a market DC Hub tracks. The index tracks that name only as ${list(hit.tracked)}.` + TAIL
+          + ' If that is the market meant, ask again naming it.' };
+  }
+  if (hit.kind === 'ambiguous') {
+    return { kind: 'market_ambiguous', phrase: hit.phrase, candidates: hit.candidates,
+      note: `"${hit.phrase}" names more than one tracked market: ${list(hit.candidates)}.` + TAIL
+          + ' Ask again with the state.' };
+  }
+  return { kind: 'multiple_markets', markets: hit.markets,
+    note: `The question names more than one market: ${list(hit.markets)}. An outlook reads one market.` + TAIL
+        + ' Ask to compare them, or ask about one.' };
 }
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
@@ -21548,7 +21662,9 @@ export function _planQuery(intent, context) {
     // no runner-up ranking step is appended behind it).
     if (s.cls.id === 'market_outlook') {
       if (d.comparePair || _OUTLOOK_MULTI_RE.test(text)) s.score = 0;
-      else if (s.score > 0 && (d.market || d.__citySlug)) s.score += 3;
+      // A place the index knows, bound or not (Columbus, GA is still about
+      // Columbus): the class owns it, and says what it could not bind.
+      else if (s.score > 0 && d.__outlook) s.score += 3;
       // No tracked metro AND no place phrase: nothing names a market, so this is
       // not a market question (the unknown fallback says so instead).
       else if (!_planNamedPlace(text)) s.score = 0;
@@ -27980,7 +28096,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const constraintIsoSet = _execConstraintIsoSet(a && a.intent, userCtx, _sig);
       // Inject ONLY when the intent named exactly one geography.
       const constraintIso = constraintIsoSet.length === 1 ? constraintIsoSet[0] : null;
-      const constraintSlug = (userCtx && userCtx.market) || _execConstraintSlug(a && a.intent);
+      // 5.17: a market_outlook run is held to the market its plan bound — and to
+      // none when the plan could not bind one (Columbus, GA must not fall back
+      // to the columbus-oh substring hit and get its placeholders filled).
+      const constraintSlug = (userCtx && userCtx.market)
+        || (sc.intent_class === 'market_outlook'
+          ? ((_sig && _sig.__outlook && _sig.__outlook.slug) || null)
+          : _execConstraintSlug(a && a.intent));
       const rejectedMints = [];
       const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
       const byStep = new Map(seq.map((s) => [s.step, s]));
@@ -28239,6 +28361,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // differently, and that difference is real information). Each collapsed
       // step gets a pointer so nothing silently disappears.
       const _upsellDedupe = _execDedupeUpsell(executed);
+      const _powerEvidence = _execPowerEvidence(executed, fullByEntry);
+      const _undated = _execUndatedSentence(_powerEvidence);
       const out = {
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
@@ -28281,9 +28405,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
         // surface; the structured field follows the answer-block gate below.
+        // 5.17: an undated power step is named next, and its verdict is not led with.
         answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
-          + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null) + (_rb ? ' ' + _rb.sentence : ''),
+          + (_undated ? _undated + ' ' : '')
+          + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
+                             new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
+          + (_rb ? ' ' + _rb.sentence : ''),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
+        ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
