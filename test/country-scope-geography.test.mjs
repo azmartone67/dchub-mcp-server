@@ -75,7 +75,9 @@ describe('planner: a named non-US country is planned as itself', () => {
     expect(seq.filter(runsUsData).map((s) => s.tool)).toEqual([]);
     expect(p.alternatives.map((a) => a.tool).filter((t) => US_ONLY_TOOLS.has(t))).toEqual([]);
     // The country itself is read.
-    expect(seq[0]).toMatchObject({ tool: 'search_facilities', args_hint: { country: iso2 } });
+    // First, unless a tracked market in that country was bound (Singapore): its read then leads.
+    expect(seq.find((s) => s.tool === 'search_facilities')).toMatchObject({ args_hint: { country: iso2 } });
+    if (!p.geography_scope.bound_market) expect(seq[0].tool).toBe('search_facilities');
     const sc = seq.find((s) => s.tool === 'source_capacity');
     expect(sc.args_hint.location).toBe(name);
     // The MW the question named is the size the capacity step runs at.
@@ -169,5 +171,36 @@ describe('MW is never worded as confirmed or available power', () => {
     expect(src).not.toMatch(/Answer plainly: how much power is available/);
     expect(src).toMatch(/per-ISO grid headroom \(a modeled MW estimate, not confirmed available power\)/);
     expect(src).toMatch(/how much headroom DC Hub's data shows \(a modeled estimate, not a utility or ISO confirmation that the power is available\)/);
+  });
+});
+
+// mcp#1311 binds a tracked DCPI market as itself; several are also country names. Found by the
+// cross-PR merge check: Singapore and Mexico City lost their DCPI steps to the country plan.
+describe('a tracked DCPI market inside the named country wins over the country plan', () => {
+  let P;
+  beforeAll(async () => { P = await import('../server.mjs'); }, 120_000);
+  const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
+
+  it.each([['Singapore', 'singapore'], ['Mexico City', 'mexico-city']])('power outlook for %s is the %s market plan, untouched', (place, slug) => {
+    const p = P._planQuery(`What is the data center power outlook for ${place}?`, {});
+    expect(p.intent_class).toBe('market_outlook');
+    expect(step(p, 'get_market_dcpi_rank').args_hint).toEqual({ market_slug: slug });
+    expect(step(p, 'get_market_intel').args_hint).toEqual({ market: slug });
+    expect(p.geography_scope).toBeUndefined();
+  });
+
+  it.each([['find 100 MW in Singapore', 'singapore', 'SG'], ['find 100 MW sites near Frankfurt, Germany', 'frankfurt', 'DE']])('%s: the market read stays, bound to %s; US-only steps go', (q, slug, iso2) => {
+    const p = P._planQuery(q, {});
+    expect(step(p, 'get_market_dcpi_rank').args_hint).toEqual({ market_slug: slug });
+    expect(p.recommended_sequence.filter(runsUsData).map((s) => s.tool)).toEqual([]);
+    expect(step(p, 'search_facilities').args_hint.country).toBe(iso2);
+    expect(step(p, 'source_capacity').args_hint.min_mw).toBe(100);
+    expect(p.geography_scope.bound_market).toBe(slug);
+  });
+
+  it('a tracked slug that spells a country is a market, not a country', () => {
+    expect(namesUsGeography('', { comparePair: { a: 'dallas', b: 'singapore' } })).toBe(true);
+    const p = P._planQuery('compare Dallas vs Singapore for a 100 MW campus', {});
+    expect(p.recommended_sequence.flatMap(marketArgs)).toEqual(expect.arrayContaining(['dallas', 'singapore']));
   });
 });
