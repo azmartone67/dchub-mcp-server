@@ -23442,7 +23442,7 @@ function trackedTool(srv, name, description, schema, handler) {
                       tool: name, tier: _gateTier || 'free', sessionId: _sid,
                       keyed: !!(c && c.api_key),   // mcp#830(c): no claim_free_key hint to a key holder
                       humanUrl: _humanUrlB,
-                      continueUrl: _buildContinueUrl({ tool: name, agent: c.platform, ...(_l || {}) }),
+                      continueUrl: _buildContinueUrl({ tool: name, humanUrl: _humanUrlB, agent: c.platform, ...(_l || {}) }),
                       ...(_l || {}),
                     });
                     return _cont ? { continuation: _cont } : {};
