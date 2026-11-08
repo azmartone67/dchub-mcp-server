@@ -126,6 +126,8 @@ test/connect-url-install-artifact.test.mjs
 test/constraint-iso-shape.test.mjs
 test/context-pack-tease-human-link.test.mjs
 test/context7-refresh-response-handling.test.mjs
+test/continuation-handback.test.mjs
+test/continuation-wall-pipeline.test.mjs
 test/continuation.test.mjs
 test/conversion-metric-wall-link.test.mjs
 test/coord-aliases.test.mjs
@@ -151,6 +153,7 @@ test/deal-desk-automint.test.mjs
 test/deals-tool-tied-copy-no-floor.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
+test/depth-wall-digest-ask.test.mjs
 test/deterministic-install.test.mjs
 test/directories-growth.test.mjs
 test/directories-page.test.mjs
@@ -193,6 +196,7 @@ test/facts-eu-zone-autoheal-1023.test.mjs
 test/fetch-as-of.test.mjs
 test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
+test/fiber-email-ask.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/find-sites-min-mw.test.mjs

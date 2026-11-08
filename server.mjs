@@ -172,7 +172,8 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand,
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
-import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
+import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
+import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
@@ -1809,10 +1810,14 @@ export function _paidSellStep(result, name) {
 // not the directory / Claude / core profiles; also not a clean platform or an execute_plan step,
 // which carry no ask lines. The row count comes from the response; unknown, no clause.
 // Kill switch DCHUB_AICAP_EMAIL_ASK=0.
+// get_fiber_intel (owner 2026-11-08, "fix it all") takes the same step with its own clause
+// (lib/paid-sell-line.fiberEmailClause, no route count) and kill switch DCHUB_FIBER_EMAIL_ASK=0.
 const _aicapEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_AICAP_EMAIL_ASK || ''));
+const _fiberEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_FIBER_EMAIL_ASK || ''));
 export function _aicapEmailAskStep(result, name) {
   try {
-    if (name !== 'ai_capacity_index' || !_aicapEmailAskOn()) return result;
+    const fiber = name === 'get_fiber_intel';
+    if (fiber ? !_fiberEmailAskOn() : (name !== 'ai_capacity_index' || !_aicapEmailAskOn())) return result;
     const c = getCtx();
     if (!c || c.api_key || c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()) return result;
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
@@ -1820,7 +1825,8 @@ export function _aicapEmailAskStep(result, name) {
     if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
     if (!sc.preview_is_partial && !sc.trial_preview) return result;
     const total = typeof sc._markets_total_in_pro === 'number' ? sc._markets_total_in_pro : sc._markets_total_available;
-    const clause = _aiCapacityEmailClause({ total, perDay: IDENTIFIED_DAILY_FULL_CAP });
+    const clause = fiber ? _fiberEmailClause({ perDay: IDENTIFIED_DAILY_FULL_CAP })
+      : _aiCapacityEmailClause({ total, perDay: IDENTIFIED_DAILY_FULL_CAP });
     if (!clause) return result;
     const isText = (b) => b && b.type === 'text' && typeof b.text === 'string';
     if (result.content.some((b) => isText(b) && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;   // once
@@ -1839,6 +1845,64 @@ export function _aicapEmailAskStep(result, name) {
     return { ...result, content };
   } catch (_) { return result; }
 }
+// The weekly-digest offer on a depth wall (owner 2026-11-08, lib/depth-digest-ask.mjs). A depth wall's
+// withheld fields open on a paid plan only, so an email ask there would promise what an email cannot
+// give; the offer is subscribe_digest (updates), and the line says the email opens nothing. Depth means
+// _wallKindFor returns no kind (not freekey, not capacity). Shown
+// once per wall: only where this response carries the human line (a repeat wall has none), and only
+// when no other email ask is on it. Not for a caller with an email on file or a paid depth tier, not
+// on Grok, a clean platform, an execute_plan step or the directory / Claude / core profiles (the same
+// exclusions as the ai_capacity_index and rank_markets asks). Kill switch DCHUB_DEPTH_DIGEST_ASK=0.
+// A Pro-only wall is a depth wall too (get_dchub_recommendation, export_dataset: an email opens nothing
+// below Pro; owner 2026-11-08 "fix it all"). Land & Power stays out: an email unlocks part of
+// analyze_site (the email teaser), and its walls carry the Pro trial offer.
+const _depthDigestAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DEPTH_DIGEST_ASK || ''));
+export function _depthWallTool(name, c) {
+  const t = String(name || '');
+  return !!t && !_freeTasteTool(t) && !_emailFullDecisionTool(t, c) && !_freePreviewOnlyTool(t)
+    && !LP_TOOLS.has(t) && !WRITE_TOOLS.has(t);
+}
+export function _depthDigestAskStep(result, name) {
+  try {
+    if (!_depthDigestAskOn()) return result;
+    const c = getCtx();
+    if (!c || !result || !Array.isArray(result.content)) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    const excluded = !!c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()
+      || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
+    // The wall must be a DEPTH wall by the classifier the relay token uses: a free-key wall (a free key,
+    // so an email, returns the fields: get_grid_data, measured 11-08) or a capacity wall (the limit is
+    // calls, which an email raises) would make "an email does not open the fields" false.
+    if (_wallKindFor(sc, c, name) !== '') return result;
+    if (!_digestAskApplies({ depth: _depthWallTool(name, c), partial: !!(sc.preview_is_partial || sc.trial_preview),
+                             bound: !!c.email, asked: !!c._emailAsk, paid: _isPaidDepthTier(c.tier), excluded })) return result;
+    const line = _digestAskLine(name);
+    const isText = (b) => b && b.type === 'text' && typeof b.text === 'string';
+    if (!line || result.content.some((b) => isText(b) && b.text.includes('`subscribe_digest`'))) return result;
+    let wrote = false;
+    const content = result.content.map((b) => {
+      if (wrote || !isText(b)) return b;
+      const lines = b.text.split('\n');
+      const k = lines.findIndex((l) => l.includes(HUMAN_FIRST_MARKER));
+      if (k < 0) return b;
+      lines[k] = line + '\n\n' + lines[k];
+      wrote = true;
+      return { ...b, text: lines.join('\n') };
+    });
+    if (!wrote) return result;
+    _markEmailAsk(c, 'digest_line');
+    return { ...result, content };
+  } catch (_) { return result; }
+}
+// The response chain runs the sell step, then the digest offer (which reads the ask the sell step marked).
+// The fiber email ask runs after the fiber sell line, which rewrites the human line it sits above.
+export function _gridSellThenDigestStep(result, name) {
+  const sold = _gridSellStep(result, name);
+  return _depthDigestAskStep(name === 'get_fiber_intel' ? _aicapEmailAskStep(sold, name) : sold, name);
+}
+// Test seam: run a step inside a request context (the steps read getCtx()).
+export const _runInCtxForTest = (store, fn) => ctx.run(store, fn);
 export function _gridSellStep(result, name) {
   try {
     if (name === 'ai_capacity_index') return _aicapEmailAskStep(result, name);
@@ -23687,7 +23751,7 @@ function trackedTool(srv, name, description, schema, handler) {
                       tool: name, tier: _gateTier || 'free', sessionId: _sid,
                       keyed: !!(c && c.api_key),   // mcp#830(c): no claim_free_key hint to a key holder
                       humanUrl: _humanUrlB,
-                      continueUrl: _buildContinueUrl({ tool: name, agent: c.platform, ...(_l || {}) }),
+                      continueUrl: _buildContinueUrl({ tool: name, humanUrl: _humanUrlB, agent: c.platform, ...(_l || {}) }),
                       ...(_l || {}),
                     });
                     return _cont ? { continuation: _cont } : {};
@@ -24945,7 +25009,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
