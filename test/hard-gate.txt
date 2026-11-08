@@ -141,6 +141,7 @@ test/daily-quota-gateway.test.mjs
 test/data-sources-odbl-117627.test.mjs
 test/dcpi-confidence-public.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
+test/dcpi-markets-refresh.test.mjs
 test/dcpi-rank-human-line-own-block.test.mjs
 test/dcpi-rank-paid-bullets.test.mjs
 test/dcpi-subscores-pro-only.test.mjs
@@ -324,6 +325,9 @@ test/lp-wall-paywall-signal.test.mjs
 test/manifest-description-heals.test.mjs
 test/market-intel-fallback-provisional.test.mjs
 test/market-intel-json-first-block.test.mjs
+test/market-outlook-e2e.test.mjs
+test/market-outlook-geography.test.mjs
+test/market-outlook-routing.test.mjs
 test/market-pricing-public.test.mjs
 test/market-taste-cites-verdict-as-of.test.mjs
 test/mcp-oauth-own-resource.test.mjs
@@ -405,6 +409,7 @@ test/platform-header.test.mjs
 test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
 test/power-grid-listing.test.mjs
+test/power-step-evidence.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
 test/pricing-canon-and-go-links.test.mjs
