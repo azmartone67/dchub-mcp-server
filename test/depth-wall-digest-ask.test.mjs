@@ -236,6 +236,21 @@ describe('_depthDigestAskStep guards, one context at a time', () => {
       expect(r.ask).toBeUndefined();
     }
   });
+  // Measured live 11-08 after mcp#1316: keyless get_grid_data carried the line under a human line
+  // that names "a free DC Hub key" as the plan that returns the fields. A free-key or capacity wall
+  // is not a depth wall; an email does open (or raise) it.
+  it('a free-key wall (keyless get_grid_data, an email-cap unlock): nothing', () => {
+    const grid = S._runInCtxForTest({ tier: 'anonymous' }, () => S._depthDigestAskStep(wall(), 'get_grid_data'));
+    expect(JSON.stringify(grid)).not.toContain('subscribe_digest');
+    const cap = S._runInCtxForTest({ tier: 'free' }, () => S._depthDigestAskStep(
+      { ...wall(), structuredContent: { preview_is_partial: true, unlock_kind: 'email_cap' } }, 'list_transactions'));
+    expect(JSON.stringify(cap)).not.toContain('subscribe_digest');
+  });
+  it('a capacity wall (the call ration is spent): nothing', () => {
+    const r = S._runInCtxForTest({ tier: 'free' }, () => S._depthDigestAskStep(
+      { ...wall(), structuredContent: { preview_is_partial: true, error: 'quota_exceeded' } }, 'list_transactions'));
+    expect(JSON.stringify(r)).not.toContain('subscribe_digest');
+  });
   it('a full answer (no preview) and a repeat wall (no human line): nothing', () => {
     const full = S._runInCtxForTest({ tier: 'free' }, () => S._depthDigestAskStep(
       { ...wall(), structuredContent: { transactions: [] } }, 'list_transactions'));
