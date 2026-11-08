@@ -213,6 +213,16 @@ jobs:
           NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
           WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-problem-taxonomy.mjs
+      - name: Refresh the DCPI market table execute_plan binds market_outlook to
+        # ★2026-11-08 (planner 5.17): lib/dcpi-markets.data.mjs lists every market
+        # /api/v1/dcpi/scores tracks, so "power outlook for <a new market>" binds
+        # the day it is scored. Needs a key (anonymous gets 10 of the rows).
+        # Fail-closed: a fetch error, a partial list, or a >10% drop writes
+        # nothing; the file changes only when the rows do. The PR this job opens
+        # runs test/market-outlook-geography (one case per market) before merge.
+        env:
+          DCHUB_KEY: ${{ secrets.DCHUB_MCP_PAID_KEY }}
+        run: node scripts/gen-dcpi-markets.mjs
       - name: Refresh per-tool maturity + coverage limits from the owner endpoints
         # ★2026-08-12: pulls /api/v1/canon/coverage (owner: dchub-backend
         # routes/problem_taxonomy.py) and the measured deferrals from
@@ -325,7 +335,7 @@ jobs:
                  submissions/README.md submissions/cline-marketplace.md submissions/devin-cognition-marketplace.md \
                  submissions/mcp.so.md submissions/official-mcp-registry.md submissions/pulsemcp.md \
                  submissions/smithery.md canonical/problem_taxonomy.json \
-                 canonical/tool_maturity.json \
+                 canonical/tool_maturity.json lib/dcpi-markets.data.mjs \
                  llms-install.md REGISTRY-LISTINGS.md .cursor-plugin/plugin.json plugins/dchub/.claude-plugin/plugin.json \
                  skills/README.md skills/dc-hub-data-center-intelligence/SKILL.md \
                  scripts/tier3_presence.sh scripts/smithery_description.txt \

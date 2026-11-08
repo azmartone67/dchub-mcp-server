@@ -45,6 +45,7 @@ describe('answer_guide geography (#117661)', () => {
   it('the call site passes the run constraint set', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(src).toMatch(/answer_guide: _execAnswerGuide\(executed, constraintIsoSet\)/);
+    // #118011: a third arg (the one named market, market_outlook runs only) follows the set.
+    expect(src).toMatch(/answer_guide:[\s\S]{0,160}_execAnswerGuide\(executed, constraintIsoSet[,)]/);
   });
 });
