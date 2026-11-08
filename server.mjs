@@ -1841,7 +1841,8 @@ export function _aicapEmailAskStep(result, name) {
 }
 // The weekly-digest offer on a depth wall (owner 2026-11-08, lib/depth-digest-ask.mjs). A depth wall's
 // withheld fields open on a paid plan only, so an email ask there would promise what an email cannot
-// give; the offer is subscribe_digest (updates), and the line says the email opens nothing. Shown
+// give; the offer is subscribe_digest (updates), and the line says the email opens nothing. Depth means
+// _wallKindFor returns no kind (not freekey, not capacity). Shown
 // once per wall: only where this response carries the human line (a repeat wall has none), and only
 // when no other email ask is on it. Not for a caller with an email on file or a paid depth tier, not
 // on Grok, a clean platform, an execute_plan step or the directory / Claude / core profiles (the same
@@ -1861,6 +1862,10 @@ export function _depthDigestAskStep(result, name) {
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
     const excluded = !!c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
+    // The wall must be a DEPTH wall by the classifier the relay token uses: a free-key wall (a free key,
+    // so an email, returns the fields: get_grid_data, measured 11-08) or a capacity wall (the limit is
+    // calls, which an email raises) would make "an email does not open the fields" false.
+    if (_wallKindFor(sc, c, name) !== '') return result;
     if (!_digestAskApplies({ depth: _depthWallTool(name, c), partial: !!(sc.preview_is_partial || sc.trial_preview),
                              bound: !!c.email, asked: !!c._emailAsk, paid: _isPaidDepthTier(c.tier), excluded })) return result;
     const line = _digestAskLine(name);
