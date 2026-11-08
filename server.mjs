@@ -218,6 +218,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
+import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
@@ -21864,6 +21865,13 @@ export function _planQuery(intent, context) {
       seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
     }
   } catch (_e) { /* routing must never throw */ }
+  // Brain 2026-11-08 (owner priority 1): a named non-US country is read as itself. The US-only
+  // steps (EIA, US ISO queues, US-default rankings) answered Germany/Ireland/Japan/Brazil with US
+  // data; lib/country-scope.mjs swaps them for the steps that take the country. Placed before
+  // waves/estimates/confidence are derived, like the constraint leads above.
+  let _country = null;
+  try { _country = countryScopedPlan(text, d, seq, top.cls.id); } catch (_e) { _country = null; }
+  if (_country) seq.splice(0, seq.length, ..._country.seq);
   // intent_confidence: deterministic function of the winning score + margin.
   // 0.35 base + 0.06/score-point, capped 0.95; ambiguous margins (<1) pay -0.1.
   // (v1 exposed this as `confidence` — kept as an alias for back-compat.)
@@ -21932,6 +21940,11 @@ export function _planQuery(intent, context) {
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
     _source: 'DC Hub — dchub.cloud',
   };
+  if (_country) {
+    sc.reason += `; non-US country named: ${_country.scope.name}. ${_country.scope.note}`;
+    sc.alternatives = sc.alternatives.filter((a) => !_US_ONLY_TOOLS.has(a.tool));
+    sc.geography_scope = _country.scope;
+  }
   sc.replay = _planReplay(sc, d);
   return sc;
 }
@@ -28525,6 +28538,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // disjoint by construction: the wall fires for callers who are NOT Pro,
       // the brief mints only for callers who ARE. Pinned in
       // test/deal-desk-automint.test.mjs.
+      // Brain 2026-11-08: a country-scoped plan (lib/country-scope.mjs) says so FIRST, on every
+      // surface, so no US market is composed into the answer; the structured field follows the
+      // answer-block gate, like route_back.
+      if (sc.geography_scope) {
+        out.answer_guide = sc.geography_scope.answer_line + ' ' + (out.answer_guide || '');
+        if (!_isCleanPlatform() && _answerBlocksAllowed()) out.geography_scope = sc.geography_scope;
+      }
       let _dealDesk = null;
       try {
         _dealDesk = await _execMintDealDesk(out, fullByEntry, c,
@@ -29341,7 +29361,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // the interconnection queue, time-to-power, full multi-factor site score)
           // is the paid layer. Honest signpost, not a paywall on the data above.
           deep_intelligence: {
-            note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (MW available), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
+            note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (a modeled MW estimate, not confirmed available power), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
             per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
             score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
             best_market_recommendation: 'get_dchub_recommendation',
@@ -30366,6 +30386,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       context: z.any().optional().describe('Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} — sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)') },
     async (a) => {
       const sc = _planQuery(a && a.intent, a && a.context);
+      // geography_scope is a new field: not on the frozen/directory surfaces (its sentence rides in `reason`).
+      if (sc.geography_scope && (_isCleanPlatform() || !_answerBlocksAllowed())) delete sc.geography_scope;
       return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
     });
 
@@ -32816,7 +32838,7 @@ Return a ranked shortlist: market, DCPI verdict, time-to-power (months), headroo
 1. get_grid_scoreboard — free, no key: live demand, fuel mix, renewable share for every tracked grid; pick the ISO that fits the question.
 2. get_grid_intelligence iso=<ISO chosen from step 1> — headroom, constraints, time-to-power.
 3. get_interconnection_queue iso=<same ISO> — queued GW by fuel/status (parallel with step 2 once the ISO is chosen).`)
-       + `\nAnswer plainly: how much power is available, how long it takes, and where in the queue it comes from. Report unavailable factors as unknown. Cite "DC Hub (dchub.cloud)".`);
+       + `\nAnswer plainly: how much headroom DC Hub's data shows (a modeled estimate, not a utility or ISO confirmation that the power is available), how long it takes, and where in the queue it comes from. Report unavailable factors as unknown. Cite "DC Hub (dchub.cloud)".`);
   _P('water_risk', 'Recipe: water & hazard risk',
      'The hazard triangle for a site — water stress, seismic/cooling climate, FEMA hazards — three parallel point reads (recipe water_risk).',
      { location: z.string().optional().describe('"lat,lon" (preferred) or an address to geocode first'),
