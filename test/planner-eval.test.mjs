@@ -68,3 +68,28 @@ describe('plan_query canonical behavior suite (run on every planner revision)', 
     }
   });
 });
+
+// 2026-11-07: AUTHORIZATION BOUNDARY for state-changing phrasing. These intents
+// ask to save, delete, submit, buy or watch. plan_query is a read-only planner,
+// so whatever class it picks, nothing it recommends may be a write tool: the
+// agent must ask its human and call the write tool itself, never get one handed
+// to it as a plan step. The routes themselves are not pinned (several fall back
+// to discover_tools on purpose); only the read-only property is.
+const WRITE_TOOL = /^(save_|set_|register_|subscribe_|bind_|claim_|request_|report_|accept_|delete_|recover_|unlock_|submit_|buy_|purchase_|watch_)/;
+const STATE_CHANGING_PHRASING = [
+  'save this site and alert me when power changes',
+  'delete my saved site',
+  'submit a listing for my 20 MW facility',
+  'list my data center for sale',
+  'buy a pro plan',
+  'watch Dallas for changes',
+  'claim my facility page',
+];
+
+describe('plan_query never plans a write step for state-changing phrasing', () => {
+  it.each(STATE_CHANGING_PHRASING)('"%s" -> read-only plan', (intent) => {
+    const p = _planQuery(intent, {});
+    const tools = [p.best_tool, ...p.recommended_sequence.map((s) => (typeof s === 'string' ? s : s.tool))];
+    expect(tools.filter((t) => WRITE_TOOL.test(String(t)))).toEqual([]);
+  });
+});
