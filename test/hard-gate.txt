@@ -127,6 +127,7 @@ test/constraint-iso-shape.test.mjs
 test/context-pack-tease-human-link.test.mjs
 test/context7-refresh-response-handling.test.mjs
 test/continuation-handback.test.mjs
+test/continuation-wall-pipeline.test.mjs
 test/continuation.test.mjs
 test/conversion-metric-wall-link.test.mjs
 test/coord-aliases.test.mjs
