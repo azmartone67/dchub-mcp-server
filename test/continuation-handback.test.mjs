@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { leanResponseStep, leanResponsesOn } from '../lib/lean-response.mjs';
 import { readFileSync } from 'node:fs';
-import { buildContinueUrl, buildContinuation } from '../lib/continuation.mjs';
+import vm from 'node:vm';
+import { buildContinueUrl, buildContinuation, extractLockedFromPayload } from '../lib/continuation.mjs';
 
 const short = 'https://dchub.cloud/u/b2gf3f'; // synthetic; never requested
 const input = { tool: 'get_grid_intelligence', humanUrl: short, fields: ['headroom_mw'] };
@@ -25,6 +26,7 @@ describe('continuation: retain the already-minted human handback, not private re
     'https://dchub.cloud/u/b2gf3f/../b2gf3f', 'https://dchub.cloud/u/%622gf3f',
     'https://dchub.cloud/u/abcdefghi', 'https://dchub.cloud/u/b0gf3f',
     'javascript:alert(1)', '', null,
+    ...['\n', '\r', '\r\n', '\u2028', '\u2029'].map(end => short + end),
   ])('rejects unsafe/non-short destinations without throwing: %s', (humanUrl) => {
     const u = new URL(buildContinueUrl({ ...input, humanUrl }));
     expect(u.searchParams.has('handoff')).toBe(false);
@@ -37,6 +39,31 @@ describe('continuation: retain the already-minted human handback, not private re
   it('wires the same response human URL into the actual gated producer', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     expect(/_buildContinueUrl\(\{ tool: name, humanUrl: _humanUrlB,/.test(src)).toBe(true);
+  });
+  it('executes the actual gated producer IIFE with real continuation helpers and hostile private context', () => {
+    const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+    const call = src.indexOf('continueUrl: _buildContinueUrl({ tool: name, humanUrl: _humanUrlB,');
+    expect(call).toBeGreaterThan(0);
+    const start = src.lastIndexOf('(function () {', call);
+    const end = src.indexOf('})()', call) + 4;
+    const producer = src.slice(start, end);
+    expect(producer).toContain('return _cont ? { continuation: _cont } : {}');
+    const out = vm.runInNewContext(producer, {
+      name: input.tool, _gateTier: 'free', _sid: 'PRIVATE_SESSION',
+      c: { api_key: 'PRIVATE_KEY', platform: 'Claude' }, _humanUrlB: short,
+      _previewObj: { grid_capacity: [{}, {}], _grid_capacity_total_in_developer: 47,
+        _headroom_mw_in_pro: true, intent: 'PRIVATE INTENT', humanUrl: 'https://evil.example/',
+        notes: 'PRIVATE NOTES', as_of: null },
+      _extractLocked: extractLockedFromPayload, _buildContinuation: buildContinuation,
+      _buildContinueUrl: buildContinueUrl,
+    }, { timeout: 1000 });
+    const actions = out.continuation.continuations;
+    expect(actions.find(a => a.type === 'human_authorization').url).toBe(short);
+    const review = new URL(actions.find(a => a.type === 'human_review').url);
+    expect(review.searchParams.get('records')).toBe('47');
+    expect(review.searchParams.get('handoff')).toBe('/u/b2gf3f');
+    expect(review.href).not.toMatch(/PRIVATE|evil|as_of/);
+    expect(actions.find(a => a.type === 'agent_autonomous').requires_user_authorization).toBe(true);
   });
   it.each([true, false])('technical continuation is not spend or key-creation consent (keyed=%s)', (keyed) => {
     const c = buildContinuation({ ...input, keyed });
