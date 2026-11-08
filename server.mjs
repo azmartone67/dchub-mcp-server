@@ -249,6 +249,8 @@ import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _r
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
          emailSourceFor as _retEmailSourceFor, maskEmail as _retMaskEmail,
          watchOneCallOn as _retWatchOneCallOn, WATCH_SOURCE as _RET_WATCH_SOURCE } from './lib/retention.mjs';
+import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAgentLine as _resumeAppend,
+         resumeEventBody as _resumeEventBody, RESUME_TOOLS as _RESUME_TOOLS } from './lib/resume-state.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -12006,6 +12008,71 @@ function _recordEmailAskShown(c, name, kind) {
     }).catch(() => {});
   } catch (_) { /* telemetry never touches a response */ }
 }
+// ── Resume line (owner priority 2, 2026-11-08: continuity between sessions) ──
+// A returning key gets ONE agent line naming what it saved in earlier sessions (saved sites,
+// shortlisted sites, watches), or failing that the market it asked about most, plus the tools
+// that pick them up (lib/resume-state.mjs holds the decision and the copy). It reads
+// /api/v1/keys/standing through the nudge's 10-minute cache, so with the nudge on it adds no
+// backend call. Same callers as the nudge (keyed, not a directory profile, not a bot or our own
+// traffic); evaluated on the first call this replica sees from a key on a UTC day. The line is
+// appended as its own block, never a `Tell the user:` line, so it never competes with the
+// response's one human line.
+//
+// MEASURED: resume_shown when the line goes out, resume_taken when that key later calls a tool
+// the line named, on this replica (dchub-backend /api/v1/mcp/funnel `resume`: keys taken / keys
+// shown). In memory per replica: a deploy or a second replica can lose a pending one, so taken
+// under-counts, never over-counts. Kill switch DCHUB_RESUME_STATE=0.
+const _RESUME_DAY = new Map();       // api_key -> UTC day last evaluated
+const _RESUME_PENDING = new Map();   // api_key -> { kind, tools, at } once a line went out
+export async function _resumeStateStep(result, name, env = process.env) {
+  try {
+    if (!_resumeOn(env)) return result;
+    const c = getCtx() || {};
+    if (!c.api_key) return result;
+    const pend = _RESUME_PENDING.get(c.api_key);
+    if (pend && pend.tools.includes(name) && _RESUME_TOOLS.includes(name)) {
+      _RESUME_PENDING.delete(c.api_key);
+      _recordResumeEvent(c, 'resume_taken', name, pend.kind);
+    }
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result)) return result;
+    if (!_retNudgeEligible(c, { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE],
+                               isBot: isBotOrInternalCtx })) return result;
+    const day = _retUtcDay(Date.now());
+    if (_RESUME_DAY.get(c.api_key) === day) return result;
+    if (_RESUME_DAY.size > 50000) _RESUME_DAY.clear();
+    _RESUME_DAY.set(c.api_key, day);
+    const standing = await _keyStandingFull(c.api_key);
+    if (!standing || typeof standing !== 'object') return result;
+    const d = _resumeDecision(standing);
+    if (!d || !d.kind) return result;
+    const out = _resumeAppend(result, d.line);
+    if (out !== result) {
+      if (_RESUME_PENDING.size > 50000) _RESUME_PENDING.clear();
+      _RESUME_PENDING.set(c.api_key, { kind: d.kind, tools: d.tools, at: Date.now() });
+      _recordResumeEvent(c, 'resume_shown', name, d.kind);
+    }
+    return out;
+  } catch (_) { return result; }
+}
+export function _resumeEventFor(c, event, name, kind) {
+  try {
+    const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
+    return _resumeEventBody({ c: c || {}, event, tool: name, kind, sessionId: _realSession((c || {}).session_id),
+                              isQa: _isQaCaller(c), platform: tagged.platform });
+  } catch (_) { return null; }
+}
+function _recordResumeEvent(c, event, name, kind) {
+  try {
+    const body = _resumeEventFor(c, event, name, kind);
+    if (!body || !INTERNAL_KEY) return;
+    fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+  } catch (_) { /* telemetry never touches a response */ }
+}
 // Option A, the agent half (owner 2026-10-25): the wall's ONE human line names the free email
 // unlock (lib/retention.mjs wallEmailLineText). It rewrites the line the wall already carries
 // (v1 '→ **For your human:**' or the paywall contract's 'Tell the user: "…"', whichever holds the
@@ -12085,7 +12152,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     return { ...result, content: wrote ? content : result.content, structuredContent: sc };
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
-export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }
+export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
@@ -24700,12 +24767,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
+       name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
