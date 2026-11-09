@@ -49,6 +49,15 @@ should always honor:
 > `get_grid_intelligence` for the top candidate's headroom + queue. Answer:
 > which grid is greenest AND has real siting headroom today.
 
+## 5 · Re-run a plan, get back only what changed (no account)
+> Connect to https://dchub.cloud/mcp. Every `execute_plan` result carries
+> `rerun.token`. Keep it with the question. Next time, call `execute_plan` with the
+> same `intent` (and hints) plus `context.rerun_token=<token>`. The answer lists only
+> the steps whose figures changed (`executed[]`), and names the rest in
+> `rerun.unchanged` with each step's `as_of` then and now. A step that failed, timed
+> out or came back at a different depth is in `rerun.not_compared`: report it as
+> not compared, never as unchanged. Each re-run returns a fresh token.
+
 ---
 
 ## Partner outreach (honest — claim only what's live)
