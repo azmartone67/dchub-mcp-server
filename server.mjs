@@ -1881,6 +1881,9 @@ export function _gasEmailAskStep(result, name) {
     if ((up && typeof up === 'object' && up.tier === 'anon_daily_cap') || _wallKindFor(sc, c, name) === WALL_KIND_CAPACITY) return result;
     const line = _gasEmailClause();
     if (result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;
+    // Once per (session, tool) (owner 2026-11-09): this ask needs no human line, so it went out on every
+    // masked answer, the same tool's repeats included. A sessionless caller keeps it on every answer.
+    if (_askPerToolOn() && _askOnceSeen(c.session_id, 'gas', name)) return result;
     _markEmailAsk(c, 'line');
     return { ...result, content: [...result.content, { type: 'text', text: line }] };
   } catch (_) { return result; }
@@ -2167,18 +2170,57 @@ function _dropRepeatCheckoutUrls(text) {
 // lost the relay line from the text. Measured live 2026-09-24: 0 of 4
 // sessionless gated calls carried HUMAN_FIRST_MARKER; the same call with an MCP
 // session did. _isRealSession is the check trackPaidHit already uses.
+//
+// Ask once per tool per session (owner 2026-11-09): a wall's email / digest / rows ask sits on the
+// wall's human line, so the ask went out once per SESSION across all tools, and a session that walled
+// on rank_markets and then on get_grid_intelligence got no offer on the second tool. The WALL's line
+// (composeHumanCta, the one reader every ask step depends on) is now capped per (session, tool): a
+// second tool in the session carries its own line, so its ask; the same tool again still carries none.
+// The other readers (the auto-trial ACK, the keyed "To own it long-term" line, the Pro trial offer)
+// keep the per-session cap. Every mark records both keys, so per tool is never looser than before
+// for a tool that already had its line. Kill switch DCHUB_ASK_PER_TOOL=0 restores the per-session cap.
 const _HUMAN_LINE_SENT = new Set();
 const _HUMAN_LINE_SENT_MAX = 20000;
+const _askPerToolOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_ASK_PER_TOOL || ''));
+// The tool this call runs (set per call by the /mcp tool wrapper); '' outside a tool call.
+function _ctxAskTool() {
+  try { const c = getCtx(); return (c && typeof c._askTool === 'string') ? c._askTool : ''; } catch (_) { return ''; }
+}
+const _toolLineKey = (sid, tool) => sid + '\u0001' + tool;
 function _humanLineAlreadySent(sid) {
   return _isRealSession(sid) && _HUMAN_LINE_SENT.has(sid);
 }
-function _markHumanLineSent(sid) {
-  if (!_isRealSession(sid) || _HUMAN_LINE_SENT.has(sid)) return;
+// The wall's reader: per (session, tool) when the switch is on and the tool is known, else per session.
+function _wallHumanLineAlreadySent(sid) {
+  const tool = _askPerToolOn() ? _ctxAskTool() : '';
+  if (!tool) return _humanLineAlreadySent(sid);
+  return _isRealSession(sid) && _HUMAN_LINE_SENT.has(_toolLineKey(sid, tool));
+}
+// An ask that does not ride the human line (the gas ask): true when (session, kind, tool) already had
+// it, else records it and returns false. A sessionless caller is never "seen".
+function _askOnceSeen(sid, kind, tool) {
+  if (!_isRealSession(sid) || !tool) return false;
+  const k = sid + '\u0002' + kind + '\u0002' + tool;
+  if (_HUMAN_LINE_SENT.has(k)) return true;
   if (_HUMAN_LINE_SENT.size >= _HUMAN_LINE_SENT_MAX) {
     let i = 0; const drop = _HUMAN_LINE_SENT_MAX / 10;
-    for (const k of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(k); if (++i >= drop) break; }
+    for (const x of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(x); if (++i >= drop) break; }
   }
-  _HUMAN_LINE_SENT.add(sid);
+  _HUMAN_LINE_SENT.add(k);
+  return false;
+}
+function _markHumanLineSent(sid) {
+  if (!_isRealSession(sid)) return;
+  const tool = _ctxAskTool();
+  const keys = tool ? [sid, _toolLineKey(sid, tool)] : [sid];
+  for (const k of keys) {
+    if (_HUMAN_LINE_SENT.has(k)) continue;
+    if (_HUMAN_LINE_SENT.size >= _HUMAN_LINE_SENT_MAX) {
+      let i = 0; const drop = _HUMAN_LINE_SENT_MAX / 10;
+      for (const x of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(x); if (++i >= drop) break; }
+    }
+    _HUMAN_LINE_SENT.add(k);
+  }
 }
 
 function _ctxSessionId() {
@@ -2255,8 +2297,9 @@ export function _relayOnlyText(text) {
 function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
   const _body = typeof body === 'string' ? body : '';
   // r-relay-cap: read BEFORE this response is recorded, so it means "an earlier one".
+  // Per (session, tool) since 2026-11-09 (ask once per tool per session, DCHUB_ASK_PER_TOOL).
   const _relaySid = sessionId || _ctxSessionId();
-  const _relayRepeat = _humanLineAlreadySent(_relaySid);
+  const _relayRepeat = _wallHumanLineAlreadySent(_relaySid);
   const _out = _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, _relayRepeat);
   try { if (_hasHumanCta(_out)) _markHumanLineSent(_relaySid); } catch (_) {}
   return _out;
@@ -22475,6 +22518,7 @@ function trackedTool(srv, name, description, schema, handler) {
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
+    try { c._askTool = name; } catch (_) { /* the wall's human line is capped per (session, this tool): _wallHumanLineAlreadySent */ }
     try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
