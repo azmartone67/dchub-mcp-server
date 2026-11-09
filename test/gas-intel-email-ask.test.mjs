@@ -33,7 +33,8 @@ const SECRET = 'test-internal-key-not-a-real-secret';
 const SHORT_ALPHA = '23456789abcdefghjkmnpqrstuvwxyz';
 const HUMAN = '→ **For your human:**';
 const CAP = 10;
-const ENV = { DCHUB_WALL_ISERROR: '0', DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET };
+const ENV = { DCHUB_WALL_ISERROR: '0', DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET, DCHUB_ANON_DAILY_CAP: '5' };
+const CAP_NET = '203.0.113.';   // the anon-usage stub reports these IPs at the daily cap; every other IP at 0
 const MINTED_KEY = 'dch_free_bound_gas_minted_0001';
 const claims = [];
 const CLEAR = ['DCHUB_GAS_EMAIL_ASK', 'DCHUB_FIBER_EMAIL_ASK', 'DCHUB_DEPTH_DIGEST_ASK', 'DCHUB_AICAP_EMAIL_ASK', 'DCHUB_LEAN_RESPONSES', 'DCHUB_IDENTIFIED_TOOL_DAILY_FULL', 'DCHUB_TRIAL_TOOL_DAILY_FULL'];
@@ -64,6 +65,10 @@ beforeAll(async () => {
       if (p === '/api/v1/keys/claim') {   // bind_email on a keyless session mints through here
         claims.push(await readBody(req));
         res.end(JSON.stringify({ ok: true, api_key: MINTED_KEY, tier: 'free' }));
+        return;
+      }
+      if (p === '/api/v1/mcp/anon-usage') {
+        res.end(JSON.stringify({ count: String(url.searchParams.get('ip') || '').startsWith(CAP_NET) ? 5 : 0 }));
         return;
       }
       if (p === '/api/v1/mcp/full-cap/peek') { res.end(JSON.stringify({ ok: true, n: 0 })); return; }
@@ -118,8 +123,8 @@ async function post(headers, body, path = '/mcp') {
 }
 let ipN = 40, rpcId = 10;
 // initialize, then tools/call, with a real client UA (UA above).
-async function session(clientName = 'Claude Code', tool = 'list_transactions') {
-  const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, 'user-agent': UA };
+async function session(clientName = 'Claude Code', tool = 'list_transactions', net = '198.51.100.') {
+  const h0 = { 'x-forwarded-for': `${net}${ipN++}`, 'user-agent': UA };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: clientName, version: '1.0' } } });
   const sid = init.headers.get('mcp-session-id');
@@ -233,26 +238,21 @@ describe('what the gas ask promises, on the real handler', () => {
 // Live 11-09 10:05Z (QA probe after mcp#1329): on the anonymous daily-cap wall the claim hand-off line already asks
 // for the email ("ask your human for an email, pass it to `claim_free_key`"), and the gas ask made it two. The cap
 // wall's structured shape below is the one production sent.
-describe('_gasEmailAskStep on a capacity wall', () => {
-  const wall = (up) => ({
-    content: [{ type: 'text', text: '{"basis_usd_mmbtu":null}' }],
-    structuredContent: { basis_usd_mmbtu: null, tier_masked: { tier_required: 'identified', fields: ['basis_usd_mmbtu'] },
-      ...(up ? { _upgrade: up } : {}) },
+describe('get_gas_intelligence on the anonymous daily cap (real handler)', () => {
+  // #1330 tested a hand-built wall and missed the live shape: with a session the cap wall also carries the email
+  // unlock link (unlock_kind 'email_cap'), which _wallKindFor reads as a free-key wall, so both asks still showed.
+  it('one email ask: the person\'s link line, no gas line beside it', async () => {
+    const r = await (await session('Claude Code', 'get_gas_intelligence', CAP_NET))({ region: 'TX' });
+    expect(r.sc._upgrade && r.sc._upgrade.tier).toBe('anon_daily_cap');
+    expect(r.text).toContain('One email unlocks 50 calls a day');
+    expect(r.text).toContain('https://dchub.cloud/u/');
+    expect(count(r.text, RANK_EMAIL_ASK_LEAD)).toBe(0);
+    expect(count(r.text, '`bind_email`')).toBe(0);
+    expect(fullGas(r.text)).toBe(false);
   });
-  const CAP_UPGRADE = { tier: 'anon_daily_cap', next_tool: 'claim_free_key', remaining_today: 0, binding_limit: 'anon_ip_daily' };
-  const run = (w) => {
-    const store = { tier: 'anonymous', platform: 'claude', session_id: 'cap-s1' };
-    const out = S._runInCtxForTest(store, () => S._gasEmailAskStep(w, 'get_gas_intelligence'));
-    return { shown: JSON.stringify(out).includes(RANK_EMAIL_ASK_LEAD), ask: store._emailAsk };
-  };
-  it('the anonymous daily cap (the live shape): no gas ask, no mark', () => {
-    const r = run(wall(CAP_UPGRADE));
-    expect(r.shown).toBe(false);
-    expect(r.ask).toBeUndefined();
-  });
-  it('the same masked answer under the cap: the ask and the mark', () => {
-    const r = run(wall(null));
-    expect(r.shown).toBe(true);
-    expect(r.ask).toBe('line');
+  it('the same caller under the cap still gets the gas ask (the control)', async () => {
+    const r = await (await session('Claude Code', 'get_gas_intelligence'))({ region: 'TX' });
+    expect(r.sc._upgrade && r.sc._upgrade.tier).not.toBe('anon_daily_cap');
+    expect(count(r.text, RANK_EMAIL_ASK_LEAD)).toBe(1);
   });
 });
