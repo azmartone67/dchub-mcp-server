@@ -15,7 +15,7 @@
  * Zero runtime dependencies (uses global fetch, Node >= 18).
  */
 const DEFAULT_ENDPOINT = "https://dchub.cloud/mcp";
-export const SDK_VERSION = "0.2.0";
+export const SDK_VERSION = "0.3.0";
 
 // ★2026-10-31: the client name was "dchub-node-sdk". server.mjs _INTERNAL_SELF_TAG
 // (and the backend's normalize_write_platform) rewrite any name containing "dchub",

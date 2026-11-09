@@ -1,0 +1,1044 @@
+{
+  "info": {
+    "name": "DC Hub API and MCP",
+    "description": "Live, dated data on data centers and their power: facilities, markets (DCPI), grids, interconnection queues, energy prices, fiber, site risk and capacity for lease.\n\nNo key is needed to start: anonymous calls return previews. Set the `apiKey` collection variable (sent as X-API-Key) for more; mint a free one with 'Mint a free DC Hub API key' or at https://dchub.cloud/connect. Cite figures as 'DC Hub (dchub.cloud), as of <date>'.\n\nGenerated from https://dchub.cloud/openapi.json (API version 2.12.46) by integrations/postman/build_collection.py in github.com/azmartone67/dchub-mcp-server.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://dchub.cloud"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "description": "Optional. Leave empty for free previews."
+    }
+  ],
+  "item": [
+    {
+      "name": "MCP (Streamable HTTP)",
+      "item": [
+        {
+          "name": "initialize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2025-06-18\",\n    \"capabilities\": {},\n    \"clientInfo\": {\n      \"name\": \"postman\",\n      \"version\": \"1.0\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Opens an MCP session. Optional for a single call: tools/list and tools/call also answer without it."
+          }
+        },
+        {
+          "name": "tools/list",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Every tool with its input schema. /mcp serves 94 tools; /mcp/core serves 10."
+          }
+        },
+        {
+          "name": "tools/call: execute_plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 3,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"execute_plan\",\n    \"arguments\": {\n      \"intent\": \"rank markets for a 200 MW AI campus\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "A multi-topic question answered in one call."
+          }
+        },
+        {
+          "name": "tools/call: get_grid_data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 4,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_grid_data\",\n    \"arguments\": {\n      \"iso\": \"ERCOT\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Live demand and fuel mix for one grid."
+          }
+        },
+        {
+          "name": "tools/call: source_capacity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 5,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"source_capacity\",\n    \"arguments\": {\n      \"min_mw\": 10,\n      \"region\": \"north_america\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Data-center capacity listed for sale or lease."
+          }
+        }
+      ]
+    },
+    {
+      "name": "REST: Public",
+      "item": [
+        {
+          "name": "Mint a free DC Hub API key (no email, no account)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/keys/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "keys",
+                "claim"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Returns a working API key in one POST \u2014 no email, no browser, no signup. Pass it as the X-API-Key header on any keyed endpoint. Call this FIRST when a keyed endpoint answers 402 or 403; those responses carry the same instruction inline.\n\nIdempotent per (client_name, source IP) inside the reuse window: the same client_name from the same IP gets the SAME key back with reused=true, and a different client_name mints a new one. Send a client_name that is distinct per agent or per end user \u2014 a single constant sent from a shared egress IP collapses every caller onto one key and one quota.\n\n\u2605 The free unbound-call allowance is metered per SOURCE IP, not per client_name or per key, and it carries across re-mints \u2014 a fresh client_name does NOT reset it. So callers sharing one egress IP share one allowance, and every key minted after it is spent arrives already gated with bind_email_required. Binding an operator email (free, via the bind_email tool or POST /api/v1/keys/identify) lifts that gate and keeps the free tier. Hosted integrations that proxy many end users through one IP should bind an email per end user rather than rely on the unbound allowance.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_name\": \"postman/<your-workspace>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "One facility's record",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/facilities/:facility_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "facilities",
+                ":facility_id"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "facility_id",
+                  "value": "8484",
+                  "description": "Numeric id (e.g. 8484) or slug (e.g. lumen-technologies-level-3-ashburn-23a0d3a2); searchFacilities returns both on every row"
+                }
+              ]
+            },
+            "description": "Look up a single facility by the `id` or `slug` that searchFacilities returns. The response shape is decided by the caller's tier. Anonymous: id, name, city, state, country, status, slug, plus coordinates rounded to 2 decimal places (~1.1 km) and an `_upgrade` block. A free claimed key adds provider, operator, market and region at the same precision, plus exact coordinates and street address for up to 10 distinct facilities a month: a call for a new facility spends one, re-reading one is free, the allowance is shared with the website and MCP, and `_location_allowance` reports what was spent and what remains. A key on any paid DC Hub plan returns the full record: exact coordinates, power_mw, address and source, and no `_upgrade`. Branch on `_upgrade` being present rather than on whether you sent a key \u2014 a free key still carries it. `_coord_precision_dp` states the rounding applied (null when exact), so never treat a returned coordinate as exact without checking it. (Keys on the retired entry plan get the full record with location metered like a free key.)"
+          }
+        },
+        {
+          "name": "Platform statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Returns global platform stats: countries, providers, markets, deals and grid/fiber asset counts. The facility count is withheld; `facilities` reads \"corroborated count pending\" and `facility_count_status` says why."
+          }
+        },
+        {
+          "name": "Capacity Source: search live data-center capacity listings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/listings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "min_mw",
+                  "value": "",
+                  "description": "Size needed in MW (give min_mw or min_kw, not both).",
+                  "disabled": true
+                },
+                {
+                  "key": "min_kw",
+                  "value": "",
+                  "description": "Size needed in kW.",
+                  "disabled": true
+                },
+                {
+                  "key": "region",
+                  "value": "",
+                  "description": "Comma list: north_america, latin_america, europe, asia_pacific, middle_east_africa (aliases emea, apac, latam, americas).",
+                  "disabled": true
+                },
+                {
+                  "key": "country",
+                  "value": "",
+                  "description": "Comma list of ISO-2 codes or country names.",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "",
+                  "description": "Free text matched against region, country, state and metro.",
+                  "disabled": true
+                },
+                {
+                  "key": "market",
+                  "value": "",
+                  "description": "Market name, e.g. Phoenix.",
+                  "disabled": true
+                },
+                {
+                  "key": "state",
+                  "value": "TX",
+                  "description": "Two-letter US state.",
+                  "disabled": true
+                },
+                {
+                  "key": "delivery_type",
+                  "value": "",
+                  "description": "How the capacity is delivered.",
+                  "disabled": true
+                },
+                {
+                  "key": "available_by",
+                  "value": "",
+                  "description": "YYYY-MM or YYYY-MM-DD.",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Max listings returned.",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Teaser cards for the live Capacity Source listings (powered land, powered shells, turnkey capacity, colocation), including pocket listings; the provider is withheld until it accepts a deal registration. Size is matched against what a listing can deliver (contiguous_kw and min_contract_kw), not its headline total. Every item carries `url` (the listing's own page) and `tracked_url` (the same page through a link that records the search receipt, channel and client platform); give your human `url`. No key is needed to browse."
+          }
+        },
+        {
+          "name": "Capacity Source: one listing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/listings/:slug_or_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "listings",
+                ":slug_or_id"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "slug_or_id",
+                  "value": "phoenix-2-mw-colocation-available-now",
+                  "description": "Slug or numeric id exactly as /api/v1/listings returns it."
+                }
+              ]
+            },
+            "description": "One listing by the slug or id the search returns. Signed-out and unaccepted callers get the teaser card plus the steps to unlock it; a signed-in human who accepted the introduction terms sees the specs. The provider's identity, site and contact are released only after the provider accepts that caller's deal registration."
+          }
+        },
+        {
+          "name": "Capacity Source: live availability in aggregate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/listings/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "listings",
+                "summary"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "How many listings are live, how many MW, in which markets and delivery types, and when they last changed. Never a listing's slug, title or provider."
+          }
+        },
+        {
+          "name": "Capacity Source: the introduction terms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/listings/terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "listings",
+                "terms"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "The version, summary and full text of the terms a human accepts before a listing opens or an introduction is requested."
+          }
+        },
+        {
+          "name": "Capacity Source: JSON Feed of live listings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/listings/feed.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "feed.json"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "JSON Feed 1.1 of the public, teaser-level listing cards (no provider, site or contact). Each item's url is the listing's own page."
+          }
+        },
+        {
+          "name": "Capacity Source: RSS feed of live listings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/listings/feed.xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "listings",
+                "feed.xml"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "RSS 2.0 of the public, teaser-level listing cards. Same items as the JSON feed."
+          }
+        },
+        {
+          "name": "Server-side set-reduction over the ISO interconnection queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/interconnection-queue/refined",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interconnection-queue",
+                "refined"
+              ],
+              "query": [
+                {
+                  "key": "min_mw",
+                  "value": "",
+                  "description": "Minimum project capacity in MW (e.g. 1000 for 1 GW+)",
+                  "disabled": true
+                },
+                {
+                  "key": "max_ttp_months",
+                  "value": "",
+                  "description": "Max time-to-power in months (ISO-level avg interconnection wait; keeps projects in ISOs at or under this)",
+                  "disabled": true
+                },
+                {
+                  "key": "iso",
+                  "value": "",
+                  "description": "Restrict to one or more ISOs (comma-separated union), from PJM/ERCOT/MISO/CAISO/SPP/NYISO/ISO-NE. e.g. iso=ERCOT,PJM. Hyphens are normalized (ISONE == ISO-NE). Combines with max_ttp_months as an intersection.",
+                  "disabled": true
+                },
+                {
+                  "key": "state",
+                  "value": "TX",
+                  "description": "Restrict to projects in one or more US states (two-letter code or full name, comma-separated union), e.g. state=NV. An ISO spans states (CAISO holds Nevada and Arizona projects), so use this for a state question. An unknown state is a 400 state_invalid.",
+                  "disabled": true
+                },
+                {
+                  "key": "baseload_only",
+                  "value": "False",
+                  "description": "Keep only firm/dispatchable fuel; exclude wind/solar/storage. (Firm/intermittent split only \u2014 does NOT sub-divide peaker vs combined-cycle gas; the queue has no duty-cycle field.)",
+                  "disabled": true
+                },
+                {
+                  "key": "fuel_type",
+                  "value": "",
+                  "description": "Inclusive substring match on the raw fuel label; comma/semicolon separated for a union (e.g. 'gas' hits GAS/Natural Gas, 'nuclear,hydro' unions both). Use to isolate a specific generation class server-side instead of post-filtering in context.",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Queue status filter. Default 'active' = still progressing (excludes withdrawn/cancelled/suspended/in-commercial-operation) \u2014 cross-ISO safe, since SPP labels live projects 'IA FULLY EXECUTED/ON SCHEDULE' etc. rather than 'active'. 'all' = no filter; any other value = literal substring match.",
+                  "disabled": true
+                },
+                {
+                  "key": "max_fiber_km",
+                  "value": "",
+                  "description": "Keep only survivors within this many km of the nearest MAPPED long-haul fiber route endpoint (coarse backbone proximity from a sparse ~260-node dataset, over a county-centroid origin \u2014 NOT last-mile fiber distance). Implies geocoded rows only.",
+                  "disabled": true
+                },
+                {
+                  "key": "geocoded_only",
+                  "value": "False",
+                  "description": "Keep only survivors that carry lat/lng (~83% of the queue) \u2014 i.e. those an agent can pipe straight into analyze_site via the site_evaluation_handoff.",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "200",
+                  "description": "Max survivors returned",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Filters US interconnection-queue projects server-side so an agent ingests survivors, not the raw queue (avoids in-context-filter token blowup). Predicates: min_mw, max_ttp_months (ISO-level estimate), iso (comma union), baseload_only, fuel_type, and the Phase-2 spatial predicates max_fiber_km + geocoded_only. Returns the DCHubEnvelope with _entity=queue_results; ~83% of survivors carry lat/lng + a compact per-survivor site_evaluation_handoff (ready-to-pipe analyze_site + get_water_risk args)."
+          }
+        },
+        {
+          "name": "Structured read of a GeoJSON parcel boundary (Phase 3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analyze-parcel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analyze-parcel"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Geodesic acreage + largest-member centroid as representative_point (never the multi-part center) + contiguous flag + per-member breakdown + a site_evaluation_handoff, for any GeoJSON Polygon/MultiPolygon. Reads any polygon you pass; DC Hub does not yet own parcel boundaries, so get_refined_queue survivors do not auto-carry geometry. Returns the DCHubEnvelope with _entity=parcel_analysis.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"geometry\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [\n      [\n        [\n          -112.08,\n          33.44\n        ],\n        [\n          -112.06,\n          33.44\n        ],\n        [\n          -112.06,\n          33.46\n        ],\n        [\n          -112.08,\n          33.46\n        ],\n        [\n          -112.08,\n          33.44\n        ]\n      ]\n    ]\n  },\n  \"capacity_mw\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Deterministic multi-site ranking/optimization under constraints (Phase 3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/rank-sites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "rank-sites"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Rank candidate sites under hard constraints + signed weighted objectives (+maximize/-minimize). Three scoring modes: relative (min-max within batch, default), absolute (fixed 0-100, cross-run-stable), percentile (vs the viable-site population \u2014 'better than X% of viable sites', cross-run + cross-region comparable). Returns the DCHubEnvelope with _entity=ranked_sites: rank, objective_score, per-field normalized{}, normalization_basis.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"candidates\": [\n    {\n      \"id\": \"a\",\n      \"lat\": 33.45,\n      \"lng\": -112.07,\n      \"power_mw\": 120,\n      \"fiber_km\": 2.1\n    },\n    {\n      \"id\": \"b\",\n      \"lat\": 32.78,\n      \"lng\": -96.8,\n      \"power_mw\": 80,\n      \"fiber_km\": 0.8\n    }\n  ],\n  \"objectives\": {\n    \"power_mw\": 1,\n    \"fiber_km\": -0.5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search data center facilities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/facilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "facilities"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search term (city, provider, market)",
+                  "disabled": true
+                },
+                {
+                  "key": "country",
+                  "value": "",
+                  "description": "ISO 3166-1 alpha-2 country code",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "description": "Max results",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Search a global data-center facility map by location, provider, or market"
+          }
+        },
+        {
+          "name": "List all data center markets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/markets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "markets"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Returns all tracked markets with summary statistics"
+          }
+        },
+        {
+          "name": "Compare data center markets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/markets/compare?markets=dallas,phoenix",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "markets",
+                "compare"
+              ],
+              "query": [
+                {
+                  "key": "markets",
+                  "value": "dallas,phoenix",
+                  "description": "Comma-separated market slugs, e.g. phoenix,dallas. Required \u2014 the endpoint answers 400 without it.",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "description": "Side-by-side comparison of two or more markets"
+          }
+        },
+        {
+          "name": "Data Center Power Index (DCPI) for one market",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dcpi/scores/:market_slug",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dcpi",
+                "scores",
+                ":market_slug"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "market_slug",
+                  "value": "northern-virginia",
+                  "description": "Market slug, e.g. phoenix, northern-virginia, dallas"
+                }
+              ]
+            },
+            "description": "Per-market power-readiness: the BUILD/CAUTION/AVOID verdict and composite_score are free; the sub-scores (excess_power_score, constraint_score, time_to_power_months) come with any paid DC Hub plan and come back null otherwise. Recomputed daily. Use for 'is <market> good to build a data center?'."
+          }
+        },
+        {
+          "name": "Evidence receipt for one market's DCPI answer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/receipt/dcpi/:market_slug",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "receipt",
+                "dcpi",
+                ":market_slug"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "market_slug",
+                  "value": "northern-virginia",
+                  "description": "DCPI market slug, e.g. dallas, phoenix, northern-virginia (list: /api/v1/dcpi/verdicts)"
+                }
+              ]
+            },
+            "description": "Keyless. Per component (verdict, composite score, each DCPI sub-score, grid operator, and that operator's interconnection queue): value, upstream source_url, as_of, basis and status (returned, stale, withheld, unavailable), plus cite_as. A withheld component is on a paid plan and comes back null with a human_url. Reads the same keyless data as /api/v1/dcpi/scores/{market_slug}. CORS open; Cache-Control public, max-age=300."
+          }
+        },
+        {
+          "name": "Evidence receipt for interconnection-queue figures by ISO",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/receipt/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "receipt",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "iso",
+                  "value": "",
+                  "description": "Comma-separated ISOs, e.g. pjm,caiso,ercot. Omit for every ISO.",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Keyless. Per ISO: the queued GW components with the ISO's own source_url, as_of, as_of_basis (published_report or live_feed_fetch_date), basis and status (returned, stale, withheld, unavailable), plus cite_as. An unknown ISO comes back with status unavailable. CORS open; Cache-Control public, max-age=300."
+          }
+        },
+        {
+          "name": "AI Compute Capacity Index",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai-capacity-index",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai-capacity-index"
+              ],
+              "query": [
+                {
+                  "key": "horizon",
+                  "value": "90",
+                  "description": "Deployment horizon in days",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Markets ranked by AI-ready deployable MW for near-term (30/60/90-day) large-load siting, with hyperscale_ready flag and an honest ai_ready_mw proxy."
+          }
+        },
+        {
+          "name": "Latest industry news",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/news",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "news"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Max results",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Aggregated from 40+ data center industry sources"
+          }
+        },
+        {
+          "name": "M&A transactions and deals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "deal_type",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Recent acquisitions, investments, and joint ventures"
+          }
+        }
+      ]
+    },
+    {
+      "name": "REST: Paid",
+      "item": [
+        {
+          "name": "Construction pipeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pipeline"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Data centers under construction, announced or in planning, with operator, market and capacity where disclosed. Use for supply coming into a market rather than what is already operating. Requires an X-API-Key header for a key that opens it: a trial key or any paid plan, or a key with full-answer access. The free key from /api/v1/keys/claim does not open it."
+          }
+        },
+        {
+          "name": "Site suitability score",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/site-score?lat=33.45&lon=-112.07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "site-score"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "33.45",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "lon",
+                  "value": "-112.07",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "state",
+                  "value": "TX",
+                  "description": "US state abbreviation",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "Composite 0-100 suitability score for data center development at one coordinate, with the component sub-scores behind it. A first-pass screen for a specific location, not a substitute for the per-layer power, fiber and risk calls. Requires an X-API-Key header for a key on the DC Hub plan with every tool. The free key from /api/v1/keys/claim does not open it: a key on any other plan gets the preview, the verdict band and the counts with every score null."
+          }
+        },
+        {
+          "name": "Real-time power grid fuel mix",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/grid/fuel-mix",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grid",
+                "fuel-mix"
+              ],
+              "query": [
+                {
+                  "key": "iso",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "description": "What a US grid is generating from RIGHT NOW \u2014 MW and share by fuel (gas, nuclear, coal, wind, solar, hydro, storage) with the reading's own timestamp. Use this instead of quoting an annual average when the question is about current conditions. Covers the seven US ISOs/RTOs only \u2014 not utility-level or non-US grids. Requires an X-API-Key header for a key on any paid DC Hub plan, or a key with full-answer access. The free key from /api/v1/keys/claim does not open it."
+          }
+        },
+        {
+          "name": "Electricity pricing by US state",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy/prices/:state",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "energy",
+                "prices",
+                ":state"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "state",
+                  "value": "TX",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Industrial, commercial and residential electricity pricing for one US state from the latest EIA release, with the period it covers. Use for a first-pass cost comparison between states. These are state-level averages \u2014 not a utility tariff and not a negotiated large-load rate. Requires an X-API-Key header for a key on any paid DC Hub plan, or a key with full-answer access. The free key from /api/v1/keys/claim does not open it."
+          }
+        }
+      ]
+    }
+  ]
+}

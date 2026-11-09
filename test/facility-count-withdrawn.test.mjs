@@ -181,6 +181,10 @@ describe('the "(corroborated count pending)" caveat is retired from this repo (o
   // Files that may still spell it, each for a reason a reader can check:
   //   scripts/canon-floor.mjs        names the retired string so it is never emitted
   //   scripts/refresh-canon-phrases.mjs  comment quoting the API's own `facilities` value
+  //   integrations/postman/dchub.postman_collection.json  generated from live /openapi.json,
+  //     whose /api/v1/stats description quotes that same API value (2026-11-09); regenerate
+  //     with build_collection.py once the backend drops it, and the dead-entry check below
+  //     will then ask for this line to go
   // canonical/mcp_facts.json LEFT this list on 2026-10-15 (G-1014-42): the backend
   // canon API's `facilities_public` / exporter prose no longer carry the caveat, so
   // the regenerated mirror is clean and the no-dead-entry check below demanded it.
@@ -188,6 +192,7 @@ describe('the "(corroborated count pending)" caveat is retired from this repo (o
   const ALLOWED = new Set([
     'scripts/canon-floor.mjs',
     'scripts/refresh-canon-phrases.mjs',
+    'integrations/postman/dchub.postman_collection.json',
   ]);
   const scanned = () => execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean)
     .filter((p) => !p.startsWith('test/'))

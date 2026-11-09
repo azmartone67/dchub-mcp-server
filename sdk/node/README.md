@@ -28,6 +28,27 @@ console.log(await dc.grid("ERCOT"));                 // live grid intel
 | `dc.call(tool, args)` | *any of the 94 tools* | cleaned data payload |
 | `dc.tools()` | `tools/list` | array of tool names (94 today) |
 
+## Vercel AI SDK (`dchub/ai-sdk`)
+```bash
+npm i dchub ai            # ai >= 5
+```
+```js
+import { generateText, stepCountIs } from "ai";
+import { dchubTools } from "dchub/ai-sdk";
+
+const { text } = await generateText({
+  model,                                   // any AI SDK model
+  tools: await dchubTools(),               // execute_plan, search_facilities, get_market_intel, get_grid_data, source_capacity
+  stopWhen: stepCountIs(5),
+  prompt: "Rank US markets for a 200 MW AI campus and cite the as-of date.",
+});
+```
+No key is needed to start (free-tier previews). `dchubTools({ apiKey })` or
+`DCHUB_API_KEY` sends `X-API-Key`. `tools: "all"` exposes every tool, or pass a list
+of names; `prefix: "dchub_"` namespaces them; `via` names your app in DC Hub's
+partner counts (default `"ai-sdk"`). Each tool returns DC Hub's text unchanged, so
+`cite_as`, `as_of` and `human_url` reach the model. Docs: https://dchub.cloud/docs/ai-sdk
+
 ## Auth & tiers
 Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full data:
 ```bash
