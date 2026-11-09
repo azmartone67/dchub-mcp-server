@@ -35,6 +35,14 @@ describe('canonical/directories.json', () => {
     }
     expect(liveDirectories(DATA).length).toBe(DATA.directories.filter((r) => r.status === 'live').length);
   });
+
+  it('a scan:manual row is live with a dated human check (the backend tracker shows Live on verified_at)', () => {
+    for (const d of DATA.directories.filter((r) => 'scan' in r)) {
+      expect(d.scan, d.id).toBe('manual');
+      expect(d.status, d.id).toBe('live');
+      expect(d.verified_at, d.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
 });
 
 describe('renderDirectoriesPage', () => {
