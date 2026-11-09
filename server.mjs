@@ -220,7 +220,8 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
-import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
+import { countryScopedPlan, namedNonUsCountries as _namedNonUsCountries, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
+import { usHeadroomHeadline, scopeScoreboardToUs } from './lib/us-headroom-headline.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
@@ -18591,7 +18592,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 US HEADROOM HEADLINE: a grid_headroom plan with no ISO and no non-US country scopes its scoreboard step to the US RTOs the queue tools read, ranked by the free DCPI BUILD rate and dated by the DCPI run (us_headroom_headline, one pick_reason per grid), and the deep reads take its first grid instead of the greenest. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -19272,10 +19273,10 @@ export const _PLAN_CLASSES = [
         args_hint: { iso: (d.iso || d.isoFromPlace), ...(d.mw ? { min_mw: d.mw } : {}) } },
     ] : [
       { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
-        why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
+        why: 'Live grid scoreboard (free, no key). For a US question the run ranks the US RTOs by DCPI BUILD rate (the share of tracked markets whose power verdict is BUILD), dated, with a reason per grid (recipe grid_and_queue).',
         args_hint: {} },
       { step: 2, tool: 'get_grid_intelligence', depends_on: [1], estimated_calls: 1,
-        why: 'Deep-dive the ISO the scoreboard surfaces: headroom, constraints, time-to-power.',
+        why: 'Deep-dive the grid step 1 ranks first: headroom, constraints, time-to-power.',
         args_hint: { iso: '<ISO chosen from the step-1 scoreboard>' } },
       { step: 3, tool: 'get_interconnection_queue', depends_on: [1], estimated_calls: 1,
         why: 'Queue depth / GW aggregate for that ISO — parallel with step 2 once the ISO is chosen.',
@@ -20956,7 +20957,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         same canonical slug on the DCPI and brief steps; a tracked name in
 //         another state, a name two markets share, or two markets named is
 //         unresolved, never the nearest tracked market.
-export const PLANNER_VERSION = '5.17';
+export const PLANNER_VERSION = '5.18';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -28382,8 +28383,23 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           }));
           for (const { s, args, out, geo, scope } of results) {
             calls += 1;
+            // 5.18 (Grok orchestration move 1, owner 11-09 "keep gated, fix routing"):
+            // a US headroom question's scoreboard step becomes a dated headline of the
+            // US RTOs ranked by the free DCPI BUILD rate, and the deep reads take its
+            // first grid instead of the greenest one (lib/us-headroom-headline.mjs).
+            // New objects, never edits: the scoreboard result can be the shared cache.
+            let _usHead = null;
+            if (sc.intent_class === 'grid_headroom' && s.tool === 'get_grid_scoreboard'
+                && (out.ok || out.gated) && !_namedNonUsCountries(a && a.intent).length) {
+              _usHead = usHeadroomHeadline(out.full || out.result, constraintIsoSet);
+              if (_usHead && _usHead.rows.length) {
+                out.result = scopeScoreboardToUs(out.result, out.full, _usHead);
+                if (out.full) out.full = { ...out.full, as_of: _usHead.as_of, us_headroom_headline: _usHead };
+              } else { _usHead = null; }
+            }
             const entry = { step: s.step, tool: s.tool, args,
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
+                            ...(_usHead ? { headline_pick: { iso: _usHead.rows[0].iso, reason: _usHead.rows[0].pick_reason } } : {}),
                             ...(scope ? { state_scope: scope } : {}),
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
@@ -28393,7 +28409,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             if (out.full) fullByEntry.set(entry, out.full);
             if (out.ok || out.gated) {
               const fresh = {};
-              _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
+              if (_usHead) fresh.iso = _usHead.rows.slice(0, Math.max(maxFan, 3)).map((r) => r.iso);
+              else _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
               const tm = _EXEC_TOOL_MINTS[s.tool];
               if (tm) {
                 try {
@@ -29362,6 +29379,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 total_markets:         _num(d.market_count),
                 build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
                 grid_emergencies_30d:  _num(d.sum_emergency_30d),
+                // 5.18: the DCPI run that produced these counts, so a BUILD-rate
+                // ranking (lib/us-headroom-headline.mjs) can carry its own date.
+                as_of:                 (typeof d.latest_computed_at === 'string' && d.latest_computed_at) || null,
                 note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the Data Center Power Index.',
               };
             }
