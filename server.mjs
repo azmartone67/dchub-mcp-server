@@ -1873,9 +1873,11 @@ export function _gasEmailAskStep(result, name) {
     if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
     const tm = sc.tier_masked;
     if (!tm || typeof tm !== 'object' || tm.tier_required !== 'identified') return result;
-    // A capacity wall (the anonymous daily cap, live 11-09) carries the claim hand-off line, which already asks
-    // the human for an email; a second ask beside it is noise.
-    if (_wallKindFor(sc, c, name) === WALL_KIND_CAPACITY) return result;
+    // The anonymous daily cap (live 11-09) carries the claim hand-off line, which already asks the human for an
+    // email; a second ask beside it is noise. Read the cap from _upgrade.tier: with a session the cap wall also
+    // carries the email unlock link (unlock_kind 'email_cap'), and _wallKindFor calls that a free-key wall.
+    const up = sc._upgrade;
+    if ((up && typeof up === 'object' && up.tier === 'anon_daily_cap') || _wallKindFor(sc, c, name) === WALL_KIND_CAPACITY) return result;
     const line = _gasEmailClause();
     if (result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;
     _markEmailAsk(c, 'line');
