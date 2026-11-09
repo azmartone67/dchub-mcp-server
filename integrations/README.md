@@ -27,6 +27,7 @@ There are three ways in. Pick the row that matches your platform.
 | You.com | [`youcom/`](./youcom/) | custom assistant / source |
 | GitHub Copilot | [`copilot/`](./copilot/) | tool use |
 | LangChain | [`langchain/`](./langchain/) | `Tool` / `StructuredTool` |
+| LangChain (PyPI package) | [`langchain-dchub/`](./langchain-dchub/) | `pip install langchain-dchub`: typed tools + `DCHubToolkit` |
 | LlamaIndex | [`llamaindex/`](./llamaindex/) | `FunctionTool` |
 
 ## Free REST endpoints (no key)

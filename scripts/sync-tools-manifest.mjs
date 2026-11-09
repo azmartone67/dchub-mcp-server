@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
-import { registryRemotes } from '../lib/registry-remotes.mjs';
+import { registryRemotes, remoteProfiles } from '../lib/registry-remotes.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
 import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, COUNT_CLAIM_FILES, SKILL_SOURCE, SKILL_TARGETS, healSkillCount, renderSkill, skillProblems, CONTEXT7_PATH } from './listing-canon.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
@@ -710,6 +710,16 @@ const names = new Set(tools.map((t) => t.name));
       problems.push(`${SJ} remotes ${JSON.stringify((sj.remotes || []).map((r) => r.url))} `
         + `!= lib/registry-remotes.mjs ${JSON.stringify(want.map((r) => r.url))}`);
       sj.remotes = want;
+    }
+    // ★2026-11-09 (owner move 2) — an alternate remote's label. A RemoteTransport
+    // carries only type + url, so the label for /mcp/core ("core profile: N tools
+    // for multi-server hosts") rides in _meta publisher-provided `remoteProfiles`,
+    // generated from the same module and healed the same way.
+    const wantProfiles = remoteProfiles();
+    if (meta && JSON.stringify(meta.remoteProfiles) !== JSON.stringify(wantProfiles)) {
+      problems.push(`${SJ} _meta.remoteProfiles ${JSON.stringify(meta.remoteProfiles)} `
+        + `!= lib/registry-remotes.mjs ${JSON.stringify(wantProfiles)}`);
+      meta.remoteProfiles = wantProfiles;
     }
   }
   // Heal the canon quantities ONCE, then treat the version as a pure parameter.
