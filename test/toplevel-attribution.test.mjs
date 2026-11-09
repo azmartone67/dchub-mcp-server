@@ -327,8 +327,9 @@ describe('gated / preview responses declare their own partiality', () => {
       { _entity: 'x', locked: ['grid'] },                           // named lock
       { _entity: 'x', preview_is_partial: true },                   // structural flag
       { _entity: 'x', trial_preview: true },
-      { _entity: 'x', steps: [{ truncated: true }] },
       { _entity: 'x', steps: [{ status: 'gated_preview' }] },
+      // A size trim beside a real tier marker: still proven, by the tier marker.
+      { _entity: 'x', steps: [{ truncated: true, power_mw: null, _power_mw_in_pro: true }] },
     ];
     for (const one of proven) {
       const g = detectGating(one);
@@ -337,6 +338,30 @@ describe('gated / preview responses declare their own partiality', () => {
       const p = buildProvenance(one, { tier: 'free' });
       expect(p.completeness, JSON.stringify(one)).toBe('partial_preview');
       expect(p.preview_warning, JSON.stringify(one)).toMatch(/withheld by tier gating/i);
+    }
+  });
+
+  it('a SIZE trim alone is not tier gating (live 11-09: keyed enterprise plan told "withheld by tier gating")', () => {
+    // What execute_plan's _slimStepResult leaves on a step that was only cut to fit the response.
+    const slimmed = { _entity: 'plan_execution', executed: [
+      { tool: 'site_selection_canvas', status: 'executed', result: { matched: [{ a: 1 }], truncated: true,
+        truncation: { basis: 'structured', rows_kept_per_array: 5, string_cap_chars: 400, rows_total: { matched: 40 } } } },
+      { tool: 'get_grid_intelligence', status: 'executed', result: { demand_mw: 1 } },
+    ] };
+    const g = detectGating(slimmed);
+    expect(g, 'still DETECTED: the reason stays readable').not.toBeNull();
+    expect(g.reasons).toEqual(['step result truncated']);
+    expect(g.withheld_fields).toEqual([]);
+    expect(g.withholding_proven).toBe(false);
+    expect(g.size_trimmed).toBe(true);
+    for (const [tier, want] of [['enterprise', 'unrestricted'], ['pro', 'unrestricted'], ['free', 'unknown'], [undefined, 'unknown']]) {
+      const p = buildProvenance(slimmed, { tier });
+      expect(p.completeness, String(tier)).toBe(want);
+      expect(p.preview_warning, String(tier)).toBeUndefined();
+      expect(p.completeness_basis, String(tier)).toMatch(/trimmed for SIZE/);
+      expect(p.completeness_basis, String(tier)).toMatch(/not tier gating/);
+      expect(p.preview && p.preview.reasons).toEqual(['step result truncated']);
+      expect(buildCitation(slimmed, { tier }).cite_as, String(tier)).not.toMatch(/PARTIAL/);
     }
   });
 
