@@ -6158,6 +6158,16 @@ export function _heldKeyFor(fp, now = Date.now()) {
   return e;
 }
 export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
+// 2026-11-09: a held key that now carries an email (bind_email ran after the
+// mint) belongs to that person. The fingerprint is only IP + client family, so
+// handing it to a caller without that same address would give one person behind
+// a shared NAT another person's bound key and usage history. Withhold it: the
+// caller mints its own, and the owner gets theirs back with recover_my_key.
+export function _heldKeyBoundElsewhere(v, claimEmail) {
+  const bound = String((v && v.email) || '').trim().toLowerCase();
+  if (!bound) return false;
+  return bound !== String(claimEmail || '').trim().toLowerCase();
+}
 // The in-band channel for a header-less host: appended to THIS session's
 // initialize `instructions` (module-scope _INSTRUCTIONS + this tail) when the
 // caller sent no credential but its fingerprint holds a key. Names the key,
@@ -32360,6 +32370,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // session auto-bind and the install artifact (r-validate-artifact).
           if (_v && _v.key_rejected) {
             _forgetHeldKey(_fp);
+          } else if (_heldKeyBoundElsewhere(_v, a.email)) {
+            _forgetHeldKey(_fp);                                // bound to someone's email: not by IP
           } else {
             const _ok = !!(_v && _v.valid);
             let _bound = false;
@@ -32567,6 +32579,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // (the ask would be for something the caller just gave). The rest of the
       // response — key, connector URL, persist_config — follows unchanged.
       const _emailAtClaim = !!a.email;
+      // 2026-11-09 (Grok: one account claimed on 4 separate days, nothing else):
+      // the backend dedupes on (client_name, ip) and on its unused-key cap and says
+      // so with reused:true, but this branch announced that key as freshly minted,
+      // so the agent never learnt it already had one. Say it is the same key.
+      const _backendReused = !!(r && r.reused === true);
       // Item 7: a caller whose client we recognise gets the key, then THE snippet for that client,
       // then a short save line, instead of the long every-client save block.
       const _ownCfg = _ownClientKey ? _persistConfig(key, _via).clients[_ownClientKey] : null;
@@ -32576,11 +32593,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         : '';
       const text =
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
-        '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
+        (_backendReused
+          ? '🔑 **You already hold a DC Hub key for `' + cn + '` — returning THAT key, not a new one.** It is active now'
+          : '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now') +
         (_autoBound && !_perCallSession
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
+        (_backendReused
+          ? 'Calling claim_free_key again keeps returning this same key. Save it once with the step below so the next session starts with it.\n\n'
+          : '') +
         _ownSnip +
         _headerlessLead +
         (_ownSnip ? '' : _saveLine) +
@@ -32608,6 +32630,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           client_name:             cn,
           tier:                    (r && r.tier) || 'free',
           header:                  'X-API-Key',
+          reused:                  _backendReused,
+          ...(_backendReused ? {
+            already_held: true,
+            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap' : 'backend_claim_dedupe',
+          } : {}),
           // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
           // a free key is N calls TO TRY in total, then a per-day rung once an
           // email is bound. daily_limit used to echo the backend's claim figure
