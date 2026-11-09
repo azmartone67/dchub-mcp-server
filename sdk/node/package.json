@@ -1,16 +1,18 @@
 {
   "name": "dchub",
-  "version": "0.2.0",
-  "description": "DC Hub Node SDK \u2014 live data-center, power & gas intelligence over MCP.",
+  "version": "0.3.0",
+  "description": "DC Hub Node SDK — live data-center, power & gas intelligence over MCP, with Vercel AI SDK tools.",
   "type": "module",
   "main": "index.mjs",
   "exports": {
     ".": "./index.mjs",
-    "./compose": "./compose.mjs"
+    "./compose": "./compose.mjs",
+    "./ai-sdk": "./ai-sdk.mjs"
   },
   "files": [
     "index.mjs",
     "compose.mjs",
+    "ai-sdk.mjs",
     "README.md"
   ],
   "engines": {
@@ -26,7 +28,10 @@
     "grid",
     "infrastructure",
     "mcp-server",
-    "compose"
+    "compose",
+    "vercel-ai-sdk",
+    "ai-sdk",
+    "tools"
   ],
   "license": "MIT",
   "homepage": "https://dchub.cloud",
@@ -36,13 +41,17 @@
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.20.0",
-    "zod": ">=3.23.0"
+    "zod": ">=3.23.0",
+    "ai": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {
       "optional": true
     },
     "zod": {
+      "optional": true
+    },
+    "ai": {
       "optional": true
     }
   }
