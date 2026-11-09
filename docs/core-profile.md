@@ -23,6 +23,25 @@ Microsoft Copilot Studio, Claude and ChatGPT. `/mcp` is unchanged.
   header, Bearer (DC Hub OAuth token or WorkOS/AuthKit JWT), query parameter or inline
   argument. The same OAuth and invalid-bearer challenges apply.
 
+## When to use /mcp/core and when to use /mcp
+
+Use `https://dchub.cloud/mcp/core` when DC Hub sits beside other MCP servers in the same
+client (composition / multi-server setups). Its `tools/list` is the smallest DC Hub serves,
+so it leaves room in the context window for the other servers' tools, and
+`plan_and_answer` answers a multi-part question in one call.
+
+Use `https://dchub.cloud/mcp` (or a task-scoped pack listed in the README) when the user
+needs anything the core profile does not list:
+- a key: `claim_free_key`, `recover_my_key`, `bind_email`;
+- saved state: `save_site`, `save_to_shortlist`, standing intents and alerts;
+- Capacity Source introductions: `accept_capacity_terms`, `request_capacity_intro`;
+- the full `execute_plan` result with its `replay`;
+- the link a gated result carries for the user's human. The core scrub removes upgrade,
+  checkout and key blocks (see below), so a core preview has no unlock path of its own.
+
+The core profile also does not carry the once-a-day resume line that `/mcp` gives a
+returning key.
+
 ## Response envelope
 
 Every tool returns the same top-level fields, in both text and structuredContent:
