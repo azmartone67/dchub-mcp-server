@@ -229,3 +229,30 @@ describe('what the gas ask promises, on the real handler', () => {
     for (let i = 0; i < 4; i++) expect((await c()).full, 'call ' + i).toBe(true);
   });
 });
+
+// Live 11-09 10:05Z (QA probe after mcp#1329): on the anonymous daily-cap wall the claim hand-off line already asks
+// for the email ("ask your human for an email, pass it to `claim_free_key`"), and the gas ask made it two. The cap
+// wall's structured shape below is the one production sent.
+describe('_gasEmailAskStep on a capacity wall', () => {
+  const wall = (up) => ({
+    content: [{ type: 'text', text: '{"basis_usd_mmbtu":null}' }],
+    structuredContent: { basis_usd_mmbtu: null, tier_masked: { tier_required: 'identified', fields: ['basis_usd_mmbtu'] },
+      ...(up ? { _upgrade: up } : {}) },
+  });
+  const CAP_UPGRADE = { tier: 'anon_daily_cap', next_tool: 'claim_free_key', remaining_today: 0, binding_limit: 'anon_ip_daily' };
+  const run = (w) => {
+    const store = { tier: 'anonymous', platform: 'claude', session_id: 'cap-s1' };
+    const out = S._runInCtxForTest(store, () => S._gasEmailAskStep(w, 'get_gas_intelligence'));
+    return { shown: JSON.stringify(out).includes(RANK_EMAIL_ASK_LEAD), ask: store._emailAsk };
+  };
+  it('the anonymous daily cap (the live shape): no gas ask, no mark', () => {
+    const r = run(wall(CAP_UPGRADE));
+    expect(r.shown).toBe(false);
+    expect(r.ask).toBeUndefined();
+  });
+  it('the same masked answer under the cap: the ask and the mark', () => {
+    const r = run(wall(null));
+    expect(r.shown).toBe(true);
+    expect(r.ask).toBe('line');
+  });
+});

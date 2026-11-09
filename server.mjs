@@ -1859,7 +1859,8 @@ export function _aicapEmailAskStep(result, name) {
 // is not a preview or a quota wall, so none of the wall ask steps reach it: live, the answer said only "hit DC Hub's
 // free-tier limit" and asked for nothing. One agent paragraph after the data, only where the mask withheld
 // something, marked 'line'. Not for a keyed caller, a caller with an email on file, an execute_plan step, Grok, a
-// clean platform or the directory / Claude / core profiles (the other email asks' exclusions).
+// clean platform or the directory / Claude / core profiles (the other email asks' exclusions), and not on a
+// capacity wall, whose claim hand-off line asks for the email already.
 // Kill switch DCHUB_GAS_EMAIL_ASK=0.
 const _gasEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GAS_EMAIL_ASK || ''));
 export function _gasEmailAskStep(result, name) {
@@ -1872,6 +1873,9 @@ export function _gasEmailAskStep(result, name) {
     if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
     const tm = sc.tier_masked;
     if (!tm || typeof tm !== 'object' || tm.tier_required !== 'identified') return result;
+    // A capacity wall (the anonymous daily cap, live 11-09) carries the claim hand-off line, which already asks
+    // the human for an email; a second ask beside it is noise.
+    if (_wallKindFor(sc, c, name) === WALL_KIND_CAPACITY) return result;
     const line = _gasEmailClause();
     if (result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;
     _markEmailAsk(c, 'line');
