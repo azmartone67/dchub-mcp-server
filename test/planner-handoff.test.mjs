@@ -10,7 +10,8 @@
 //   - route_back's existing shape changing for readers of owned_by (names) when no url is present;
 //   - a complement on a class or outcome the design says gets none (grid, capacity with matches);
 //   - a complement repeating a need route_back already named;
-//   - a complement beside a human_url, a for_your_human relay or a wall;
+//   - a complement beside a wall (and NOT removed by a mere link: the Deal Desk PDF / resume link on a
+//     full keyed answer is not a wall; live 11-09 the pointer rule removed it from every answer);
 //   - more than one complement field or sentence;
 //   - banned wording (directive, superlative, status claim, figure, emoji) in any emitted string;
 //   - an organisation name typed in lib/handoff.mjs or the server.mjs wiring;
@@ -297,20 +298,30 @@ describe('never beside a pointer', () => {
     return { content: [{ type: 'text', text: JSON.stringify(sc) }, { type: 'text', text: 'a human line' }], structuredContent: sc };
   };
 
-  it('planLooksWalled: a gated step, a step carrying human_url / for_your_human, or a wall step', () => {
+  it('planLooksWalled: a gated step or a wall step; a link alone is not a wall', () => {
     expect(planLooksWalled(MARKET_STEPS())).toBe(false);
     expect(planLooksWalled([...MARKET_STEPS(), step('x', 'gated_preview')])).toBe(true);
-    expect(planLooksWalled([step('x', 'executed', { human_url: 'https://dchub.cloud/u/abc' })])).toBe(true);
-    expect(planLooksWalled([step('x', 'executed', { for_your_human: { url: 'u' } })])).toBe(true);
+    expect(planLooksWalled([step('x', 'executed', { human_url: 'https://dchub.cloud/u/abc' })])).toBe(false);
+    expect(planLooksWalled([step('x', 'executed', { for_your_human: { url: 'u' } })])).toBe(false);
     expect(planLooksWalled([step('x', 'executed', { _gated: true })], { isWall: (r) => !!r._gated })).toBe(true);
     const e = step('x');
-    expect(planLooksWalled([e], { fullOf: new Map([[e, { human_url: 'https://dchub.cloud/u/abc' }]]) })).toBe(true);
+    expect(planLooksWalled([e], { fullOf: new Map([[e, { _gated: true }]]), isWall: (r) => !!r._gated })).toBe(true);
     expect(planLooksWalled([step('x')], { isWall: () => { throw new Error('boom'); } })).toBe(false);
   });
 
+  const notWall = () => false;
+  for (const [label, extra] of [
+    ['a resume human_url', { human_url: 'https://dchub.cloud/upgrade/h/abcdef' }],
+    ['a Deal Desk for_your_human', { for_your_human: { message: 'Your brief', url: 'https://dchub.cloud/reports/deal-desk/dd-x.pdf' } }],
+  ]) {
+    it(`final result with ${label} that is not a wall: the same result object, handoff kept`, () => {
+      const r0 = make(extra);
+      expect(stripHandoffIfPointered(r0, { isWall: notWall })).toBe(r0);
+      expect(stripHandoffIfPointered(r0)).toBe(r0);
+    });
+  }
+
   for (const [label, extra, isWall] of [
-    ['human_url', { human_url: 'https://dchub.cloud/u/abcdef' }, undefined],
-    ['for_your_human', { for_your_human: { text: 'see this', url: 'https://dchub.cloud/u/abcdef' } }, undefined],
     ['a wall', { _preview_only: true }, (sc) => !!sc._preview_only],
   ]) {
     it(`final result with ${label}: the field and the sentence leave structuredContent and the text block`, () => {
@@ -325,9 +336,9 @@ describe('never beside a pointer', () => {
   }
 
   it('a text block that is not the byte-exact serialisation still loses the field (parse fallback)', () => {
-    const r0 = make({ human_url: 'https://dchub.cloud/u/abcdef' });
+    const r0 = make({ _preview_only: true });
     r0.content[0].text = JSON.stringify(JSON.parse(r0.content[0].text), null, 1);
-    const r = stripHandoffIfPointered(r0);
+    const r = stripHandoffIfPointered(r0, { isWall: (sc) => !!sc._preview_only });
     expect(r.content[0].text).not.toContain('"handoff"');
   });
 
@@ -505,6 +516,26 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
     expect('handoff' in r.out).toBe(false);
     expect(r.text.includes('DC Hub covers power, grid and DCPI here')).toBe(false);
     expect('handoff_need' in stepsRow(r.hits).body.params).toBe(false);
+  }, 120_000);
+
+  it('the real wall test on the live 11-09 shape: a full keyed answer with the Deal Desk PDF and the resume link keeps the complement', async () => {
+    const r = await plan(DALLAS);
+    expect(r.out.handoff && r.out.handoff.kind, 'control: the full answer carries the complement').toBe('complement');
+    // What production attached to this answer on 11-09 (keyed enterprise, Dallas): a resume link and the Deal Desk PDF.
+    const sc = { ...r.out,
+      human_url: 'https://dchub.cloud/upgrade/h/NGM4MWU1ODM.d88d1225b5858ebf',
+      for_your_human: { message: 'Your Deal Desk Brief for this analysis is ready', url: 'https://dchub.cloud/reports/deal-desk/dd-mTXRnuew9x5q1B93.pdf', render: 'verbatim_link_required' } };
+    const res = { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    for (const tier of ['enterprise', 'pro']) {
+      expect(S._isRelayWall(sc, { tier }), `control: ${tier} full answer is not a wall`).toBe(false);
+      expect(stripHandoffIfPointered(res, { isWall: (x) => S._isRelayWall(x, { tier }) })).toBe(res);
+    }
+    // The same answer behind the keyless relay (for_your_human points at /upgrade/h/) is a wall: stripped.
+    const walled = { ...sc, for_your_human: { message: 'Open the full answer', url: 'https://dchub.cloud/upgrade/h/abc.def' } };
+    expect(S._isRelayWall(walled, { tier: 'anon' }), 'control: the relay reads as a wall').toBe(true);
+    const out = stripHandoffIfPointered({ content: [{ type: 'text', text: JSON.stringify(walled) }], structuredContent: walled }, { isWall: (x) => S._isRelayWall(x, { tier: 'anon' }) });
+    expect('handoff' in out.structuredContent).toBe(false);
+    expect(out.content[0].text).not.toContain('"handoff"');
   }, 120_000);
 
   it('directory profiles and ChatGPT clients: no field, no sentence', async () => {
