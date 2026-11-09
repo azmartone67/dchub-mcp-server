@@ -173,7 +173,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
-import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
+import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
@@ -1850,6 +1850,30 @@ export function _aicapEmailAskStep(result, name) {
     return { ...result, content };
   } catch (_) { return result; }
 }
+// The keyless get_gas_intelligence answer's email ask (2026-11-09, lib/paid-sell-line.gasEmailClause, found by
+// test/wall-ask-guard). Its anonymous mask (_maskGasIntelligenceAnonymous: tier_masked.tier_required 'identified')
+// is not a preview or a quota wall, so none of the wall ask steps reach it: live, the answer said only "hit DC Hub's
+// free-tier limit" and asked for nothing. One agent paragraph after the data, only where the mask withheld
+// something, marked 'line'. Not for a keyed caller, a caller with an email on file, an execute_plan step, Grok, a
+// clean platform or the directory / Claude / core profiles (the other email asks' exclusions).
+// Kill switch DCHUB_GAS_EMAIL_ASK=0.
+const _gasEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GAS_EMAIL_ASK || ''));
+export function _gasEmailAskStep(result, name) {
+  try {
+    if (name !== 'get_gas_intelligence' || !_gasEmailAskOn()) return result;
+    const c = getCtx();
+    if (!c || c.api_key || c.email || c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
+    const tm = sc.tier_masked;
+    if (!tm || typeof tm !== 'object' || tm.tier_required !== 'identified') return result;
+    const line = _gasEmailClause();
+    if (result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.includes(_RANK_EMAIL_ASK_LEAD))) return result;
+    _markEmailAsk(c, 'line');
+    return { ...result, content: [...result.content, { type: 'text', text: line }] };
+  } catch (_) { return result; }
+}
 // The weekly-digest offer on a depth wall (owner 2026-11-08, lib/depth-digest-ask.mjs). A depth wall's
 // withheld fields open on a paid plan only, so an email ask there would promise what an email cannot
 // give; the offer is subscribe_digest (updates), and the line says the email opens nothing. Depth means
@@ -1904,7 +1928,7 @@ export function _depthDigestAskStep(result, name) {
 // The fiber email ask runs after the fiber sell line, which rewrites the human line it sits above.
 export function _gridSellThenDigestStep(result, name) {
   const sold = _gridSellStep(result, name);
-  return _depthDigestAskStep(name === 'get_fiber_intel' ? _aicapEmailAskStep(sold, name) : sold, name);
+  return _depthDigestAskStep(_gasEmailAskStep(name === 'get_fiber_intel' ? _aicapEmailAskStep(sold, name) : sold, name), name);
 }
 // Test seam: run a step inside a request context (the steps read getCtx()).
 export const _runInCtxForTest = (store, fn) => ctx.run(store, fn);

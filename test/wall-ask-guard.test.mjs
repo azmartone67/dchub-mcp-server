@@ -8,7 +8,8 @@
 // file (rank-markets-email-rows-ask, ai-capacity-email-rows-ask, fiber-email-ask, wall-email-line-freekey,
 // keyless-wall-email-first, depth-wall-digest-ask).
 //
-// Found 11-09 while building this: a live probe with the QA UA (`dchub-qa-readonly`) never sees option A,
+// Found 11-09 by this guard: get_gas_intelligence asked for nothing (now _gasEmailAskStep, test/gas-intel-email-ask).
+// Also found 11-09: a live probe with the QA UA (`dchub-qa-readonly`) never sees option A,
 // because isBotOrInternalCtx reads `dchub` in the UA as an internal caller. A QA probe of a free-key wall
 // therefore shows no ask that a real caller does get.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -138,10 +139,6 @@ const NO_CHAIN_ASK = {
   get_grid_intelligence: 'grid/queue email line on the taste wall (keyless-wall-email-first)',
   get_interconnection_queue: 'grid/queue email line on the taste wall (keyless-wall-email-first)',
   get_market_intel: 'preview-only; its email line rides the same taste wall as grid/queue',
-  // OPEN GAP found by this guard 11-09: a trial-taste tool (ALWAYS_PARTIAL_PREVIEW) like get_fiber_intel, so the
-  // digest offer skips it, and no step asks. What an email-bound key gets on it is not measured yet, so no ask
-  // is written that would promise it. Remove this line when its ask ships.
-  get_gas_intelligence: 'OPEN GAP: no ask until the email-bound allowance is measured on the real handler',
 };
 describe('guard: every walled tool ends a keyless first wall with an ask, or a named reason', () => {
   it('tools/list, each through the ask chain', async () => {
@@ -155,7 +152,8 @@ describe('guard: every walled tool ends a keyless first wall with an ask, or a n
     expect(tools.length).toBeGreaterThan(80);
     const wall = () => ({
       content: [{ type: 'text', text: '{"rows":[]}' }, { type: 'text', text: HUMAN + ' this answer hid 3 fields — open https://dchub.cloud/u/abc234' }],
-      structuredContent: { preview_is_partial: true, trial_preview: true, rows: [], human_url: 'https://dchub.cloud/u/abc234' },
+      structuredContent: { preview_is_partial: true, trial_preview: true, rows: [], human_url: 'https://dchub.cloud/u/abc234',
+        tier_masked: { tier_required: 'identified', fields: ['rows'] } },   // the keyless any-key mask (get_gas_intelligence)
     });
     const missing = [];
     for (const t of tools) {
