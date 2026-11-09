@@ -79,6 +79,8 @@
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
+import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
+import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -16761,6 +16763,15 @@ export function _splitQueueRow(row) {
 // 454.5), ERCOT's large-load queue and its data-center share under their own
 // names, and the NESO/IESO/AESO mixed connections queue under its own name.
 // Returns null when the row carries none of them. Pure; exported for tests.
+// 5.18: the date of one DCPI per-ISO aggregate on a scoreboard row. Pure; exported for tests.
+export function _scoreboardDcpiAsOf(d) {
+  const t = d && typeof d.oldest_computed_at === 'string' ? d.oldest_computed_at.trim() : '';
+  if (t && !Number.isNaN(Date.parse(t))) {
+    return { as_of: t, as_of_basis: 'oldest market score in this ISO\'s DCPI aggregate (oldest_computed_at)' };
+  }
+  return { as_of: null, as_of_basis: 'UNMEASURED: the DCPI ISO comparison sent no oldest_computed_at; its latest_computed_at is the newest market score, not the aggregate\'s date' };
+}
+
 export function _scoreboardQueueBlock(q) {
   if (!q || typeof q !== 'object') return null;
   const k = _splitQueueRow(q);
@@ -18591,7 +18602,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -20956,7 +20967,14 @@ export function _planWorkflowConfidence(seq, d) {
 //         same canonical slug on the DCPI and brief steps; a tracked name in
 //         another state, a name two markets share, or two markets named is
 //         unresolved, never the nearest tracked market.
-export const PLANNER_VERSION = '5.17';
+//  5.18 = DATED US GRID RANKING (owner move 1, 2026-11-09): a grid_headroom
+//         run that reads the scoreboard returns grid_ranking — the US ISOs
+//         ranked by DCPI BUILD rate, each row with its reason, value, ISO and
+//         as_of (lib/grid-ranking.mjs); the deep read (steps 2-3) takes the
+//         best-ranked queue ISO instead of the first ISO the harvest met; the
+//         scoreboard step is dated by the ranking's oldest row when the answer
+//         uses only those rows; plan steps count against the caller's IP.
+export const PLANNER_VERSION = '5.18';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -21132,7 +21150,11 @@ export const _EXEC_POWER_TOOLS = new Set([
   'get_interconnection_queue', 'get_refined_queue', 'get_hosting_capacity',
   'get_retirement_headroom', 'get_power_pipeline', 'get_energy_prices', 'grid_transition_radar',
 ]);
-export function _execPowerEvidence(executed, fullByEntry = null) {
+// 5.18: `derived` (Map entry -> { as_of, as_of_basis }) dates a step whose answer uses only some of
+// its rows: the grid_headroom scoreboard step, which the plan reads only for the US rows it ranks
+// (lib/grid-ranking.mjs). It applies only when the step itself carries no collection as_of, and
+// only with a real date taken from those rows; the row then says which basis dated it.
+export function _execPowerEvidence(executed, fullByEntry = null, derived = null) {
   const out = [];
   try {
     const named = (x) => (typeof x === 'string' && x.trim() && !/^DC Hub$/i.test(x.trim())) ? x.trim() : null;
@@ -21142,8 +21164,11 @@ export function _execPowerEvidence(executed, fullByEntry = null) {
       if (!e || !(e.status === 'executed' || e.status === 'gated_preview') || !_EXEC_POWER_TOOLS.has(e.tool)) continue;
       const r = (fullByEntry && fullByEntry.get(e)) || e.result || {};
       const p = (r && typeof r.provenance === 'object' && r.provenance) || {};
-      const asOf = dated(r.as_of) || dated(p.as_of) || dated(r.citation && r.citation.as_of)
+      let asOf = dated(r.as_of) || dated(p.as_of) || dated(r.citation && r.citation.as_of)
         || dated(r.dcpi_provenance && r.dcpi_provenance.as_of) || null;
+      const dv = (!asOf && derived && typeof derived.get === 'function') ? derived.get(e) : null;
+      const derivedBasis = (dv && dated(dv.as_of)) ? (String(dv.as_of_basis || '') || 'derived from the rows this answer uses') : null;
+      if (derivedBasis) asOf = dated(dv.as_of);
       const a = e.args || {};
       const iso = [r.iso, r.region_id, a.iso, a.region_id].find((x) => typeof x === 'string' && x.trim()) || null;
       const source = named(p.source) || named(r.source) || null;
@@ -21151,10 +21176,25 @@ export function _execPowerEvidence(executed, fullByEntry = null) {
       if (!asOf) missing.push('as_of');
       if (!iso && !source) missing.push('iso_or_source');
       out.push({ step: e.step, tool: e.tool, iso: iso ? iso.trim().toUpperCase() : null, source, as_of: asOf,
+                 ...(derivedBasis ? { as_of_basis: derivedBasis } : {}),
                  ok: !missing.length, ...(missing.length ? { missing } : {}) });
     }
   } catch (_e) { /* evidence is advisory; never blocks the answer */ }
   return out;
+}
+// 5.18: after a grid_headroom scoreboard step, put the best-ranked queue ISO first in the iso
+// mints so steps 2-3 read the grid the ranking put on top. Mutates `minted`; returns that ISO or
+// null (no ranking, a country/region scope, or no ranked queue ISO inside the constraint).
+export function _gridDeepReadIso(sc, tool, payload, constraintIsoSet, minted, cap = 3) {
+  try {
+    if (!sc || sc.intent_class !== 'grid_headroom' || tool !== 'get_grid_scoreboard') return null;
+    if (sc.geography_scope || intentNamesNonUsRegion(sc.intent)) return null;
+    const top = topQueueIso(payload, constraintIsoSet);
+    if (!top) return null;
+    const k = (x) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    minted.iso = [top, ...(Array.isArray(minted.iso) ? minted.iso : []).filter((x) => k(x) !== top)].slice(0, Math.max(1, cap));
+    return top;
+  } catch (_e) { return null; }
 }
 export function _execUndatedSentence(evidence) {
   const bad = (Array.isArray(evidence) ? evidence : []).filter((x) => x && !x.ok);
@@ -28330,6 +28370,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // collapse into each other. Consumed only by _execMintDealDesk; the
       // agent's envelope keeps the slim results untouched.
       const fullByEntry = new Map();
+      let gridDeepIso = null;   // 5.18: the ISO the grid_headroom deep read took from the ranking
       let ran = 0; let calls = 0;
       for (const wave of waves) {
         const doable = [];
@@ -28422,6 +28463,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
                 }
               }
+              // 5.18: the grid_headroom deep read follows the US grid ranking, not the order
+              // the harvest met ISOs in (lib/grid-ranking.mjs).
+              const _deep = _gridDeepReadIso(sc, s.tool, out.full || out.result, constraintIsoSet, minted, Math.max(maxFan, 3));
+              if (_deep) gridDeepIso = _deep;
             }
           }
         }
@@ -28574,8 +28619,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // differently, and that difference is real information). Each collapsed
       // step gets a pointer so nothing silently disappears.
       const _upsellDedupe = _execDedupeUpsell(executed);
-      const _powerEvidence = _execPowerEvidence(executed, fullByEntry);
+      // 5.18: the dated US grid ranking, and the date it gives the scoreboard step (lib/grid-ranking.mjs).
+      const _gridRank = buildGridRanking({ intent: sc.intent, intent_class: sc.intent_class,
+        geography_scope: sc.geography_scope || null, deep_read_iso: gridDeepIso }, executed, fullByEntry);
+      const _powerEvidence = _execPowerEvidence(executed, fullByEntry,
+        (_gridRank && _gridRank.evidence) ? new Map([[_gridRank.evidence.entry, _gridRank.evidence]]) : null);
       const _undated = _execUndatedSentence(_powerEvidence);
+      const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
+      const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       const out = {
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
@@ -28620,12 +28671,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // surface; the structured field follows the answer-block gate below.
         // 5.17: an undated power step is named next, and its verdict is not led with.
         answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
-          + (_undated ? _undated + ' ' : '')
+          + (_undated ? _undated + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
           + (_rb ? ' ' + _rb.sentence : ''),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
+        ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
@@ -29362,6 +29414,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 total_markets:         _num(d.market_count),
                 build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
                 grid_emergencies_30d:  _num(d.sum_emergency_30d),
+                // 5.18: the aggregate's own data date. oldest_computed_at is the
+                // OLDEST market score in this ISO's aggregate (backend MIN(computed_at)),
+                // so nothing on this row is older. latest_computed_at (the NEWEST
+                // market score) is not used: it would date the row fresher than its
+                // oldest input. A backend that does not send it leaves the row undated.
+                ..._scoreboardDcpiAsOf(d),
                 note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the Data Center Power Index.',
               };
             }
@@ -30560,6 +30618,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && (c.profile === DIRECTORY_PROFILE || c.legacy_wall_copy === true)) headers[LEGACY_WALL_LOOPBACK_HEADER] = _mintLegacyWallLoopbackToken();
       // The step belongs to the caller's session: its signals and tracking rows carry that id, not 'no-session'.
       { const _pst = _mintPlanSessionToken(c && c.session_id); if (_pst) headers[PLAN_SESSION_HEADER] = _pst; }
+      // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
+      { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -34192,6 +34252,10 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planSessTok = req.headers[PLAN_SESSION_HEADER];
     delete req.headers[PLAN_SESSION_HEADER];
     const _planLoopbackSid = _isLoopbackPeer(req) ? _consumePlanSessionToken(_planSessTok) : null;
+    // 5.18: and the caller's IP, the same way (lib/plan-caller-ip.mjs); used as clientIp below.
+    const _planCallerIpTok = req.headers[PLAN_CALLER_IP_HEADER];
+    delete req.headers[PLAN_CALLER_IP_HEADER];
+    const _planLoopbackIp = _isLoopbackPeer(req) ? consumePlanCallerIpToken(_planCallerIpTok) : null;
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     // The QA marker header (QA_MARKER_HEADER). Read for the trial-mint skip
@@ -34858,7 +34922,8 @@ app.post(MCP_PATHS, async (req, res) => {
     // Cloudflare POPs as "agents". The dchubapiproxy worker (v4.9.28) now
     // forwards the real caller IP in X-DC-Client-IP; prefer it, keep the XFF
     // first-token as the fallback for direct (non-worker) callers.
-    const clientIp  = (req.headers['x-dc-client-ip'] || '').trim()
+    const clientIp  = _planLoopbackIp
+                   || (req.headers['x-dc-client-ip'] || '').trim()
                    || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
                    || req.socket?.remoteAddress
                    || null;

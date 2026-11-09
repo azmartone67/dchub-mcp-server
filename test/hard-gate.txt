@@ -249,6 +249,8 @@ test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
 test/grid-provenance-source-own-as-of.test.mjs
 test/grid-queue-by-kind.test.mjs
+test/grid-ranking-e2e.test.mjs
+test/grid-ranking.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
 test/grid-sell-line.test.mjs
@@ -406,6 +408,7 @@ test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
+test/plan-caller-ip.test.mjs
 test/plan-free-fields.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
