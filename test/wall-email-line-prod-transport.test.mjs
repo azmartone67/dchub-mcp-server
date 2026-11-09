@@ -154,10 +154,14 @@ describe('option A wall line, production transport', () => {
       const call = await wallSession(key);
       const first = await call('get_interconnection_queue');
       expect(humanLines(first.text).length, String(key)).toBe(1);
+      // Ask once per tool per session (owner 2026-11-09, test/ask-once-per-tool): a second tool carries its own
+      // line once, then repeats like the first.
+      const second = await call('get_grid_intelligence');
+      expect(humanLines(second.text).length, 'second tool ' + String(key)).toBe(1);
       for (const tool of ['get_interconnection_queue', 'get_grid_intelligence']) {
         const at = tool + ' repeat ' + (key ? 'free key' : 'keyless');
         const r = await call(tool);
-        expect(humanLines(r.text), at).toEqual([]);                 // the session's one line was already sent
+        expect(humanLines(r.text), at).toEqual([]);                 // this tool's one line was already sent
         expect(R.countTellLines(r.text), at).toBe(0);
         expect(() => JSON.parse(r.result.content[0].text), at).not.toThrow();
         const url = r.sc.human_url;

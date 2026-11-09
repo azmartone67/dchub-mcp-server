@@ -209,16 +209,21 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     expect(r.text).not.toMatch(/held back part of this answer/);
   });
 
+  // Ask once per tool per session (owner 2026-11-09, test/ask-once-per-tool): the repeat is the SAME tool; a
+  // second tool in the session carries its own line and agent line.
   it('a repeat free-key wall in the same session (no text human line to sit under): link-only wording, no agent line', async () => {
     const call = await wallSession();
     const first = await call('get_grid_data');
     expect(first.text).toContain(claimHandoffFreekeyText());
-    const r = await call('get_water_risk');
+    const r = await call('get_grid_data');
     const url = r.sc.human_url;
     expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\//);
-    expect(humanLines(r.text)).toEqual([]);                      // the session's one line was already sent
+    expect(humanLines(r.text)).toEqual([]);                      // this tool's one line was already sent
     expect(r.text).not.toContain('bind_email');
     expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));   // never the in-chat promise alone
+    const other = await call('get_water_risk');                  // a second tool: its own ask
+    expect(other.text).toContain(claimHandoffFreekeyText());
+    expect(humanLines(other.text).length).toBe(1);
   });
 
   // Step level, on a real handler output: a response that already names `bind_email` keeps the

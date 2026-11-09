@@ -65,7 +65,7 @@ afterAll(async () => {
   if (fence) fence.restore();
 });
 
-const ARGS = { rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' },
+const ARGS = { execute_plan: { intent: 'rank markets for a 200 MW AI campus and check PJM grid headroom' }, rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' },
   list_transactions: { limit: 10 }, get_gas_intelligence: { region: 'TX' } };
 let ipN = 10;
 // One MCP session (initialize + initialized) where the surface has sessions, then tool calls on it, as the agent
@@ -196,6 +196,23 @@ describe('the anonymous daily-cap wall keeps exactly one ask (mcp#1331) as a sec
     expect(r.ev && r.ev.email_ask).toBe('link');
     const prose = r.text.split('\n').filter((l) => !/^\s*\{/.test(l));
     expect(prose.filter((l) => /https:\/\/dchub\.cloud\/(u|upgrade\/h)\//.test(l)).length).toBe(1);
+  });
+});
+
+// An execute_plan step runs on loopback with the caller's session id. Its steps keep the per-session memo: per tool
+// there grew the plan's step results (measured: +696 chars of step text, no line in the plan answer) and marked
+// each step's tool for the session, so a later direct get_grid_intelligence wall lost its ask.
+describe('execute_plan steps keep the per-session memo', () => {
+  const norm = (t) => t.replace(/https:\/\/\S+/g, 'URL').replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, 'TS')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID');
+  it('the plan answer is the same with the switch on and off; the direct walls after it each ask once', async () => {
+    const on = await session();
+    const pOn = await on('execute_plan');
+    const pOff = await withEnv('DCHUB_ASK_PER_TOOL', '0', async () => (await session())('execute_plan'));
+    expect(pOn.text.length).toBeGreaterThan(1000);
+    expect(norm(pOn.text).length).toBe(norm(pOff.text).length);
+    expect(count((await on('rank_markets')).text, RANK_ASK)).toBe(1);
+    expect(count((await on('get_grid_intelligence')).text, HUMAN)).toBe(1);
   });
 });
 

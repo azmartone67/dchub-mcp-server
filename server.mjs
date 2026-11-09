@@ -2182,9 +2182,14 @@ function _dropRepeatCheckoutUrls(text) {
 const _HUMAN_LINE_SENT = new Set();
 const _HUMAN_LINE_SENT_MAX = 20000;
 const _askPerToolOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_ASK_PER_TOOL || ''));
-// The tool this call runs (set per call by the /mcp tool wrapper); '' outside a tool call.
+// The tool this call runs (set per call by the /mcp tool wrapper); '' outside a tool call. An execute_plan
+// step (loopback, the caller's session id) keeps the per-session read and mark it had: per tool there grew
+// the plan's step results with lines no plan answer shows, and marked the step's tool for the session.
 function _ctxAskTool() {
-  try { const c = getCtx(); return (c && typeof c._askTool === 'string') ? c._askTool : ''; } catch (_) { return ''; }
+  try {
+    const c = getCtx();
+    return (c && !c.loopback_step && typeof c._askTool === 'string') ? c._askTool : '';
+  } catch (_) { return ''; }
 }
 const _toolLineKey = (sid, tool) => sid + '\u0001' + tool;
 function _humanLineAlreadySent(sid) {
