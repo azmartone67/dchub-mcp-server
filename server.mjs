@@ -78,6 +78,8 @@
 
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
+import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
+import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
@@ -28305,6 +28307,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const maxSteps = Math.max(1, Math.min(8, parseInt(a && a.max_steps, 10) || 6));
       const maxFan = Math.max(1, Math.min(3, parseInt(a && a.max_fanout, 10) || 2));
       const c = getCtx();
+      // Move 3 (lib/plan-rerun.mjs): the re-run token leaves the context before anything plans with it.
+      const _rerunIn = _takeRerunToken(a);
       const userCtx = (a && typeof a.context === 'object' && a.context) || {};
       // ★[6] merge the typed top-level params into context; TOP LEVEL WINS.
       //  Keeps `context` working for every existing caller.
@@ -28558,6 +28562,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
         }
       } catch (_e) {}
+      // Move 3: fingerprint what this caller received, diff it against a presented rerun token.
+      let _rr = null;
+      try {
+        _rr = _computeRerun({ token: _rerunIn, intent: a && a.intent, context: a && a.context, executed, c,
+          fullOf: (e) => fullByEntry.get(e),
+          profile: (c && c.profile) || null, secret: process.env.DCHUB_INTERNAL_KEY || '',
+          surfaceOk: (!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreRerunOn()) });
+      } catch (_e) { _rr = null; }
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
@@ -28574,7 +28586,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                     constraint_iso: constraintIsoSet.join('|') || null,
                     // which needs the response named a route back for (ids from the registry); absent when none.
                     // Read by dchub-backend routes/planner_quality.py route_back_summary.
-                    ...(_rb ? { route_back_need: _rb.need_ids.join('|') } : {}) },
+                    ...(_rb ? { route_back_need: _rb.need_ids.join('|') } : {}),
+                    // Move 3: rerun_token_issued on every run that carried a token; rerun / rerun_age_h /
+                    // rerun_within_7d / rerun_unchanged / rerun_changed / rerun_not_compared on a re-run.
+                    ...(_rr ? _rr.telemetry : {}) },
           platform: (c && c.platform) || 'unknown', client_name: null,
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
@@ -28743,6 +28758,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const _rel = _dealDeskHumanRelay(_dealDesk);
         if (_rel) out.for_your_human = _rel;
       }
+      // Move 3: a re-run keeps only what changed; every run carries the next token.
+      if (_rr) { try { _applyRerun(out, _rr); } catch (_e) { /* never break the answer */ } }
       // r-endburst (2026-08-15): the planner's final assembly IS the
       // end-of-burst moment — append the ONE return-hook line.
       const _content = [{ type: 'text', text: JSON.stringify(out) }];
