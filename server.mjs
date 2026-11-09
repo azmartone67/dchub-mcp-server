@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
+import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLooksWalled, boundPlaces, stripHandoffIfPointered } from './lib/handoff.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
@@ -7040,6 +7041,9 @@ export const _capacitySummary = createCapacitySummaryCache({
 export const _routeBackRegistry = createRouteBackRegistry({
   fetchTwin: () => ctx.exit(() => callAPI(ROUTE_BACK_PATH, { light: 1 },
     { withStatus: true, timeout: ROUTE_BACK_TIMEOUT_MS })),
+  // The complement (lib/handoff.mjs) reads the same copy, so either switch keeps it; each switch still
+  // removes only its own field.
+  enabled: () => routeBackEnabled() || handoffEnabled(),
 });
 
 // The tools whose results may carry a capacity_source pointer. Their
@@ -22302,6 +22306,9 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
         _wallViaMemo.note(c.session_id, _wallType);
       }
     }
+    // lib/handoff.mjs: every wall / relay step has run, so this is the final word: the execute_plan complement
+    // never rides beside a human_url, a for_your_human relay or a wall.
+    if (name === 'execute_plan') out = stripHandoffIfPointered(out, { isWall: (sc) => _isRelayWall(sc, c) });
     return out;
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
@@ -28600,6 +28607,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           profile: (c && c.profile) || null, secret: process.env.DCHUB_INTERNAL_KEY || '',
           surfaceOk: (!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreRerunOn()) });
       } catch (_e) { _rr = null; }
+      // Complement (owner 2026-11-09, lib/handoff.mjs): after a plan DC Hub answered, who covers what it did
+      // not. route_back's surfaces; /mcp/core only with DCHUB_CORE_HANDOFF=1. Final pointer check: _wallOuterStep.
+      let _ho = null;
+      try {
+        if (handoffEnabled() && ((!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreHandoffOn()))) {
+          _ho = buildHandoff({ intentClass: sc.intent_class, executed, fullOf: fullByEntry, registry: _routeBackRegistry.get(),
+            routeBackIds: _rb ? _rb.need_ids : [], walled: planLooksWalled(executed, { isWall: (r) => _isRelayWall(r, c), fullOf: fullByEntry }),
+            places: boundPlaces({ intent: a && a.intent, market: (a && a.context && a.context.market) || (sc.intent_class === 'market_outlook' ? constraintSlug : null),
+              cityTable: _CITY_ISO_META, cityHit: _execCityHit }) });
+        }
+      } catch (_e) { _ho = null; }
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
@@ -28617,6 +28635,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                     // which needs the response named a route back for (ids from the registry); absent when none.
                     // Read by dchub-backend routes/planner_quality.py route_back_summary.
                     ...(_rb ? { route_back_need: _rb.need_ids.join('|') } : {}),
+                    // the complement's basis (market_answer | capacity_no_fit) and need ids; absent when none.
+                    ...(_ho ? { handoff_kind: _ho.basis, handoff_need: _ho.need_ids.join('|') } : {}),
                     // Move 3: rerun_token_issued on every run that carried a token; rerun / rerun_age_h /
                     // rerun_within_7d / rerun_unchanged / rerun_changed / rerun_not_compared on a re-run.
                     ...(_rr ? _rr.telemetry : {}) },
@@ -28719,11 +28739,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + (_undated ? _undated + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
-          + (_rb ? ' ' + _rb.sentence : ''),
+          + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
+        ...(_ho ? { handoff: _ho.field } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
@@ -35521,7 +35542,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
     if (capacityPointersEnabled()) { _capacitySummary.arm(); _capacitySummary.refresh(); }
     // execute_plan route_back: read the Works with registry once in the background so the first plan after
     // a deploy can already carry it; never awaited, and a failed read leaves the field out.
-    if (routeBackEnabled()) { _routeBackRegistry.arm(); _routeBackRegistry.refresh(); }
+    if (routeBackEnabled() || handoffEnabled()) { _routeBackRegistry.arm(); _routeBackRegistry.refresh(); }
     // r-list-swr: warm the generic tools/list cache at boot so the FIRST
     // scanner probe after a deploy (5-7 deploys/day) is already served warm.
     _toolsListCached('__warmup__', null)
