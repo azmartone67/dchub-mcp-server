@@ -203,6 +203,8 @@ import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextA
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
+import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
+         emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -4765,6 +4767,34 @@ export function _flushQuotaWallHits(c, name) {
 function _recordQuotaWallHit(c, name, status) {
   try {
     const body = _quotaWallEventFor(c, name, status);
+    if (body) _lastWallMemo.note(c, body);   // which wall a later email entry came from (lib/email-entered.mjs)
+    if (!body || !INTERNAL_KEY) return;
+    fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+  } catch (_) { /* telemetry never touches a response */ }
+}
+
+// Grok -> Brain 2026-11-08 (ask 3): the last wall each caller hit, so the email it later enters is
+// credited to that tool (lib/email-entered.mjs). One email_entered event per successful bind_email,
+// claim_free_key {email} or subscribe_digest; no response changes. Kill switch DCHUB_EMAIL_ENTERED_EVENT=0.
+const _lastWallMemo = createLastWallMemo();
+export const _lastWallFor = (c, k) => _lastWallMemo.get(c, k);   // test seam
+export function _emailEnteredEventFor(c, name, args, result) {
+  try {
+    if (!_emailEnteredOn() || !_EMAIL_ENTRY_TOOLS.has(name) || !c || c.loopback_step) return null;
+    const hit = _emailEntered(name, args, result);
+    if (!hit) return null;
+    const tagged = _tagOwnTestTelemetry({ platform: c.platform || '' }, c);
+    return _emailEnteredEventBody({ c, path: hit.path, wall: _lastWallMemo.get(c, hit.apiKey), apiKey: hit.apiKey,
+                                    isQa: _isQaCaller(c), platform: tagged.platform });
+  } catch (_) { return null; }
+}
+function _recordEmailEntered(c, name, args, result) {
+  try {
+    const body = _emailEnteredEventFor(c, name, args, result);
     if (!body || !INTERNAL_KEY) return;
     fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
       method: 'POST', keepalive: true,
@@ -22173,6 +22203,7 @@ async function _wallOuterStep(fn, args, extra, name) {
     flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
       _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
     _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
+    if (_EMAIL_ENTRY_TOOLS.has(name)) _recordEmailEntered(c, name, args, out);
   }
 }
 
