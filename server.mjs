@@ -224,6 +224,7 @@ import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/countr
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
+import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark } from './lib/offers-shown.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
 import { PACK_PRICE, PACK_NAME, PRO_NAME, PRO_PRICE } from './lib/wall-upgrade-offer.mjs';
 import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
@@ -9693,6 +9694,19 @@ export function _withSitingFreeRun(result, fr, tool) {
   }
   return out;
 }
+// C3 (2026-11-09, G8): an ask that a path showed but never marked on the call, so the wall row read
+// "no ask". Marks only when nothing is marked yet: these fill gaps and never reclassify a stronger ask
+// (lib/keyless-wall.mjs markEmailAsk). Switch DCHUB_OFFERS_SHOWN_EVENT=0 adds none.
+function _markAskGap(c, kind, url) {
+  try {
+    if (c && typeof c === 'object' && !c._emailAsk && !c._askGap && _offersShownOn()) c._askGap = { kind, ...(url ? { url } : {}) };
+  } catch (_) { /* never */ }
+}
+// The siting preview's line, marked as the bind_email ask it is (a spent email seat is not asked).
+function _sitingPreviewUpgradeMarked(name, seat, fr) {
+  if (seat !== 'email') _markAskGap(getCtx() || {}, 'line');
+  return _sitingPreviewUpgrade(name, seat, fr);
+}
 // The keyed caller's line on the keyless preview: the next step is bind_email, never
 // claim_free_key (it already holds a key). No plan name, no price.
 export function _sitingPreviewUpgrade(name, seat, fr) {
@@ -11143,6 +11157,7 @@ export function withBindHint(result, name, c) {
         }
       }
     } catch (_) { /* prose line is best-effort — never break a tool response */ }
+    _markAskGap(c, out.content !== result.content ? 'line' : 'bind_field');   // C3 (G8): the _bind ask
     return out;
   } catch (_) {
     return result;
@@ -22159,12 +22174,16 @@ function _sourceLineCb(name, fn) {
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
-    const _done = planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
-      { skip: leanSkip }), name, { skip: !!c.loopback_step, ownScrub });
-    // Brain block 2026-10-28 (item 4): every data answer names the next call (lib/next-call.mjs), in block 0's
-    // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
-    // a clean platform, or an execute_plan loopback step.
-    return (c.loopback_step || ownScrub || _isCleanPlatform()) ? _done : withNextCall(_done, name);
+    let _final;
+    try {
+      const _done = planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name, { deferRow: true }), name, args), name,
+        { skip: leanSkip }), name, { skip: !!c.loopback_step, ownScrub });
+      // Brain block 2026-10-28 (item 4): every data answer names the next call (lib/next-call.mjs), in block 0's
+      // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
+      // a clean platform, or an execute_plan loopback step.
+      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _done : withNextCall(_done, name);
+      return _final;
+    } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };
 }
 // Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
@@ -22174,7 +22193,22 @@ function _sourceLineCb(name, fn) {
 const _wallViaMemo = createWallViaMemo();   // session id -> the wall link it was handed (lib/wall-via-tag.mjs)
 export const _wallViaSeenFor = (sid) => _wallViaMemo.get(sid);      // test seam
 export const _noteWallViaForTest = (sid, wall) => _wallViaMemo.note(sid, wall);   // test seam
-async function _wallOuterStep(fn, args, extra, name) {
+// C3 (2026-11-09): the parked wall row leaves with what the FINAL result carried. The lean step after
+// _wallOuterStep drops ask paragraphs and the _bind / pro_url keys, so a row read before it named asks
+// and offers the agent never received. G8 gap marks (_markAskGap) count only if their ask survived;
+// the claim hand-off line is read off the result (lib/offers-shown.mjs finalAskMark).
+function _finishWallRow(c, name, result) {
+  try {
+    if (_offersShownOn() && Array.isArray(c._pendingWallHits) && c._pendingWallHits.length) {
+      const k = _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result });
+      if (k) _markEmailAsk(c, k);
+      const o = _offersShown(result, c._emailAsk);
+      if (o) c._offersShown = o;
+    }
+  } catch (_) { /* telemetry never touches a response */ }
+  _flushQuotaWallHits(c, name);
+}
+async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) {
   const c = getCtx() || {};
   let out;
   try {
@@ -22202,7 +22236,8 @@ async function _wallOuterStep(fn, args, extra, name) {
     // whether it showed the email ask (lib/answer-markers.mjs), for the session-ordered log.
     flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
       _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
-    _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
+    // C3: the /mcp tool wrapper sends the row itself, off the result the agent receives (_finishWallRow).
+    if (!deferRow) _finishWallRow(c, name, out);   // option E: after every step that can add an email ask
     if (_EMAIL_ENTRY_TOOLS.has(name)) _recordEmailEntered(c, name, args, out);
   }
 }
@@ -22349,7 +22384,7 @@ function trackedTool(srv, name, description, schema, handler) {
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
-    try { c._paidBlocked = false; c._emailAsk = ''; } catch (_) { /* set by signalPaywall / the wall builders (option E) for this call only */ }
+    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
@@ -22746,6 +22781,7 @@ function trackedTool(srv, name, description, schema, handler) {
           const _emailRelay = (_siteOn && (!_noSid || _keyLink))
             ? buildHumanRelay(name, tier || 'free', c.session_id, { wall: _noSid ? 'sitekey' : 'siteruns' }) : undefined;
           const _emailOn = !!(_emailRelay && _emailRelay.url);
+          if (_emailOn) _markAskGap(c, 'link', _emailRelay.url);   // C3 (G8): the keyless analyze_site wall's email link
           // The Pro wall is a paywall encounter, and it wrote NO signal: analyze_site, compare_sites,
           // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
           // 30 days before 2026-09-23 to ZERO since the Land & Power Pro-only cutover (2026-09-22),
@@ -24121,7 +24157,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; its steps already ran
       // keyless above), so the keyed caller's bind_email / human-link line is stamped here.
       if (_sitingPreview && name === 'execute_plan') {
-        const _up = _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr);
+        const _up = _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr);
         try {
           const _p = JSON.parse(result.content[0].text);
           if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
@@ -24277,7 +24313,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const trimmed = trimForTrial(await _freeFacilityRows(parsed, name, c), name);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
-              trimmed._note = _sitingPreview ? _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr).message
+              trimmed._note = _sitingPreview ? _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr).message
                 : 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
@@ -24329,7 +24365,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // Item 1: the keyed caller already holds a key; its next step is bind_email (or the
             // human link once the month's run is used), with no plan name, price or checkout URL.
             if (_sitingPreview) {
-              trimmed._upgrade = _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr);
+              trimmed._upgrade = _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr);
               status = _sitingSeatNow === 'email' ? 'siting_free_spent' : 'siting_noemail_preview';
             }
             // r-gated-text-human-link (2026-10-01): Grok read this keyless trim as
@@ -26916,6 +26952,7 @@ export function _emailHintStep(result, name) {
       let n = 0; for (const k of _EMAIL_HINT_SENT) { _EMAIL_HINT_SENT.delete(k); if (++n >= _EMAIL_HINT_MAX / 10) break; }
     }
     _EMAIL_HINT_SENT.add(sid);
+    _markAskGap(c, 'line');   // C3 (G8)
     return { ...result, content: [...result.content, { type: 'text', text: offer.text }],
              structuredContent: { ...sc0, save_offer: { when: 'only_if_your_human_wants_updates', steps: offer.steps, purpose: offer.purpose } } };
   } catch (_) { return result; }   // an offer is never worth failing a response over
@@ -27075,6 +27112,7 @@ export function _bindNoticeOnceStep(result, name) {
     const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
     const line = _bindNoticeLine(c, sc);
     if (result.content.some((x) => x && typeof x.text === 'string' && x.text.includes('call `bind_email` with your human'))) return result;
+    _markAskGap(c, 'line');   // C3 (G8)
     return { ...result, content: [...result.content, { type: 'text', text: line }] };
   } catch (_) { return result; }   // a notice is never worth failing a response over
 }

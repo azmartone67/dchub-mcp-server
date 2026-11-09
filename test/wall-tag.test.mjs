@@ -23,6 +23,10 @@ describe('which statuses are tagged', () => {
     for (const s of ['pro_wall', 'lp_wall', 'anon_hard_wall', 'depth_teased', 'ok', '', undefined, null, '__proto__', 'constructor']) {
       expect(T.wallTypeFor(s), String(s)).toBeNull();
     }
+    const on = { DCHUB_WALL_TAG_ALL: '1' };   // C3 (G10), off by default
+    for (const s of ['depth_teased', 'ok', '', undefined, null, '__proto__', 'constructor', 'toString']) {
+      expect(T.wallTypeFor(s, on), String(s)).toBeNull();
+    }
   });
   it('every wall type fits the backend shape', () => {
     for (const w of Object.values(T.WALL_TYPES)) expect(w).toMatch(/^[a-z][a-z0-9_]{1,31}$/);
@@ -40,6 +44,10 @@ describe('wallTypeForResult', () => {
     expect(T.wallTypeForResult('pro_wall', {})).toBeNull();
     expect(T.wallTypeForResult('pro_wall', { structuredContent: { free_monthly_runs: { reason: 'other' } } })).toBeNull();
     expect(T.wallTypeForResult('pro_wall', null)).toBeNull();
+    // C3 (G10, DCHUB_WALL_TAG_ALL=1): pro_wall carries its own tag, but the spent block still wins over it.
+    const on = { DCHUB_WALL_TAG_ALL: '1' };
+    expect(T.wallTypeForResult('pro_wall', {}, on)).toBe('pro_wall');
+    expect(T.wallTypeForResult('pro_wall', spentBlock, on)).toBe('analyze_site_spent');
   });
 });
 
@@ -218,5 +226,17 @@ describe('the frozen ChatGPT profile is untouched', () => {
   it('a wall on /mcp/chatgpt carries no mcp-wall tag', async () => {
     const r = await callTool('get_pipeline', { country: 'US' }, { path: '/mcp/chatgpt' });
     expect(r.text + JSON.stringify(r.sc)).not.toContain('mcp-wall');
+  });
+});
+
+
+describe('C3 (2026-11-09, G10): every logged wall can be tagged, off by default', () => {
+  it('switch on: each wall status in QUOTA_WALL_STATUSES has a well-formed tag; off (default): the three', async () => {
+    const { QUOTA_WALL_STATUSES } = await import('../lib/keyless-wall.mjs');
+    const on = { DCHUB_WALL_TAG_ALL: '1' };
+    for (const s of QUOTA_WALL_STATUSES) expect(T.wallTypeFor(s, on), s).toMatch(/^[a-z][a-z0-9_]{1,31}$/);
+    expect([...QUOTA_WALL_STATUSES].filter((s) => T.wallTypeFor(s, {})).sort())
+      .toEqual(['anon_daily_cap', 'lp_free_spent', 'trial_used']);
+    expect(T.wallTagAllOn({})).toBe(false);
   });
 });
