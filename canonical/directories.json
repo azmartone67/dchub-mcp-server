@@ -1,7 +1,7 @@
 {
-  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
+  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-06T17:30:00Z",
+  "updated_at": "2026-11-09T19:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -907,14 +907,15 @@
     {
       "id": "chatgpt-apps",
       "name": "ChatGPT apps",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://chatgpt.com/plugins/plugin_asdk_app_6add46d40f448191905e327e261ec86c",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-09",
       "added_at": "2026-10-09",
-      "note": "endpoint https://dchub.cloud/mcp/chatgpt"
+      "note": "endpoint https://dchub.cloud/mcp/chatgpt. Approved 2026-11-05, published by the owner 2026-11-08. Store page is rendered in the browser (server HTML has no DC Hub text), so scan is manual: rendered 2026-11-09 showing 'DC Hub / Data-center power & grid data', v1.0.1, 65 tools, MCP https://dchub.cloud/mcp/chatgpt.",
+      "scan": "manual"
     },
     {
       "id": "awesome-gis",
