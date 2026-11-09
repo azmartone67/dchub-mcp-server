@@ -577,6 +577,7 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-alert-line-d.test.mjs
+test/wall-ask-guard.test.mjs
 test/wall-email-line-freekey.test.mjs
 test/wall-email-line-prod-transport.test.mjs
 test/wall-exits.test.mjs

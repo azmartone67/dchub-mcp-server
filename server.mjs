@@ -1908,6 +1908,8 @@ export function _gridSellThenDigestStep(result, name) {
 }
 // Test seam: run a step inside a request context (the steps read getCtx()).
 export const _runInCtxForTest = (store, fn) => ctx.run(store, fn);
+// Test seam: a write tool never walls (the ask guard in test/wall-ask-guard.test.mjs skips it).
+export const _writeToolForTest = (name) => WRITE_TOOLS.has(String(name || ''));
 export function _gridSellStep(result, name) {
   try {
     if (name === 'ai_capacity_index') return _aicapEmailAskStep(result, name);
