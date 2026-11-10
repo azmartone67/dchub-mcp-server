@@ -28,7 +28,10 @@ describe('tier_required on the access tag', () => {
     expect(_tierRequiredFor('export_dataset')).toBe('pro');
     expect(_tierRequiredFor('get_composite_site_score')).toBe('pro');
     expect(_tierRequiredFor('analyze_site')).toBe('pro');
-    expect(_tierRequiredFor('get_facility')).toBe('email');
+    // 2026-11-10: an email-bound free key gets the same facility field mask as a keyless call, so
+    // an email opens nothing here (test/wall-ask-guard measures it on the real handler).
+    expect(_tierRequiredFor('get_facility')).toBe('developer_for_full');
+    expect(_tierRequiredFor('get_market_intel')).toBe('email');
     expect(_tierRequiredFor('get_grid_scoreboard')).toBe('anonymous');
     expect(_tierRequiredFor('list_standing_intents')).toBe('free_key');
     expect(_tierRequiredFor('save_site')).toBe('free_key');
