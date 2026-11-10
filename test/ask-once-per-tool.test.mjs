@@ -203,14 +203,19 @@ describe('the anonymous daily-cap wall keeps exactly one ask (mcp#1331) as a sec
 // there grew the plan's step results (measured: +696 chars of step text, no line in the plan answer) and marked
 // each step's tool for the session, so a later direct get_grid_intelligence wall lost its ask.
 describe('execute_plan steps keep the per-session memo', () => {
+  // Per-run noise blanked: URLs (session-signed), timestamps, UUIDs, per-step
+  // timings ("ms":36 vs "ms":9 shifted the old length pin by a byte) and signed
+  // tokens (random ids inside). The rest must be IDENTICAL, not just as long.
   const norm = (t) => t.replace(/https:\/\/\S+/g, 'URL').replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, 'TS')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID');
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID')
+    .replace(/"(ms|elapsed_ms|duration_ms|latency_ms|took_ms)":\d+/g, '"$1":N')
+    .replace(/[A-Za-z0-9_-]{40,}(?:\.[A-Za-z0-9_-]+)*/g, 'TOKEN');
   it('the plan answer is the same with the switch on and off; the direct walls after it each ask once', async () => {
     const on = await session();
     const pOn = await on('execute_plan');
     const pOff = await withEnv('DCHUB_ASK_PER_TOOL', '0', async () => (await session())('execute_plan'));
     expect(pOn.text.length).toBeGreaterThan(1000);
-    expect(norm(pOn.text).length).toBe(norm(pOff.text).length);
+    expect(norm(pOn.text)).toBe(norm(pOff.text));
     expect(count((await on('rank_markets')).text, RANK_ASK)).toBe(1);
     expect(count((await on('get_grid_intelligence')).text, HUMAN)).toBe(1);
   });
