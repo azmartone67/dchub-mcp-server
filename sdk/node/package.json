@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DC Hub Node SDK — live data-center, power & gas intelligence over MCP, with Vercel AI SDK tools.",
   "type": "module",
   "main": "index.mjs",

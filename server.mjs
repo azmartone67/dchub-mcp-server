@@ -180,7 +180,7 @@ import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridS
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -972,6 +972,27 @@ export function _keylessEmailFirstTool(name, { wide = false, env = process.env }
   if (!wide) return false;
   if (/^(0|false|no|off)$/i.test(String(env.DCHUB_KEYLESS_EMAIL_FIRST_ALL || '').trim())) return false;
   return !PRO_ONLY_TOOLS.has(name) && name !== 'get_market_intel';
+}
+// Sessionless email ask (Grok -> Brain 2026-11-09; dchub-backend no_ask_split_7d: 186 of 271 no-ask
+// walls in 7 days had no MCP session). _keylessCapEmailLink needs a real session (the page grants the
+// email tier onto it), so a sessionless keyless cap wall offered no email path at all, only the
+// no-email claim_free_key line. The agent path needs no session: claim_free_key with the human's email
+// returns an email-bound key, sent as X-API-Key, and a keyed caller is not subject to the anonymous
+// per-IP limits. Same tool scope as the email-first wall (_keylessEmailFirstTool), same exclusions as
+// the other email asks (Grok, a clean platform, an execute_plan step, the directory / Claude / core
+// profiles, a caller with an email on file). '' when it does not apply.
+// Kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0.
+const _sessionlessEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SESSIONLESS_EMAIL_ASK || '').trim());
+export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
+  try {
+    if (!_sessionlessEmailAskOn() || !_keylessEmailFirstOn() || !c || c.api_key || c.email || c.loopback_step) return '';
+    if (_realSession(c.session_id) || !_keylessEmailFirstTool(name, { wide })) return '';
+    if (_pcIsGrok(c.platform) || _isCleanPlatform()) return '';
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return '';
+    return _SESSIONLESS_EMAIL_ASK_LEAD + ', and send the key it returns as the X-API-Key header. A keyed caller is '
+      + 'not subject to this anonymous limit, and an email-bound key gets ' + FREE_TIER.identified_calls_per_day
+      + ' calls a day, free. If they prefer not to give an email, call `claim_free_key` without one.';
+  } catch (_) { return ''; }
 }
 export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
@@ -22861,11 +22882,15 @@ function trackedTool(srv, name, description, schema, handler) {
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
         }
         const _sidw = c.session_id || 'no-session';
+        const _askNoSid = _sessionlessCapEmailAsk(c, name);
+        if (_askNoSid) _markEmailAsk(c, 'line');   // option E: the wall-hit row says it asked
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
           + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
           + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
-          + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
-          + "identified callers are not subject to this wall. To keep going today without a key, relay the link in human_url to your human "
+          + (_askNoSid ? _askNoSid + ' Save the key to your MCP config. '
+            : "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
+              + "identified callers are not subject to this wall. ")
+          + "To keep going today without a key, relay the link in human_url to your human "
           + "(a one-time pack of 1,000 API credits, no subscription).";
         return await _withWallUserLine({
           content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
@@ -24382,6 +24407,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                                                  proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
+            }
+            // No session: no page unlock to link, so the email ask goes to the agent (claim_free_key {email}).
+            const _askS = _sessionlessCapEmailAsk(c, name, { wide: true });
+            if (_askS) {
+              // Its own prose block: the lean step keeps it (SESSIONLESS_EMAIL_ASK_LEAD) and shrinks _upgrade to
+              // machine fields, so email_ask names the call there.
+              trimmed._upgrade.email_ask = { tool: 'claim_free_key', arguments: { email: '<your human’s email>' } };
+              _markEmailAsk(c, 'line');
+              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }, { type: 'text', text: _askS }],
+                       structuredContent: trimmed };
             }
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
             // Every tool declares an outputSchema, so schema-aware clients read
