@@ -32886,7 +32886,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (!_key && !_sessKey && typeof _claimImpl === 'function') {
         const _minted = await _claimImpl({ email });
         try {
-          const _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          let _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          // Sessionless caller (2026-11-10): no MCP session, so the server cannot apply the key to later
+          // calls and the walled call stays walled until the agent sends it. Kill switch
+          // DCHUB_SESSIONLESS_BIND_KEY_LINE=0. Session callers and execute_plan steps: unchanged.
+          const _mk = _minted && _minted.structuredContent && _minted.structuredContent.api_key;
+          let _bc = null; try { _bc = getCtx(); } catch (_) { _bc = null; }
+          if (_mk && _bc && !_bc.loopback_step && !_realSession(_bc.session_id)
+              && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SESSIONLESS_BIND_KEY_LINE || '').trim())) {
+            _lead += 'This call had no MCP session, so nothing carries the key forward for you: send it as the X-API-Key header (`X-API-Key: '
+              + _mk + '`) on your next DC Hub calls, then call the tool that returned the preview again for the full answer.\n\n';
+          }
           if (_minted && Array.isArray(_minted.content) && _minted.content[0] && typeof _minted.content[0].text === 'string') {
             _minted.content[0] = { ..._minted.content[0], text: _lead + _minted.content[0].text };
           }
