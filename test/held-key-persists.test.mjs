@@ -105,10 +105,14 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
   });
   it('returns the held key flagged already_held; a REJECTED key is forgotten and re-minted', () => {
     const rejected = sole(TOOL, 'if (_v && _v.key_rejected) {', 'rejection guard');
-    const forget = sole(TOOL, '_forgetHeldKey(_fp);', 'forget');
+    // 2026-11-09: a second forget follows for a key bound to someone's email
+    // (claim-reuse-wording-and-bound-key.test.mjs drives that one end to end).
+    const bound = sole(TOOL, '} else if (_heldKeyBoundElsewhere(_v, a.email)) {', 'bound-key guard');
+    const forget = TOOL.indexOf('_forgetHeldKey(_fp);', rejected);
     const flag = sole(TOOL, 'already_held:            true', 'already_held flag');
     expect(rejected).toBeLessThan(forget);
-    expect(forget).toBeLessThan(flag);
+    expect(forget).toBeLessThan(bound);
+    expect(bound).toBeLessThan(flag);
   });
   it('the install artifact and the session auto-bind ride ONLY on a confirmed key', () => {
     const ok = sole(TOOL, 'const _ok = !!(_v && _v.valid);', 'confirmed flag');

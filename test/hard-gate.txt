@@ -95,6 +95,7 @@ test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claim-handoff-keyless-walls.test.mjs
+test/claim-reuse-wording-and-bound-key.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-desktop-install-is-stdio.test.mjs
@@ -517,6 +518,7 @@ test/server-json-npm-package.test.mjs
 test/server-json-route.test.mjs
 test/session-init-event.test.mjs
 test/session-release-covers-every-map.test.mjs
+test/sessionless-cap-email-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs

@@ -40,6 +40,21 @@ test("_clean strips the upsell wrapper", () => {
   });
 });
 
+// ★2026-11-10: tools now answer [data, agent line, citation]; call() handed back
+// all three as an array, so market()/search() lost their fields (0.2.0-0.3.0).
+test("_clean picks the data block out of several content blocks", () => {
+  const data = { market: { name: "Dallas" }, by_status: { Operational: 1 } };
+  assert.deepStrictEqual(
+    _clean([data, "(agent) Optional, only if your human wants...", "Source: DC Hub (dchub.cloud), as of 2026-11-09"]),
+    data,
+  );
+  assert.deepStrictEqual(_clean([{ agent_action: { x: 1 } }, data]), data);
+  assert.deepStrictEqual(_clean([[1, 2], "Source: DC Hub"]), [1, 2]);
+  assert.deepStrictEqual(_clean(["preview line", "Source: DC Hub"]), {
+    text: "preview line\n---\nSource: DC Hub",
+  });
+});
+
 test("grid() returns cleanly without throwing", async () => {
   const g = await new DCHub().grid("ERCOT");
   assert.strictEqual(typeof g, "object");
