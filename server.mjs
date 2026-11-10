@@ -4641,7 +4641,7 @@ export function _initRequestError(body) {
   }
 }
 
-function detectPlatformFromInit(body, ua = '', explicitHint = '') {
+function detectPlatformFromInit(body, ua = '', explicitHint = '', clientHeader = '') {
   // A deployment-source tag (operator env) names the CHANNEL the traffic came
   // through and WINS: on a hosted single-tenant deployment every session IS that
   // channel regardless of the gateway's forwarded clientInfo, and "which
@@ -4664,7 +4664,11 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
   // still name a real platform, and it can only ever return 'dchub-internal'.
   const hintedInternal = _INTERNAL_SELF_TAG(explicitHint);
   if (hintedInternal) return hintedInternal;
-  const clientName = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
+  // 2026-11-10: a sessionless call's X-MCP-Client name (already sanitised and screened by
+  // _sessionlessClientHeader) stands in for the clientInfo.name it cannot carry, so it runs the
+  // SAME vocabulary below: known platform, then our own tags, then the raw safe name. Only used
+  // when the body has no clientInfo.name, so it can never override an initialize.
+  const clientName = (body?.params?.clientInfo?.name || clientHeader || '').toString().toLowerCase();
   if (clientName && !_GENERIC_CLIENT_NAMES.has(clientName.trim())) {
     const known = _KNOWN_PLATFORM_FROM_NAME(clientName);
     if (known) return known;
@@ -33586,10 +33590,30 @@ export function _recallPlatform(sid) {
 
 // Detection first, recall only to fill the generic gap. Order is the safety
 // property — see the SAFETY note above.
-export function _resolvePlatform(body, userAgent, platformHeader, sessionId) {
-  const detected = detectPlatformFromInit(body, userAgent, platformHeader);
+export function _resolvePlatform(body, userAgent, platformHeader, sessionId, clientHeader = '') {
+  const detected = detectPlatformFromInit(body, userAgent, platformHeader, clientHeader);
   if (detected && detected !== 'mcp') return detected;
   return _recallPlatform(sessionId) || detected;
+}
+
+// ── X-MCP-Client on a sessionless call (2026-11-10) ─────────────────────────
+// A tools/call with no initialize has no clientInfo.name, so a client that names itself in a
+// header was still tagged 'mcp': measured 11-10, 103 walls in 7 days from platform 'mcp' with no
+// session, and a live probe sending `X-MCP-Client: brain-askcheck-1110` logged 'mcp'. This returns
+// the header as a clientInfo.name stand-in: lowercased, [a-z0-9._-], 40 chars (detectPlatformFromInit
+// then runs the clientInfo vocabulary on it, so our own and 1-2 char tags still become
+// 'dchub-internal'), '' for a generic name. It never overrides a session: '' whenever this session
+// id has a remembered clientInfo platform or name. Kill switch DCHUB_SESSIONLESS_CLIENT_HEADER=0.
+export function _sessionlessClientHeader(req, sessionId) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SESSIONLESS_CLIENT_HEADER || '').trim())) return '';
+    const raw = req && req.headers ? req.headers['x-mcp-client'] : '';
+    const v = String(Array.isArray(raw) ? raw[0] : (raw || '')).trim().toLowerCase()
+      .replace(/[^a-z0-9._-]/g, '').slice(0, 40);
+    if (!v || _GENERIC_CLIENT_NAMES.has(v)) return '';
+    if (sessionId && (_recallPlatform(sessionId) || _recallClientName(sessionId))) return '';
+    return v;
+  } catch (_e) { return ''; }   // attribution must never break a request
 }
 const sessionSrv        = new Map(); // sessionId → McpServer (qa-0704 url-elicit: elicitInput needs the per-session server instance)
 
@@ -35503,7 +35527,8 @@ app.post(MCP_PATHS, async (req, res) => {
     // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
-      const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId);
+      const _clientHdr = _sessionlessClientHeader(req, sessionId || _planLoopbackSid);   // 2026-11-10
+      const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId, _clientHdr);
       // r-free-key-per-call: /mcp/chatgpt keeps the counted validate it always
       // had (frz-chatgpt-toolset), and so does a /mcp/core plan step (the core
       // profile skips the chokepoint); everywhere else this resolve spends
@@ -35543,7 +35568,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // ★ Recovered raw clientInfo.name — without this the telemetry row's
         // client_name falls back to the generic platform and the identity view
         // classifies the call as 'mcp'.
-        client_name_raw: _recallClientName(sessionId || _planLoopbackSid),
+        client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
