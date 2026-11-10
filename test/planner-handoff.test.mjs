@@ -538,6 +538,31 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
     expect(out.content[0].text).not.toContain('"handoff"');
   }, 120_000);
 
+  it('the live 11-09 envelope: a partial_preview stamped only for a size trim is not a wall; real withholding still is', async () => {
+    const r = await plan(DALLAS);
+    expect(r.out.handoff && r.out.handoff.kind, 'control: the full answer carries the complement').toBe('complement');
+    // What production stamped on the keyed enterprise Dallas plan (all four steps 'unrestricted').
+    const trim = { completeness: 'partial_preview', preview: { reasons: ['step result truncated'], withheld_fields: [], withholding_proven: true, unlock_tool: 'unlock_more_data' } };
+    const sc = { ...r.out,
+      provenance: { ...(r.out.provenance || {}), ...trim },
+      human_url: 'https://dchub.cloud/upgrade/h/NGM4MWU1ODM.d88d1225b5858ebf',
+      for_your_human: { message: 'Your Deal Desk Brief for this analysis is ready', url: 'https://dchub.cloud/reports/deal-desk/dd-Soe2gUPyaiuOHB4.pdf' } };
+    const wallE = (x) => S._isRelayWall(x, { tier: 'enterprise' });
+    expect(wallE(sc), 'control: the server wall test alone reads this envelope as a wall').toBe(true);
+    const res = { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    expect(stripHandoffIfPointered(res, { isWall: wallE })).toBe(res);
+    expect(planLooksWalled([{ tool: 'get_market_dcpi_rank', status: 'executed', result: sc }], { isWall: wallE })).toBe(false);
+    // Anything beyond the size trim still walls: another reason, or a named withheld field.
+    for (const preview of [
+      { ...trim.preview, reasons: ['step result truncated', 'tier gating'] },
+      { ...trim.preview, withheld_fields: ['asking_rate'] },
+    ]) {
+      const w = { ...sc, provenance: { ...sc.provenance, preview } };
+      const out = stripHandoffIfPointered({ content: [{ type: 'text', text: JSON.stringify(w) }], structuredContent: w }, { isWall: wallE });
+      expect('handoff' in out.structuredContent, JSON.stringify(preview)).toBe(false);
+    }
+  }, 120_000);
+
   it('directory profiles and ChatGPT clients: no field, no sentence', async () => {
     for (const [p, hdr] of [['/mcp/claude', PRO], ['/mcp/chatgpt', PRO], ['/mcp/grok', PRO], ['/mcp', { ...PRO, 'user-agent': 'openai-mcp/1.0.0' }]]) {
       const r = await plan(DALLAS, p, hdr);
