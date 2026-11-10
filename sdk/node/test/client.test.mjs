@@ -2,7 +2,25 @@
 // Run: node --test
 import assert from "node:assert";
 import { test } from "node:test";
-import { DCHub, _clean } from "../index.mjs";
+import { DCHub, _clean, userAgent } from "../index.mjs";
+
+// These tests call the live server: mark them as DC Hub's own run so the usage counts drop
+// them (dchub-backend routes/mcp_funnel_events.OWN_SDK_RUN_UA_MARK). Read per DCHub instance.
+process.env.DCHUB_UA_SUFFIX ??= "(dc-own-run)";
+
+test("userAgent(): optional printable suffix, else the bare SDK user agent", () => {
+  assert.match(userAgent("(dc-own-run)"), /^dc-sdk-node\/\d+\.\d+\.\d+ \(dc-own-run\)$/);
+  assert.match(userAgent(undefined), /^dc-sdk-node\/\d+\.\d+\.\d+$/);
+  assert.strictEqual(userAgent("bad\r\nX-Inject: 1"), userAgent(undefined));
+  assert.strictEqual(userAgent("x".repeat(61)), userAgent(undefined));
+  assert.strictEqual(new DCHub({ uaSuffix: "(acme)" })._headers()["User-Agent"], userAgent("(acme)"));
+  assert.strictEqual(new DCHub()._headers()["User-Agent"], userAgent(process.env.DCHUB_UA_SUFFIX));
+});
+
+test("userAgent(): this live suite runs marked as DC Hub's own run", () => {
+  assert.strictEqual(process.env.DCHUB_UA_SUFFIX, "(dc-own-run)");
+  assert.ok(new DCHub()._headers()["User-Agent"].endsWith(" (dc-own-run)"));
+});
 
 // ★2026-07-30: was a hardcoded 38 that sat two catalog bumps stale (live 81).
 // Bind to mcp-server.json — the canonical manifest sync-tools-manifest.mjs

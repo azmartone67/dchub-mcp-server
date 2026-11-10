@@ -26,6 +26,17 @@ export const SDK_VERSION = "0.3.1";
 export const CLIENT_NAME = "dc-sdk-node";
 const USER_AGENT = `${CLIENT_NAME}/${SDK_VERSION}`;
 
+// An optional user-agent suffix, e.g. your app name: "dc-sdk-node/0.3.1 (acme-siting)".
+// DC Hub's own test and release runs set DCHUB_UA_SUFFIX="(dc-own-run)" so its usage counts
+// can drop them (dchub-backend routes/mcp_funnel_events.OWN_SDK_RUN_UA_MARK) without
+// changing what the server returns. Printable ASCII only, at most 60 characters.
+export const UA_SUFFIX_RE = /^[\x20-\x7e]{1,60}$/;
+
+export function userAgent(suffix) {
+  const s = typeof suffix === "string" ? suffix.trim() : "";
+  return s && UA_SUFFIX_RE.test(s) ? `${USER_AGENT} ${s}` : USER_AGENT;
+}
+
 // Partner attribution (the convention served at https://dchub.cloud/mcp/builders):
 // a `via` name rides every request as X-DCHub-Via and is counted per day.
 export const VIA_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
@@ -81,8 +92,9 @@ function clean(result) {
 }
 
 export class DCHub {
-  constructor({ apiKey, endpoint, timeout = 60000, via } = {}) {
+  constructor({ apiKey, endpoint, timeout = 60000, via, uaSuffix } = {}) {
     this.endpoint = endpoint || process.env.DCHUB_ENDPOINT || DEFAULT_ENDPOINT;
+    this.userAgent = userAgent(uaSuffix !== undefined ? uaSuffix : process.env.DCHUB_UA_SUFFIX);
     this.apiKey = apiKey !== undefined ? apiKey : process.env.DCHUB_API_KEY;
     this.via = checkVia(via !== undefined ? via : process.env.DCHUB_VIA);
     this.timeout = timeout;
@@ -93,7 +105,7 @@ export class DCHub {
     const h = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
-      "User-Agent": USER_AGENT,
+      "User-Agent": this.userAgent,
     };
     if (this.apiKey) h["X-API-Key"] = this.apiKey;
     if (this.via) h["X-DCHub-Via"] = this.via;

@@ -20,7 +20,7 @@ import os
 import re
 import urllib.request
 
-__all__ = ["DCHub", "check_via", "CLIENT_NAME"]
+__all__ = ["DCHub", "check_via", "user_agent", "CLIENT_NAME"]
 
 _DEFAULT_ENDPOINT = "https://dchub.cloud/mcp"
 SDK_VERSION = "0.3.1"  # = pyproject.toml and dchub.__version__
@@ -31,6 +31,17 @@ SDK_VERSION = "0.3.1"  # = pyproject.toml and dchub.__version__
 # from usage counts. Neither the name nor the User-Agent may contain those words.
 CLIENT_NAME = "dc-sdk-python"
 _USER_AGENT = f"{CLIENT_NAME}/{SDK_VERSION}"
+
+# An optional user-agent suffix, e.g. your app name: "dc-sdk-python/0.3.1 (acme-siting)".
+# DC Hub's own test and release runs set DCHUB_UA_SUFFIX="(dc-own-run)" so its usage counts
+# can drop them (dchub-backend routes/mcp_funnel_events.OWN_SDK_RUN_UA_MARK) without
+# changing what the server returns. Printable ASCII only, at most 60 characters.
+UA_SUFFIX_RE = re.compile(r"^[\x20-\x7e]{1,60}$")
+
+
+def user_agent(suffix=None) -> str:
+    s = suffix.strip() if isinstance(suffix, str) else ""
+    return f"{_USER_AGENT} {s}" if s and UA_SUFFIX_RE.match(s) else _USER_AGENT
 
 # Partner attribution (https://dchub.cloud/mcp/builders): sent as X-DCHub-Via.
 VIA_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
@@ -46,8 +57,10 @@ def check_via(via):
 
 class DCHub:
     def __init__(self, api_key: str | None = None, endpoint: str | None = None,
-                 timeout: int = 60, via: str | None = None):
+                 timeout: int = 60, via: str | None = None, ua_suffix: str | None = None):
         self.endpoint = endpoint or os.environ.get("DCHUB_ENDPOINT", _DEFAULT_ENDPOINT)
+        self.user_agent = user_agent(ua_suffix if ua_suffix is not None
+                                     else os.environ.get("DCHUB_UA_SUFFIX"))
         self.api_key = api_key if api_key is not None else os.environ.get("DCHUB_API_KEY")
         self.via = check_via(via if via is not None else os.environ.get("DCHUB_VIA"))
         self.timeout = timeout
@@ -57,7 +70,7 @@ class DCHub:
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json",
              "Accept": "application/json, text/event-stream",
-             "User-Agent": _USER_AGENT}
+             "User-Agent": self.user_agent}
         if self.api_key:
             h["X-API-Key"] = self.api_key
         if self.via:

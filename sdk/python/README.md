@@ -87,6 +87,9 @@ dc.call("get_power_availability_timeline", state="TX")   # any tool
 dc.tools()                                 # tool names
 ```
 
+`DCHUB_UA_SUFFIX` (or `DCHubMCP(ua_suffix=...)`) appends a label to the User-Agent, e.g. your
+app name: `dc-sdk-python/0.3.1 (acme-siting)`.
+
 ## Compose DC Hub into your own MCP server (new in 0.3.0)
 
 ```python
