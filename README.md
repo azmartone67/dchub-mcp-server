@@ -80,7 +80,7 @@ MCP endpoint `https://dchub.cloud/mcp/github` (client setup at [/connect](https:
 "Who has 500 kW of colocation capacity anywhere in Europe?"
 ```
 
-Your AI assistant gets real-time, structured answers — not links to PDFs.
+Your AI assistant gets real-time, structured answers, dated and cited.
 
 ## What's inside
 
