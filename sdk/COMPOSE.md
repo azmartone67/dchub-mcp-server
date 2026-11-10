@@ -44,6 +44,14 @@ defs = dchub_tool_definitions(via="acme-energy")   # same options: tools=, api_k
 `execute_plan` (multi-part questions), `search_facilities`, `get_market_intel`,
 `get_grid_data`, `source_capacity`. Full catalog: `tools/list` on https://dchub.cloud/mcp.
 
+## Beside other servers, without code
+
+If your client already connects several MCP servers and you only want DC Hub next to
+them, you do not need this SDK: add the remote endpoint `https://dchub.cloud/mcp/core`.
+It lists ten read-only tools (start with `plan_and_answer`), the smallest DC Hub tool list,
+on the same key and tier as `/mcp`. It has no key, email, save or alert tools; connect
+`https://dchub.cloud/mcp` when your user needs those. See `docs/core-profile.md`.
+
 ## Rules that come with the data
 
 - `via`: lowercase letters, digits, `.`, `_` or `-`, 1-40 characters. It is sent as

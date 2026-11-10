@@ -21267,6 +21267,8 @@ export const _EXEC_POWER_TOOLS = new Set([
   'get_interconnection_queue', 'get_refined_queue', 'get_hosting_capacity',
   'get_retirement_headroom', 'get_power_pipeline', 'get_energy_prices', 'grid_transition_radar',
 ]);
+// The queue tools whose live-export reads can be labelled collected (see _execPowerEvidence).
+export const _EXEC_COLLECTED_TOOLS = new Set(['get_interconnection_queue', 'get_refined_queue']);
 // 5.18: `derived` (Map entry -> { as_of, as_of_basis }) dates a step whose answer uses only some of
 // its rows: the grid_headroom scoreboard step, which the plan reads only for the US rows it ranks
 // (lib/grid-ranking.mjs). It applies only when the step itself carries no collection as_of, and
@@ -21286,14 +21288,21 @@ export function _execPowerEvidence(executed, fullByEntry = null, derived = null)
       const dv = (!asOf && derived && typeof derived.get === 'function') ? derived.get(e) : null;
       const derivedBasis = (dv && dated(dv.as_of)) ? (String(dv.as_of_basis || '') || 'derived from the rows this answer uses') : null;
       if (derivedBasis) asOf = dated(dv.as_of);
+      // Owner 11-09 ("label collected"): a queue the ISO generates on request has no report
+      // date, and the backend keeps as_of null for it (a fetch time is not a data date) while
+      // naming the collection time in provenance.fetched_at under an UNMEASURED basis. That
+      // step is a timed reading, labelled as collected; its as_of stays null.
+      const collectedAt = (!asOf && _EXEC_COLLECTED_TOOLS.has(e.tool) && /^UNMEASURED\b/.test(String(p.as_of_basis || '')))
+        ? dated(p.fetched_at) : null;
       const a = e.args || {};
       const iso = [r.iso, r.region_id, a.iso, a.region_id].find((x) => typeof x === 'string' && x.trim()) || null;
       const source = named(p.source) || named(r.source) || null;
       const missing = [];
-      if (!asOf) missing.push('as_of');
+      if (!asOf && !collectedAt) missing.push('as_of');
       if (!iso && !source) missing.push('iso_or_source');
       out.push({ step: e.step, tool: e.tool, iso: iso ? iso.trim().toUpperCase() : null, source, as_of: asOf,
                  ...(derivedBasis ? { as_of_basis: derivedBasis } : {}),
+                 ...(collectedAt ? { collected_at: collectedAt, as_of_kind: 'collected' } : {}),
                  ok: !missing.length, ...(missing.length ? { missing } : {}) });
     }
   } catch (_e) { /* evidence is advisory; never blocks the answer */ }
@@ -21319,6 +21328,13 @@ export function _execUndatedSentence(evidence) {
   const what = (x) => x.missing.map((m) => (m === 'as_of' ? 'no as_of' : 'no ISO or named source')).join(' and ');
   return 'UNDATED — ' + bad.map((x) => `${x.tool} (step ${x.step}) returned ${what(x)}`).join('; ')
     + '. Do not present those steps\' figures or verdicts as current; quote only dated steps, each with its as_of.';
+}
+export function _execCollectedSentence(evidence) {
+  const col = (Array.isArray(evidence) ? evidence : []).filter((x) => x && x.ok && x.collected_at);
+  if (!col.length) return '';
+  return 'COLLECTED, NOT REPORT-DATED — '
+    + col.map((x) => `${x.tool} (step ${x.step}${x.iso ? ', ' + x.iso : ''}) was collected by DC Hub at ${x.collected_at}`).join('; ')
+    + '; the ISO publishes no report date for it. Quote those figures as "collected <time>", never as "as of" or as a report date.';
 }
 export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
@@ -28785,7 +28801,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         geography_scope: sc.geography_scope || null, deep_read_iso: gridDeepIso }, executed, fullByEntry);
       const _powerEvidence = _execPowerEvidence(executed, fullByEntry,
         (_gridRank && _gridRank.evidence) ? new Map([[_gridRank.evidence.entry, _gridRank.evidence]]) : null);
-      const _undated = _execUndatedSentence(_powerEvidence);
+      // 11-09: the lead names undated steps, then live-export queue steps labelled collected.
+      const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       const out = {

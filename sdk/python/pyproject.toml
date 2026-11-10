@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # adds dchub.mcp (MCP client, also dchub.DCHubMCP) and dchub.compose.
 [project]
 name = "dchub"
-version = "0.3.0"
+version = "0.3.1"
 description = "Python SDK, MCP client, compose kit and LangChain/smolagents tools for DC Hub data-center & energy intelligence."
 readme = "README.md"
 requires-python = ">=3.9"
