@@ -191,6 +191,13 @@ field for the endpoint (its `glama.json` schema's only property is
 the distinction that was actually blocking a decision: all four registries
 report zero today, and nothing separated *zero* from *unmeasured*.
 
+★ **2026-11-09 (owner move 2): `https://dchub.cloud/mcp/core` joins `remotes`, second
+to last** (`lib/registry-remotes.mjs`, before the bare `/mcp`). It is the ten-tool core
+profile for hosts that load DC Hub beside other servers (tools/list 16.6 KB against
+210.7 KB on `/mcp`, measured 2026-11-09). A remote carries only `type` + `url`, so its
+label is in `_meta` publisher-provided `remoteProfiles`. `remotes[0]` and
+`canonicalRemote` are unchanged.
+
 ★ **2026-10-27 (owner, from Grok's registry audit): the bare `https://dchub.cloud/mcp`
 is now ALSO listed in `remotes`, LAST** (`lib/registry-remotes.mjs`, v2.12.44).
 `remotes[0]` stays `/mcp/registry`, so PulseMCP / Glama (which mirror
@@ -320,6 +327,7 @@ move every few days and a listing is edited by hand perhaps twice a year.
 ## Connection
 - Transport: **Streamable HTTP**
 - URL: `https://dchub.cloud/mcp`
+- Alternate (core profile: 10 tools for multi-server hosts): `https://dchub.cloud/mcp/core` — paste it only where a form has a second-endpoint field; `/mcp` stays the primary URL
 - Auth: none for the free tier; `X-API-Key: dch_live_…` for full data (free dev key, email only, at https://dchub.cloud/signup)
 - Manifest: `https://dchub.cloud/.well-known/mcp.json`
 - Discovery: `https://dchub.cloud/llms.txt` · `https://dchub.cloud/AGENTS.md`

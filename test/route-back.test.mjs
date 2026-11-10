@@ -137,7 +137,9 @@ describe('builder: names and wording come from the registry document', () => {
       const rb = buildRouteBack(intent, real);
       const e = rb.entries.find((x) => x.need === real.labels.get(id));
       expect(e, id).toBeTruthy();
-      const owners = real.partners.filter((p) => p.needs.includes(id)).slice(0, 3);
+      // alphabetical by name, then capped (owner 2026-11-09: neutral order, not registry order)
+      const owners = real.partners.filter((p) => p.needs.includes(id))
+        .sort((x, y) => x.name.localeCompare(y.name, 'en', { sensitivity: 'base' })).slice(0, 3);
       expect(e.owned_by).toEqual(owners.map((p) => p.name));
       expect(e.where).toBe(ROUTE_BACK_WHERE);
       for (const o of owners) expect(rb.sentence).toContain(o.route.replace(/[.;:\s]+$/, ''));
@@ -449,7 +451,8 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
         expect(e.where).toBe('https://dchub.cloud/partners#works-with');
         expect(Object.keys(e)).toEqual(['need', 'owned_by', 'where', 'note']);
       }
-      const expectedNames = ids.map((id) => reg.partners.filter((p) => p.needs.includes(id)).slice(0, 3).map((p) => p.name));
+      const expectedNames = ids.map((id) => reg.partners.filter((p) => p.needs.includes(id))
+        .sort((x, y) => x.name.localeCompare(y.name, 'en', { sensitivity: 'base' })).slice(0, 3).map((p) => p.name));
       expect(o.route_back.map((e) => e.owned_by)).toEqual(expectedNames);
       expect(o.answer_guide.endsWith(buildRouteBack(INTENTS[k], reg).sentence), k).toBe(true);
       expect(brokenRules(JSON.stringify(o.route_back) + buildRouteBack(INTENTS[k], reg).sentence), k).toEqual([]);

@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.45",
+  "version": "2.12.46",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -37,7 +37,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "dchub-mcp-server",
-      "version": "2.12.45",
+      "version": "2.12.46",
       "transport": {
         "type": "stdio"
       },
@@ -71,6 +71,10 @@
     },
     {
       "type": "streamable-http",
+      "url": "https://dchub.cloud/mcp/core"
+    },
+    {
+      "type": "streamable-http",
       "url": "https://dchub.cloud/mcp"
     }
   ],
@@ -83,7 +87,10 @@
       "freeTier": true,
       "deploymentType": "origin",
       "canonicalRemote": "https://dchub.cloud/mcp",
-      "gatewayNote": "This entry is the ORIGIN. DC Hub is also reachable through hosted gateways, which share one upstream identity across many end users — a client that binds here directly is counted as itself, and its own key and clientInfo reach the server unaltered. When a call does arrive through a known gateway, the response says so in identity.connection; the field is absent otherwise, because a gateway forwarding a generic client identity cannot be distinguished from a direct caller."
+      "gatewayNote": "This entry is the ORIGIN. DC Hub is also reachable through hosted gateways, which share one upstream identity across many end users — a client that binds here directly is counted as itself, and its own key and clientInfo reach the server unaltered. When a call does arrive through a known gateway, the response says so in identity.connection; the field is absent otherwise, because a gateway forwarding a generic client identity cannot be distinguished from a direct caller.",
+      "remoteProfiles": {
+        "https://dchub.cloud/mcp/core": "core profile: 10 tools for multi-server hosts"
+      }
     }
   }
 }

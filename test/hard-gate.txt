@@ -95,6 +95,7 @@ test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claim-handoff-keyless-walls.test.mjs
+test/claim-reuse-wording-and-bound-key.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-desktop-install-is-stdio.test.mjs
@@ -221,6 +222,7 @@ test/funnel-invariants.test.mjs
 test/gas-hosting-no-hardcoded-figures.test.mjs
 test/gas-index-as-of-lifted.test.mjs
 test/gas-index-dcgi-paid-set.test.mjs
+test/gas-intel-email-ask.test.mjs
 test/gas-tier-mask.test.mjs
 test/gated-first-link-is-upgrade-h.test.mjs
 test/gated-text-carries-human-link.test.mjs
@@ -249,6 +251,8 @@ test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
 test/grid-provenance-source-own-as-of.test.mjs
 test/grid-queue-by-kind.test.mjs
+test/grid-ranking-e2e.test.mjs
+test/grid-ranking.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
 test/grid-sell-line.test.mjs
@@ -375,6 +379,8 @@ test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
+test/offers-shown-c3-wire.test.mjs
+test/offers-shown-c3.test.mjs
 test/one-free-tier-rule-one-pro-list.test.mjs
 test/one-human-cta.test.mjs
 test/one-of-published.test.mjs
@@ -404,13 +410,16 @@ test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
+test/plan-caller-ip.test.mjs
 test/plan-free-fields.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
+test/plan-rerun.test.mjs
 test/plan-step-session-id.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
+test/planner-handoff.test.mjs
 test/platform-desc-sync.test.mjs
 test/platform-header.test.mjs
 test/platform-recall.test.mjs
@@ -509,6 +518,7 @@ test/server-json-npm-package.test.mjs
 test/server-json-route.test.mjs
 test/session-init-event.test.mjs
 test/session-release-covers-every-map.test.mjs
+test/sessionless-cap-email-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
@@ -575,6 +585,7 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-alert-line-d.test.mjs
+test/wall-ask-guard.test.mjs
 test/wall-email-line-freekey.test.mjs
 test/wall-email-line-prod-transport.test.mjs
 test/wall-exits.test.mjs

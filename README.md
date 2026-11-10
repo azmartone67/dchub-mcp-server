@@ -162,6 +162,8 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 | `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
 | `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
 
+**Core profile for multi-server hosts:** `https://dchub.cloud/mcp/core` lists 10 task-shaped, read-only tools (`plan_and_answer`, `find_sites`, `evaluate_site`, `compare_sites`, `market_snapshot`, `rank_markets`, `grid_power`, `fiber_connectivity`, `facility_lookup`, `get_evidence`) composed from the same handlers, so its `tools/list` is about 17 KB against about 211 KB for the full catalog at `/mcp` (measured 2026-11-09). It suits hosts that load DC Hub beside other MCP servers, where context is tight; same key, tiers and gates. It is an alternate, not the default: `/mcp` stays the canonical endpoint. Details: [docs/core-profile.md](docs/core-profile.md).
+
 ## What DC Hub adds
 
 Facility directories list sites you can browse. DC Hub adds the power side, queryable live: grid demand and fuel mix, interconnection queues, substations and transmission, energy prices, and a daily power-availability verdict for 300+ markets (DCPI). It's the same data on the web pages, over REST and over MCP; results carry an `as_of` date. Where each layer comes from is listed under [Data sources](#data-sources).
