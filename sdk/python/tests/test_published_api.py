@@ -20,7 +20,7 @@ def test_mcp_client_and_compose_are_added():
     from dchub.mcp import DCHub as M
     assert dchub.DCHubMCP is M
     assert callable(dchub.dchub_tool_definitions)
-    assert dchub.__version__ == "0.3.0"
+    assert dchub.__version__ == "0.3.1"
 
 
 def test_rest_user_agent_is_not_counted_as_internal():

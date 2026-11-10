@@ -20,18 +20,15 @@ def test_import_clean():
     assert dchub.__version__
 
 
-def test_stats_returns_facility_count():
+def test_stats_returns_counts():
     data = _client().stats()
-    # /api/v1/stats wraps payload in "data"
     payload = data.get("data", data)
-    notes = payload.get("_facility_count_notes", {})
-    count = notes.get("primary_count") or notes.get("discovered_total")
-    if count is None:
-        # fall back: any integer count-ish field present
-        count = payload.get("facilities") or payload.get("total_facilities")
-    assert count is None or int(str(count).split()[0]) if isinstance(count, str) else True
-    assert notes.get("discovered_total", 0) > 1000, notes
-
+    # The headline facility count is withheld by design ("corroborated count
+    # pending", owner contract); /api/v1/stats still serves its basis notes and
+    # the other counts.
+    assert "_facility_count_notes" in payload, payload
+    assert "facility_count_status" in payload, payload
+    assert payload.get("total_countries", 0) > 0, payload
 
 def test_dcpi_phoenix_is_free_and_numeric():
     d = _client().get_market_dcpi_rank("phoenix")
