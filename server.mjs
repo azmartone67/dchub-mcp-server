@@ -246,6 +246,7 @@ import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } fr
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
+import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
@@ -34261,6 +34262,41 @@ app.use(MCP_PATHS, (req, res, next) => {
   });
 });
 
+// [mcp-4xx] (2026-11-10): one masked JSON line per refused /mcp request (400, 404, 405, 406,
+// 413, 415), with a reason code (lib/mcp-request-shape.mjs failureReason). Railway's HTTP log
+// keeps no body or header, so ~1,552 Claude 400s a week had no recorded cause. Facts are read
+// at entry, before the handler rewrites headers or the body; the error text is the first 300
+// bytes the response wrote. Read with: railway logs | grep '\[mcp-4xx\]'.
+const _MCP_4XX_LOGGED = new Set([400, 404, 405, 406, 413, 415]);
+app.use(MCP_PATHS, (req, res, next) => {
+  let rec;
+  try {
+    const sid = req.headers['mcp-session-id'];
+    rec = _describeMcpRequest(req, { sessionKnown: !!(sid && sessions.has(sid)) });
+  } catch (_) { return next(); }
+  let head = '';
+  const grab = (chunk) => {
+    if (head.length < 300 && chunk && res.statusCode >= 400) {
+      try { head += (Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)).slice(0, 300 - head.length); } catch (_) { /* never affect the response */ }
+    }
+  };
+  const _write = res.write, _end = res.end;
+  res.write = function (chunk, ...a) { grab(chunk); return _write.call(this, chunk, ...a); };
+  res.end = function (chunk, ...a) { if (chunk && typeof chunk !== 'function') grab(chunk); return _end.call(this, chunk, ...a); };
+  res.on('finish', () => {
+    if (!_MCP_4XX_LOGGED.has(res.statusCode)) return;
+    try {
+      let msg = head;
+      try { const j = JSON.parse(head); msg = (j.error && (j.error.message || j.error)) || j.message || head; } catch (_) { /* plain text */ }
+      console.log('[mcp-4xx] ' + JSON.stringify({
+        status: res.statusCode, reason: _mcpFailureReason(res.statusCode, rec, String(msg)),
+        error: String(msg).slice(0, 160), ...rec,
+      }));
+    } catch (_) { /* observability must never affect the handler */ }
+  });
+  next();
+});
+
 // Evidence for the enforcement flip, behind the SAME internal key the rest of
 // the other /internal routes use. `missing` must be 0 for a full traffic day first.
 app.get('/internal/edge-key', (req, res) => {
@@ -34600,6 +34636,16 @@ app.post(MCP_PATHS, async (req, res) => {
     delete req.headers[PLAN_CALLER_IP_HEADER];
     const _planLoopbackIp = _isLoopbackPeer(req) ? consumePlanCallerIpToken(_planCallerIpTok) : null;
     const sessionId = req.headers['mcp-session-id'];
+    // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
+    // 400 on every in-session request. Negotiate down instead: drop the header, and the request
+    // is served at the version initialize settled on. An unknown older value keeps the SDK's 400.
+    if (_protocolHeaderVerdict(req.headers['mcp-protocol-version']) === 'newer') {
+      console.log(`[mcp-proto] newer MCP-Protocol-Version ${String(req.headers['mcp-protocol-version']).slice(0, 20)} served at the negotiated version`);
+      _dropRequestHeader(req, 'mcp-protocol-version');
+    }
+    // [mcp-4xx] cause 1: initialize re-sent with the id of a session we still hold. The header
+    // is stale by definition (initialize starts a session), so it never routes into that session.
+    const _reinit = _isReinitWithSession(req.body, sessionId);
     const userAgent = req.headers['user-agent'] || '';
     // The QA marker header (QA_MARKER_HEADER). Read for the trial-mint skip
     // only: a caller that sends it merely declines a trial key for itself.
@@ -35289,7 +35335,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // on a path that advertises a subset. It falls through to the stateless
     // tools/list branch below, which applies the pack filter; that listing is
     // caller-independent, so skipping the session loses nothing.
-    if (sessionId && sessions.has(sessionId)
+    if (sessionId && sessions.has(sessionId) && !_reinit
         && !(req.body?.method === 'tools/list' && _pathPack(req))) {
       touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
@@ -35358,6 +35404,12 @@ app.post(MCP_PATHS, async (req, res) => {
       });
     }
     if (body?.method === 'initialize') {
+      // [mcp-4xx] cause 1: a re-initialize mints a new session like any other; the old one is
+      // left to the idle sweeper (a request still in flight on it must not 404 mid-call).
+      if (_reinit) {
+        console.log(`[MCP] re-initialize with a session header (${sessions.has(sessionId) ? 'live' : 'unknown'} sid=${_logId(String(sessionId))}): new session`);
+        _dropRequestHeader(req, 'mcp-session-id');
+      }
       // r-init-precise-error: reject a malformed initialize HERE, naming the
       // field, instead of letting it fall through to the transport's
       // "Server not initialized". Placed BEFORE detectPlatformFromInit /
@@ -35618,8 +35670,17 @@ app.post(MCP_PATHS, async (req, res) => {
     //       an unknown id, so nothing crashes; the one-shot stateless transport just
     //       can't do server→client elicitation (that guard skips it by design).
     // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
-    if (body?.method === 'tools/call'
-        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
+    // [mcp-4xx] causes 2-4 (2026-11-10): with NO session id, a notification (or a batch of only
+    // notifications / responses) is accepted with 202, as the SDK does inside a session; any other
+    // request or batch that does not initialize is served from the same one-shot stateless
+    // transport as tools/call below (an unknown method gets the SDK's in-band -32601). These all
+    // fell through to "No session. Send initialize first." (400). An UNKNOWN session id keeps the
+    // spec's 404 below, so a client still re-initializes on it.
+    const _shape = _rpcShape(body);
+    if (!sessionId && _isNotificationsOnly(_shape)) return res.status(202).end();
+    const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
+    if ((body?.method === 'tools/call'
+        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
       const _clientHdr = _sessionlessClientHeader(req, sessionId || _planLoopbackSid);   // 2026-11-10
       const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId, _clientHdr);
       // r-free-key-per-call: /mcp/chatgpt keeps the counted validate it always
@@ -35636,9 +35697,11 @@ app.post(MCP_PATHS, async (req, res) => {
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      const ephServer = createServer(_descOverrides);
+      // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
+      const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey }) : createServer(_descOverrides);
       await ephServer.connect(ephTransport);
-      console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
@@ -35686,10 +35749,17 @@ app.post(MCP_PATHS, async (req, res) => {
         id: body?.id || null,
       });
     }
+    // What is left: no session id and a body that cannot be served without one (initialize inside
+    // a batch, or a body that is not JSON-RPC). Say which, in a JSON-RPC error body.
+    const _why = (_shape.kind === 'empty' || _shape.kind === 'invalid')
+      ? 'Invalid Request: the body is not a JSON-RPC 2.0 message. POST one JSON-RPC object (start with initialize), see https://dchub.cloud/mcp.'
+      : (_shape.hasInit
+        ? 'Invalid Request: send initialize on its own, not inside a batch.'
+        : 'No session: send initialize first, then repeat this request with the Mcp-Session-Id header it returns.');
     res.status(400).json({
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'No session. Send initialize first.' },
-      id: body?.id || null,
+      error: { code: -32600, message: _why },
+      id: (body && !Array.isArray(body) && body.id !== undefined) ? body.id : null,
     });
   } catch (err) {
     console.error('[MCP] Error:', _scrubLog((err && err.stack) || err));
@@ -35721,6 +35791,14 @@ app.post(MCP_PATHS, async (req, res) => {
 app.get(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 app.delete(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 
+export const MCP_GET_405_BODY = Object.freeze({
+  error: 'method_not_allowed',
+  message: 'This endpoint takes JSON-RPC over POST. GET opens an optional server-to-client event stream, which DC Hub does not offer; MCP clients continue normally without it.',
+  allow: ['POST', 'DELETE', 'OPTIONS'],
+  endpoint: 'https://dchub.cloud/mcp',
+  docs: 'https://dchub.cloud/mcp',
+});
+
 app.get(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
@@ -35734,7 +35812,10 @@ app.get(MCP_PATHS, async (req, res) => {
   // an unrecognized session id gets 404 (client re-initializes); only a
   // session-less GET is a 400.
   if (sid) return res.status(404).json({ error: 'Session not found — re-initialize.' });
-  res.status(400).json({ error: 'No session. POST /mcp with initialize.' });
+  // GET without a session: the optional server-to-client SSE stream is not offered, and 405 is
+  // the spec's answer for that (clients carry on over POST). It was a 400 here, which a client
+  // reads as a broken request. The edge answers bare GET /mcp first; this covers the origin.
+  res.status(405).set('Allow', 'POST, DELETE, OPTIONS').json(MCP_GET_405_BODY);
 });
 
 // ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle
