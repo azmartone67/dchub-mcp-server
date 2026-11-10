@@ -9,7 +9,7 @@ prefixed `From DC Hub (dchub.cloud):`, and its result passes through unchanged, 
 
 ```js
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerDCHubTools } from "dchub/compose";      // npm i dchub@^0.2.0
+import { registerDCHubTools } from "dchub/compose";      // npm i dchub@^0.3.0
 
 const server = new McpServer({ name: "acme-energy", version: "1.0.0" });
 await registerDCHubTools(server, {
