@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
+import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLooksWalled, boundPlaces, stripHandoffIfPointered } from './lib/handoff.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
@@ -179,7 +180,7 @@ import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridS
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -971,6 +972,27 @@ export function _keylessEmailFirstTool(name, { wide = false, env = process.env }
   if (!wide) return false;
   if (/^(0|false|no|off)$/i.test(String(env.DCHUB_KEYLESS_EMAIL_FIRST_ALL || '').trim())) return false;
   return !PRO_ONLY_TOOLS.has(name) && name !== 'get_market_intel';
+}
+// Sessionless email ask (Grok -> Brain 2026-11-09; dchub-backend no_ask_split_7d: 186 of 271 no-ask
+// walls in 7 days had no MCP session). _keylessCapEmailLink needs a real session (the page grants the
+// email tier onto it), so a sessionless keyless cap wall offered no email path at all, only the
+// no-email claim_free_key line. The agent path needs no session: claim_free_key with the human's email
+// returns an email-bound key, sent as X-API-Key, and a keyed caller is not subject to the anonymous
+// per-IP limits. Same tool scope as the email-first wall (_keylessEmailFirstTool), same exclusions as
+// the other email asks (Grok, a clean platform, an execute_plan step, the directory / Claude / core
+// profiles, a caller with an email on file). '' when it does not apply.
+// Kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0.
+const _sessionlessEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SESSIONLESS_EMAIL_ASK || '').trim());
+export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
+  try {
+    if (!_sessionlessEmailAskOn() || !_keylessEmailFirstOn() || !c || c.api_key || c.email || c.loopback_step) return '';
+    if (_realSession(c.session_id) || !_keylessEmailFirstTool(name, { wide })) return '';
+    if (_pcIsGrok(c.platform) || _isCleanPlatform()) return '';
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return '';
+    return _SESSIONLESS_EMAIL_ASK_LEAD + ', and send the key it returns as the X-API-Key header. A keyed caller is '
+      + 'not subject to this anonymous limit, and an email-bound key gets ' + FREE_TIER.identified_calls_per_day
+      + ' calls a day, free. If they prefer not to give an email, call `claim_free_key` without one.';
+  } catch (_) { return ''; }
 }
 export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
@@ -6157,6 +6179,16 @@ export function _heldKeyFor(fp, now = Date.now()) {
   return e;
 }
 export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
+// 2026-11-09: a held key that now carries an email (bind_email ran after the
+// mint) belongs to that person. The fingerprint is only IP + client family, so
+// handing it to a caller without that same address would give one person behind
+// a shared NAT another person's bound key and usage history. Withhold it: the
+// caller mints its own, and the owner gets theirs back with recover_my_key.
+export function _heldKeyBoundElsewhere(v, claimEmail) {
+  const bound = String((v && v.email) || '').trim().toLowerCase();
+  if (!bound) return false;
+  return bound !== String(claimEmail || '').trim().toLowerCase();
+}
 // The in-band channel for a header-less host: appended to THIS session's
 // initialize `instructions` (module-scope _INSTRUCTIONS + this tail) when the
 // caller sent no credential but its fingerprint holds a key. Names the key,
@@ -7042,6 +7074,9 @@ export const _capacitySummary = createCapacitySummaryCache({
 export const _routeBackRegistry = createRouteBackRegistry({
   fetchTwin: () => ctx.exit(() => callAPI(ROUTE_BACK_PATH, { light: 1 },
     { withStatus: true, timeout: ROUTE_BACK_TIMEOUT_MS })),
+  // The complement (lib/handoff.mjs) reads the same copy, so either switch keeps it; each switch still
+  // removes only its own field.
+  enabled: () => routeBackEnabled() || handoffEnabled(),
 });
 
 // The tools whose results may carry a capacity_source pointer. Their
@@ -22320,6 +22355,9 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
         _wallViaMemo.note(c.session_id, _wallType);
       }
     }
+    // lib/handoff.mjs: every wall / relay step has run, so this is the final word: the execute_plan complement
+    // never rides beside a human_url, a for_your_human relay or a wall.
+    if (name === 'execute_plan') out = stripHandoffIfPointered(out, { isWall: (sc) => _isRelayWall(sc, c) });
     return out;
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
@@ -22811,11 +22849,15 @@ function trackedTool(srv, name, description, schema, handler) {
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
         }
         const _sidw = c.session_id || 'no-session';
+        const _askNoSid = _sessionlessCapEmailAsk(c, name);
+        if (_askNoSid) _markEmailAsk(c, 'line');   // option E: the wall-hit row says it asked
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
           + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
           + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
-          + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
-          + "identified callers are not subject to this wall. To keep going today without a key, relay the link in human_url to your human "
+          + (_askNoSid ? _askNoSid + ' Save the key to your MCP config. '
+            : "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
+              + "identified callers are not subject to this wall. ")
+          + "To keep going today without a key, relay the link in human_url to your human "
           + "(a one-time pack of 1,000 API credits, no subscription).";
         return await _withWallUserLine({
           content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
@@ -24332,6 +24374,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                                                  proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
+            }
+            // No session: no page unlock to link, so the email ask goes to the agent (claim_free_key {email}).
+            const _askS = _sessionlessCapEmailAsk(c, name, { wide: true });
+            if (_askS) {
+              // Its own prose block: the lean step keeps it (SESSIONLESS_EMAIL_ASK_LEAD) and shrinks _upgrade to
+              // machine fields, so email_ask names the call there.
+              trimmed._upgrade.email_ask = { tool: 'claim_free_key', arguments: { email: '<your human’s email>' } };
+              _markEmailAsk(c, 'line');
+              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }, { type: 'text', text: _askS }],
+                       structuredContent: trimmed };
             }
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
             // Every tool declares an outputSchema, so schema-aware clients read
@@ -28618,6 +28670,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           profile: (c && c.profile) || null, secret: process.env.DCHUB_INTERNAL_KEY || '',
           surfaceOk: (!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreRerunOn()) });
       } catch (_e) { _rr = null; }
+      // Complement (owner 2026-11-09, lib/handoff.mjs): after a plan DC Hub answered, who covers what it did
+      // not. route_back's surfaces; /mcp/core only with DCHUB_CORE_HANDOFF=1. Final pointer check: _wallOuterStep.
+      let _ho = null;
+      try {
+        if (handoffEnabled() && ((!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreHandoffOn()))) {
+          _ho = buildHandoff({ intentClass: sc.intent_class, executed, fullOf: fullByEntry, registry: _routeBackRegistry.get(),
+            routeBackIds: _rb ? _rb.need_ids : [], walled: planLooksWalled(executed, { isWall: (r) => _isRelayWall(r, c), fullOf: fullByEntry }),
+            places: boundPlaces({ intent: a && a.intent, market: (a && a.context && a.context.market) || (sc.intent_class === 'market_outlook' ? constraintSlug : null),
+              cityTable: _CITY_ISO_META, cityHit: _execCityHit }) });
+        }
+      } catch (_e) { _ho = null; }
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
@@ -28635,6 +28698,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                     // which needs the response named a route back for (ids from the registry); absent when none.
                     // Read by dchub-backend routes/planner_quality.py route_back_summary.
                     ...(_rb ? { route_back_need: _rb.need_ids.join('|') } : {}),
+                    // the complement's basis (market_answer | capacity_no_fit) and need ids; absent when none.
+                    ...(_ho ? { handoff_kind: _ho.basis, handoff_need: _ho.need_ids.join('|') } : {}),
                     // Move 3: rerun_token_issued on every run that carried a token; rerun / rerun_age_h /
                     // rerun_within_7d / rerun_unchanged / rerun_changed / rerun_not_compared on a re-run.
                     ...(_rr ? _rr.telemetry : {}) },
@@ -28738,11 +28803,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + (_undated ? _undated + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
-          + (_rb ? ' ' + _rb.sentence : ''),
+          + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
+        ...(_ho ? { handoff: _ho.field } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
@@ -32356,6 +32422,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // session auto-bind and the install artifact (r-validate-artifact).
           if (_v && _v.key_rejected) {
             _forgetHeldKey(_fp);
+          } else if (_heldKeyBoundElsewhere(_v, a.email)) {
+            _forgetHeldKey(_fp);                                // bound to someone's email: not by IP
           } else {
             const _ok = !!(_v && _v.valid);
             let _bound = false;
@@ -32563,6 +32631,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // (the ask would be for something the caller just gave). The rest of the
       // response — key, connector URL, persist_config — follows unchanged.
       const _emailAtClaim = !!a.email;
+      // 2026-11-09 (Grok: one account claimed on 4 separate days, nothing else):
+      // the backend dedupes on (client_name, ip) and on its unused-key cap and says
+      // so with reused:true, but this branch announced that key as freshly minted,
+      // so the agent never learnt it already had one. Say it is the same key.
+      const _backendReused = !!(r && r.reused === true);
       // Item 7: a caller whose client we recognise gets the key, then THE snippet for that client,
       // then a short save line, instead of the long every-client save block.
       const _ownCfg = _ownClientKey ? _persistConfig(key, _via).clients[_ownClientKey] : null;
@@ -32572,11 +32645,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         : '';
       const text =
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
-        '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
+        (_backendReused
+          ? '🔑 **You already hold a DC Hub key for `' + cn + '` — returning THAT key, not a new one.** It is active now'
+          : '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now') +
         (_autoBound && !_perCallSession
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
+        (_backendReused
+          ? 'Calling claim_free_key again keeps returning this same key. Save it once with the step below so the next session starts with it.\n\n'
+          : '') +
         _ownSnip +
         _headerlessLead +
         (_ownSnip ? '' : _saveLine) +
@@ -32604,6 +32682,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           client_name:             cn,
           tier:                    (r && r.tier) || 'free',
           header:                  'X-API-Key',
+          reused:                  _backendReused,
+          ...(_backendReused ? {
+            already_held: true,
+            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap' : 'backend_claim_dedupe',
+          } : {}),
           // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
           // a free key is N calls TO TRY in total, then a per-day rung once an
           // email is bound. daily_limit used to echo the backend's claim figure
@@ -35540,7 +35623,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
     if (capacityPointersEnabled()) { _capacitySummary.arm(); _capacitySummary.refresh(); }
     // execute_plan route_back: read the Works with registry once in the background so the first plan after
     // a deploy can already carry it; never awaited, and a failed read leaves the field out.
-    if (routeBackEnabled()) { _routeBackRegistry.arm(); _routeBackRegistry.refresh(); }
+    if (routeBackEnabled() || handoffEnabled()) { _routeBackRegistry.arm(); _routeBackRegistry.refresh(); }
     // r-list-swr: warm the generic tools/list cache at boot so the FIRST
     // scanner probe after a deploy (5-7 deploys/day) is already served warm.
     _toolsListCached('__warmup__', null)
