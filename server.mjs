@@ -210,6 +210,11 @@ import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
+import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
+         buildResearchRequest as _buildResearchRequest, researchRequestSentence as _researchRequestSentence } from './lib/research-request.mjs';
+import { SITE_OWNER_TOOLS as _SITE_OWNER_TOOLS, SITE_OWNER_KEY as _SITE_OWNER_KEY, siteOwnerHandoffOn as _siteOwnerHandoffOn,
+         isPointCall as _siteOwnerPointCall, siteBand as _siteOwnerBand, siteOwnerBlock as _siteOwnerBlock,
+         siteOwnerLine as _siteOwnerLine, createSiteOwnerMemo as _createSiteOwnerMemo } from './lib/site-owner-handoff.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -831,6 +836,8 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
         + 'act on what you found.',
       ...(_offer ? { offer: _offer } : {}),
     };
+    // owner 2026-11-10: on unlock_more_data the agent asked; it hit nothing (lib/research-request.mjs).
+    if (toolName === 'unlock_more_data') _relay.message = RELAY_ASK_MESSAGE;
     if (_memo) _memo[_mk] = _relay;
     return _relay;
   } catch (_e) { return undefined; }   // additive — never break an envelope
@@ -1341,9 +1348,12 @@ export function _unlockMoreDataEnvelope(a) {
   // r-price-collapse (2026-09-05): founding is RETIRED as an offer. `pro`
   // above is the same $99, on the link that stamps plan_name='pro'.
   const reason = (a.reason || '').toString().trim().slice(0, 240);
-  const _why = reason
+  // owner 2026-11-10 (lib/research-request.mjs): what this caller was held back on, and the public sources
+  // the full answer joins, so the human sees the research the upgrade buys. Kill DCHUB_RESEARCH_REQUEST=0.
+  const _research = _researchRequestOn() ? _buildResearchRequest(reason, _sessionWallLog.get(_ctx)) : null;
+  const _why = (reason
     ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.'
-    : '';
+    : '') + _researchRequestSentence(_research);
   // ★★★ r-anon-attrib (2026-08-26): the same-session unlock is a REAL
   // mechanism for two of the three identity classes and a FALSE PROMISE for
   // the third, and we were promising it to all of them.
@@ -1443,6 +1453,7 @@ export function _unlockMoreDataEnvelope(a) {
     structuredContent: {
       human_message,                 // many MCP clients render this field verbatim
       relay_to_human: human_message,
+      ...(_research ? { research_request: _research } : {}),
       ...(_ladder ? { user_message: human_message.split('\n')[0].replace(HUMAN_FIRST_MARKER, '').trim(), show_to_user: true } : {}),
       // The /upgrade/h token the first line of human_message carries.
       ...((_proLeadOn && _proRelay) ? { for_your_human: _proRelay, human_url: _proLink }
@@ -4877,6 +4888,8 @@ export function _flushQuotaWallHits(c, name) {
 }
 function _recordQuotaWallHit(c, name, status) {
   try {
+    // unlock_more_data's research request (lib/research-request.mjs) names the tools that walled this caller.
+    if (_QUOTA_WALL_STATUSES.has(String(status || '')) || (c && c._paidBlocked)) _sessionWallLog.note(c, name);
     const body = _quotaWallEventFor(c, name, status);
     if (body) _lastWallMemo.note(c, body);   // which wall a later email entry came from (lib/email-entered.mjs)
     if (!body || !INTERNAL_KEY) return;
@@ -4892,6 +4905,9 @@ function _recordQuotaWallHit(c, name, status) {
 // credited to that tool (lib/email-entered.mjs). One email_entered event per successful bind_email,
 // claim_free_key {email} or subscribe_digest; no response changes. Kill switch DCHUB_EMAIL_ENTERED_EVENT=0.
 const _lastWallMemo = createLastWallMemo();
+const _sessionWallLog = _createSessionWallLog();
+export const _sessionWallsFor = (c) => _sessionWallLog.get(c);                 // test seam
+export const _noteSessionWallForTest = (c, tool) => _sessionWallLog.note(c, tool);   // test seam
 export const _lastWallFor = (c, k) => _lastWallMemo.get(c, k);   // test seam
 export function _emailEnteredEventFor(c, name, args, result) {
   try {
@@ -7293,6 +7309,48 @@ export function _withCapacityPointer(result, name, args, outSchema) {
     return out;
   } catch (_e) {
     return result;   // a pointer is never worth a response
+  }
+}
+
+// ── Site-owner hand-off (owner 2026-11-10, lib/site-owner-handoff.mjs) ──────────────────────────────────
+// A BUILD or CAUTION point-level analyze_site / analyze_parcel answer that is not a relay wall tells the human
+// who OWNS the site that DC Hub can list it or have Martone Advisors (disclosed) bring it to market. Once per
+// caller per day. Same
+// skips as the Capacity Source pointer: failures, clean platforms, /mcp/claude, plus the ChatGPT directory
+// and /mcp/core profiles (no commerce lines there). Kill switch DCHUB_SITE_OWNER_HANDOFF=0.
+const _siteOwnerMemo = _createSiteOwnerMemo();
+export const _resetSiteOwnerMemoForTest = () => _siteOwnerMemo.clear();   // test seam
+export function _withSiteOwnerHandoff(result, name, args, outSchema) {
+  try {
+    if (!_SITE_OWNER_TOOLS.has(name) || !_siteOwnerHandoffOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result) || _isNoDataAnswer(result) || _isCleanPlatform()) return result;
+    const c = getCtx();
+    if (c && (c.profile === CLAUDE_PROFILE || c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE)) return result;
+    if (!_siteOwnerPointCall(name, args)) return result;
+    // A relay wall carries ONE link (_oneLinkWallStep), which would rewrite both of this line's links into
+    // the upgrade link. So the hand-off rides answers that are not walls: keyed answers, the free monthly
+    // reports and the keyless daily runs.
+    const sc0 = result.structuredContent;
+    if (sc0 && typeof sc0 === 'object' && !Array.isArray(sc0) && _isRelayWall(sc0, c || {})) return result;
+    const band = _siteOwnerBand(result);
+    if (band !== 'BUILD' && band !== 'CAUTION') return result;
+    if (!_siteOwnerMemo.first(c)) return result;
+    const block = _siteOwnerBlock(name);
+    const out = { ...result, content: [...result.content, { type: 'text', text: _siteOwnerLine(block) }] };
+    // Same outputSchema rule as _withCapacityPointer: structuredContent only when the tool's schema accepts it.
+    const sc = result.structuredContent;
+    if (sc && typeof sc === 'object' && !Array.isArray(sc) && !(_SITE_OWNER_KEY in sc)
+        && outSchema && typeof outSchema.safeParse === 'function') {
+      const candidate = { ...sc, [_SITE_OWNER_KEY]: block };
+      const verdict = outSchema.safeParse(candidate);
+      if (verdict && verdict.success) { out.structuredContent = candidate; return out; }
+    }
+    out._meta = { ...((result._meta && typeof result._meta === 'object') ? result._meta : {}),
+      ['cloud.dchub/' + _SITE_OWNER_KEY]: block };
+    return out;
+  } catch (_e) {
+    return result;   // a hand-off line is never worth a response
   }
 }
 
@@ -25366,12 +25424,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withSiteOwnerHandoff(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
+       name, args, _outSchema), name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────

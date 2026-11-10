@@ -527,6 +527,8 @@ test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
 test/site-market-verdict.test.mjs
+test/site-owner-handoff-handler.test.mjs
+test/site-owner-handoff.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs
@@ -579,6 +581,7 @@ test/uncovered-constraints.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/unlock-more-data-no-price.test.mjs
 test/unlock-more-data-pro-trigger.test.mjs
+test/unlock-research-request.test.mjs
 test/unlock-tool-text-price-free.test.mjs
 test/unverified-listing-marker.test.mjs
 test/upgrade-names-what-you-missed.test.mjs
