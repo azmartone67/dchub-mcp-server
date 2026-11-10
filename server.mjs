@@ -9641,7 +9641,8 @@ export const KEY_REQUIRED_TOOLS = new Set([
 //                       below Developer, full depth on Developer and up
 //   free_key            KEY_REQUIRED_TOOLS: any key, no plan
 //   anonymous           everything else
-// Whether a free key with a bound email gets more of this tool than a keyless call. Read off the gate the
+// Whether a free key with a bound email gets this tool's answer in full (what tools/list calls `email` and
+// the cap line calls "the full answer"), not just more calls or a few more fields. Read off the gate the
 // request path applies (applyTierGate with the email bound), never a per-tool list; test/wall-ask-guard pins
 // it against the real handler (keyless vs email-bound, compared on the data). False for Pro / Land & Power;
 // for a tool the gate refuses a free key (its always-preview branch serves every free seat the same preview:

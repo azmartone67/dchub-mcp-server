@@ -242,7 +242,10 @@ describe('guard: every walled tool ends a keyless first wall with an ask, or a n
 //   1. a keyless wall that carries the digest line gets nothing more for the email-bound key
 //      (the line is true: the email opened nothing);
 //   2. where the email-bound key gets more, the keyless wall must not carry the digest line and must
-//      carry an email ask (`bind_email` / `claim_free_key` / "enter your email").
+//      carry an email ask (`bind_email` / `claim_free_key` / "enter your email", or _upgrade.next_tool);
+//   3. the keyless cap wall (soft cap and hard wall, lib/keyless-wall.mjs) must not promise "the full
+//      answer" where the keyless answer is a preview and the email-bound key gets nothing more;
+//   4. tools/list must not tag such a tool tier_required `email`.
 // Found 11-10 by this pass: compare_isos, hyperscaler_deals, get_tax_incentives and get_facility are in
 // isFreeWithEmailTool, yet an email-bound free key gets the same preview as a keyless call (applyTierGate
 // opens none of the first three for a free key, and the trial branch forces the preview; get_facility's
