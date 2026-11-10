@@ -15,7 +15,7 @@
  * Zero runtime dependencies (uses global fetch, Node >= 18).
  */
 const DEFAULT_ENDPOINT = "https://dchub.cloud/mcp";
-export const SDK_VERSION = "0.3.0";
+export const SDK_VERSION = "0.3.1";
 
 // ★2026-10-31: the client name was "dchub-node-sdk". server.mjs _INTERNAL_SELF_TAG
 // (and the backend's normalize_write_platform) rewrite any name containing "dchub",
@@ -52,8 +52,19 @@ function parseBody(raw) {
   throw new Error(`Could not parse MCP response body: ${raw.slice(0, 300)}`);
 }
 
+const isAgentBlock = (o) => "agent_action" in o || "agent_claim" in o;
+
 /** Strip any free-tier upsell wrapper, returning the real data payload. */
 function clean(result) {
+  // A tool answer can carry several content blocks: the data, then text lines
+  // for the agent and the citation. Return the data block, not all of them.
+  if (Array.isArray(result)) {
+    const data = result.find((p) => Array.isArray(p) || (p && typeof p === "object" && !isAgentBlock(p)));
+    if (data !== undefined) return data;
+    const texts = result.filter((p) => typeof p === "string");
+    if (texts.length) return clean(texts.join("\n---\n"));
+    return result;
+  }
   if (result && typeof result === "object") return result;
   if (typeof result === "string") {
     for (const part of result.split("---")) {
