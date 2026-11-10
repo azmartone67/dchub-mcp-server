@@ -11,8 +11,12 @@ export const DCPI_COMPUTED_AT = '2026-11-09T08:33:06.830552+00:00';
 // PJM's is the oldest of all, so a ranking dated by its oldest row reads this day.
 export const DCPI_OLDEST = { PJM: '2026-11-08T05:13:51+00:00' };
 export const DCPI_OLDEST_DEFAULT = '2026-11-09T08:31:12.104210+00:00';
-export const PLANTED_QUEUE_WAIT = 41.7;
-export const PLANTED_RESERVE_MARGIN = 17.3;
+// Four decimals on purpose: no clock-derived text in a response can carry them. ISO timestamps
+// stop at milliseconds and ages are rounded to one decimal, and 17.3 alone matched both
+// ("retrieved_at":"…04:19:17.309Z" and "demand_age_hours":17.3 failed the anonymous e2e on
+// clean code, 2026-11-10).
+export const PLANTED_QUEUE_WAIT = 41.7293;
+export const PLANTED_RESERVE_MARGIN = 17.3861;
 
 const FUEL = {
   PJM:   { NG: 33391, NUC: 30709, COL: 13013, WND: 5584, SUN: 13, WAT: 1642, OIL: 271, OTH: 2006 },

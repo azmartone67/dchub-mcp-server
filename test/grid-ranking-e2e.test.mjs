@@ -89,6 +89,19 @@ describe('execute_plan: US grid headroom, anonymous (real server.mjs on loopback
     const all = JSON.stringify(o);
     expect(all).not.toContain(String(PLANTED_QUEUE_WAIT));
     expect(all).not.toContain(String(PLANTED_RESERVE_MARGIN));
+    // …and by name, so a leak that rounds the value is still caught.
+    const PAID = /^(avg_)?(queue_wait_months|reserve_margin_pct)$/;
+    const leaks = [];
+    (function walk(v, path) {
+      if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+      else if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          if (PAID.test(k) && typeof x === 'number') leaks.push(`${path}.${k}=${x}`);
+          walk(x, `${path}.${k}`);
+        }
+      }
+    })(o, '$');
+    expect(leaks).toEqual([]);
     for (const x of g.rows.filter((y) => y.tie_break)) expect(x.tie_break).not.toHaveProperty('value');
     expect(fence.foreign).toEqual([]);
   }, 120_000);
