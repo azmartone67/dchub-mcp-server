@@ -24,6 +24,10 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 // email link alone; the no-email claim_free_key exit returns from its second wall that day.
 const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
   + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day and the full answer to this question\\.$');
+// A tool an email does not open in full (server.mjs _emailOpensTool, 2026-11-10): the line names the daily
+// calls only, never "the full answer".
+const FREE_TIER_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
+  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day on the free tier\\.$');
 const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `claim_free_key` (one call, no email).';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
@@ -225,7 +229,9 @@ describe('C wide: every tool\'s soft cap is email first, except where the email 
     expect(r.status).toEqual(['anon_daily_cap']);
     const up = r.sc._upgrade || {};
     expect(up.unlock_kind).toBe('email_cap');
-    expect(r.sc.user_message).toMatch(FIRST_LINE(SHORT));
+    // An email-bound key gets the free facility field set (MW, exact coordinates and specs stay paid),
+    // so the line names the daily calls and does not promise the full answer.
+    expect(r.sc.user_message).toMatch(FREE_TIER_LINE(SHORT));
     const rel = shortReqs.map((b) => relayFields(b.relay_url)).find(Boolean);
     expect(rel && rel.fields).toContain('w-freekey');
     expect(copyViolations({ up, line: r.sc.user_message, fyh: r.sc.for_your_human })).toEqual([]);

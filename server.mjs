@@ -9635,15 +9635,41 @@ export const KEY_REQUIRED_TOOLS = new Set([
 // The lowest seat that gets this tool's full answer, from the SAME sets the
 // live gate enforces (never a per-tool table). First match wins:
 //   pro                 PRO_ONLY_TOOLS or LP_TOOLS
-//   email               isFreeWithEmailTool (a free key with a bound email)
+//   email               isFreeWithEmailTool AND _emailOpensTool (a free key with a bound email
+//                       gets more than a keyless call); the rest of that set is developer_for_full
 //   developer_for_full  ALWAYS_PARTIAL_PREVIEW / DEPTH_TEASE_TOOLS: a preview
 //                       below Developer, full depth on Developer and up
 //   free_key            KEY_REQUIRED_TOOLS: any key, no plan
 //   anonymous           everything else
+// Whether a free key with a bound email gets this tool's answer in full (what tools/list calls `email` and
+// the cap line calls "the full answer"), not just more calls or a few more fields. Read off the gate the
+// request path applies (applyTierGate with the email bound), never a per-tool list; test/wall-ask-guard pins
+// it against the real handler (keyless vs email-bound, compared on the data). False for Pro / Land & Power;
+// for a tool the gate refuses a free key (its always-preview branch serves every free seat the same preview:
+// compare_isos, hyperscaler_deals, get_tax_incentives, list_transactions ...); for the facility mask (the
+// keyless preview applies the same field set); and for a depth-teased tool the gate passes plainly (the
+// tease below Developer is the same with or without an email). Found 2026-11-10: tools/list said an email
+// opens those, and the keyless cap line promised "the full answer" on them.
+export function _emailOpensTool(name) {
+  const t = String(name || '');
+  if (!t || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t)) return false;
+  const g = applyTierGate(t, {}, 'free', true, false, undefined, true);
+  if (!g.allowed || g.masked) return false;
+  if (g.trial_taste || g.email_full || g.bonus) return true;
+  return !DEPTH_TEASE_TOOLS.has(t);
+}
+// The soft cap's preview is a real answer, so the rung its own gates left in it (_missedUpgradeFor:
+// the lowest rung that opens every field this answer hid) decides too: an email opens it only when
+// nothing was hidden past the cap trim, or what was hidden opens at the free-key rung.
+export function _capEmailOpens(name, payload) {
+  if (!_emailOpensTool(name)) return false;
+  const mu = _missedUpgradeFor(payload);
+  return !mu || mu.rung === 'free_key';
+}
 export function _tierRequiredFor(name) {
   const n = String(name || '');
   if (PRO_ONLY_TOOLS.has(n) || LP_TOOLS.has(n)) return 'pro';
-  if (isFreeWithEmailTool(n)) return 'email';
+  if (isFreeWithEmailTool(n)) return _emailOpensTool(n) ? 'email' : 'developer_for_full';
   if (ALWAYS_PARTIAL_PREVIEW.has(n) || DEPTH_TEASE_TOOLS.has(n)) return 'developer_for_full';
   if (KEY_REQUIRED_TOOLS.has(n)) return 'free_key';
   return 'anonymous';
@@ -22890,6 +22916,7 @@ function trackedTool(srv, name, description, schema, handler) {
           const _sidCap = c.session_id || 'no-session';
           const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
             exitShown: _exitH, perDay: FREE_TIER.identified_calls_per_day, market: _wallAlertMarket(c),
+            emailOpens: _emailOpensTool(name),
             packUrl: _packCheckoutUrl(_sidCap),
             proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidCap) : '',
             wallKind: 'anon_hard_wall',
@@ -24419,6 +24446,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS, exitShown: _exitS,
                                                                  perDay: FREE_TIER.identified_calls_per_day,
                                                                  market: _wallAlertMarket(c),
+                                                                 emailOpens: _capEmailOpens(name, trimmed),
                                                                  packUrl: _packCheckoutUrl(_sidSoft),
                                                                  proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');

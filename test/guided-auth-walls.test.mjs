@@ -120,7 +120,9 @@ describe('guided 401/402 through a real session', () => {
 
 describe('_authWallGuidance / _guideAuthWall (unit)', () => {
   it('a keyed 401 on an email-class tool points at bind_email', () => {
-    const g = S._authWallGuidance('get_facility', 401, 'identity_required', true);
+    // get_grid_data: get_facility left the email class 2026-11-10 (an email-bound key gets the same facility
+    // field mask as a keyless call; test/wall-ask-guard measures it).
+    const g = S._authWallGuidance('get_grid_data', 401, 'identity_required', true);
     expect(g.next_tool).toBe('bind_email');
     expect(g.required_plan).toBe('identified');   // builder still feeds _isRelayWall; stripped last
   });
