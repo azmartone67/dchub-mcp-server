@@ -32635,6 +32635,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
                 '\nFallback: POST https://dchub.cloud/api/v1/keys/claim {"client_name":"' + cn + '"}' }] };
       }
+      // 2026-11-10: the claim door now runs validate_email (be: mint doors validate the email). A
+      // placeholder / disposable / role / no-MX address is dropped: the key is minted WITHOUT it and the
+      // backend says so (email_rejected). Say it first, so no reply (nor bind_email's lead) reports a bind
+      // that did not happen. Only the backend's explicit flag counts; an older backend changes nothing.
+      const _emailRejected = !!a.email && !!(r && r.email_rejected === true);
+      const _emailRejectedReason = _emailRejected
+        ? String((r && r.email_rejected_reason) || 'undeliverable').replace(/[^a-z_]/gi, '').slice(0, 40) || 'undeliverable' : '';
+      const _emailRejectLine = _emailRejected
+        ? '⚠️ **That email was NOT bound to this key**: it looks undeliverable (' + _emailRejectedReason + '). The key below works without one. ' +
+          'PAUSE and ask your human for their real email address (never a placeholder or a docs example), then call **`bind_email`** with it.\n\n'
+        : '';
+      const _emailRejectFields = _emailRejected ? {
+        email_bound:           false,
+        email_rejected:        true,
+        email_rejected_reason: _emailRejectedReason,
+        next_tool:             'bind_email',
+        next_tool_hint:        'The email you sent was not bound (' + _emailRejectedReason + '). Ask your human for their real email, then call bind_email {email}. Never invent or reuse an example address.',
+      } : {};
       // r86-reach: AUTO-BIND the just-minted key to THIS session so the agent gets the full
       // free tier on its very NEXT call — no reconnect. The #1 retention leak (0.6 calls/key)
       // is agents claiming a key then never reconnecting; the per-request context is rebuilt
@@ -32666,7 +32684,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (r && (r.bind_required === true || r.gate === 'bind_email_required')) {
         const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : _rungNum('free');
         return {
-          content: [{ type: 'text', text:
+          content: [{ type: 'text', text: _emailRejectLine +
             '🔒 **This identity already used its ' + _gateN + ' free unbound calls — ' +
             (r.reused ? 're-claiming returned the SAME key, not a fresh allowance.' :
                         'the counter carried onto this key; re-minting does not reset it.') + '**\n\n' +
@@ -32701,6 +32719,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             // it was indistinguishable from someone typing the URL. _unlockUrl
             // resolves the session from AsyncLocalStorage when not passed one.
             upgrade_url:             _unlockUrl('claim_free_key', ''),
+            ..._emailRejectFields,
           },
         };
       }
@@ -32782,7 +32801,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ? '**Save it for ' + _ownCfg.label + '**' + (_ownCfg.file ? ' (`' + _ownCfg.file + '`)' : '') + ':\n```\n' + _ownCfg.snippet + '\n```\n'
           + 'Show your human this snippet and ask them to save it: the key is then sent on every future session. Do not re-mint each session. Other clients: https://dchub.cloud/connect\n\n'
         : '';
-      const text =
+      const text = _emailRejectLine +
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         (_backendReused
           ? '🔑 **You already hold a DC Hub key for `' + cn + '` — returning THAT key, not a new one.** It is active now'
@@ -32890,6 +32909,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // it was indistinguishable from someone typing the URL. _unlockUrl
           // resolves the session from AsyncLocalStorage when not passed one.
           upgrade_url:             _unlockUrl('claim_free_key', ''),
+          ..._emailRejectFields,
         },
       };
     });
@@ -32944,7 +32964,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (!_key && !_sessKey && typeof _claimImpl === 'function') {
         const _minted = await _claimImpl({ email });
         try {
-          let _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          // 2026-11-10: the claim door can now drop the email (validate_email). Never claim a bind
+          // that did not happen; claim_free_key's own text says why and asks for a real address.
+          const _notBound = !!(_minted && _minted.structuredContent && _minted.structuredContent.email_rejected === true);
+          let _lead = _notBound
+            ? 'No key on this session, so `bind_email` minted a free DC Hub key, but the email was NOT bound to it (see below). '
+            : 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
           // Sessionless caller (2026-11-10): no MCP session, so the server cannot apply the key to later
           // calls and the walled call stays walled until the agent sends it. Kill switch
           // DCHUB_SESSIONLESS_BIND_KEY_LINE=0. Session callers and execute_plan steps: unchanged.
