@@ -23,7 +23,7 @@ import urllib.request
 __all__ = ["DCHub", "check_via", "CLIENT_NAME"]
 
 _DEFAULT_ENDPOINT = "https://dchub.cloud/mcp"
-SDK_VERSION = "0.3.0"  # = pyproject.toml and dchub.__version__
+SDK_VERSION = "0.3.1"  # = pyproject.toml and dchub.__version__
 
 # 2026-10-31: the client name was "dchub-python-sdk". server.mjs _INTERNAL_SELF_TAG
 # (and the backend's normalize_write_platform) rewrite any name containing "dchub",
@@ -112,7 +112,19 @@ class DCHub:
         (`get_market_intel`, `get_grid_data`) embed the data as a JSON block
         fenced by `---`. Upsell-only objects (agent_action/agent_claim) are
         skipped.
+
+        A tool answer can carry several content blocks (the data, then text
+        lines for the agent and the citation); the data block is returned.
         """
+        if isinstance(result, list):
+            for part in result:
+                if isinstance(part, list) or (
+                        isinstance(part, dict) and not ({"agent_action", "agent_claim"} & set(part))):
+                    return part
+            texts = [p for p in result if isinstance(p, str)]
+            if texts:
+                return DCHub._clean("\n---\n".join(texts))
+            return result
         if isinstance(result, dict):
             return result
         if isinstance(result, str):
