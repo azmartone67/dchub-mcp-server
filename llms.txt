@@ -45,6 +45,11 @@ Per-client config, including the two that silently fail:
   with a different config file, so installing one does not install the other.
 - Every other host: https://dchub.cloud/integrations/mcp
 
+Beside other MCP servers (composition / multi-server clients): connect
+`https://dchub.cloud/mcp/core` instead. It lists ten read-only tools, starting with
+`plan_and_answer`, on the same key and tier. It has no key, email, save or alert tools, so
+use `https://dchub.cloud/mcp` when your user wants a key, saved sites or alerts.
+
 ## Start with execute_plan
 
 Do not guess among the tools. Pass the user's question through unchanged as `intent`:

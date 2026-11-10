@@ -22,7 +22,7 @@ DEFAULT_TIMEOUT = 20
 # 2026-10-31: was "dchub-python-sdk/0.1". A User-Agent containing "dchub" is
 # counted as internal traffic (see CLIENT_NAME in dchub/mcp.py), so SDK calls
 # vanished from usage counts.
-REST_USER_AGENT = "dc-sdk-python-rest/0.3.0"
+REST_USER_AGENT = "dc-sdk-python-rest/0.3.1"
 
 
 class DCHubError(Exception):

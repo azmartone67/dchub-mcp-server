@@ -444,6 +444,7 @@ test/public-descriptions-no-internal-directives.test.mjs
 test/public-doors-banned-floors.test.mjs
 test/qa-1007-relay-sid-chatgpt-keyed-walls.test.mjs
 test/qa-marker-forward.test.mjs
+test/queue-collected-date.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
@@ -526,6 +527,7 @@ test/site-market-verdict.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs
+test/size-trim-not-tier-gating.test.mjs
 test/skill-source-heals-canon-1104.test.mjs
 test/smithery-canon-guard.test.mjs
 test/smithery-credential-fallback.test.mjs
