@@ -28567,6 +28567,21 @@ export function expandTypeUnions(schema) {
   return out;
 }
 
+// Capacity handoff item 5 (owner 2026-11-11, "Yes, add it"): the buy/lease/RFP routing clause rides
+// the /mcp handshake, right after the CAPACITY SOURCE ROUTING sentence, so clients that never fetch
+// dchub://instructions still read it. /mcp only (opts.capacityIntro): Grok and the packs do not list
+// request_capacity_intro, and /mcp/grok holds 2,000 characters (test/initialize-instructions-length).
+export const INSTR_CAPACITY_INTRO = ' Buy, lease, RFP, quote and tour requests go through '
+  + '`request_capacity_intro`, after your human approves; never contact operators directly.';
+const _CAPACITY_INTRO_ANCHOR = '(free; fee only on close).';
+export function _withCapacityIntroClause(text) {
+  const s = String(text == null ? '' : text);
+  const i = s.indexOf(_CAPACITY_INTRO_ANCHOR);
+  if (i < 0 || s.includes(INSTR_CAPACITY_INTRO)) return s;
+  const at = i + _CAPACITY_INTRO_ANCHOR.length;
+  return s.slice(0, at) + INSTR_CAPACITY_INTRO + s.slice(at);
+}
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
@@ -28583,7 +28598,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // Every other path passes none, so their text is unchanged byte for byte.
     instructions: ((typeof instructionsRewrite === 'function')
       ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
-      : _capacityInstructions(_INSTRUCTIONS_LEAN)) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
+      : (opts && opts.capacityIntro
+        ? _withCapacityIntroClause(_capacityInstructions(_INSTRUCTIONS_LEAN))
+        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -35714,7 +35731,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey });
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });
       await mcpServer.connect(transport);
 
       return ctx.run({
