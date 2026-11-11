@@ -251,7 +251,7 @@ import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isN
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
 import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
-         planAnswerAsks as _planAnswerAsks, createPlanWallSink, planAskParagraph as _planAskParagraph } from './lib/plan-wall-sink.mjs';
+         planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph } from './lib/plan-wall-sink.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -4922,8 +4922,8 @@ function _drainPlanWallSink(c, result) {
     const id = c && c._planWallSinkId;
     if (!id) return;
     c._planWallSinkId = null;
-    const asks = _planAnswerAsks(result);
-    _planWallSink.drain(id, asks ? (sc) => _markEmailAsk(sc, 'line') : null);
+    const asked = _planAskedTools(result);
+    _planWallSink.drain(id, asked.size ? (sc, e) => { if (e && asked.has(e.name)) _markEmailAsk(sc, 'line'); } : null);
   } catch (_) { /* telemetry never touches a response */ }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
@@ -9973,10 +9973,16 @@ export function _planWalledSteps(executed, c) {
   for (const e of executed) {
     try {
       if (!e || typeof e !== 'object' || typeof e.tool !== 'string') continue;
-      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool });
+      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool, email_opens: _planStepEmailOpens(e.tool, e.result, c) });
     } catch (_) { /* unreadable: not named */ }
   }
   return out;
+}
+// Whether an email opens a walled plan step: not a depth wall (its fields open on a paid plan only, the
+// rule the digest offer uses, _depthWallTool), unless the step's own wall is a free-key wall (a keyless
+// get_grid_data: an email-bound key gets full answers). Fails closed: unreadable = not named in the ask.
+export function _planStepEmailOpens(tool, result, c) {
+  try { return !_depthWallTool(tool, c) || _wallKindFor(result, c, tool) === WALL_KIND_FREEKEY; } catch (_) { return false; }
 }
 // The keyed caller's line on the keyless preview: the next step is bind_email, never
 // claim_free_key (it already holds a key). No plan name, no price.

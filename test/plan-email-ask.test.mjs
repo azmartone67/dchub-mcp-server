@@ -193,22 +193,28 @@ describe('1) a keyless plan whose steps walled asks once, and its step rows say 
     ['in a session', {}, PLAN_ARGS],
   ])('%s: the answer names the walled steps and asks for the email; the row reads line', async (_l, opts, args) => {
     const r = await plan(null, undefined, opts, args);
-    const walled = (r.data.executed || []).filter((e) => e.result && e.result.human_url).map((e) => e.tool);
+    const walledE = (r.data.executed || []).filter((e) => e.result && e.result.human_url);
+    const walled = walledE.map((e) => e.tool);
     expect(walled.length, JSON.stringify((r.data.executed || []).map((e) => e.tool))).toBeGreaterThan(0);
+    // An email opens these; the rest are depth walls (paid fields), which the ask never names.
+    const opens = [...new Set(walledE.filter((e) => S._planStepEmailOpens(e.tool, e.result, {})).map((e) => e.tool))];
+    const depth = [...new Set(walled)].filter((t) => !opens.includes(t));
+    expect(opens.length, 'the plan walled a step an email opens').toBeGreaterThan(0);
     expect(r.data._upgrade, r.text.slice(0, 600)).toMatchObject({ tier: 'anonymous', next_tool: 'bind_email' });
     for (const t of walled) expect(r.data._upgrade.walled_steps.map((w) => w.tool)).toContain(t);
     expect(r.result.structuredContent._upgrade).toEqual(r.data._upgrade);
     // What the agent reads after the lean step: one prose paragraph, naming every walled step.
     const para = askBlock(r);
     expect(para, r.text.slice(0, 1200)).toBeTruthy();
-    for (const t of walled) expect(para).toMatch(new RegExp('step \\d+ \\(' + t + '\\)'));
+    for (const t of opens) expect(para.match(new RegExp('step \\d+ \\(' + t + '\\)', 'g')), t + ' named once').toHaveLength(1);
+    for (const t of depth) expect(para, t + ' is a depth step: an email does not open it').not.toContain('(' + t + ')');
     expect(para).toContain('Only use an address they gave you');
     expect(para).not.toMatch(PLAN_OR_PRICE);
     expect(para).not.toMatch(/\n/);
     expect(r.walls.length, 'a step wrote a wall row').toBeGreaterThan(0);
     for (const w of r.walls) {
+      expect(opens, 'only steps the ask names wrote wall rows here').toContain(w.tool);
       expect(w.email_ask, JSON.stringify(w)).toBe('line');
-      expect(walled).toContain(w.tool);
       if (!opts.sessionless) expect(w.session_id, 'the step row keeps the caller session').toBeTruthy();
     }
   });
@@ -285,6 +291,46 @@ describe('4) CONTROL: DCHUB_PLAN_EMAIL_ASK=0', () => {
   });
 });
 
+describe('4b) depth steps are never named, fan-out steps once, and only named steps are credited', () => {
+  const W2 = [{ step: 1, tool: 'ai_capacity_index', email_opens: true }, { step: 2, tool: 'get_market_dcpi_rank', email_opens: false },
+    { step: 2, tool: 'get_market_dcpi_rank', email_opens: false }, { step: 3, tool: 'get_grid_intelligence', email_opens: true },
+    { step: 3, tool: 'get_grid_intelligence', email_opens: true }];
+  it('the paragraph and the upgrade name only what an email opens, each once', () => {
+    for (const p of [W.planAskParagraph(W2), W.planAskParagraph(W2, { keyed: true }), W.planAnonEmailUpgrade(W2).message]) {
+      expect(p).toContain('step 1 (ai_capacity_index), step 3 (get_grid_intelligence).');
+      expect(p).not.toContain('get_market_dcpi_rank');
+    }
+    expect(W.planAnonEmailUpgrade(W2).walled_steps, 'the machine list keeps every walled step, once').toEqual([
+      { step: 1, tool: 'ai_capacity_index' }, { step: 2, tool: 'get_market_dcpi_rank' }, { step: 3, tool: 'get_grid_intelligence' }]);
+  });
+  it('a plan whose only walled step is a depth step asks nothing', () => {
+    const d = [{ step: 2, tool: 'get_market_dcpi_rank', email_opens: false }];
+    expect(W.planAskParagraph(d)).toBeNull();
+    expect(W.planAskParagraph(d, { keyed: true })).toBeNull();
+    expect(W.planAnonEmailUpgrade(d)).toBeNull();
+  });
+  it('the classifier: DCPI is depth (owner 11-02), a keyless get_grid_data free-key wall opens, grid intelligence opens', () => {
+    expect(S._planStepEmailOpens('get_market_dcpi_rank', { human_url: 'https://dchub.cloud/u/x', preview_is_partial: true }, {})).toBe(false);
+    expect(S._planStepEmailOpens('get_grid_intelligence', {}, {})).toBe(true);
+    expect(S._planStepEmailOpens('ai_capacity_index', {}, {})).toBe(true);
+    expect(S._planStepEmailOpens('get_grid_data', {}, {}), 'keyless get_grid_data is a free-key wall').toBe(true);
+    expect(S._planStepEmailOpens('compare_isos', {}, {})).toBe(false);
+  });
+  it('the drain credits only the rows of named tools (the real send path)', async () => {
+    const sink = S._planWallSinkForTest;
+    const planC = { _planWallSinkId: sink.open() };
+    for (const tool of ['ai_capacity_index', 'get_market_dcpi_rank']) {
+      sink.park(planC._planWallSinkId, { platform: 'claude', client_ip: '198.51.100.251', session_id: 'drain-' + tool },
+        { name: tool, status: 'trial_used', sent: false, timer: null });
+    }
+    const b = events.length;
+    S._drainPlanWallSinkForTest(planC, { content: [{ type: 'text', text: '{}' }, { type: 'text', text: W.planAskParagraph(W2) }] });
+    await new Promise((res) => setTimeout(res, 200));
+    const got = Object.fromEntries(events.slice(b).filter((e) => e.event === 'quota_wall_hit').map((e) => [e.tool, e.email_ask]));
+    expect(got).toEqual({ ai_capacity_index: 'line', get_market_dcpi_rank: undefined });
+  });
+});
+
 describe('5) the sink and the helpers', () => {
   const sent = [];
   const mk = (ms) => W.createPlanWallSink({ send: (c, e) => sent.push([c, e]), fallbackMs: ms });
@@ -312,7 +358,7 @@ describe('5) the sink and the helpers', () => {
     expect(sent.slice(before).map(([c]) => [c.n, c._emailAsk])).toEqual([[2, undefined]]);
   });
   it('only an answer whose _upgrade still asks for the email is credited', () => {
-    const asks = { next_tool: 'claim_free_key', message: 'ask your human for their email' };
+    const asks = { next_tool: 'claim_free_key', message: 'Came back as a preview: step 1 (ai_capacity_index). ask your human for their email' };
     expect(W.planAnswerAsks({ structuredContent: { _upgrade: asks } })).toBe(true);
     expect(W.planAnswerAsks({ content: [{ type: 'text', text: JSON.stringify({ _upgrade: asks }) }] })).toBe(true);
     expect(W.planAnswerAsks({ structuredContent: { _upgrade: { next_tool: 'unlock_more_data', message: 'email' } } })).toBe(false);
@@ -331,6 +377,7 @@ describe('5) the sink and the helpers', () => {
     expect(S._planKeyedAskParagraph('noemail', w, { platform: 'grok' })).toBeNull();
     expect(S._planKeyedAskParagraph('noemail', [], { platform: 'claude' })).toBeNull();
     expect(W.planAnswerAsks(undefined)).toBe(false);
+    expect(W.planAnswerAsks({ structuredContent: { _upgrade: { next_tool: 'bind_email', message: 'give us your email' } } }), 'an ask naming no step credits nothing').toBe(false);
   });
   it('the upgrade is null with no walled step, and the switch reads per call', () => {
     expect(W.planAnonEmailUpgrade([])).toBeNull();
