@@ -265,13 +265,14 @@ describe('keyless limit: anon_daily_cap', () => {
 
   it('DCHUB_CLAIM_HANDOFF=0 restores the earlier response: the tool is named in the JSON only', async () => {
     process.env.DCHUB_CLAIM_HANDOFF = '0';
+    process.env.DCHUB_WALL_OFFER_FLOOR = '0';   // the offer floor (item 2) is its own layer, read alone elsewhere
     try {
       const seat = await open({ ip: CAPPED_IP });
       const r = await call(seat, 'search_facilities', { state: 'VA' });
       expect(r.status).toBe('anon_daily_cap');
       expect(proseBlocks(r.blocks).join('\n')).not.toContain('claim_free_key');
       expect(r.blocks[0]).toContain('claim_free_key');
-    } finally { delete process.env.DCHUB_CLAIM_HANDOFF; }
+    } finally { delete process.env.DCHUB_CLAIM_HANDOFF; delete process.env.DCHUB_WALL_OFFER_FLOOR; }
   });
 });
 

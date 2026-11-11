@@ -253,7 +253,10 @@ import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isN
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
 import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
-         planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph } from './lib/plan-wall-sink.mjs';
+         planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph,
+         planDigestParagraph as _planDigestParagraph, planDigestTools as _planDigestTools } from './lib/plan-wall-sink.mjs';
+import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind, floorOfferLine as _floorOfferLine,
+         hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -4923,15 +4926,113 @@ function _sinkStepRow(c, e) {
     return true;
   } catch (_) { return false; }
 }
-// The plan is done: its steps' rows leave, marked 'line' only when the final answer carries the ask.
+// The plan is done: its steps' rows leave, marked 'line' only when the final answer carries the ask, and
+// 'digest_line' when it carries the digest offer naming that step (item 2, 2026-11-11). Each step row's
+// offers_shown is then what the PLAN answer carried: that, not the step's in-process result, is what the
+// agent received.
 function _drainPlanWallSink(c, result) {
   try {
     const id = c && c._planWallSinkId;
     if (!id) return;
     c._planWallSinkId = null;
     const asked = _planAskedTools(result);
-    _planWallSink.drain(id, asked.size ? (sc, e) => { if (e && asked.has(e.name)) _markEmailAsk(sc, 'line'); } : null);
+    const digest = _planDigestTools(result);
+    const offersOn = _offersShownOn();
+    _planWallSink.drain(id, (sc, e) => {
+      // The plan answer is what the agent received: a mark the in-process step result earned (an in-session
+      // step runs the wall's own ask, which no plan answer shows) is not carried over.
+      if (sc && typeof sc === 'object') sc._emailAsk = '';
+      if (e && asked.has(e.name)) _markEmailAsk(sc, 'line');
+      if (e && digest.has(e.name)) _markEmailAsk(sc, 'digest_line');
+      if (offersOn && result) { const o = _offersShown(result, sc._emailAsk); if (o) sc._offersShown = o; }
+    });
   } catch (_) { /* telemetry never touches a response */ }
+}
+
+// ── the offer floor (owner 2026-11-11, item 2; lib/wall-offer-floor.mjs) ──────────────────────────
+// Runs last on the /mcp result (after the lean step, which can no longer cut it). A walled answer that
+// carries neither an email ask nor the digest offer gets ONE line: the email ask where an email opens
+// more, else the digest offer (+ the free key for a keyless caller). An execute_plan answer names each
+// walled step its own ask did not. Never on an execute_plan step (the plan answer speaks for it), Grok
+// (contract G3: fixed copy), a clean platform or the directory / Claude / core profiles (frozen or
+// commerce-free copy), or the key / account tools whose answer IS the key step.
+// bind_email / recover_my_key / subscribe_digest never wall (they are the email steps themselves). claim_free_key
+// and unlock_more_data DO wall on the anonymous hard wall, and bind_email (not walled) is the way on from there.
+const _FLOOR_SKIP_TOOLS = new Set(['bind_email', 'recover_my_key', 'subscribe_digest']);
+// analyze_site: a keyless caller's email opens its email teaser (the siting seat); a key's free monthly runs
+// are per key, so once they are spent an email opens nothing more there.
+function _floorProOnly(name, c) {
+  const t = String(name || '');
+  if (t === 'analyze_site') return !!(c && c.api_key);
+  return PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t);
+}
+// The same rule the plan's own ask and the digest offer use (_planStepEmailOpens): depth = an email opens
+// nothing on this wall. A tool a free key gets in full (KEYED_FREE_BONUS, not preview-only: get_grid_data,
+// get_energy_prices, get_water_risk ...) is never depth here, whatever wall it hit (on the anonymous hard
+// wall _wallKindFor says capacity, and an email-bound key still opens the full answer).
+function _floorKindFor(name, sc, c) {
+  let depth = false;
+  try {
+    const t = String(name || '');
+    depth = !(KEYED_FREE_BONUS.has(t) && !_freePreviewOnlyTool(t)) && !_planStepEmailOpens(t, sc, c);
+  } catch (_) { depth = true; }
+  const proOnly = _floorProOnly(name, c);
+  return { kind: _floorOfferKind({ proOnly, depth, bound: !!(c && c.email) }), depth: proOnly || depth };
+}
+function _floorExcluded(c) {
+  return !c || !!c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()
+    || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
+}
+function _planFloor(result, c) {
+  const id = c && c._planWallSinkId;
+  const rows = id ? _planWallSink.rows(id) : [];
+  const tools = [...new Set(rows.map((r) => r && r.tool).filter((t) => typeof t === 'string' && t))];
+  if (!tools.length) return result;
+  // Prose only: block 0's JSON carries each step's own result (a step's digest line or bind_email copy
+  // inside `executed` is not an offer the plan answer makes).
+  const asked = _planAskedTools(result);
+  const digested = _planDigestTools(result);
+  let executed = [];
+  try { const p = JSON.parse(result.content[0].text); if (p && Array.isArray(p.executed)) executed = p.executed; } catch (_) { executed = []; }
+  const uncovered = tools.filter((t) => !asked.has(t) && !digested.has(t)).map((t) => {
+    const i = executed.findIndex((e) => e && e.tool === t);
+    const e = i >= 0 ? executed[i] : null;
+    const step = e && Number.isFinite(Number(e.step)) ? Number(e.step) : (i >= 0 ? i + 1 : 0);
+    return { step, tool: t, kind: _floorKindFor(t, e && e.result, c).kind };
+  });
+  if (!uncovered.length) return result;
+  uncovered.sort((a, b) => a.step - b.step);
+  const keyed = !!c.api_key;
+  let out = result;
+  const emailSteps = uncovered.filter((w) => w.kind === 'email');
+  const digestSteps = uncovered.filter((w) => w.kind === 'digest');
+  if (emailSteps.length) {
+    const para = _planAskParagraph(emailSteps, { keyed });
+    if (para) { out = _withFloorLine(out, para); _markEmailAsk(c, 'line'); }
+    else digestSteps.push(...emailSteps);
+  }
+  if (digestSteps.length) {
+    const para = _planDigestParagraph(digestSteps, { keyed });
+    if (para) { out = _withFloorLine(out, para); _markEmailAsk(c, 'digest_line'); }
+  }
+  return out;
+}
+export function _wallOfferFloorStep(result, name, c = getCtx()) {
+  try {
+    if (!_wallOfferFloorOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_floorExcluded(c) || _FLOOR_SKIP_TOOLS.has(String(name || ''))) return result;
+    let out = name === 'execute_plan' ? _planFloor(result, c) : result;
+    const walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
+    if (!walled) return out;
+    // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
+    // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
+    if (_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) return out;
+    const sc = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : {};
+    const { kind, depth } = _floorKindFor(name, sc, c);
+    out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
+    _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
+    return out;
+  } catch (_) { return result; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
 export function _flushQuotaWallHits(c, name) {
@@ -22576,7 +22677,9 @@ function _sourceLineCb(name, fn) {
       // Brain block 2026-10-28 (item 4): every data answer names the next call (lib/next-call.mjs), in block 0's
       // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
       // a clean platform, or an execute_plan loopback step.
-      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _done : withNextCall(_done, name);
+      // Item 2 (2026-11-11): the offer floor reads what lean left, so it runs after it (lib/wall-offer-floor.mjs).
+      const _floored = _wallOfferFloorStep(_done, name, c);
+      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name);
       return _final;
     } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };

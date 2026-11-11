@@ -75,7 +75,7 @@ afterAll(async () => {
 });
 beforeEach(() => {
   anonCount = 0; EXTERNAL = true;
-  for (const k of ['DCHUB_SESSIONLESS_EMAIL_ASK', 'DCHUB_KEYLESS_EMAIL_FIRST', 'DCHUB_KEYLESS_EMAIL_FIRST_ALL']) delete process.env[k];
+  for (const k of ['DCHUB_SESSIONLESS_EMAIL_ASK', 'DCHUB_KEYLESS_EMAIL_FIRST', 'DCHUB_KEYLESS_EMAIL_FIRST_ALL', 'DCHUB_WALL_OFFER_FLOOR']) delete process.env[k];
   _resetCapWallDay();
 });
 
@@ -138,8 +138,9 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     expect((r.sc._upgrade || {}).email_ask).toBeUndefined();
   });
 
-  it('kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 restores the earlier sessionless walls', async () => {
+  it('kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 (and the offer floor off) restores the earlier sessionless walls', async () => {
     process.env.DCHUB_SESSIONLESS_EMAIL_ASK = '0';
+    process.env.DCHUB_WALL_OFFER_FLOOR = '0';   // the offer floor (item 2) is its own layer
     anonCount = 50;
     const soft = await call('search_facilities', { query: 'ashburn' });
     expect(soft.wire).not.toMatch(ASK);

@@ -19,12 +19,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
+import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
 
 const UA = 'Claude-User/1.0 (+https://claude.ai)';
 const SHORT_ALPHA = '23456789abcdefghjkmnpqrstuvwxyz';
 const HUMAN = '→ **For your human:**';
 const RANK_ASK = '`bind_email` with it shows all 10 markets in this ranking';
 const DIGEST = '`subscribe_digest`';
+const DIGEST_LINE_LEAD = 'An email does not open the fields this preview held back.';
 const CAP_NET = '203.0.113.';   // the anon-usage stub reports these IPs at the daily cap; every other IP at 0
 // DCHUB_PAID_SELL_LINE is on in production (the rank_markets rows ask rides its sell line).
 const ENV = { DCHUB_WALL_ISERROR: '0', DCHUB_PREVIEW_ISERROR: '0', DCHUB_ANON_DAILY_CAP: '5', DCHUB_PAID_SELL_LINE: '1' };
@@ -94,12 +96,11 @@ const withEnv = async (k, v, fn) => {
   try { return await fn(); } finally { if (was === undefined) delete process.env[k]; else process.env[k] = was; }
 };
 const count = (t, s) => t.split(s).length - 1;
-// Any ask the chain emits, in the text the agent reads.
-const anyAsk = (t) => /`bind_email`|`subscribe_digest`|`claim_free_key`|Reply with your email|enter your email/i.test(t)
-  || t.includes(RANK_EMAIL_ASK_LEAD);
 
 describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
-  it('rank_markets wall, then get_grid_intelligence wall, then rank_markets again: asks on the 1st and 2nd, none on the 3rd', async () => {
+  // Item 2 (owner 2026-11-11): the memo still shortens a repeat wall (no human line, no rows clause), but every
+  // wall carries one offer: the repeat gets the offer floor's one line (lib/wall-offer-floor.mjs) and its row says so.
+  it('rank_markets wall, then get_grid_intelligence wall, then rank_markets again: full asks on the 1st and 2nd, the floor\'s one line on the 3rd', async () => {
     const call = await session();
     const r1 = await call('rank_markets');
     expect(r1.sc.preview_is_partial || r1.sc.trial_preview, 'rank_markets did not wall').toBeTruthy();
@@ -121,13 +122,14 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(r3.sc.preview_is_partial || r3.sc.trial_preview, 'rank_markets did not wall the second time').toBeTruthy();
     expect(r3.text).not.toContain(RANK_EMAIL_ASK_LEAD);
     expect(count(r3.text, HUMAN)).toBe(0);
-    expect(r3.text).not.toMatch(/`bind_email`|`subscribe_digest`|Reply with your email/);
+    expect(r3.text).not.toMatch(/`subscribe_digest`|Reply with your email/);
+    expect(count(r3.text, FLOOR_EMAIL_LEAD)).toBe(1);                   // one short line, not the full ask again
     expect(r3.ev).toBeTruthy();
-    expect(r3.ev.email_ask).toBeUndefined();
-    expect(r3.ev.offers_shown || []).not.toContain('email_unlock');   // C3: the row names only what was delivered
+    expect(r3.ev.email_ask).toBe('line');
+    expect(r3.ev.offers_shown).toContain('email_unlock');               // C3: the row names what was delivered
   });
 
-  it('a depth wall as the second tool gets the digest offer, never an email ask; its repeat gets neither', async () => {
+  it('a depth wall as the second tool gets the digest offer, never an email ask; its repeat gets the floor\'s one digest line', async () => {
     const call = await session();
     expect(count((await call('rank_markets')).text, RANK_ASK)).toBe(1);
     const d1 = await call('list_transactions');
@@ -137,9 +139,11 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(d1.text).not.toContain(RANK_EMAIL_ASK_LEAD);
     expect(d1.ev && d1.ev.email_ask).toBe('digest_line');
     const d2 = await call('list_transactions');
-    expect(anyAsk(d2.text)).toBe(false);
-    expect(d2.ev && d2.ev.email_ask).toBeUndefined();
-    expect(d2.ev.offers_shown || []).not.toContain('digest');
+    expect(count(d2.text, FLOOR_DIGEST_LEAD)).toBe(1);
+    expect(count(d2.text, DIGEST)).toBe(1);
+    expect(d2.text).not.toMatch(/`bind_email`|Reply with your email/);   // depth: never an email unlock
+    expect(d2.ev && d2.ev.email_ask).toBe('digest_line');
+    expect(d2.ev.offers_shown).toContain('digest');
   });
 
   it('a free-key wall as the second tool shows its email line; the same tool again does not', async () => {
@@ -172,7 +176,8 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
       expect(count(r2.text, HUMAN)).toBe(0);
       expect(r2.text).toContain('sent the full ask earlier in this session');
       const d = await call('list_transactions');
-      expect(d.text).not.toContain(DIGEST);
+      expect(d.text).not.toContain(DIGEST_LINE_LEAD);                    // the full digest ask rides the human line
+      expect(count(d.text, FLOOR_DIGEST_LEAD)).toBe(1);                  // the floor's one line still offers
       const gas = await session();
       expect(count((await gas('get_gas_intelligence')).text, RANK_EMAIL_ASK_LEAD)).toBe(1);
       expect(count((await gas('get_gas_intelligence')).text, RANK_EMAIL_ASK_LEAD)).toBe(1);

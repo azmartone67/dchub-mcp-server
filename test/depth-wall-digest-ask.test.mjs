@@ -179,8 +179,9 @@ describe('keyless list_transactions wall on /mcp, production transport', () => {
     expect(r.ev && r.ev.email_ask).toBe('digest_line');
   });
 
-  it('kill switch DCHUB_DEPTH_DIGEST_ASK=0: no line, no tag', async () => {
-    const r = await withEnv('DCHUB_DEPTH_DIGEST_ASK', '0', async () => (await session())());
+  // The offer floor (item 2, 2026-11-11) is a separate layer with its own switch; off here so this switch is read alone.
+  it('kill switch DCHUB_DEPTH_DIGEST_ASK=0 (and the offer floor off): no line, no tag', async () => {
+    const r = await withEnv('DCHUB_WALL_OFFER_FLOOR', '0', () => withEnv('DCHUB_DEPTH_DIGEST_ASK', '0', async () => (await session())()));
     expect(r.text).not.toContain('subscribe_digest');
     expect(r.ev && r.ev.email_ask).toBeUndefined();
   });
