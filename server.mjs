@@ -1017,6 +1017,11 @@ export function _planAnonEmailAskAllowed(c) {
 }
 // The plan's ask paragraph as its own text block right after the JSON block (in place: the result is
 // this call's own object). null paragraph: nothing added.
+// A key in the siting seat: the paragraph only while no email is bound (seat 'email' already has one),
+// with the same exclusions as the keyless ask.
+export function _planKeyedAskParagraph(seat, walled, c) {
+  return seat !== 'email' && _planAnonEmailAskAllowed(c) ? _planAskParagraph(walled, { keyed: true }) : null;
+}
 function _withPlanAskParagraph(result, para) {
   try {
     if (!para || !result || !Array.isArray(result.content)) return;
@@ -24512,7 +24517,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
         if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
         // The ask the agent actually receives on /mcp (the lean step keeps no _upgrade prose).
-        if (_sitingSeatNow !== 'email' && _planAnonEmailAskAllowed(c)) _withPlanAskParagraph(result, _planAskParagraph(_walled, { keyed: true }));
+        _withPlanAskParagraph(result, _planKeyedAskParagraph(_sitingSeatNow, _walled, c));
         // Not a wall row: each walled step logged its own wall under its own tool.
         status = 'plan_steps_caller_key';
       } else if (_sitingPreview && name === 'execute_plan') {

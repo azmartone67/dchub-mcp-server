@@ -324,6 +324,12 @@ describe('5) the sink and the helpers', () => {
     expect(W.planAnswerAsks({ content: [{ type: 'text', text: EMAIL_ASK }] }), 'another wall line is not the plan ask').toBe(false);
     expect(W.planAskParagraph([])).toBeNull();
     expect(W.planAskParagraph([{ step: 2, tool: 'get_grid_data' }], { keyed: true })).toContain('{api_key, email}');
+    // A key whose email is bound (seat 'email') is never asked; Grok never; a no-email seat is.
+    const w = [{ step: 2, tool: 'get_grid_data' }];
+    expect(S._planKeyedAskParagraph('noemail', w, { platform: 'claude' })).toContain('{api_key, email}');
+    expect(S._planKeyedAskParagraph('email', w, { platform: 'claude' })).toBeNull();
+    expect(S._planKeyedAskParagraph('noemail', w, { platform: 'grok' })).toBeNull();
+    expect(S._planKeyedAskParagraph('noemail', [], { platform: 'claude' })).toBeNull();
     expect(W.planAnswerAsks(undefined)).toBe(false);
   });
   it('the upgrade is null with no walled step, and the switch reads per call', () => {
