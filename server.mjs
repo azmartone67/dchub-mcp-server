@@ -210,6 +210,11 @@ import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
+import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
+         buildResearchRequest as _buildResearchRequest, researchRequestSentence as _researchRequestSentence } from './lib/research-request.mjs';
+import { SITE_OWNER_TOOLS as _SITE_OWNER_TOOLS, SITE_OWNER_KEY as _SITE_OWNER_KEY, siteOwnerHandoffOn as _siteOwnerHandoffOn,
+         isPointCall as _siteOwnerPointCall, siteBand as _siteOwnerBand, siteOwnerBlock as _siteOwnerBlock,
+         siteOwnerLine as _siteOwnerLine, createSiteOwnerMemo as _createSiteOwnerMemo } from './lib/site-owner-handoff.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -241,9 +246,12 @@ import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } fr
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
+import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
-         sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
+         sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
+import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
+         planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph } from './lib/plan-wall-sink.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -265,7 +273,8 @@ import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAg
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
-  buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent } from './lib/capacity-source-summary.mjs';
+  buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent,
+  buildCapacitySourceBlock, capacityRegisterLine } from './lib/capacity-source-summary.mjs';
 export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, FOUNDING_URL, PRO_URL };
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
@@ -831,6 +840,8 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
         + 'act on what you found.',
       ...(_offer ? { offer: _offer } : {}),
     };
+    // owner 2026-11-10: on unlock_more_data the agent asked; it hit nothing (lib/research-request.mjs).
+    if (toolName === 'unlock_more_data') _relay.message = RELAY_ASK_MESSAGE;
     if (_memo) _memo[_mk] = _relay;
     return _relay;
   } catch (_e) { return undefined; }   // additive — never break an envelope
@@ -993,6 +1004,30 @@ export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
       + 'not subject to this anonymous limit, and an email-bound key gets ' + FREE_TIER.identified_calls_per_day
       + ' calls a day, free. If they prefer not to give an email, call `claim_free_key` without one.';
   } catch (_) { return ''; }
+}
+// The keyless plan's one email ask (lib/plan-wall-sink.mjs): the same exclusions as the other email asks
+// (Grok, a clean platform, the directory / Claude / core profiles, a bot or our own caller). Not the step
+// test: execute_plan is never dispatched as a step (the planner skips it), so loopback_step on it only
+// means a caller on this host. Kill switch DCHUB_PLAN_EMAIL_ASK=0.
+export function _planAnonEmailAskAllowed(c) {
+  try {
+    if (!_planEmailAskOn() || !_keylessEmailFirstOn() || !c) return false;
+    if (_pcIsGrok(c.platform) || _isCleanPlatform() || isBotOrInternalCtx(c)) return false;
+    return !(c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE);
+  } catch (_) { return false; }
+}
+// The plan's ask paragraph as its own text block right after the JSON block (in place: the result is
+// this call's own object). null paragraph: nothing added.
+// A key in the siting seat: the paragraph only while no email is bound (seat 'email' already has one),
+// with the same exclusions as the keyless ask.
+export function _planKeyedAskParagraph(seat, walled, c) {
+  return seat !== 'email' && _planAnonEmailAskAllowed(c) ? _planAskParagraph(walled, { keyed: true }) : null;
+}
+function _withPlanAskParagraph(result, para) {
+  try {
+    if (!para || !result || !Array.isArray(result.content)) return;
+    result.content = [result.content[0], { type: 'text', text: para }, ...result.content.slice(1)];
+  } catch (_) { /* a line's wording is never worth failing a response over */ }
 }
 export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
@@ -1341,9 +1376,12 @@ export function _unlockMoreDataEnvelope(a) {
   // r-price-collapse (2026-09-05): founding is RETIRED as an offer. `pro`
   // above is the same $99, on the link that stamps plan_name='pro'.
   const reason = (a.reason || '').toString().trim().slice(0, 240);
-  const _why = reason
+  // owner 2026-11-10 (lib/research-request.mjs): what this caller was held back on, and the public sources
+  // the full answer joins, so the human sees the research the upgrade buys. Kill DCHUB_RESEARCH_REQUEST=0.
+  const _research = _researchRequestOn() ? _buildResearchRequest(reason, _sessionWallLog.get(_ctx)) : null;
+  const _why = (reason
     ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.'
-    : '';
+    : '') + _researchRequestSentence(_research);
   // ★★★ r-anon-attrib (2026-08-26): the same-session unlock is a REAL
   // mechanism for two of the three identity classes and a FALSE PROMISE for
   // the third, and we were promising it to all of them.
@@ -1443,6 +1481,7 @@ export function _unlockMoreDataEnvelope(a) {
     structuredContent: {
       human_message,                 // many MCP clients render this field verbatim
       relay_to_human: human_message,
+      ...(_research ? { research_request: _research } : {}),
       ...(_ladder ? { user_message: human_message.split('\n')[0].replace(HUMAN_FIRST_MARKER, '').trim(), show_to_user: true } : {}),
       // The /upgrade/h token the first line of human_message carries.
       ...((_proLeadOn && _proRelay) ? { for_your_human: _proRelay, human_url: _proLink }
@@ -1788,7 +1827,7 @@ export function _paidSellStep(result, name) {
         perIso: keys.map((k) => cmp[k]), url: buy });
     } else {
       const rows = Array.isArray(sc.results) ? sc.results : [];
-      sentence = _rankMarketsSellLine({ criteria: sc.criteria, region: sc.region, total: sc._results_total_in_pro, shown: rows.length,
+      sentence = _rankMarketsSellLine({ criteria: sc.criteria, region: sc.region, regionState: sc.region_state, total: sc._results_total_in_pro, shown: rows.length,
         scoreHidden: rows.some((r) => r && r._score_in_pro === true), mwHidden: rows.some((r) => r && r._total_mw_in_pro === true), url: buy });
     }
     if (!sentence) return result;                      // nothing honest to name: keep the old line
@@ -4865,18 +4904,44 @@ function _sendParkedWallHit(c, e) {
   try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
   _recordQuotaWallHit(c, e.name, e.status);
 }
+// execute_plan's step rows wait for the plan's final answer and leave marked with the ask it carried
+// (lib/plan-wall-sink.mjs). Kill switch DCHUB_PLAN_EMAIL_ASK=0.
+const _planWallSink = createPlanWallSink({ send: (c, e) => _sendParkedWallHit(c, e) });
+export const _planWallSinkForTest = _planWallSink;   // test seam
+function _sinkStepRow(c, e) {
+  try {
+    if (!c || !c.loopback_step || !c.plan_wall_sink || !_planEmailAskOn()) return false;
+    if (!_planWallSink.park(c.plan_wall_sink, c, e)) return false;
+    try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
+    e.timer = null;
+    return true;
+  } catch (_) { return false; }
+}
+// The plan is done: its steps' rows leave, marked 'line' only when the final answer carries the ask.
+function _drainPlanWallSink(c, result) {
+  try {
+    const id = c && c._planWallSinkId;
+    if (!id) return;
+    c._planWallSinkId = null;
+    const asked = _planAskedTools(result);
+    _planWallSink.drain(id, asked.size ? (sc, e) => { if (e && asked.has(e.name)) _markEmailAsk(sc, 'line'); } : null);
+  } catch (_) { /* telemetry never touches a response */ }
+}
+export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
 export function _flushQuotaWallHits(c, name) {
   try {
     const l = c && Array.isArray(c._pendingWallHits) ? c._pendingWallHits : null;
     if (!l || !l.length) return;
     c._pendingWallHits = l.filter((e) => {
-      if (e && !e.sent && e.name === name) { _sendParkedWallHit(c, e); return false; }
+      if (e && !e.sent && e.name === name) { if (!_sinkStepRow(c, e)) _sendParkedWallHit(c, e); return false; }
       return !!(e && !e.sent);
     });
   } catch (_) { /* telemetry never touches a response */ }
 }
 function _recordQuotaWallHit(c, name, status) {
   try {
+    // unlock_more_data's research request (lib/research-request.mjs) names the tools that walled this caller.
+    if (_QUOTA_WALL_STATUSES.has(String(status || '')) || (c && c._paidBlocked)) _sessionWallLog.note(c, name);
     const body = _quotaWallEventFor(c, name, status);
     if (body) _lastWallMemo.note(c, body);   // which wall a later email entry came from (lib/email-entered.mjs)
     if (!body || !INTERNAL_KEY) return;
@@ -4892,6 +4957,9 @@ function _recordQuotaWallHit(c, name, status) {
 // credited to that tool (lib/email-entered.mjs). One email_entered event per successful bind_email,
 // claim_free_key {email} or subscribe_digest; no response changes. Kill switch DCHUB_EMAIL_ENTERED_EVENT=0.
 const _lastWallMemo = createLastWallMemo();
+const _sessionWallLog = _createSessionWallLog();
+export const _sessionWallsFor = (c) => _sessionWallLog.get(c);                 // test seam
+export const _noteSessionWallForTest = (c, tool) => _sessionWallLog.note(c, tool);   // test seam
 export const _lastWallFor = (c, k) => _lastWallMemo.get(c, k);   // test seam
 export function _emailEnteredEventFor(c, name, args, result) {
   try {
@@ -7139,6 +7207,8 @@ export const _routeBackRegistry = createRouteBackRegistry({
 export const _CAPACITY_POINTER_TOOLS = new Set([
   'find_sites', 'site_selection_canvas', 'rank_markets',
   'get_market_intel', 'analyze_site', 'get_market_context',
+  // Capacity handoff item 1 (2026-11-10): the rest of the siting family bridges to inventory too.
+  'compare_sites', 'get_market_dcpi_rank', 'ai_capacity_index',
 ]);
 
 // The /dchub:find_capacity prompt (Capacity Source, 2026-09-14). Module level so
@@ -7154,17 +7224,51 @@ export const FIND_CAPACITY_PROMPT = Object.freeze({
     min_mw: 'The size your human needs, in MW, e.g. 40 — matched against what each listing can actually deliver, not just its headline total',
   }),
 });
+// Capacity handoff item 5 (2026-11-10): on /mcp `requirement` is optional. Without one the prompt asks
+// the human for it first, instead of the -32602 a required argument returned.
+export const FIND_CAPACITY_ASK_FIRST = 'Your human has not stated the requirement yet. First ask them for it: '
+  + 'the size (MW or kW), the location (metro, state, country or region), the delivery type (powered land, '
+  + 'powered shell, turnkey or colocation) and when they need it. Then:';
 export function findCapacityPromptText(a = {}) {
   const st = _capacityStateCode(a.state);
   const mw = Number(a.min_mw);
   const args = [st ? `state="${st}"` : '', Number.isFinite(mw) && mw > 0 ? `min_mw=${mw}` : '']
     .filter(Boolean).join(' ');
-  return `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${a.requirement}
+  const req = typeof a.requirement === 'string' && a.requirement.trim() ? a.requirement.trim() : null;
+  return `${req ? `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${req}`
+    : `Use DC Hub Capacity Source to find data-center capacity. ${FIND_CAPACITY_ASK_FIRST}`}
 1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
    To match the whole requirement instead of browsing (once your human is signed in), call source_capacity with target_mw (or target_kw), plus min_chunk_kw for the smallest piece they will contract at one site, and max_sites / max_providers above one if the requirement may be split: it returns exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it.
 2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
 3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
 This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
+}
+
+// The capacity_rfp prompt (capacity handoff item 5, 2026-11-10): requirement -> match -> approved
+// registration, with the human gate before anything is sent. draft_capacity_requirement joins step 1
+// when it ships (capacity item 2).
+export const CAPACITY_RFP_PROMPT = Object.freeze({
+  name: 'capacity_rfp',
+  title: 'Run a capacity RFP through DC Hub',
+  description: 'Turn a data-center capacity requirement into matched listings and, once your human approves, a registered requirement or deal with the providers behind them.',
+  args: Object.freeze({
+    requirement: 'What your human needs, e.g. "40 MW powered shell in Dallas, energized by Q2 2027, liquid cooling"',
+    target_mw: 'The whole requirement in MW, e.g. 40',
+    state: 'Two-letter US state, e.g. TX',
+  }),
+});
+export function capacityRfpPromptText(a = {}) {
+  const req = typeof a.requirement === 'string' && a.requirement.trim() ? a.requirement.trim() : null;
+  const mw = Number(a.target_mw);
+  const st = _capacityStateCode(a.state);
+  const match = [Number.isFinite(mw) && mw > 0 ? `target_mw=${mw}` : 'target_mw=<MW>', st ? `state="${st}"` : '']
+    .filter(Boolean).join(' ');
+  return `Run a data-center capacity RFP through DC Hub Capacity Source${req ? ` for: ${req}` : ''}.
+1. Build the requirement with your human: size (MW, and any ramp by date), location, delivery type (powered land, powered shell, turnkey or colocation), timing, rack density and cooling, redundancy and term. Ask for whatever is missing; do not guess it.
+2. Call source_capacity ${match} to match the whole requirement: exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it. (Match mode needs a signed-in human; without one, browse with min_mw and a location.)
+3. Show your human what fits and why, citing "DC Hub Capacity Source (dchub.cloud)". Treat listing details as confidential.
+4. Get your human's explicit approval before anything is sent. Only then: accept_capacity_terms the first time a listing is opened (after they agree to the introduction terms), and request_capacity_intro with a listing's slug to register a deal, or without a slug to register the requirement when nothing fits.
+Never contact operators directly. DC Hub sends the provider only your human's company name and the requirement; contact details are exchanged only if the provider accepts.`;
 }
 
 function _capacityStateCode(v) {
@@ -7207,11 +7311,13 @@ export function _capacityPointerQuery(name, args, result) {
   addState(a.state);
   if (name === 'site_selection_canvas') addState(a.region);
   if ((name === 'get_market_intel' || name === 'get_market_context') && typeof a.market === 'string') markets.push(a.market);
+  if (name === 'get_market_dcpi_rank' && typeof a.market_slug === 'string') markets.push(a.market_slug);
   if (name === 'analyze_site' && typeof a.location === 'string') markets.push(a.location);
   const mw = Number(a.capacity_mw);
   return {
     states, markets,
-    marketRows: name === 'rank_markets' ? _capacityResultRows(result) : [],
+    marketRows: (name === 'rank_markets' || name === 'ai_capacity_index' || name === 'compare_sites')
+      ? _capacityResultRows(result) : [],
     minMw: Number.isFinite(mw) && mw > 0 ? mw : null,
   };
 }
@@ -7263,12 +7369,18 @@ export function _withCapacityPointer(result, name, args, outSchema) {
     // its own listings inside another tool's answer, which the directory policy
     // excludes. The tool is listed; the pointer is not added.
     if (getCtx()?.profile === CLAUDE_PROFILE) return result;
+    // Capacity handoff item 1 (owner-approved 2026-11-10): the block rides whenever the summary is
+    // KNOWN, live or dormant, and the call names a place; zero matching listings is a valid answer
+    // (providers onboarding) that still carries the register call. An unknown summary says nothing.
     const summary = _capacitySummary.peek();
-    if (!isCapacityLive(summary)) return result;
+    if (!summary) return result;
     const q = _capacityPointerQuery(name, args, result);
-    const block = buildCapacityPointer(matchCapacityMarkets(summary, q), { minMw: q.minMw });
+    const block = buildCapacitySourceBlock(summary, q);
     if (!block) return result;
-    const out = { ...result, content: [...result.content, { type: 'text', text: capacityPointerLine(block) }] };
+    const line = block.live_listings_matching > 0 ? capacityPointerLine(block)
+      : (q.minMw !== null ? capacityRegisterLine(block) : null);
+    const out = line ? { ...result, content: [...result.content, { type: 'text', text: line }] }
+      : { ...result };
     // ★ outputSchema. The SDK validates structuredContent AFTER this returns,
     // and a schema that refuses the key answers -32602 for every tier while
     // telemetry logs success (hyperscaler_deals died that way twice). So the
@@ -7293,6 +7405,48 @@ export function _withCapacityPointer(result, name, args, outSchema) {
     return out;
   } catch (_e) {
     return result;   // a pointer is never worth a response
+  }
+}
+
+// ── Site-owner hand-off (owner 2026-11-10, lib/site-owner-handoff.mjs) ──────────────────────────────────
+// A BUILD or CAUTION point-level analyze_site / analyze_parcel answer that is not a relay wall tells the human
+// who OWNS the site that DC Hub can list it or have Martone Advisors (disclosed) bring it to market. Once per
+// caller per day. Same
+// skips as the Capacity Source pointer: failures, clean platforms, /mcp/claude, plus the ChatGPT directory
+// and /mcp/core profiles (no commerce lines there). Kill switch DCHUB_SITE_OWNER_HANDOFF=0.
+const _siteOwnerMemo = _createSiteOwnerMemo();
+export const _resetSiteOwnerMemoForTest = () => _siteOwnerMemo.clear();   // test seam
+export function _withSiteOwnerHandoff(result, name, args, outSchema) {
+  try {
+    if (!_SITE_OWNER_TOOLS.has(name) || !_siteOwnerHandoffOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result) || _isNoDataAnswer(result) || _isCleanPlatform()) return result;
+    const c = getCtx();
+    if (c && (c.profile === CLAUDE_PROFILE || c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE)) return result;
+    if (!_siteOwnerPointCall(name, args)) return result;
+    // A relay wall carries ONE link (_oneLinkWallStep), which would rewrite both of this line's links into
+    // the upgrade link. So the hand-off rides answers that are not walls: keyed answers, the free monthly
+    // reports and the keyless daily runs.
+    const sc0 = result.structuredContent;
+    if (sc0 && typeof sc0 === 'object' && !Array.isArray(sc0) && _isRelayWall(sc0, c || {})) return result;
+    const band = _siteOwnerBand(result);
+    if (band !== 'BUILD' && band !== 'CAUTION') return result;
+    if (!_siteOwnerMemo.first(c)) return result;
+    const block = _siteOwnerBlock(name);
+    const out = { ...result, content: [...result.content, { type: 'text', text: _siteOwnerLine(block) }] };
+    // Same outputSchema rule as _withCapacityPointer: structuredContent only when the tool's schema accepts it.
+    const sc = result.structuredContent;
+    if (sc && typeof sc === 'object' && !Array.isArray(sc) && !(_SITE_OWNER_KEY in sc)
+        && outSchema && typeof outSchema.safeParse === 'function') {
+      const candidate = { ...sc, [_SITE_OWNER_KEY]: block };
+      const verdict = outSchema.safeParse(candidate);
+      if (verdict && verdict.success) { out.structuredContent = candidate; return out; }
+    }
+    out._meta = { ...((result._meta && typeof result._meta === 'object') ? result._meta : {}),
+      ['cloud.dchub/' + _SITE_OWNER_KEY]: block };
+    return out;
+  } catch (_e) {
+    return result;   // a hand-off line is never worth a response
   }
 }
 
@@ -9830,7 +9984,7 @@ export function _withSitingFreeRun(result, fr, tool) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
   const block = { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
     basis: 'per key and per bound email, the higher count; UTC calendar month',
-    note: sitingFreeRunNote(fr, tool) };
+    note: sitingFreeRunNote(fr, tool, { planCallerKey: planStepsCallerKeyOn() }) };
   const out = { ...result };
   try {
     const p = JSON.parse(out.content[0].text);
@@ -9855,6 +10009,25 @@ function _markAskGap(c, kind, url) {
 function _sitingPreviewUpgradeMarked(name, seat, fr) {
   if (seat !== 'email') _markAskGap(getCtx() || {}, 'line');
   return _sitingPreviewUpgrade(name, seat, fr);
+}
+// The plan steps that came back walled, read off each step's own result by the relay's wall test.
+// A step it cannot read is left out, and nothing here calls a step full.
+export function _planWalledSteps(executed, c) {
+  const out = [];
+  if (!Array.isArray(executed)) return out;
+  for (const e of executed) {
+    try {
+      if (!e || typeof e !== 'object' || typeof e.tool !== 'string') continue;
+      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool, email_opens: _planStepEmailOpens(e.tool, e.result, c) });
+    } catch (_) { /* unreadable: not named */ }
+  }
+  return out;
+}
+// Whether an email opens a walled plan step: not a depth wall (its fields open on a paid plan only, the
+// rule the digest offer uses, _depthWallTool), unless the step's own wall is a free-key wall (a keyless
+// get_grid_data: an email-bound key gets full answers). Fails closed: unreadable = not named in the ask.
+export function _planStepEmailOpens(tool, result, c) {
+  try { return !_depthWallTool(tool, c) || _wallKindFor(result, c, tool) === WALL_KIND_FREEKEY; } catch (_) { return false; }
 }
 // The keyed caller's line on the keyless preview: the next step is bind_email, never
 // claim_free_key (it already holds a key). No plan name, no price.
@@ -12363,8 +12536,20 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     if (_isCleanPlatform() || isBotOrInternalCtx(c)) return result;
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
     if (_isPaidDepthTier(c.tier) || c.tier === 'identified' || c.email) return result;
+    // Sessionless free-key wall (2026-11-11, funnel no_ask_split since 11-10 10:45Z: get_grid_data on
+    // platform mcp, 2 of 2 sessionless walls with no ask). The link page grants the email onto a SESSION, so
+    // this step stopped here for a caller without one, and a keyless sessionless get_grid_data /
+    // get_energy_prices / get_water_risk / get_renewable_energy wall asked for nothing. The in-chat form
+    // below needs no session: its agent line is bind_email, which on a call with no key returns a new
+    // email-bound key for the X-API-Key header (mcp#1348). So a sessionless caller gets that form only
+    // (never the page-only wording), on every wall (there is no session memo). Not an execute_plan step
+    // (the plan answer carries the ask). The freekeyChat test below leaves the rest as they were: a grid /
+    // queue tool (the decision hand-off line already asks there) and a keyed caller (its wall already
+    // names `bind_email`, the bind_field ask) are never freekeyChat.
+    // Kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 (the sessionless cap-wall ask's switch, mcp#1340).
     const sid = c.session_id || '';
-    if (!sid || sid === 'no-session') return result;
+    const sessionless = !sid || sid === 'no-session';
+    if (sessionless && (c.loopback_step || !_sessionlessEmailAskOn())) return result;
     if (!_isRelayWall(sc0, c)) return result;
     const up = (sc0._upgrade && typeof sc0._upgrade === 'object') ? sc0._upgrade : {};
     if (sc0.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return result;
@@ -12383,6 +12568,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     const freekeyChat = !gridQueue && _retWallEmailFreekeyChatOn(env) && !_pcIsGrok(c.platform)
       && texts.some((t) => t.split('\n').some(isHumanLine))
       && !texts.some((t) => t.includes('`' + 'bind_email' + '`'));
+    if (sessionless && !freekeyChat) return result;   // the page-only wording needs a session to grant onto
     const sentence = (gridQueue || freekeyChat) ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
     let wrote = false;
     const content = result.content.map((b) => {
@@ -22410,6 +22596,7 @@ function _finishWallRow(c, name, result) {
     }
   } catch (_) { /* telemetry never touches a response */ }
   _flushQuotaWallHits(c, name);
+  _drainPlanWallSink(c, result);
 }
 async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) {
   const c = getCtx() || {};
@@ -22485,7 +22672,19 @@ function _withHygieneTail(name, description) {
 // Raw handlers by tool name, for the few places one tool hands off to another in the same
 // call (bind_email on a keyless session -> claim_free_key with the email; Grok/owner 10-17).
 const _RAW_TOOL_HANDLERS = new Map();
+// Capacity handoff item 1 (owner-approved 2026-11-10): every siting tool's description ends with the
+// one "Next:" sentence that names the inventory and the register path. Appended here, once, so the
+// eight descriptions cannot drift apart. No prices, no plan names, no counts.
+export const CAPACITY_NEXT_TOOLS = Object.freeze(new Set([
+  'site_selection_canvas', 'find_sites', 'rank_markets', 'get_market_intel', 'analyze_site',
+  'compare_sites', 'get_market_dcpi_rank', 'ai_capacity_index',
+]));
+export const CAPACITY_NEXT_SENTENCE = 'Next: to buy or lease capacity in these markets, call source_capacity; '
+  + 'to register a requirement with providers, call request_capacity_intro after your human approves.';
 function trackedTool(srv, name, description, schema, handler) {
+  if (CAPACITY_NEXT_TOOLS.has(name) && typeof description === 'string' && !description.includes(CAPACITY_NEXT_SENTENCE)) {
+    description = `${description.trimEnd()} ${CAPACITY_NEXT_SENTENCE}`;
+  }
   _registeredToolNames.add(name);
   _RAW_TOOL_HANDLERS.set(name, handler);
   // ── r-mpp-arg-channel (2026-08-17): DECLARE the payment params ─────────────
@@ -23162,8 +23361,9 @@ function trackedTool(srv, name, description, schema, handler) {
         }
         _sitingPreview = true;   // fail closed
       }
-      // execute_plan's steps are loopback calls under the caller's key: run them keyless.
-      if (_sitingPreview && name === 'execute_plan') c.plan_steps_keyless = true;
+      // execute_plan's steps are loopback calls under the caller's key, each at that tool's own
+      // allowance for the key (owner 2026-11-11). DCHUB_PLAN_STEPS_CALLER_KEY=0: run them keyless.
+      if (_sitingPreview && name === 'execute_plan' && !planStepsCallerKeyOn()) c.plan_steps_keyless = true;
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
       // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
@@ -24366,9 +24566,24 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // Keyless full-answer trial: the funnel tag (mcp_call_log.status / mcp_tool_calls.gate_status),
       // on a charged answer only. A QA observer is tagged nothing.
       if (gate.keyless_full_trial_charged === true) status = KEYLESS_FULL_TRIAL_STATUS;
-      // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; its steps already ran
-      // keyless above), so the keyed caller's bind_email / human-link line is stamped here.
-      if (_sitingPreview && name === 'execute_plan') {
+      // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; each step was gated by its own
+      // loopback call), so the keyed caller's bind_email / human-link line is stamped here. Steps
+      // under the caller's key (owner 2026-11-11): the line names the steps that came back walled
+      // and calls nothing a preview it did not read as one.
+      if (_sitingPreview && name === 'execute_plan' && !c.plan_steps_keyless) {
+        let _walled = [];
+        try { _walled = _planWalledSteps(JSON.parse(result.content[0].text).executed, c); } catch (_) { _walled = []; }
+        const _up = planCallerKeyUpgrade(_sitingSeatNow, _walled, _sitingFr);
+        try {
+          const _p = JSON.parse(result.content[0].text);
+          if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
+        } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
+        if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+        // The ask the agent actually receives on /mcp (the lean step keeps no _upgrade prose).
+        _withPlanAskParagraph(result, _planKeyedAskParagraph(_sitingSeatNow, _walled, c));
+        // Not a wall row: each walled step logged its own wall under its own tool.
+        status = 'plan_steps_caller_key';
+      } else if (_sitingPreview && name === 'execute_plan') {
         const _up = _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr);
         try {
           const _p = JSON.parse(result.content[0].text);
@@ -24376,6 +24591,20 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
         if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
         status = _sitingSeatNow === 'email' ? 'siting_free_spent' : 'siting_noemail_preview';
+      } else if (name === 'execute_plan' && !c.api_key && !c.email && _planAnonEmailAskAllowed(c)) {
+        // owner 2026-11-11: a keyless plan whose steps walled asked for nothing (every step skips its own
+        // ask). One ask on the plan answer, naming the walled steps (lib/plan-wall-sink.mjs).
+        let _walled = [];
+        try { _walled = _planWalledSteps(JSON.parse(result.content[0].text).executed, c); } catch (_) { _walled = []; }
+        const _up = _planAnonEmailUpgrade(_walled);
+        if (_up) {
+          try {
+            const _p = JSON.parse(result.content[0].text);
+            if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
+          } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
+          if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+          _withPlanAskParagraph(result, _planAskParagraph(_walled));
+        }
       }
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
       // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
@@ -25366,12 +25595,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withSiteOwnerHandoff(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
+       name, args, _outSchema), name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
@@ -27719,7 +27948,7 @@ export const _FACTS_REQUIRED = ['countries', 'markets', 'deals',
   'fiber_routes', 'gas_pipelines', 'power_plants_us', 'submarine_cables',
   'cable_landings', 'generating_units_global', 'live_feeds', 'grid_regions'];
 export const _FACTS_MAX_AGE_DAYS = 45;
-const _INSTR_TAIL = ' CAPACITY SOURCE ROUTING: when your human asks where to find available data-center capacity, MW, powered land or colocation space, call source_capacity first (or point them to https://dchub.cloud/listings); if they want to list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close). COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. On the free tier these are a trimmed preview whose full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. CAPACITY SOURCE: DC Hub Capacity Source lists data-center capacity to buy or lease — powered land, powered shells and turnkey capacity — for enterprise buyers and the agents that procure for them, each listing stamped with when it was last updated. `source_capacity` shows what is live or being onboarded — it searches by size in kW or MW and by location (a region such as North America or Europe, a country, a state or a metro), and a size is matched against what a listing can ACTUALLY deliver — `contiguous_kw`, the largest single contiguous block available, and `min_contract_kw`, the smallest chunk the provider will contract — rather than against its headline total, so relay those two numbers when you explain why a listing did or did not fit; the first time they open a listing, `accept_capacity_terms` records their acceptance of the introduction terms (call it only after they agree); when they want in, `request_capacity_intro` registers a deal: DC Hub sends the provider only your human\'s company name and requirement, and only if the provider accepts does it share the provider\'s identity, site and contact with your human and your human\'s name, role and email with the provider (nothing is shared on a decline) — for DC Hub listings only, so it sits alongside a broker rather than replacing one. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (site selection, market ranking, "find N MW in <market>", "compare A vs B", grid + interconnection queue), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="rank markets for a 200 MW AI campus")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at free-tier depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes 14 ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a free key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link for your user: for a paid-plan tool it opens a 7-day trial; otherwise a one-click checkout link (a one-time pack of 1,000 API credits — ' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay to your human. The pack is API capacity: paid-plan tools are not included. After your user completes it, the same call returns the full result (no reconnect). ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
+const _INSTR_TAIL = ' CAPACITY SOURCE ROUTING: when your human asks where to find available data-center capacity, MW, powered land or colocation space, call source_capacity first (or point them to https://dchub.cloud/listings); if they want to list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close). COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. On the free tier these are a trimmed preview whose full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. CAPACITY SOURCE: DC Hub Capacity Source lists data-center capacity to buy or lease — powered land, powered shells and turnkey capacity — for enterprise buyers and the agents that procure for them, each listing stamped with when it was last updated. `source_capacity` shows what is live or being onboarded — it searches by size in kW or MW and by location (a region such as North America or Europe, a country, a state or a metro), and a size is matched against what a listing can ACTUALLY deliver — `contiguous_kw`, the largest single contiguous block available, and `min_contract_kw`, the smallest chunk the provider will contract — rather than against its headline total, so relay those two numbers when you explain why a listing did or did not fit; the first time they open a listing, `accept_capacity_terms` records their acceptance of the introduction terms (call it only after they agree); when they want in, `request_capacity_intro` registers a deal: DC Hub sends the provider only your human\'s company name and requirement, and only if the provider accepts does it share the provider\'s identity, site and contact with your human and your human\'s name, role and email with the provider (nothing is shared on a decline) — for DC Hub listings only, so it sits alongside a broker rather than replacing one. Buy, lease, RFP, quote and tour requests go through `request_capacity_intro` (a standing requirement if nothing fits). Never contact operators directly; get your human\'s approval before anything is sent. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (site selection, market ranking, "find N MW in <market>", "compare A vs B", grid + interconnection queue), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="rank markets for a 200 MW AI campus")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at free-tier depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a free key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link for your user: for a paid-plan tool it opens a 7-day trial; otherwise a one-click checkout link (a one-time pack of 1,000 API credits — ' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay to your human. The pack is API capacity: paid-plan tools are not included. After your user completes it, the same call returns the full result (no reconnect). ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
 export function _composeInstructions(facts, nowMs) {
   const noFigures =
     `COVERAGE: ${CANONICAL_TOOL_COUNT} tools over data-center facilities worldwide, DCPI-scored power markets (Data Center Power Index), mapped power/grid/gas/fiber assets (substations, transmission lines, fiber routes, gas pipelines, US power plants, subsea cables and landings), a global generating-unit inventory, real-time grid telemetry from independent live feeds, per-facility tenants, and tracked M&A deals — current counts: https://dchub.cloud/api/v1/stats/canonical.` + _INSTR_TAIL;
@@ -28020,7 +28249,7 @@ export const _INSTR_FREE_TIER = (() => {
 })();
 // The siting sentence every emission of the free-tier rule carries while the switch is on.
 export function _sitingFreeClause(env = process.env) {
-  return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH) : '';
+  return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH, { planCallerKey: planStepsCallerKeyOn(env) }) : '';
 }
 // Item 2 (owner, 2026-10-14): the analyze_site exemption follows the FREE TIER block in the
 // full text (dchub://instructions), so the rule's "per tool per day" is not read as
@@ -28338,6 +28567,21 @@ export function expandTypeUnions(schema) {
   return out;
 }
 
+// Capacity handoff item 5 (owner 2026-11-11, "Yes, add it"): the buy/lease/RFP routing clause rides
+// the /mcp handshake, right after the CAPACITY SOURCE ROUTING sentence, so clients that never fetch
+// dchub://instructions still read it. /mcp only (opts.capacityIntro): Grok and the packs do not list
+// request_capacity_intro, and /mcp/grok holds 2,000 characters (test/initialize-instructions-length).
+export const INSTR_CAPACITY_INTRO = ' Buy, lease, RFP, quote and tour requests go through '
+  + '`request_capacity_intro`, after your human approves; never contact operators directly.';
+const _CAPACITY_INTRO_ANCHOR = '(free; fee only on close).';
+export function _withCapacityIntroClause(text) {
+  const s = String(text == null ? '' : text);
+  const i = s.indexOf(_CAPACITY_INTRO_ANCHOR);
+  if (i < 0 || s.includes(INSTR_CAPACITY_INTRO)) return s;
+  const at = i + _CAPACITY_INTRO_ANCHOR.length;
+  return s.slice(0, at) + INSTR_CAPACITY_INTRO + s.slice(at);
+}
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
@@ -28354,7 +28598,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // Every other path passes none, so their text is unchanged byte for byte.
     instructions: ((typeof instructionsRewrite === 'function')
       ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
-      : _capacityInstructions(_INSTRUCTIONS_LEAN)) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
+      : (opts && opts.capacityIntro
+        ? _withCapacityIntroClause(_capacityInstructions(_INSTRUCTIONS_LEAN))
+        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -28874,7 +29120,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             ? { constraint_iso: [...constraintIsoSet] }
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
-                  tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
+                  tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
+                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): free-preview depth' : 'anonymous — steps returned free-preview depth; claim_free_key raises it') },
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
@@ -30818,7 +31065,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     try {
       const headers = { 'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream' };
-      // Item 1: a key in the siting preview seat runs its plan's steps keyless (the keyless preview).
+      // Steps carry the caller's key (owner 2026-11-11); only DCHUB_PLAN_STEPS_CALLER_KEY=0 sets plan_steps_keyless.
       if (c && c.api_key && !c.plan_steps_keyless) headers['X-API-Key'] = c.api_key;
       if (c && c.platform) headers['X-MCP-Platform'] = String(c.platform);
       // r-core-profile: a plan run from /mcp/core keeps its steps in the core
@@ -30831,6 +31078,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && (c.profile === DIRECTORY_PROFILE || c.legacy_wall_copy === true)) headers[LEGACY_WALL_LOOPBACK_HEADER] = _mintLegacyWallLoopbackToken();
       // The step belongs to the caller's session: its signals and tracking rows carry that id, not 'no-session'.
       { const _pst = _mintPlanSessionToken(c && c.session_id); if (_pst) headers[PLAN_SESSION_HEADER] = _pst; }
+      // The step's wall row waits in this plan's sink for the plan's one email ask (lib/plan-wall-sink.mjs).
+      if (c && _planEmailAskOn()) {
+        if (!c._planWallSinkId) c._planWallSinkId = _planWallSink.open();
+        const _pws = _planWallSink.mintStepToken(c._planWallSinkId);
+        if (_pws) headers[PLAN_WALL_SINK_HEADER] = _pws;
+      }
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
@@ -32577,6 +32830,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
                 '\nFallback: POST https://dchub.cloud/api/v1/keys/claim {"client_name":"' + cn + '"}' }] };
       }
+      // 2026-11-10: the claim door now runs validate_email (be: mint doors validate the email). A
+      // placeholder / disposable / role / no-MX address is dropped: the key is minted WITHOUT it and the
+      // backend says so (email_rejected). Say it first, so no reply (nor bind_email's lead) reports a bind
+      // that did not happen. Only the backend's explicit flag counts; an older backend changes nothing.
+      const _emailRejected = !!a.email && !!(r && r.email_rejected === true);
+      const _emailRejectedReason = _emailRejected
+        ? String((r && r.email_rejected_reason) || 'undeliverable').replace(/[^a-z_]/gi, '').slice(0, 40) || 'undeliverable' : '';
+      const _emailRejectLine = _emailRejected
+        ? '⚠️ **That email was NOT bound to this key**: it looks undeliverable (' + _emailRejectedReason + '). The key below works without one. ' +
+          'PAUSE and ask your human for their real email address (never a placeholder or a docs example), then call **`bind_email`** with it.\n\n'
+        : '';
+      const _emailRejectFields = _emailRejected ? {
+        email_bound:           false,
+        email_rejected:        true,
+        email_rejected_reason: _emailRejectedReason,
+        next_tool:             'bind_email',
+        next_tool_hint:        'The email you sent was not bound (' + _emailRejectedReason + '). Ask your human for their real email, then call bind_email {email}. Never invent or reuse an example address.',
+      } : {};
       // r86-reach: AUTO-BIND the just-minted key to THIS session so the agent gets the full
       // free tier on its very NEXT call — no reconnect. The #1 retention leak (0.6 calls/key)
       // is agents claiming a key then never reconnecting; the per-request context is rebuilt
@@ -32608,7 +32879,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (r && (r.bind_required === true || r.gate === 'bind_email_required')) {
         const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : _rungNum('free');
         return {
-          content: [{ type: 'text', text:
+          content: [{ type: 'text', text: _emailRejectLine +
             '🔒 **This identity already used its ' + _gateN + ' free unbound calls — ' +
             (r.reused ? 're-claiming returned the SAME key, not a fresh allowance.' :
                         'the counter carried onto this key; re-minting does not reset it.') + '**\n\n' +
@@ -32643,6 +32914,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             // it was indistinguishable from someone typing the URL. _unlockUrl
             // resolves the session from AsyncLocalStorage when not passed one.
             upgrade_url:             _unlockUrl('claim_free_key', ''),
+            ..._emailRejectFields,
           },
         };
       }
@@ -32724,7 +32996,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ? '**Save it for ' + _ownCfg.label + '**' + (_ownCfg.file ? ' (`' + _ownCfg.file + '`)' : '') + ':\n```\n' + _ownCfg.snippet + '\n```\n'
           + 'Show your human this snippet and ask them to save it: the key is then sent on every future session. Do not re-mint each session. Other clients: https://dchub.cloud/connect\n\n'
         : '';
-      const text =
+      const text = _emailRejectLine +
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         (_backendReused
           ? '🔑 **You already hold a DC Hub key for `' + cn + '` — returning THAT key, not a new one.** It is active now'
@@ -32832,6 +33104,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // it was indistinguishable from someone typing the URL. _unlockUrl
           // resolves the session from AsyncLocalStorage when not passed one.
           upgrade_url:             _unlockUrl('claim_free_key', ''),
+          ..._emailRejectFields,
         },
       };
     });
@@ -32886,7 +33159,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (!_key && !_sessKey && typeof _claimImpl === 'function') {
         const _minted = await _claimImpl({ email });
         try {
-          let _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          // 2026-11-10: the claim door can now drop the email (validate_email). Never claim a bind
+          // that did not happen; claim_free_key's own text says why and asks for a real address.
+          const _notBound = !!(_minted && _minted.structuredContent && _minted.structuredContent.email_rejected === true);
+          let _lead = _notBound
+            ? 'No key on this session, so `bind_email` minted a free DC Hub key, but the email was NOT bound to it (see below). '
+            : 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
           // Sessionless caller (2026-11-10): no MCP session, so the server cannot apply the key to later
           // calls and the walled call stays walled until the agent sends it. Kill switch
           // DCHUB_SESSIONLESS_BIND_KEY_LINE=0. Session callers and execute_plan steps: unchanged.
@@ -33326,10 +33604,15 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // rest of the distribution layer by DCHUB_CAPACITY_POINTERS=off.
   if (capacityPointersEnabled()) {
     _P('find_capacity', FIND_CAPACITY_PROMPT.title, FIND_CAPACITY_PROMPT.description,
-       { requirement: z.string().describe(FIND_CAPACITY_PROMPT.args.requirement),
+       { requirement: z.string().optional().describe(FIND_CAPACITY_PROMPT.args.requirement),
          state: z.string().optional().describe(FIND_CAPACITY_PROMPT.args.state),
          min_mw: z.string().optional().describe(FIND_CAPACITY_PROMPT.args.min_mw) },
        findCapacityPromptText);
+    _P(CAPACITY_RFP_PROMPT.name, CAPACITY_RFP_PROMPT.title, CAPACITY_RFP_PROMPT.description,
+       { requirement: z.string().optional().describe(CAPACITY_RFP_PROMPT.args.requirement),
+         target_mw: z.string().optional().describe(CAPACITY_RFP_PROMPT.args.target_mw),
+         state: z.string().optional().describe(CAPACITY_RFP_PROMPT.args.state) },
+       capacityRfpPromptText);
   }
 
   // Reference resources (r-promres) — read-only, fail-soft. _RD = dynamic
@@ -34178,6 +34461,41 @@ app.use(MCP_PATHS, (req, res, next) => {
   });
 });
 
+// [mcp-4xx] (2026-11-10): one masked JSON line per refused /mcp request (400, 404, 405, 406,
+// 413, 415), with a reason code (lib/mcp-request-shape.mjs failureReason). Railway's HTTP log
+// keeps no body or header, so ~1,552 Claude 400s a week had no recorded cause. Facts are read
+// at entry, before the handler rewrites headers or the body; the error text is the first 300
+// bytes the response wrote. Read with: railway logs | grep '\[mcp-4xx\]'.
+const _MCP_4XX_LOGGED = new Set([400, 404, 405, 406, 413, 415]);
+app.use(MCP_PATHS, (req, res, next) => {
+  let rec;
+  try {
+    const sid = req.headers['mcp-session-id'];
+    rec = _describeMcpRequest(req, { sessionKnown: !!(sid && sessions.has(sid)) });
+  } catch (_) { return next(); }
+  let head = '';
+  const grab = (chunk) => {
+    if (head.length < 300 && chunk && res.statusCode >= 400) {
+      try { head += (Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)).slice(0, 300 - head.length); } catch (_) { /* never affect the response */ }
+    }
+  };
+  const _write = res.write, _end = res.end;
+  res.write = function (chunk, ...a) { grab(chunk); return _write.call(this, chunk, ...a); };
+  res.end = function (chunk, ...a) { if (chunk && typeof chunk !== 'function') grab(chunk); return _end.call(this, chunk, ...a); };
+  res.on('finish', () => {
+    if (!_MCP_4XX_LOGGED.has(res.statusCode)) return;
+    try {
+      let msg = head;
+      try { const j = JSON.parse(head); msg = (j.error && (j.error.message || j.error)) || j.message || head; } catch (_) { /* plain text */ }
+      console.log('[mcp-4xx] ' + JSON.stringify({
+        status: res.statusCode, reason: _mcpFailureReason(res.statusCode, rec, String(msg)),
+        error: String(msg).slice(0, 160), ...rec,
+      }));
+    } catch (_) { /* observability must never affect the handler */ }
+  });
+  next();
+});
+
 // Evidence for the enforcement flip, behind the SAME internal key the rest of
 // the other /internal routes use. `missing` must be 0 for a full traffic day first.
 app.get('/internal/edge-key', (req, res) => {
@@ -34516,7 +34834,21 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planCallerIpTok = req.headers[PLAN_CALLER_IP_HEADER];
     delete req.headers[PLAN_CALLER_IP_HEADER];
     const _planLoopbackIp = _isLoopbackPeer(req) ? consumePlanCallerIpToken(_planCallerIpTok) : null;
+    // And the plan's wall sink (lib/plan-wall-sink.mjs), the same single-use way.
+    const _planWallSinkTok = req.headers[PLAN_WALL_SINK_HEADER];
+    delete req.headers[PLAN_WALL_SINK_HEADER];
+    const _planWallSinkId = _isLoopbackPeer(req) ? _planWallSink.consumeStepToken(_planWallSinkTok) : null;
     const sessionId = req.headers['mcp-session-id'];
+    // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
+    // 400 on every in-session request. Negotiate down instead: drop the header, and the request
+    // is served at the version initialize settled on. An unknown older value keeps the SDK's 400.
+    if (_protocolHeaderVerdict(req.headers['mcp-protocol-version']) === 'newer') {
+      console.log(`[mcp-proto] newer MCP-Protocol-Version ${String(req.headers['mcp-protocol-version']).slice(0, 20)} served at the negotiated version`);
+      _dropRequestHeader(req, 'mcp-protocol-version');
+    }
+    // [mcp-4xx] cause 1: initialize re-sent with the id of a session we still hold. The header
+    // is stale by definition (initialize starts a session), so it never routes into that session.
+    const _reinit = _isReinitWithSession(req.body, sessionId);
     const userAgent = req.headers['user-agent'] || '';
     // The QA marker header (QA_MARKER_HEADER). Read for the trial-mint skip
     // only: a caller that sends it merely declines a trial key for itself.
@@ -35206,7 +35538,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // on a path that advertises a subset. It falls through to the stateless
     // tools/list branch below, which applies the pack filter; that listing is
     // caller-independent, so skipping the session loses nothing.
-    if (sessionId && sessions.has(sessionId)
+    if (sessionId && sessions.has(sessionId) && !_reinit
         && !(req.body?.method === 'tools/list' && _pathPack(req))) {
       touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
@@ -35275,6 +35607,12 @@ app.post(MCP_PATHS, async (req, res) => {
       });
     }
     if (body?.method === 'initialize') {
+      // [mcp-4xx] cause 1: a re-initialize mints a new session like any other; the old one is
+      // left to the idle sweeper (a request still in flight on it must not 404 mid-call).
+      if (_reinit) {
+        console.log(`[MCP] re-initialize with a session header (${sessions.has(sessionId) ? 'live' : 'unknown'} sid=${_logId(String(sessionId))}): new session`);
+        _dropRequestHeader(req, 'mcp-session-id');
+      }
       // r-init-precise-error: reject a malformed initialize HERE, naming the
       // field, instead of letting it fall through to the transport's
       // "Server not initialized". Placed BEFORE detectPlatformFromInit /
@@ -35393,7 +35731,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey });
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });
       await mcpServer.connect(transport);
 
       return ctx.run({
@@ -35535,8 +35873,17 @@ app.post(MCP_PATHS, async (req, res) => {
     //       an unknown id, so nothing crashes; the one-shot stateless transport just
     //       can't do server→client elicitation (that guard skips it by design).
     // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
-    if (body?.method === 'tools/call'
-        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
+    // [mcp-4xx] causes 2-4 (2026-11-10): with NO session id, a notification (or a batch of only
+    // notifications / responses) is accepted with 202, as the SDK does inside a session; any other
+    // request or batch that does not initialize is served from the same one-shot stateless
+    // transport as tools/call below (an unknown method gets the SDK's in-band -32601). These all
+    // fell through to "No session. Send initialize first." (400). An UNKNOWN session id keeps the
+    // spec's 404 below, so a client still re-initializes on it.
+    const _shape = _rpcShape(body);
+    if (!sessionId && _isNotificationsOnly(_shape)) return res.status(202).end();
+    const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
+    if ((body?.method === 'tools/call'
+        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
       const _clientHdr = _sessionlessClientHeader(req, sessionId || _planLoopbackSid);   // 2026-11-10
       const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId, _clientHdr);
       // r-free-key-per-call: /mcp/chatgpt keeps the counted validate it always
@@ -35553,9 +35900,11 @@ app.post(MCP_PATHS, async (req, res) => {
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      const ephServer = createServer(_descOverrides);
+      // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
+      const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey }) : createServer(_descOverrides);
       await ephServer.connect(ephTransport);
-      console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
@@ -35580,6 +35929,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // classifies the call as 'mcp'.
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
+        plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
@@ -35603,10 +35953,17 @@ app.post(MCP_PATHS, async (req, res) => {
         id: body?.id || null,
       });
     }
+    // What is left: no session id and a body that cannot be served without one (initialize inside
+    // a batch, or a body that is not JSON-RPC). Say which, in a JSON-RPC error body.
+    const _why = (_shape.kind === 'empty' || _shape.kind === 'invalid')
+      ? 'Invalid Request: the body is not a JSON-RPC 2.0 message. POST one JSON-RPC object (start with initialize), see https://dchub.cloud/mcp.'
+      : (_shape.hasInit
+        ? 'Invalid Request: send initialize on its own, not inside a batch.'
+        : 'No session: send initialize first, then repeat this request with the Mcp-Session-Id header it returns.');
     res.status(400).json({
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'No session. Send initialize first.' },
-      id: body?.id || null,
+      error: { code: -32600, message: _why },
+      id: (body && !Array.isArray(body) && body.id !== undefined) ? body.id : null,
     });
   } catch (err) {
     console.error('[MCP] Error:', _scrubLog((err && err.stack) || err));
@@ -35638,6 +35995,14 @@ app.post(MCP_PATHS, async (req, res) => {
 app.get(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 app.delete(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 
+export const MCP_GET_405_BODY = Object.freeze({
+  error: 'method_not_allowed',
+  message: 'This endpoint takes JSON-RPC over POST. GET opens an optional server-to-client event stream, which DC Hub does not offer; MCP clients continue normally without it.',
+  allow: ['POST', 'DELETE', 'OPTIONS'],
+  endpoint: 'https://dchub.cloud/mcp',
+  docs: 'https://dchub.cloud/mcp',
+});
+
 app.get(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
@@ -35651,7 +36016,10 @@ app.get(MCP_PATHS, async (req, res) => {
   // an unrecognized session id gets 404 (client re-initializes); only a
   // session-less GET is a 400.
   if (sid) return res.status(404).json({ error: 'Session not found — re-initialize.' });
-  res.status(400).json({ error: 'No session. POST /mcp with initialize.' });
+  // GET without a session: the optional server-to-client SSE stream is not offered, and 405 is
+  // the spec's answer for that (clients carry on over POST). It was a 400 here, which a client
+  // reads as a broken request. The edge answers bare GET /mcp first; this covers the origin.
+  res.status(405).set('Allow', 'POST, DELETE, OPTIONS').json(MCP_GET_405_BODY);
 });
 
 // ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle

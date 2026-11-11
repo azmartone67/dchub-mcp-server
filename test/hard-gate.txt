@@ -47,6 +47,7 @@ test/b2-analyze-site-keyless-headline.test.mjs
 test/backend-breaker-keyed-handshake.test.mjs
 test/band-matches-verdict.test.mjs
 test/bind-copy-preview-only.test.mjs
+test/bind-email-rejected-email-not-claimed.test.mjs
 test/bind-midcall-facility-mask.test.mjs
 test/bind-notice-key-usage.test.mjs
 test/bind-notice-once-per-key.test.mjs
@@ -65,6 +66,7 @@ test/canvas-echoes-callers-own-inputs.test.mjs
 test/cap-signal.test.mjs
 test/cap-trim-spares-capacity-teaser.test.mjs
 test/capacity-context.test.mjs
+test/capacity-intro-handshake.test.mjs
 test/capacity-inventory-not-in-static-copy.test.mjs
 test/capacity-pointer-size-vs-ask.test.mjs
 test/capacity-source-pointers.test.mjs
@@ -342,6 +344,7 @@ test/market-outlook-geography.test.mjs
 test/market-outlook-routing.test.mjs
 test/market-pricing-public.test.mjs
 test/market-taste-cites-verdict-as-of.test.mjs
+test/mcp-claude-400-get-405.test.mjs
 test/mcp-oauth-own-resource.test.mjs
 test/mcp-oauth-path.test.mjs
 test/mcp-packs.test.mjs
@@ -412,12 +415,14 @@ test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
 test/plan-caller-ip.test.mjs
+test/plan-email-ask.test.mjs
 test/plan-free-fields.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
 test/plan-rerun.test.mjs
 test/plan-step-session-id.test.mjs
+test/plan-steps-caller-key.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
@@ -451,6 +456,7 @@ test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-email-rows-ask.test.mjs
+test/rank-markets-every-criterion-asks.test.mjs
 test/rank-markets-unreadable-floor.test.mjs
 test/rank-markets-value-strip.test.mjs
 test/rank-markets-visible-order.test.mjs
@@ -523,10 +529,13 @@ test/session-release-covers-every-map.test.mjs
 test/sessionless-bind-email-unlock-e2e.test.mjs
 test/sessionless-cap-email-ask.test.mjs
 test/sessionless-client-header-platform.test.mjs
+test/sessionless-freekey-wall-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
 test/site-market-verdict.test.mjs
+test/site-owner-handoff-handler.test.mjs
+test/site-owner-handoff.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs
@@ -579,6 +588,7 @@ test/uncovered-constraints.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/unlock-more-data-no-price.test.mjs
 test/unlock-more-data-pro-trigger.test.mjs
+test/unlock-research-request.test.mjs
 test/unlock-tool-text-price-free.test.mjs
 test/unverified-listing-marker.test.mjs
 test/upgrade-names-what-you-missed.test.mjs

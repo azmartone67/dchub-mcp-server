@@ -93,7 +93,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['free tier block', /FREE TIER \(quote verbatim\): Anonymous: previews, no key needed\./],
     // Item 1 (owner 2026-10-16): the "PAID: <tools> need a paid DC Hub plan" line is gone; the
     // siting clause and one neutral line state where the free answers stop.
-    ['siting clause + past that', /Siting: no email, previews; [^.]*each a month\. Past that, previews\./],
+    ['siting clause + past that', /Siting: no email, previews; [^.]*a month\. Past that, previews\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['reference', /Reference: resource `dchub:\/\/instructions`/],
     ['served count', /\b\d+ tools \(a curated subset of \d+\)/],

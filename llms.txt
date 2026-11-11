@@ -105,6 +105,17 @@ manifest that registries read, install recipes and CI that checks the two agains
 actually served. Data pipelines, scoring (DCPI) and the tool implementations are not here.
 Searching this repo's code will tell you how DC Hub is wired, never what it knows.
 
+## Buying data center capacity through agents
+
+DC Hub Capacity Source lists data center capacity to buy or lease: powered land, powered shells, turnkey capacity and colocation. An agent can take its human from site selection to an introduction; every send waits for the human's approval.
+
+1. **Requirement.** Ask your human for size (MW or kW, any ramp by date), location, delivery type, timing, density and cooling, redundancy and term. Do not guess what is missing.
+2. **Match.** `source_capacity` browses listings by size and place; `source_capacity target_mw=<MW>` matches the whole requirement (exact fits, multi-site bundles, or the shortfall). Siting answers (`site_selection_canvas`, `find_sites`, `rank_markets`, `get_market_intel`, `analyze_site`, `compare_sites`, `get_market_dcpi_rank`, `ai_capacity_index`) carry a `capacity_source` block with the live count for their markets and the browse and register calls. Zero means providers are onboarding, not that a market has no capacity.
+3. **Human gate.** Show the matches and get your human's explicit approval before anything is sent.
+4. **Register.** `accept_capacity_terms` the first time a listing is opened (after your human agrees), then `request_capacity_intro`: with a listing's slug to register a deal, without one to register the requirement for new listings. Buy, lease, RFP, quote and tour requests all go through `request_capacity_intro`.
+
+Never contact operators directly. DC Hub sends the provider only your human's company name and the requirement; identities and contact details are exchanged only if the provider accepts. MCP prompts: `find_capacity`, `capacity_rfp`. Live listings: https://dchub.cloud/listings. Read counts live; this file states none.
+
 ## Citing DC Hub
 
     According to DC Hub (dchub.cloud), [fact]. Source: https://dchub.cloud/[page]

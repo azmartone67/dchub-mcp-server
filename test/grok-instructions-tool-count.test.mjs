@@ -96,7 +96,9 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     expect(instr).toMatch(new RegExp(`DC Hub: ${TOTAL} tools\\.`));
     expect(S._INSTRUCTIONS).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
     expect(instr).not.toContain('curated subset');
-    expect(instr).toBe(S._INSTRUCTIONS_LEAN);
+    // Capacity handoff item 5 (owner 2026-11-11): /mcp alone adds the buy/RFP clause after the routing sentence.
+    expect(instr).toBe(S._withCapacityIntroClause(S._INSTRUCTIONS_LEAN));
+    expect(instr).not.toBe(S._INSTRUCTIONS_LEAN);
   });
 
   it('grokServedCount counts only names the catalog carries (serves short, never long)', () => {
