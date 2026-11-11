@@ -141,10 +141,10 @@ describe('DELETE /mcp — the third eviction site', () => {
     expect(held(sid)).toEqual([]);
   });
 
-  it('still 404s an unknown session, and touches no map', async () => {
+  it('answers an unknown session 200 (already ended: 2026-11-11, was 404), and touches no map', async () => {
     const before = maps().map(([n, m]) => `${n}:${m.size}`);
     const r = await del('never-seen-sid');
-    expect(r.status).toBe(404);
+    expect(r.status).toBe(200);
     expect(maps().map(([n, m]) => `${n}:${m.size}`)).toEqual(before);
   });
 });

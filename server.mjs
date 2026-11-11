@@ -36112,7 +36112,7 @@ app.delete(MCP_PATHS, async (req, res) => {
   // 2026-11-11: a DELETE for a session this process does not hold (evicted by the idle sweeper or
   // a deploy) has nothing left to end, so it gets 200 like a successful one. It was a 404, which
   // the SDK client's terminateSession raises as an error at the moment the client is shutting
-  // down (11-10/11: copilot-cli and opencode, 5 in 8 hours). A DELETE with no session id at all is
+  // down (11-10/11: two CLI clients, 5 in 8 hours). A DELETE with no session id at all is
   // still a 404: there is no session it could mean.
   if (sid) return res.status(200).json({ ok: true, session: 'not held: already ended' });
   res.status(404).json({ error: 'Session not found' });
