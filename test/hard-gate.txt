@@ -454,6 +454,7 @@ test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-email-rows-ask.test.mjs
+test/rank-markets-every-criterion-asks.test.mjs
 test/rank-markets-unreadable-floor.test.mjs
 test/rank-markets-value-strip.test.mjs
 test/rank-markets-visible-order.test.mjs
@@ -526,6 +527,7 @@ test/session-release-covers-every-map.test.mjs
 test/sessionless-bind-email-unlock-e2e.test.mjs
 test/sessionless-cap-email-ask.test.mjs
 test/sessionless-client-header-platform.test.mjs
+test/sessionless-freekey-wall-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
