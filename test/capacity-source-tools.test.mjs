@@ -480,8 +480,9 @@ describe('source_capacity', () => {
     responder = () => json(200, { ...LIST_UPCOMING_EMPTY, filters: { market: 'Reno' } });
     const lines = (await call(READ, { market: 'Reno' })).content[1].text.split('\n');
     expect(lines[0]).toBe(S.LISTING_NO_MATCH_LINE);
-    expect(lines[0]).toContain('request_capacity_intro without a slug');
-    expect(S._listingLines(listWithItems(2)).join('\n')).not.toContain('No listing matches');
+    // Item 4 (owner 2026-11-11): the requirement option is its own person-approved line, naming this search's market.
+    expect(lines.join('\n')).toContain('request_capacity_intro without a slug, with markets="Reno", registers this requirement');
+    expect(S._listingLines(listWithItems(2)).join('\n')).not.toContain('No live listing matches');
     expect(S._listingLines({ ok: false, items: [] })).toEqual([]);
   });
 
@@ -1653,7 +1654,9 @@ describe('browse-path access block → next_steps', () => {
     const fixture = listWithItems(2);   // no access block of either name
     const payload = JSON.parse((await browseResult(fixture)).content[0].text);
     expect(Object.keys(payload)).toEqual(
-      [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite', 'next_call']);   // next_call: lib/next-call.mjs, on every data answer (Brain block 2026-10-28 item 4)
+      // listings_matching / register_call: the honest count and, under LISTING_FEW, the person-approved register
+      // call (item 4, owner 2026-11-11); grid_check: both cards sit in one state, so the grid check for it (item 3).
+      [...Object.keys(fixture), 'listings_matching', 'register_call', 'grid_check', 'citation', 'provenance', '_source', '_cite', 'next_call']);   // next_call: lib/next-call.mjs, on every data answer (Brain block 2026-10-28 item 4)
     for (const [i, item] of payload.items.entries()) {
       expect(Object.keys(item), 'item ' + i).toEqual(Object.keys(fixture.items[i]));
     }

@@ -314,10 +314,14 @@ describe('pointers on tool results', () => {
     expect(S.CAPACITY_NEXT_SENTENCE).not.toMatch(/\$|\bpro\b|starter|enterprise|plan\b/i);
   });
 
-  it('the pointer set is exactly the nine siting tools, all registered', () => {
+  // Energy first (owner 2026-11-11, item 3): the six grid / queue tools joined the nine siting tools.
+  it('the pointer set is exactly the nine siting tools plus the six grid / queue tools, all registered', () => {
     expect([...S._CAPACITY_POINTER_TOOLS].sort()).toEqual(
-      ['ai_capacity_index', 'analyze_site', 'compare_sites', 'find_sites', 'get_market_context',
-        'get_market_dcpi_rank', 'get_market_intel', 'rank_markets', 'site_selection_canvas']);
+      ['ai_capacity_index', 'analyze_site', 'compare_isos', 'compare_sites', 'find_sites', 'get_grid_data',
+        'get_grid_intelligence', 'get_interconnection_queue', 'get_market_context',
+        'get_market_dcpi_rank', 'get_market_intel', 'get_power_availability_timeline', 'get_refined_queue',
+        'rank_markets', 'site_selection_canvas']);
+    expect([...S._GRID_CROSS_TOOLS].every((t) => S._CAPACITY_POINTER_TOOLS.has(t))).toBe(true);
     for (const n of S._CAPACITY_POINTER_TOOLS) expect(TOOLS[n], `${n} is not registered`).toBeTruthy();
   });
 

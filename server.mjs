@@ -274,7 +274,7 @@ import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAg
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
   buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent,
-  buildCapacitySourceBlock, capacityRegisterLine } from './lib/capacity-source-summary.mjs';
+  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY } from './lib/capacity-source-summary.mjs';
 export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, FOUNDING_URL, PRO_URL };
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
@@ -7210,6 +7210,33 @@ export const _CAPACITY_POINTER_TOOLS = new Set([
   // Capacity handoff item 1 (2026-11-10): the rest of the siting family bridges to inventory too.
   'compare_sites', 'get_market_dcpi_rank', 'ai_capacity_index',
 ]);
+// Energy first (owner 2026-11-11, item 3): a grid or queue answer names the place where capacity would
+// sit, so it carries the same capacity_source block for that ISO, state or market (the item-1 bridge:
+// live count, zero honest, browse call, person-approved register call), and its next_call names
+// source_capacity unless a wall's own ask names a tool (lib/next-call.mjs).
+export const _GRID_CROSS_TOOLS = new Set([
+  'get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_refined_queue',
+  'get_power_availability_timeline', 'compare_isos',
+]);
+for (const t of _GRID_CROSS_TOOLS) _CAPACITY_POINTER_TOOLS.add(t);
+
+// The US states an ISO argument covers, read off _STATE_ISO_META (split states included: PJM covers
+// part of VA, and a Virginia listing is a PJM listing). "PJM-DOM" is the Dominion zone: Virginia.
+// Non-RTO codes (balancing authorities, non-US grids) cover nothing here, so they get no block.
+export function _isoStates(v) {
+  const out = [];
+  for (const raw of String(v ?? '').split(/[,;]/)) {
+    let iso = raw.trim().toUpperCase().replace(/\s+/g, '');
+    if (!iso) continue;
+    if (iso === 'PJM-DOM') { if (!out.includes('VA')) out.push('VA'); continue; }
+    if (iso === 'ISO-NE') iso = 'ISONE';
+    if (!_EXEC_RTOS.has(iso)) continue;
+    for (const [st, isos] of Object.entries(_STATE_ISO_META)) {
+      if (isos.includes(iso) && !out.includes(st)) out.push(st);
+    }
+  }
+  return out;
+}
 
 // The /dchub:find_capacity prompt (Capacity Source, 2026-09-14). Module level so
 // /mcp/claude can serve the SAME prompt (owner 2026-09-29) without a second
@@ -7239,8 +7266,8 @@ export function findCapacityPromptText(a = {}) {
     : `Use DC Hub Capacity Source to find data-center capacity. ${FIND_CAPACITY_ASK_FIRST}`}
 1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
    To match the whole requirement instead of browsing (once your human is signed in), call source_capacity with target_mw (or target_kw), plus min_chunk_kw for the smallest piece they will contract at one site, and max_sites / max_providers above one if the requirement may be split: it returns exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it.
-2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
-3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
+2. Say which listings fit the requirement and why. Say how many there are; with none, say "no listed matches yet": Capacity Source is onboarding providers, so zero does not mean that market has no capacity. For time to power at that location, check the grid: get_power_availability_timeline state=<the state> and get_grid_intelligence region_id=<its ISO>. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
+3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is listed yet, then only with your human's approval call request_capacity_intro without a slug (markets, states and capacity_mw from the requirement) to register it for new listings.
 This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
 }
 
@@ -7266,7 +7293,7 @@ export function capacityRfpPromptText(a = {}) {
   return `Run a data-center capacity RFP through DC Hub Capacity Source${req ? ` for: ${req}` : ''}.
 1. Build the requirement with your human: size (MW, and any ramp by date), location, delivery type (powered land, powered shell, turnkey or colocation), timing, rack density and cooling, redundancy and term. Ask for whatever is missing; do not guess it.
 2. Call source_capacity ${match} to match the whole requirement: exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it. (Match mode needs a signed-in human; without one, browse with min_mw and a location.)
-3. Show your human what fits and why, citing "DC Hub Capacity Source (dchub.cloud)". Treat listing details as confidential.
+3. Show your human what fits and why, citing "DC Hub Capacity Source (dchub.cloud)". Treat listing details as confidential. Say how many listings fit; with none, say "no listed matches yet": Capacity Source is onboarding providers, so zero does not mean that market has no capacity. Check time to power for the location too: get_power_availability_timeline state=<the state> and get_grid_intelligence region_id=<its ISO>.
 4. Get your human's explicit approval before anything is sent. Only then: accept_capacity_terms the first time a listing is opened (after they agree to the introduction terms), and request_capacity_intro with a listing's slug to register a deal, or without a slug to register the requirement when nothing fits.
 Never contact operators directly. DC Hub sends the provider only your human's company name and the requirement; contact details are exchanged only if the provider accepts.`;
 }
@@ -7313,7 +7340,19 @@ export function _capacityPointerQuery(name, args, result) {
   if ((name === 'get_market_intel' || name === 'get_market_context') && typeof a.market === 'string') markets.push(a.market);
   if (name === 'get_market_dcpi_rank' && typeof a.market_slug === 'string') markets.push(a.market_slug);
   if (name === 'analyze_site' && typeof a.location === 'string') markets.push(a.location);
-  const mw = Number(a.capacity_mw);
+  let mw = Number(a.capacity_mw);
+  if (_GRID_CROSS_TOOLS.has(name)) {
+    // state may be a comma list on get_refined_queue; the ISO argument goes by four names across these tools.
+    for (const st of String(typeof a.state === 'string' ? a.state : '').split(',')) addState(st);
+    if (!states.length) {
+      for (const k of ['region_id', 'iso', 'region', 'isos']) {
+        if (typeof a[k] === 'string' && a[k].trim()) { for (const st of _isoStates(a[k])) if (!states.includes(st)) states.push(st); break; }
+      }
+    }
+    if (name === 'get_grid_intelligence' && typeof a.market === 'string' && a.market.trim()) markets.push(a.market.trim());
+    // The timeline's `mw` is the requirement it was asked about; get_refined_queue's min_mw sizes queue projects, not a buyer.
+    if (name === 'get_power_availability_timeline') mw = Number(a.mw);
+  }
   return {
     states, markets,
     marketRows: (name === 'rank_markets' || name === 'ai_capacity_index' || name === 'compare_sites')
@@ -7377,8 +7416,15 @@ export function _withCapacityPointer(result, name, args, outSchema) {
     const q = _capacityPointerQuery(name, args, result);
     const block = buildCapacitySourceBlock(summary, q);
     if (!block) return result;
+    // A grid answer is the energy-to-capacity bridge (item 3): its next call is the inventory for that place,
+    // and it says so in one line even unsized (zero reads as "not listed yet", never "no capacity").
+    const grid = _GRID_CROSS_TOOLS.has(name);
+    if (grid && !block.next_call) {
+      block.next_call = { tool: 'source_capacity', arguments: { ...block.browse_call.arguments },
+        why: 'this answer names a grid: browse listed capacity in the same place' };
+    }
     const line = block.live_listings_matching > 0 ? capacityPointerLine(block)
-      : (q.minMw !== null ? capacityRegisterLine(block) : null);
+      : ((q.minMw !== null || grid) ? capacityRegisterLine(block) : null);
     const out = line ? { ...result, content: [...result.content, { type: 'text', text: line }] }
       : { ...result };
     // ★ outputSchema. The SDK validates structuredContent AFTER this returns,
@@ -8488,8 +8534,68 @@ function _matchReachableWhen(req) {
 
 // No listing in a browse answer: said first, with the free requirement option,
 // so an empty search does not read as a sign-in or plan limit.
-export const LISTING_NO_MATCH_LINE = 'No listing matches this search. To be told when matching capacity opens,'
-  + ' register the requirement with request_capacity_intro without a slug (free).';
+// Item 4 (owner 2026-11-11): zero is "no listed matches yet", never "no capacity exists" (the siting
+// bridge's own note, lib/capacity-source-summary CAPACITY_ZERO_NOTE), and registering the requirement
+// is a step the person approves: nothing is sent without it.
+// The register step itself is the next line, with this search's own market and size (_listingRegisterLine).
+export const LISTING_NO_MATCH_LINE = CAPACITY_ZERO_NOTE;
+// Fewer listings than this in an answer: the count line says "only", and the register call rides along.
+export const LISTING_FEW = 3;
+
+// The person-approved register call for a browse or match that came back empty or thin, built from the
+// caller's own filters so it names that market. Never sent by DC Hub: request_capacity_intro sends
+// nothing without the person's name, company and accept_terms:true.
+export function _listingRegisterCall(args) {
+  const a = args && typeof args === 'object' ? args : {};
+  const out = {};
+  const market = _listingStr(a.market);
+  if (market) out.markets = market;
+  const st = _capacityStateCode(a.state);
+  if (st) out.states = st;
+  const loc = _listingStr(a.location);
+  if (loc && !market && !st) out.markets = loc;
+  if (_listingStr(a.region)) out.regions = _listingStr(a.region);
+  const mw = [a.target_mw, a.min_mw].map(Number).find((v) => Number.isFinite(v) && v > 0);
+  const kw = [a.target_kw, a.min_kw].map(Number).find((v) => Number.isFinite(v) && v > 0);
+  if (mw) out.capacity_mw = mw; else if (kw) out.capacity_kw = kw;
+  if (_listingStr(a.available_by)) out.timeline = _listingStr(a.available_by);
+  return { tool: 'request_capacity_intro', arguments: out, needs_human_approval: true, why: CAPACITY_REGISTER_WHY };
+}
+const _callArgsText = (args) => Object.entries(args || {})
+  .map(([k, v]) => `${k}=${typeof v === 'number' ? v : JSON.stringify(v)}`).join(' ');
+export function _listingRegisterLine(call) {
+  const args = _callArgsText(call.arguments);
+  return 'Next, only once your human approves (with their name, company and agreement to the introduction terms): request_capacity_intro without a slug'
+    + (args ? ', with ' + args + ',' : '') + ' registers this requirement so providers with matching capacity can respond. Nothing is sent without that approval.';
+}
+export function _listingCountLine(n) {
+  return (n < LISTING_FEW ? 'Only ' : '') + n + ' listing' + (n === 1 ? '' : 's') + ' match' + (n === 1 ? 'es' : '')
+    + ' this search' + (n < LISTING_FEW ? ' so far (Capacity Source is onboarding providers).' : '.');
+}
+
+// Energy first (owner 2026-11-11, item 3): a capacity answer names the grid check for its place, the
+// other half of time to power. State from the caller's filter, else the one state every listing shares;
+// the ISO is the first RTO _STATE_ISO_META gives that state (TX -> ERCOT, VA -> PJM, GA -> none).
+export function _listingGridCheck(args, rows) {
+  const a = args && typeof args === 'object' ? args : {};
+  let st = _capacityStateCode(a.state);
+  if (!st && Array.isArray(rows)) {
+    const sts = new Set(rows.map((x) => _capacityStateCode(x && (x.state || (x.location && x.location.state)))).filter(Boolean));
+    if (sts.size === 1) st = [...sts][0];
+  }
+  const iso = st ? (_STATE_ISO_META[st] || []).find((i) => _EXEC_RTOS.has(i)) : null;
+  const mw = [a.target_mw, a.min_mw].map(Number).find((v) => Number.isFinite(v) && v > 0);
+  const calls = [];
+  if (st) calls.push({ tool: 'get_power_availability_timeline', arguments: { state: st, ...(mw ? { mw } : {}) } });
+  if (iso) calls.push({ tool: 'get_grid_intelligence', arguments: { region_id: iso } });
+  else if (_listingStr(a.market)) calls.push({ tool: 'get_grid_intelligence', arguments: { market: _listingStr(a.market) } });
+  if (!calls.length) return null;
+  return { calls, why: 'time to power for this location: queue, headroom and when new load can connect' };
+}
+export function _listingGridCheckLine(gc) {
+  return 'Grid check for this location (time to power): '
+    + gc.calls.map((c) => '`' + c.tool + (Object.keys(c.arguments).length ? ' ' + _callArgsText(c.arguments) : '') + '`').join(' · ') + '.';
+}
 
 // The rendered lines for a 2xx match body.
 export function _matchLines(body) {
@@ -8543,9 +8649,9 @@ export function _matchLines(body) {
     if (req.max_sites === 1 || req.max_sites === undefined) {
       lines.push('Bundles were not considered: pass max_sites (and max_providers) above one to allow a multi-site answer.');
     }
-    lines.push('To be told when matching capacity opens, register the requirement with request_capacity_intro without a slug.');
+    // The register step itself is the person-approved line _matchToolResult adds after these (item 4).
   }
-  if (!exact.length && !bundles.length && !sf) lines.push('No listing matched.');
+  if (!exact.length && !bundles.length && !sf) lines.push(CAPACITY_ZERO_NOTE);
 
   if (b.data_as_of_basis === 'newest_listing_updated_at') {
     lines.push('Data as of: ' + (_listingStr(b.data_as_of) || 'unavailable')
@@ -8571,7 +8677,7 @@ export function _matchLines(body) {
 // Map the /match response onto the tool result. 2xx renders the match; every
 // wall and error goes through the same mapping the rest of the tool uses, with
 // the match-specific identity wording.
-export function _matchToolResult(r) {
+export function _matchToolResult(r, args) {
   const tool = 'source_capacity';
   const status = r && Number.isInteger(r.http_status) ? r.http_status : 0;
   const body = r && r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : null;
@@ -8601,12 +8707,44 @@ export function _matchToolResult(r) {
           + ' left this month; more introductions need a paid plan (the link in human_url).';
       }
     } else {
-      note = 'Nothing fits yet. request_capacity_intro without a slug registers the requirement so DC Hub can email your human when matching capacity opens.';
+      note = 'Nothing fits yet. ' + CAPACITY_ZERO_NOTE + ' With your human\'s approval (nothing is sent without it), request_capacity_intro without a slug registers the requirement so DC Hub can email your human when matching capacity opens.';
     }
     const payload = { ...scrubbed, next_steps: ['request_capacity_intro'], next_steps_note: note };
-    return _listingResult(payload, {}, _matchLines(scrubbed));
+    // Item 3 + 4 (owner 2026-11-11): no fit carries the person-approved register call for this requirement;
+    // every match carries the grid check for its place.
+    const tail = [];
+    if (!slugs.length || sf) {
+      payload.register_call = _listingRegisterCall(args);
+      tail.push(_listingRegisterLine(payload.register_call));
+    }
+    const legs = [...(Array.isArray(scrubbed.exact) ? scrubbed.exact : []),
+      ...(Array.isArray(scrubbed.bundles) ? scrubbed.bundles.flatMap((x) => (x && Array.isArray(x.legs) ? x.legs : [])) : [])];
+    const gc = _listingGridCheck(args, legs);
+    if (gc) { payload.grid_check = gc; tail.push(_listingGridCheckLine(gc)); }
+    return _listingResult(payload, {}, [..._matchLines(scrubbed), ...tail]);
   }
-  return _listingsToolResult(tool, r, { match: true });
+  return _listingsToolResult(tool, r, { match: true, args });
+}
+
+// Item 3 + 4 (owner 2026-11-11) on a 2xx browse: the honest count ("Only N listings ... so far", or the
+// zero line _listingLines already leads with), the person-approved register call for that market when
+// the answer is empty or thin, and the grid check for the place. null for an opened listing or a
+// body that is not a browse.
+export function _listingBrowseExtras(body, args) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.ok === false || !Array.isArray(body.items)) return null;
+  if (body.listing && typeof body.listing === 'object') return null;
+  const rows = body.items.filter((x) => x && typeof x === 'object' && !Array.isArray(x));
+  const n = Number.isInteger(body.count) && body.count >= rows.length ? body.count : rows.length;
+  const fields = { listings_matching: n };
+  const lead = n > 0 ? [_listingCountLine(n)] : [];
+  const tail = [];
+  if (n < LISTING_FEW) {
+    fields.register_call = _listingRegisterCall(args);
+    tail.push(_listingRegisterLine(fields.register_call));
+  }
+  const gc = _listingGridCheck(args, rows);
+  if (gc) { fields.grid_check = gc; tail.push(_listingGridCheckLine(gc)); }
+  return { fields, lead, tail };
 }
 
 // Map a {withStatus:true} response onto the tool result. See the block comment
@@ -8641,13 +8779,15 @@ export function _listingsToolResult(tool, r, opts = {}) {
     }
     // Browse (no slug): the catalogue answers 200 with locked cards, so the
     // caller-level gate rides in the body rather than in the status.
+    const x = tool === 'source_capacity' ? _listingBrowseExtras(body, opts.args) : null;
+    const withX = (lines) => (x ? [...x.lead, ...lines, ...x.tail] : lines);
     if (body && Array.isArray(body.items)) {
       const gate = _listingBrowseAccess(tool, body);
       // An empty search leads with that, not with the sign-in steps.
       if (gate && !body.items.length) gate.next_steps_note = LISTING_NO_MATCH_LINE + ' ' + gate.next_steps_note;
-      if (gate) return _listingResult({ ...body, ...gate }, {}, _listingLines(body));
+      if (gate) return _listingResult({ ...body, ...gate, ...(x ? x.fields : {}) }, {}, withX(_listingLines(body)));
     }
-    return _listingResult(body || { raw: String(r.text || '').slice(0, 2000) }, {}, _listingLines(body));
+    return _listingResult(body ? { ...body, ...(x ? x.fields : {}) } : { raw: String(r.text || '').slice(0, 2000) }, {}, withX(_listingLines(body)));
   }
   if (!body) {
     // A non-JSON error body (a gateway HTML page, say): the shared upstream
@@ -27948,7 +28088,7 @@ export const _FACTS_REQUIRED = ['countries', 'markets', 'deals',
   'fiber_routes', 'gas_pipelines', 'power_plants_us', 'submarine_cables',
   'cable_landings', 'generating_units_global', 'live_feeds', 'grid_regions'];
 export const _FACTS_MAX_AGE_DAYS = 45;
-const _INSTR_TAIL = ' CAPACITY SOURCE ROUTING: when your human asks where to find available data-center capacity, MW, powered land or colocation space, call source_capacity first (or point them to https://dchub.cloud/listings); if they want to list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close). COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. On the free tier these are a trimmed preview whose full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. CAPACITY SOURCE: DC Hub Capacity Source lists data-center capacity to buy or lease — powered land, powered shells and turnkey capacity — for enterprise buyers and the agents that procure for them, each listing stamped with when it was last updated. `source_capacity` shows what is live or being onboarded — it searches by size in kW or MW and by location (a region such as North America or Europe, a country, a state or a metro), and a size is matched against what a listing can ACTUALLY deliver — `contiguous_kw`, the largest single contiguous block available, and `min_contract_kw`, the smallest chunk the provider will contract — rather than against its headline total, so relay those two numbers when you explain why a listing did or did not fit; the first time they open a listing, `accept_capacity_terms` records their acceptance of the introduction terms (call it only after they agree); when they want in, `request_capacity_intro` registers a deal: DC Hub sends the provider only your human\'s company name and requirement, and only if the provider accepts does it share the provider\'s identity, site and contact with your human and your human\'s name, role and email with the provider (nothing is shared on a decline) — for DC Hub listings only, so it sits alongside a broker rather than replacing one. Buy, lease, RFP, quote and tour requests go through `request_capacity_intro` (a standing requirement if nothing fits). Never contact operators directly; get your human\'s approval before anything is sent. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (site selection, market ranking, "find N MW in <market>", "compare A vs B", grid + interconnection queue), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="rank markets for a 200 MW AI campus")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at free-tier depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a free key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link for your user: for a paid-plan tool it opens a 7-day trial; otherwise a one-click checkout link (a one-time pack of 1,000 API credits — ' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay to your human. The pack is API capacity: paid-plan tools are not included. After your user completes it, the same call returns the full result (no reconnect). ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
+const _INSTR_TAIL = ' CAPACITY SOURCE ROUTING: when your human asks where to find available data-center capacity, MW, powered land or colocation space, call source_capacity first (or point them to https://dchub.cloud/listings); if they want to list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close). COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. On the free tier these are a trimmed preview whose full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. CAPACITY SOURCE: DC Hub Capacity Source lists data-center capacity to buy or lease — powered land, powered shells and turnkey capacity — for enterprise buyers and the agents that procure for them, each listing stamped with when it was last updated. `source_capacity` shows what is live or being onboarded — it searches by size in kW or MW and by location (a region such as North America or Europe, a country, a state or a metro), and a size is matched against what a listing can ACTUALLY deliver — `contiguous_kw`, the largest single contiguous block available, and `min_contract_kw`, the smallest chunk the provider will contract — rather than against its headline total, so relay those two numbers when you explain why a listing did or did not fit; the first time they open a listing, `accept_capacity_terms` records their acceptance of the introduction terms (call it only after they agree); when they want in, `request_capacity_intro` registers a deal: DC Hub sends the provider only your human\'s company name and requirement, and only if the provider accepts does it share the provider\'s identity, site and contact with your human and your human\'s name, role and email with the provider (nothing is shared on a decline) — for DC Hub listings only, so it sits alongside a broker rather than replacing one. Buy, lease, RFP, quote and tour requests go through `request_capacity_intro` (a standing requirement if nothing fits). Never contact operators directly; get your human\'s approval before anything is sent. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (time to power, power availability + interconnection queue, energy and gas prices, site selection, market ranking, "find N MW in <market>", "compare A vs B"), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="how soon can a 100 MW load get power in ERCOT")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at free-tier depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a free key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link for your user: for a paid-plan tool it opens a 7-day trial; otherwise a one-click checkout link (a one-time pack of 1,000 API credits — ' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay to your human. The pack is API capacity: paid-plan tools are not included. After your user completes it, the same call returns the full result (no reconnect). ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
 export function _composeInstructions(facts, nowMs) {
   const noFigures =
     `COVERAGE: ${CANONICAL_TOOL_COUNT} tools over data-center facilities worldwide, DCPI-scored power markets (Data Center Power Index), mapped power/grid/gas/fiber assets (substations, transmission lines, fiber routes, gas pipelines, US power plants, subsea cables and landings), a global generating-unit inventory, real-time grid telemetry from independent live feeds, per-facility tenants, and tracked M&A deals — current counts: https://dchub.cloud/api/v1/stats/canonical.` + _INSTR_TAIL;
@@ -28477,7 +28617,9 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // Item 1 (owner 2026-10-16): no "needs a paid DC Hub plan" line; the walls carry the link.
     + 'Past that, previews. '
     + 'A gated result carries `human_url` and `human_message`. ' + RELAY_CONTRACT + ' '
-    + 'Reference: resource `' + INSTRUCTIONS_RESOURCE_URI + '`, https://dchub.cloud/llms.txt.';
+    // Energy-first lead (owner 2026-11-11, item 3) took 37 more characters; the llms.txt URL gives them back (the
+    // resource carries the full text, and llms.txt is linked from it and from every public page).
+    + 'Reference: resource `' + INSTRUCTIONS_RESOURCE_URI + '`.';
 })();
 
 // ── Tool registrations (all wrapped) ─────────────────────────────
@@ -28701,8 +28843,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // silently drops the tool from the derived count (caught 2026-07-31 when
   // the count healed 82→81 across every registry surface).
   trackedTool(srv, 'execute_plan',
-    'Use this when a data center question spans several topics: one-call planner over megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure. Recommended entry for a question that spans more than one of those: it picks and chains the right tools and returns one dated, cited answer. Pass the user\'s question as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you ("rank markets for a 200 MW AI campus", "compare phoenix vs columbus", "power availability in ERCOT"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
-    { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "rank markets for a 200 MW AI campus" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "compare Dallas vs Phoenix for a hyperscale campus" · "find 100 MW of buildable capacity near Ashburn" · "where do fiber density and grid headroom overlap in Atlanta"'),
+    'Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), substations and transmission, megawatts and power density, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, tax incentives and permitting, water and climate risk, data-center M&A and deals. Recommended entry for a question that spans more than one of those: it picks and chains the right tools and returns one dated, cited answer. Pass the user\'s question as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you, energy and time to power first ("how soon can a 100 MW load get power in ERCOT", "interconnection queue and grid headroom in PJM for a 200 MW AI campus", "gas economics for on-site generation in Texas", "rank markets for a 200 MW AI campus"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
+    { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "how soon can a 100 MW load get power in ERCOT" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "interconnection queue and energy prices in MISO for a 200 MW campus" · "gas economics for on-site generation in Texas" · "rank markets for a 200 MW AI campus" · "find 100 MW of buildable capacity near Ashburn"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict.'),
       // ★★★2026-08-19 [6]: these values were ALWAYS accepted — but only inside
       //  the untyped `context` blob, so tools/list published them as an EMPTY
@@ -33352,7 +33494,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // request_capacity_intro (X-API-Key, X-MCP-Session, X-MCP-Platform,
       // X-Forwarded-For), so the backend matches for the real caller.
       if (_matchWanted(a)) {
-        return _matchToolResult(await callAPIWrite(MATCH_API, _matchBody(a), { withStatus: true }));
+        return _matchToolResult(await callAPIWrite(MATCH_API, _matchBody(a), { withStatus: true }), a);
       }
       // The GPU filters exist in the schema only when the flag is on, so they are read from
       // `gpu`, which is empty otherwise (no handler reads an undeclared argument).
@@ -33362,7 +33504,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           location: a.location, delivery_type: a.delivery_type, available_by: a.available_by,
           gpu_model: gpu.gpu_model, min_gpus: gpu.min_gpus, offer_type: gpu.offer_type, limit: a.limit },
         { withStatus: true });
-      return _listingsToolResult('source_capacity', r);
+      return _listingsToolResult('source_capacity', r, { args: a });
     });
 
   trackedTool(srv, 'request_capacity_intro',
