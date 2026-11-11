@@ -1800,7 +1800,7 @@ export function _paidSellStep(result, name) {
         perIso: keys.map((k) => cmp[k]), url: buy });
     } else {
       const rows = Array.isArray(sc.results) ? sc.results : [];
-      sentence = _rankMarketsSellLine({ criteria: sc.criteria, region: sc.region, total: sc._results_total_in_pro, shown: rows.length,
+      sentence = _rankMarketsSellLine({ criteria: sc.criteria, region: sc.region, regionState: sc.region_state, total: sc._results_total_in_pro, shown: rows.length,
         scoreHidden: rows.some((r) => r && r._score_in_pro === true), mwHidden: rows.some((r) => r && r._total_mw_in_pro === true), url: buy });
     }
     if (!sentence) return result;                      // nothing honest to name: keep the old line
@@ -12435,8 +12435,20 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     if (_isCleanPlatform() || isBotOrInternalCtx(c)) return result;
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
     if (_isPaidDepthTier(c.tier) || c.tier === 'identified' || c.email) return result;
+    // Sessionless free-key wall (2026-11-11, funnel no_ask_split since 11-10 10:45Z: get_grid_data on
+    // platform mcp, 2 of 2 sessionless walls with no ask). The link page grants the email onto a SESSION, so
+    // this step stopped here for a caller without one, and a keyless sessionless get_grid_data /
+    // get_energy_prices / get_water_risk / get_renewable_energy wall asked for nothing. The in-chat form
+    // below needs no session: its agent line is bind_email, which on a call with no key returns a new
+    // email-bound key for the X-API-Key header (mcp#1348). So a sessionless caller gets that form only
+    // (never the page-only wording), on every wall (there is no session memo). Not an execute_plan step
+    // (the plan answer carries the ask). The freekeyChat test below leaves the rest as they were: a grid /
+    // queue tool (the decision hand-off line already asks there) and a keyed caller (its wall already
+    // names `bind_email`, the bind_field ask) are never freekeyChat.
+    // Kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 (the sessionless cap-wall ask's switch, mcp#1340).
     const sid = c.session_id || '';
-    if (!sid || sid === 'no-session') return result;
+    const sessionless = !sid || sid === 'no-session';
+    if (sessionless && (c.loopback_step || !_sessionlessEmailAskOn())) return result;
     if (!_isRelayWall(sc0, c)) return result;
     const up = (sc0._upgrade && typeof sc0._upgrade === 'object') ? sc0._upgrade : {};
     if (sc0.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return result;
@@ -12455,6 +12467,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     const freekeyChat = !gridQueue && _retWallEmailFreekeyChatOn(env) && !_pcIsGrok(c.platform)
       && texts.some((t) => t.split('\n').some(isHumanLine))
       && !texts.some((t) => t.includes('`' + 'bind_email' + '`'));
+    if (sessionless && !freekeyChat) return result;   // the page-only wording needs a session to grant onto
     const sentence = (gridQueue || freekeyChat) ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
     let wrote = false;
     const content = result.content.map((b) => {
