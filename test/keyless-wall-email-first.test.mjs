@@ -362,7 +362,9 @@ describe('C. quota_wall_hit', () => {
   });
 
   // Wall email option E (owner 2026-10-26): the event names the email ask the wall showed.
-  it('option E: the email-first wall reports link (first wall) then link_exit; a wall with no email link reports none', async () => {
+  // Item 2 (2026-11-11): a wall with no email link still offers: the offer floor's digest line (search_facilities
+  // is a depth tool), reported as digest_line, never as an email unlock.
+  it('option E: the email-first wall reports link (first wall) then link_exit; a wall with no email link reports the floor\'s digest_line', async () => {
     anonCount = 999;
     const ip = { 'x-dc-client-ip': '203.0.113.13' };
     const f = await call('find_sites', { state: 'TX' }, { extraHdr: ip });
@@ -374,7 +376,7 @@ describe('C. quota_wall_hit', () => {
     const n = await call('search_facilities', { query: 'ashburn' });
     expect(n.status).toEqual(['anon_hard_wall']);
     expect(n.events.length).toBe(1);
-    expect(n.events[0]).not.toHaveProperty('email_ask');
+    expect(n.events[0].email_ask).toBe('digest_line');
   });
 
   // Option E fix (2026-10-26): the event leaves after the outer response steps, so an ask they add

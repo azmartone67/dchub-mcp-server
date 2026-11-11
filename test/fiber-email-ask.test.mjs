@@ -12,6 +12,7 @@ import { createServer } from 'node:http';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import { digestAskLine } from '../lib/depth-digest-ask.mjs';
+import { FLOOR_EMAIL_LEAD } from '../lib/wall-offer-floor.mjs';
 import { fiberEmailClause, RANK_EMAIL_ASK_LEAD, AICAP_EMAIL_LINE_HEAD } from '../lib/paid-sell-line.mjs';
 
 const realConnect = net.Socket.prototype.connect;
@@ -198,15 +199,18 @@ describe('keyless get_fiber_intel wall on /mcp, production transport', () => {
     expect(r.text).not.toContain('`subscribe_digest`');                // the unlock ask, not the digest offer
     expect(r.ev && r.ev.email_ask).toBe('line');
   });
-  it('a repeat wall in the same session (no human line): no ask, not tagged', async () => {
+  // Item 2 (owner 2026-11-11): a repeat wall still carries one offer: not the rows clause again, the offer
+  // floor's one email line (lib/wall-offer-floor.mjs), tagged line.
+  it('a repeat wall in the same session (no human line): the rows clause is not repeated; the floor\'s one email line is, tagged line', async () => {
     const call = await session('Claude Code', 'get_fiber_intel');
     await call({ market: 'dallas' });
     const r = await call({ market: 'dallas' });
     expect(r.text).not.toContain(RANK_EMAIL_ASK_LEAD);
-    expect(r.ev && r.ev.email_ask).toBeUndefined();
+    expect(count(r.text, FLOOR_EMAIL_LEAD)).toBe(1);
+    expect(r.ev && r.ev.email_ask).toBe('line');
   });
-  it('DCHUB_FIBER_EMAIL_ASK=0: no ask, not tagged', async () => {
-    const r = await withEnv('DCHUB_FIBER_EMAIL_ASK', '0', async () => (await session('Claude Code', 'get_fiber_intel'))({ market: 'dallas' }));
+  it('DCHUB_FIBER_EMAIL_ASK=0 (and the offer floor off): no ask, not tagged', async () => {
+    const r = await withEnv('DCHUB_WALL_OFFER_FLOOR', '0', () => withEnv('DCHUB_FIBER_EMAIL_ASK', '0', async () => (await session('Claude Code', 'get_fiber_intel'))({ market: 'dallas' })));
     expect(r.text).not.toContain(RANK_EMAIL_ASK_LEAD);
     expect(r.ev && r.ev.email_ask).toBeUndefined();
   });

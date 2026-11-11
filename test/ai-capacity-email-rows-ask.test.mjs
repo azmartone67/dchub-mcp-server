@@ -9,6 +9,7 @@
 // on) against a stub backend serving a production-shaped /api/v1/ai-capacity-index payload
 // (test/fixtures/ai-capacity-index-90.json: the live 2026-11-05 response's keys and markets, numeric
 // values filled in). The wall-hit tag is read from the quota_wall_hit event the server posts.
+import { FLOOR_EMAIL_LEAD } from '../lib/wall-offer-floor.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -170,19 +171,23 @@ describe('keyless ai_capacity_index wall on /mcp, production transport', () => {
     expect(r.text).not.toContain('shows all 20 markets');
   });
 
-  it('a repeat wall in the same session (no human line): no ask, not tagged line', async () => {
+  // Item 2 (owner 2026-11-11): the ask-once memo shortens a repeat wall but it still carries one offer: the
+  // rows clause is not repeated, the offer floor's one email line is (lib/wall-offer-floor.mjs), tagged line.
+  it('a repeat wall in the same session (no human line): the rows clause is not repeated, the floor\'s one email line is; tagged line', async () => {
     const call = await session();
     const first = await call();
     expect(first.text).toContain(line(20));
     const r = await call();
     expect(r.texts.some((t) => t.includes(HUMAN))).toBe(false);
-    expect(r.text).not.toContain('bind_email');
+    expect(r.text).not.toContain(line(20));
+    expect(count(r.text, FLOOR_EMAIL_LEAD)).toBe(1);
+    expect(count(r.text, '`bind_email`')).toBeGreaterThanOrEqual(1);
     expect(r.ev).toBeTruthy();
-    expect(r.ev.email_ask).not.toBe('line');
+    expect(r.ev.email_ask).toBe('line');
   });
 
-  it('DCHUB_AICAP_EMAIL_ASK=0: no ask, not tagged line', async () => {
-    const r = await withEnv('DCHUB_AICAP_EMAIL_ASK', '0', async () => (await session())());
+  it('DCHUB_AICAP_EMAIL_ASK=0 (and the offer floor off): no ask, not tagged line', async () => {
+    const r = await withEnv('DCHUB_WALL_OFFER_FLOOR', '0', () => withEnv('DCHUB_AICAP_EMAIL_ASK', '0', async () => (await session())()));
     expect(r.texts.some((t) => t.startsWith(HUMAN))).toBe(true);
     expect(r.text).not.toContain('bind_email');
     expect(r.ev).toBeTruthy();

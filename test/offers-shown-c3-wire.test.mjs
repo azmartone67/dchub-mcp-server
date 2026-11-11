@@ -32,7 +32,7 @@ const SHORT_ALPHA = '23456789abcdefghjkmnpqrstuvwxyz';
 const HUMAN = '→ **For your human:**';
 const CAP = 10;   // IDENTIFIED_DAILY_FULL_CAP's default (DCHUB_IDENTIFIED_TOOL_DAILY_FULL is cleared below)
 const ENV = { DCHUB_WALL_ISERROR: '0', DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET };
-const CLEAR = ['DCHUB_OFFERS_SHOWN_EVENT', 'DCHUB_WALL_TAG_ALL', 'DCHUB_DEPTH_DIGEST_ASK', 'DCHUB_AICAP_EMAIL_ASK', 'DCHUB_LEAN_RESPONSES', 'DCHUB_IDENTIFIED_TOOL_DAILY_FULL', 'DCHUB_TRIAL_TOOL_DAILY_FULL'];
+const CLEAR = ['DCHUB_WALL_OFFER_FLOOR', 'DCHUB_OFFERS_SHOWN_EVENT', 'DCHUB_WALL_TAG_ALL', 'DCHUB_DEPTH_DIGEST_ASK', 'DCHUB_AICAP_EMAIL_ASK', 'DCHUB_LEAN_RESPONSES', 'DCHUB_IDENTIFIED_TOOL_DAILY_FULL', 'DCHUB_TRIAL_TOOL_DAILY_FULL'];
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -145,7 +145,8 @@ describe('C3 on the wire: the wall row names what the agent received', () => {
   });
 
   it('an ask the lean step cut is neither marked nor offered (the claim hand-off line)', async () => {
-    const r = await withEnv('DCHUB_DEPTH_DIGEST_ASK', '0', async () => (await session())());
+    // The offer floor (item 2) is off: this reads what the lean step cut, not the line added after it.
+    const r = await withEnv('DCHUB_WALL_OFFER_FLOOR', '0', () => withEnv('DCHUB_DEPTH_DIGEST_ASK', '0', async () => (await session())()));
     expect(r.text).not.toMatch(/ask your human for (their|an) email/i);
     expect(r.text).not.toContain('claim_free_key');
     expect(r.ev && r.ev.email_ask).toBeUndefined();

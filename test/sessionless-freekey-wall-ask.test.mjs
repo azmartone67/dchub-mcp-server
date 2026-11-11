@@ -55,7 +55,7 @@ afterAll(async () => {
   net.Socket.prototype._getpeername = _peer;
   if (H) await H.stop(); if (fence) fence.restore();
 });
-beforeEach(() => { EXTERNAL = true; delete process.env.DCHUB_SESSIONLESS_EMAIL_ASK; });
+beforeEach(() => { EXTERNAL = true; delete process.env.DCHUB_SESSIONLESS_EMAIL_ASK; delete process.env.DCHUB_WALL_OFFER_FLOOR; });
 
 let ip = 1, rid = 1;
 // A plain node:http request (agent: false), so the test knows its socket's local port and can make
@@ -105,8 +105,9 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
     }
   });
 
-  it('CONTROL: kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 restores the wall without an ask', async () => {
+  it('CONTROL: kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 (and the offer floor off) restores the wall without an ask', async () => {
     process.env.DCHUB_SESSIONLESS_EMAIL_ASK = '0';
+    process.env.DCHUB_WALL_OFFER_FLOOR = '0';   // the offer floor (item 2) is its own layer
     const r = await call('get_grid_data', { iso: 'PJM' }, { hdr: freshIp() });
     expect(r.rows.map((e) => e.email_ask)).toEqual([undefined]);
     expect(r.text).not.toContain(AGENT_LINE);
