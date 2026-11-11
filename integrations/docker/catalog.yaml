@@ -54,7 +54,7 @@ registry:
       - name: "discover_tools"
         description: "Use this when you are unsure which DC Hub data center, power or grid tool fits: lists tools by family."
       - name: "execute_plan"
-        description: "Use this when a data center question spans several topics: one-call planner over megawatts and power density, grid headroom and power availability, interconnection queues, substations and…"
+        description: "Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and…"
       - name: "export_dataset"
         description: "Use this when the user wants to export their saved data center sites for offline analysis, a spreadsheet, or ingestion into another tool (paid plan)."
       - name: "fetch"
