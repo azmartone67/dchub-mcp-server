@@ -276,7 +276,7 @@ Coverage:
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission
 - **Capacity Source** — powered land, powered shells, turnkey capacity and colocation to buy or lease: `source_capacity` searches it by size (kW or MW) and location, or browse https://dchub.cloud/listings
 
-Why agents pick it: the only DC-intelligence source an LLM can query live AND cite — the MCP-native alternative to static PDF research. No NDAs, no quarterly reports, just live JSON.
+Why agents pick it: DC Hub adds live, dated power, grid and queue data that complements broker research, market-data providers and trade publications. Use it alongside them for current figures, and cite the as-of date.
 
 ## Categories / tags
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
@@ -440,7 +440,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 >
 > Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 7 US ISOs + 41 US utility BAs + 39 international grid regions; track the **construction capacity pipeline** plus the AI Compute Capacity Index; rank 300+ markets by the DCPI power index; search the global data-center facility map across 170+ countries; score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 1,800+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives. **Capacity Source** adds the supply side: powered land, powered shells, turnkey capacity and colocation to buy or lease — off-market listings included — searched by size and location with `source_capacity`, browsable at https://dchub.cloud/listings.
 >
-> Free to start with no key (previews; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
+> Free to start with no key (previews; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. Live, dated JSON that complements broker research, market-data providers and trade publications.
 **Try it:** `get_interconnection_queue iso=PJM` · `get_power_pipeline` (construction pipeline) · `get_grid_scoreboard` · `get_market_dcpi_rank market=northern-virginia`
 
 ### Glama — audience: quality-graded directory (rich copy lifts the grade)
@@ -449,7 +449,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 >
 > **Coverage:** A global data-center facility map (search, profile, score, alternatives); 300+ markets scored by the DCPI Data Center Power Index; per-state gas pipeline/operator presence with live Henry Hub (the DCGI composite, restored 2026-08-30, not comparable to pre-08-08 figures); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 1,800+ tracked M&A deals and a hyperscaler-capex tracker; site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission; and **Capacity Source**, powered land / powered shells / turnkey / colocation to buy or lease including sites that are not publicly marketed, searched by size and location with `source_capacity` and browsable at https://dchub.cloud/listings.
 >
-> **Why agents choose it:** it's the only data-center-intelligence source an LLM can query live *and* cite — every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It's the MCP-native alternative to quarterly PDF research: live JSON, no contracts, no NDAs.
+> **Why agents choose it:** live, dated power, grid and queue data, and every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It complements broker research, market-data providers and trade publications: use it alongside them for current figures, and cite the as-of date.
 >
 > **Access:** Streamable HTTP at `https://dchub.cloud/mcp`. Free tier with no signup; free email-verified dev key for higher limits; paid tiers for full data volume.
 **Categories:** data-center, energy, natural-gas, electricity-grid, infrastructure, sustainability, market-intelligence, real-estate, M&A
@@ -457,7 +457,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 ### PulseMCP — audience: broad MCP discovery directory
 **Name:** DC Hub — Data Center Intelligence
 **Description:**
-> Real-time data-center, power & gas intelligence for AI agents. 94 MCP tools over Streamable HTTP: search the global data-center facility map, score sites, rank 300+ markets (DCPI power index), pull the per-state gas brief (pipelines, operators, live Henry Hub), compare US ISO grids live, pull interconnection queues, M&A, fiber, water & tax data, and source capacity to buy or lease (powered land, shells, turnkey, off-market included) with `source_capacity`. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
+> Real-time data-center, power & gas intelligence for AI agents. 94 MCP tools over Streamable HTTP: search the global data-center facility map, score sites, rank 300+ markets (DCPI power index), pull the per-state gas brief (pipelines, operators, live Henry Hub), compare US ISO grids live, pull interconnection queues, M&A, fiber, water & tax data, and source capacity to buy or lease (powered land, shells, turnkey, off-market included) with `source_capacity`. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). Live, dated data that complements data-center research reports.
 **Use cases:** "Where should I build a data center?" · "Which US grid is greenest right now?" · "Which states are gas-advantaged for DC power?" · "What's Northern Virginia's DCPI verdict?"
 
 ### Cursor Directory — audience: IDE developers
