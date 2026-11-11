@@ -83,6 +83,44 @@ describe('manifest.xml points at hosted files that exist', () => {
   });
 });
 
+// AppSource certification 2026-11-11 (policy 1120.5.1): every custom function needs a
+// helpUrl. Each points at its own anchor in the function reference on /spreadsheets
+// (dchub-frontend spreadsheets.html carries id="<id lowercased>").
+describe('every custom function has a help page', () => {
+  it('helpUrl = https://dchub.cloud/spreadsheets#<id lowercased>', () => {
+    const fns = JSON.parse(read('excel/functions.json')).functions;
+    expect(fns.length).toBe(4);
+    for (const f of fns) expect(f.helpUrl, f.id).toBe(`https://dchub.cloud/spreadsheets#${f.id.toLowerCase()}`);
+  });
+});
+
+// AppSource certification 2026-11-11 (policy 1100.1.5): the task pane opens on a welcome
+// that says what the add-in does, above the key field, with no prices or plan names.
+describe('task pane first-run experience', () => {
+  const html = read('excel/taskpane.html');
+  it('welcome headline, value lines and examples come before the key field', () => {
+    const welcome = html.indexOf('id="welcome"');
+    expect(welcome).toBeGreaterThan(0);
+    expect(html).toContain('Data center &amp; energy intelligence in Excel');
+    const examples = [...html.slice(welcome).matchAll(/<li><code>=DCHUB\.([A-Z_]+)\(/g)].map((m) => m[1]);
+    expect(examples.length).toBeGreaterThanOrEqual(2);
+    for (const id of examples) expect(Object.keys(C.DCHUB_FUNCTIONS)).toContain(id);
+    expect(welcome).toBeLessThan(html.indexOf('id="k"'));
+  });
+  it('free key link goes to /connect?via=excel', () => {
+    expect(html).toMatch(/href="https:\/\/dchub\.cloud\/connect\?via=excel"[^>]*>Get a free key</);
+  });
+  it('names no price or plan', () => {
+    const text = html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<[^>]+>/g, ' ');
+    expect(text).not.toMatch(/\$\s*\d|\/mo\b|\bper month\b|\bPro\b|\bEnterprise\b|\bplan\b|\bpricing\b/i);
+  });
+  it('saving a key does not replace the welcome (status goes to its own element)', () => {
+    const js = read('excel/taskpane.js');
+    expect(js).toMatch(/getElementById\("s"\)/);
+    expect(js).not.toMatch(/getElementById\("welcome"\)|document\.body\.(innerHTML|textContent)/);
+  });
+});
+
 describe('mapper', () => {
   it('URLs carry the via tag and encode arguments', () => {
     expect(C.dchubUrl('GRID', ['pjm'], 'sheets')).toBe('https://dchub.cloud/api/v1/grid/intelligence/PJM?via=sheets');

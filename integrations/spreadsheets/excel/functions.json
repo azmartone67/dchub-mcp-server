@@ -2,6 +2,7 @@
   "functions": [
     {
       "id": "GRID", "name": "GRID",
+      "helpUrl": "https://dchub.cloud/spreadsheets#grid",
       "description": "Live grid data for an ISO or grid code from DC Hub (dchub.cloud).",
       "result": { "type": "any" },
       "parameters": [
@@ -11,6 +12,7 @@
     },
     {
       "id": "DCPI", "name": "DCPI",
+      "helpUrl": "https://dchub.cloud/spreadsheets#dcpi",
       "description": "DCPI power verdict for a data center market from DC Hub (dchub.cloud), CC BY 4.0.",
       "result": { "type": "any" },
       "parameters": [
@@ -20,6 +22,7 @@
     },
     {
       "id": "FACILITIES", "name": "FACILITIES",
+      "helpUrl": "https://dchub.cloud/spreadsheets#facilities",
       "description": "Data center facilities matching a search, as a table, from DC Hub (dchub.cloud).",
       "result": { "type": "any", "dimensionality": "matrix" },
       "parameters": [
@@ -29,6 +32,7 @@
     },
     {
       "id": "ENERGY_RATE", "name": "ENERGY_RATE",
+      "helpUrl": "https://dchub.cloud/spreadsheets#energy_rate",
       "description": "Retail electricity rate for a US state from DC Hub (dchub.cloud), sourced from EIA.",
       "result": { "type": "any" },
       "parameters": [
