@@ -2,12 +2,13 @@
 //
 // WHAT THIS PINS (real /mcp handler over loopback HTTP, a 127.0.0.1 stub backend, off-loopback
 // connects refused):
-//   A) a free key with NO bound email gets the keyless preview on find_sites,
-//      site_selection_canvas and execute_plan (execute_plan's steps run keyless);
+//   A) a free key with NO bound email gets the keyless preview on find_sites and
+//      site_selection_canvas; execute_plan's steps run under the caller's own key (owner 2026-11-11,
+//      test/plan-steps-caller-key.test.mjs), so each step is that tool's own answer for the key;
 //   B) an email-bound key: find_sites returns every candidate at ~1 km with the anchor's
 //      operator/kV still withheld; site_selection_canvas / execute_plan give ONE full answer per
-//      UTC month through the backend monthly counter, then the preview; a backend that does not
-//      list the tool (limit 0) fails closed to the preview;
+//      UTC month through the backend monthly counter, then the preview (execute_plan: steps still
+//      under the key); a backend that does not list the tool (limit 0) fails closed to the preview;
 //   C) keyless is unchanged;
 //   D) DCHUB_NOEMAIL_PREVIEW_ONLY=0 restores the full answer for the no-email key;
 //   E) the published clause is built from the enforced number and names no plan or price.
@@ -172,6 +173,8 @@ const decimals = (n) => { const s = String(n); return s.includes('.') ? s.split(
 const FIND_ARGS = { state: 'OH', min_voltage_kv: 230 };
 const CANVAS_ARGS = { region: 'OH', capacity_mw: 100 };
 const PLAN_ARGS = { intent: 'find sites for 100 MW in Ohio', state: 'OH', capacity_mw: 100 };
+// A plan step's own data reads (this server's bookkeeping calls carry no caller key by design).
+const stepReads = (hits) => hits.filter((h) => !/^\/api\/v1\/(mcp|keys|sources)\//.test(h.path));
 
 describe('C) keyless is unchanged (the baseline the no-email key must equal)', () => {
   it('find_sites: 3 candidates at ~11 km, no anchor name/operator/kV', async () => {
@@ -214,14 +217,25 @@ describe('A) a free key with no bound email gets the keyless preview', () => {
     expect(runHits.length, 'a no-email key never asks the monthly counter').toBe(before);
     expect(r.text).not.toMatch(PLAN_OR_PRICE);
   });
-  it('execute_plan: every step runs keyless (no backend call carries the key)', async () => {
+  it('execute_plan: every step runs under the caller\'s key (owner 2026-11-11)', async () => {
     const before = dataHits.length;
     const r = await callAs(NOEMAIL, 'execute_plan', PLAN_ARGS);
     expect(Array.isArray(r.data.executed), r.text.slice(0, 600)).toBe(true);
     const stepHits = dataHits.slice(before);
     expect(stepHits.length, 'the plan ran steps').toBeGreaterThan(0);
-    expect(stepHits.filter((h) => h.key === NOEMAIL), JSON.stringify(stepHits)).toEqual([]);
-    expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email' });
+    expect(stepReads(stepHits).length, 'the plan read data').toBeGreaterThan(0);
+    expect(stepReads(stepHits).filter((h) => h.key !== NOEMAIL), JSON.stringify(stepHits)).toEqual([]);
+    expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email', steps_ran_under: 'your_key' });
+  });
+  it('execute_plan CONTROL: DCHUB_PLAN_STEPS_CALLER_KEY=0 runs every step keyless again', async () => {
+    await withEnv('DCHUB_PLAN_STEPS_CALLER_KEY', '0', async () => {
+      const before = dataHits.length;
+      const r = await callAs(NOEMAIL, 'execute_plan', PLAN_ARGS);
+      const stepHits = dataHits.slice(before);
+      expect(stepHits.length, 'the plan ran steps').toBeGreaterThan(0);
+      expect(stepHits.filter((h) => h.key === NOEMAIL), JSON.stringify(stepHits)).toEqual([]);
+      expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email' });
+    });
   });
   it('D) CONTROL: DCHUB_NOEMAIL_PREVIEW_ONLY=0 restores the full answer', async () => {
     await withEnv('DCHUB_NOEMAIL_PREVIEW_ONLY', '0', async () => {
@@ -262,7 +276,7 @@ describe('B) an email-bound key', () => {
     expect(r2.data._upgrade).toMatchObject({ next_tool: 'unlock_more_data', free_full_runs: { used: 1, limit: 1, remaining: 0 } });
     expect(r2.text).not.toMatch(PLAN_OR_PRICE);
   });
-  it('execute_plan: 1 full plan (steps keyed), then steps keyless', async () => {
+  it('execute_plan: 1 full plan (steps keyed), then the steps stay keyed (owner 2026-11-11)', async () => {
     const key = freshBound();
     let before = dataHits.length;
     const r1 = await callAs(key, 'execute_plan', PLAN_ARGS);
@@ -273,7 +287,9 @@ describe('B) an email-bound key', () => {
     expect(r2.data.free_full_runs).toBeUndefined();
     const hits2 = dataHits.slice(before);
     expect(hits2.length).toBeGreaterThan(0);
-    expect(hits2.filter((h) => h.key === key), 'the spent plan runs keyless').toEqual([]);
+    expect(stepReads(hits2).length).toBeGreaterThan(0);
+    expect(stepReads(hits2).filter((h) => h.key !== key), 'the spent plan still runs its steps under the key').toEqual([]);
+    expect(r2.data._upgrade).toMatchObject({ next_tool: 'unlock_more_data', steps_ran_under: 'your_key' });
   });
   it('a backend that does not list the tool (limit 0) fails closed to the preview', async () => {
     backendKnows = false;
@@ -288,8 +304,10 @@ describe('B) an email-bound key', () => {
 
 describe('E) the published clause', () => {
   it('is built from the enforced number, rides the handshake and the claim/bind siblings, names no plan or price', () => {
-    const clause = L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH);
-    expect(clause).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas and execute_plan each a month');
+    // execute_plan left the clause with DCHUB_PLAN_STEPS_CALLER_KEY on (its steps are each tool's own answer).
+    const clause = L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH, { planCallerKey: true });
+    expect(clause).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas a month');
+    expect(L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH)).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas and execute_plan each a month');
     expect(L.sitingFreeClause(2)).toContain('2 full site_selection_canvas');
     expect(clause).not.toMatch(PLAN_OR_PRICE);
     expect(S._INSTRUCTIONS_LEAN).toContain(clause);
