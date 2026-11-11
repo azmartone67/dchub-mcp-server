@@ -19711,6 +19711,13 @@ export const _PLAN_CLASSES = [
       // the MW figure to follow the verb IMMEDIATELY keeps it to this one shape
       // ("site selection for 200 MW" still does NOT match).
       [/\b(?:site|siting)\s+(?:a|an|the)?\s*\d+(?:\.\d+)?\s*(?:mw|gw|megawatt|gigawatt)\b/i, 2.5],
+      // 2026-11-11: two Atlanta asks fell to unknown. Weight 1 only: each must
+      // route when nothing else matched, never outvote a class that did (an ISO
+      // named in "how soon can a 100 MW load get power in ERCOT" still wins).
+      // The data-center form is the one with no "in/near …" after it (that form
+      // already scores 2 above): "Georgia Power 200MW data center Atlanta GA".
+      [/\bhow\s+soon\b[^.?!]{0,60}\bget\s+power\b/i, 1],
+      [/\b\d+(?:\.\d+)?\s*(?:mw|gw)\s+data\s*cent(?:er|re)\b(?!\s+(?:in|near|around|within|for)\b)/i, 1],
     ],
     rationale: (d) => `A capacity search is ${d.hc && d.hc.answers_load ? 'four' : 'three'} INDEPENDENT reads that fan out in one wave: where ${d.mw ? Math.round(d.mw) + ' MW' : 'MW'} is OPENING (retiring generators near substations), what's in the interconnection QUEUE at that size, and whether the target market can even energize it (DCPI verdict + time-to-power)`
       + (d.hc && d.hc.answers_load
@@ -19764,6 +19771,9 @@ export const _PLAN_CLASSES = [
       [/\bcompare\b/i, 1.5], [/\bwhich\s+is\s+better\b/i, 2],
       [/\bbetween\s+[A-Za-z][\w-]*\s+and\s+[A-Za-z][\w-]*/i, 2],
       [/\bcompare\s+[A-Za-z][\w-]*\s+(?:and|to|with)\s+[A-Za-z][\w-]*/i, 2],
+      // 2026-11-11: "…in Atlanta, compared with Northern Virginia?" scored only
+      // facility_search ("data center in") and read Ashburn facilities.
+      [/\b(?:compared|comparison)\s+(?:with|to|against)\b/i, 3],
     ],
     rationale: (d) => d.comparePair
       ? `A head-to-head is symmetric: pull the same DCPI scorecard (BUILD/CAUTION/AVOID verdict, composite_score, time-to-power) for ${d.comparePair.a} and ${d.comparePair.b} in parallel, then compare like-for-like. Neither read depends on the other.`
@@ -20428,6 +20438,25 @@ export function _execHarvest(node, minted, capPerKind, depth = 0) {
     }
   }
 }
+// market_comparison: has this tool already been planned against this market in
+// this run? Markets compare without the state suffix (ashburn-va = ashburn).
+// Records the market when it is new. Returns { key, value } for a repeat, else
+// null; any other class always null. Exported for tests. Never throws.
+export function _execComparisonDup(intentClass, tool, args, seen) {
+  try {
+    if (intentClass !== 'market_comparison' || !args || !(seen instanceof Map)) return null;
+    const key = ['market_slug', 'market', 'metro_slug', 'metro', 'slug'].find((k) => typeof args[k] === 'string' && args[k]);
+    if (!key) return null;
+    const v = String(args[key]).trim().toLowerCase().replace(/-[a-z]{2}$/, '');
+    const set = seen.get(tool) || new Set();
+    seen.set(tool, set);
+    if (set.has(v)) return { key, value: args[key] };
+    set.add(v);
+    return null;
+  } catch (_e) {
+    return null;
+  }
+}
 export function _execResolveArgs(hint, minted, userCtx, wantFanout) {
   const args = {}; let unresolved = null; let fanKey = null; let fanVals = null;
   for (const [k, v] of Object.entries(hint || {})) {
@@ -20686,15 +20715,21 @@ export const _STATE_ISO_META = {
 };
 export function _execConstraintSlug(intentText) {
   const t = String(intentText || '').toLowerCase();
+  // 2026-11-11: the metro the text names FIRST, not the first in table order.
+  // "200 MW in Atlanta … vs Ashburn" took ashburn-va (declared above atlanta)
+  // as the intent's market, and every market placeholder read Ashburn.
+  let best = null, bestAt = Infinity;
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
     // An entry may carry an iso with NO slug — a geography whose ISO is exact
     // but which has no DCPI market to name (see 'central illinois'). Keep
     // scanning rather than returning undefined: a slug-less match must not
     // mask a later entry that does have one, and must never surface as a
     // slug-shaped `undefined` downstream.
-    if (meta.slug && _execCityHit(city, meta, t)) return meta.slug;
+    if (!meta.slug || !_execCityHit(city, meta, t)) continue;
+    const at = meta.re ? (t.search(new RegExp(meta.re.source, 'i'))) : t.indexOf(city);
+    if (at >= 0 && at < bestAt) { best = meta.slug; bestAt = at; }
   }
-  return null;
+  return best;
 }
 // r-invariants v2.7.3: per-tool mint contracts — ai_capacity_index rows
 // carry display names ('market': 'Dallas-Fort Worth'), not slugs; the
@@ -21218,6 +21253,49 @@ export function _facilityFetchRecord(id, d, url) {
   return { id, title: String(name), text: parts.join(' '), url, metadata };
 }
 
+// The markets a COMPARISON names, first-named first, as { a, b } — or null when
+// the text has no comparison wording or names fewer than two tracked markets
+// (the caller then falls back to the word-pair regex). Sources: _CITY_ISO_META
+// (its slug without the state suffix, the form the comparison steps already
+// pass: 'atlanta', 'northern-virginia') and the DCPI index (its own slug).
+// Exported for tests. Pure, never throws.
+const _PLAN_COMPARE_WORDS_RE = /\b(?:vs\.?|versus|against|compar(?:e|ed|ing|ison)|head[-\s]?to[-\s]?head|which\s+is\s+better|between)\b/i;
+export function _planComparedMarkets(text) {
+  try {
+    const t = String(text || '');
+    if (!_PLAN_COMPARE_WORDS_RE.test(t)) return null;
+    const lower = t.toLowerCase();
+    const found = [];   // { v, i, end }
+    for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+      if (!meta.slug) continue;
+      const re = meta.re ? new RegExp(meta.re.source, 'i')
+        : new RegExp('\\b' + city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      const m = re.exec(t);
+      if (m) found.push({ v: meta.slug.replace(/-[a-z]{2}$/, ''), i: m.index, end: m.index + m[0].length });
+    }
+    const hit = _matchDcpiMarket(t);
+    const ms = hit && hit.kind === 'multiple' ? hit.markets : (hit && hit.kind === 'hit' ? [hit] : []);
+    for (const mk of ms) {
+      const i = (mk && mk.slug && mk.name) ? lower.indexOf(String(mk.name).toLowerCase()) : -1;
+      if (i >= 0) found.push({ v: mk.slug, i, end: i + String(mk.name).length });
+    }
+    found.sort((x, y) => x.i - y.i || y.end - x.end);
+    const order = [];
+    let prevEnd = -1;
+    for (const f of found) {
+      // A name inside, or hyphen/slash-joined to, the one before it is the same
+      // place ("Dallas-Fort Worth", "Dallas/Fort Worth"), not a second market.
+      if (prevEnd >= 0 && (f.i < prevEnd || /^\s*[-/–]\s*$/.test(t.slice(prevEnd, f.i)))) {
+        prevEnd = Math.max(prevEnd, f.end); continue;
+      }
+      prevEnd = f.end;
+      if (!order.includes(f.v)) order.push(f.v);
+    }
+    return order.length >= 2 ? { a: order[0], b: order[1] } : null;
+  } catch (_e) {
+    return null;
+  }
+}
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
@@ -21338,6 +21416,13 @@ export function _planSignals(intent, context) {
       .filter((w) => !_PLAN_COMPARE_STOP.has(w)).slice(-2).join('-');
     const cm = Array.isArray(c.markets) ? c.markets.filter(Boolean).map(norm) : null;
     if (cm && cm.length >= 2 && cm[0] && cm[1] && cm[0] !== cm[1]) return { a: cm[0], b: cm[1] };
+    // 2026-11-11: two TRACKED markets named in a comparison are the pair, in the
+    // order the text names them. The word-pair regex below needs a bare word on
+    // each side of "vs", so "Atlanta (Georgia Power) vs Ashburn" and "…in Atlanta
+    // …, compared with Northern Virginia" left the pair null; both steps then fell
+    // back to the one constraint slug and Ashburn was read twice, Atlanta never.
+    const tracked = _planComparedMarkets(text);
+    if (tracked) return tracked;
     const m = text.match(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:vs\.?|versus|against)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i)
       || text.match(/\bcompare\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:and|to|with)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i);
     if (!m) return null;
@@ -21853,6 +21938,10 @@ export function _planDcpiLead(ia) {
   } catch (_e) { return null; }
 }
 
+// The balancing-authority labels DCPI market records carry for metros that
+// _CITY_ISO_META declares by reliability region (see its 'atlanta' and
+// 'nashville' notes). Read by the answer guide's ISO check only.
+const _EXEC_BA_REGION = { SOCO: 'SERC', TVA: 'SERC' };
 export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
@@ -21871,7 +21960,11 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
       const v = o.verdict, nm = o.market || o.name || o.slug || o.market_slug;
       if (typeof v === 'string' && /^(BUILD|CAUTION|AVOID)$/i.test(v.trim())) {
         const iso = typeof o.iso === 'string' ? o.iso.trim().toUpperCase() : null;
-        const outside = (iso && allowed.length && !allowed.includes(iso))
+        // A balancing-authority label inside an allowed region is inside it: the
+        // live atlanta record reports SOCO while _CITY_ISO_META constrains Atlanta
+        // to SERC, so Atlanta's own verdict was dropped from its own answer.
+        const outside = (iso && allowed.length && !allowed.includes(iso)
+                         && !allowed.includes(_EXEC_BA_REGION[iso]))
           || (constraintSlug && typeof nm === 'string' && !_execSameMarket(nm, constraintSlug));
         if (!outside) {
           found.push({ verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' ? nm : null,
@@ -29144,6 +29237,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (constraintIso) minted.__constraint_iso = constraintIso;
       if (constraintSlug) minted.__constraint_slug = constraintSlug;
       const executed = [];
+      const cmpSeen = new Map();   // market_comparison: tool -> markets already read
       // A2: the FULL (pre-slim) result for each executed entry, keyed on the
       // ENTRY OBJECT so fan-out variants sharing one step number cannot
       // collapse into each other. Consumed only by _execMintDealDesk; the
@@ -29183,6 +29277,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             // depends_on:[1] when the ISO really comes from the sibling's
             // result). Park it; retried once after the wave lands.
             deferred.push(s);
+            continue;
+          }
+          // 2026-11-11: a head-to-head never reads the same market twice. When side
+          // B resolved to side A's market (both placeholders fell back to the one
+          // constraint slug), side B is unresolved, not a second copy of side A.
+          const dupOf = _execComparisonDup(sc.intent_class, s.tool, r.args, cmpSeen);
+          if (dupOf) {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved', missing: dupOf.key,
+                            note: 'a comparison reads each market once: this side resolved to ' + dupOf.value
+                              + ', the market another step already reads. Run it with the second market named.' });
             continue;
           }
           const variants = (r.fanKey && r.fanVals)
