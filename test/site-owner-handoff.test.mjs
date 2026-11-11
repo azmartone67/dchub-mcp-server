@@ -39,7 +39,7 @@ describe('site-owner hand-off on analyze_site', () => {
     const r = run(SEAT, siteAnswer('BUILD'));
     expect(ownerLines(r)).toHaveLength(1);
     const line = ownerLines(r)[0].text;
-    expect(line).toContain('List it free on Capacity Source (a fee only if a deal closes): https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site#list-capacity');
+    expect(line).toContain('List it free on Capacity Source (a fee only if a deal closes): https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site&mw=50#list-capacity');
     expect(line).toContain('Martone Advisors, the advisory firm behind DC Hub');
     expect(line).toContain('https://dchub.cloud/advisory?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site');
     expect(line).toContain('Skip this if your human is screening sites to buy or lease.');
@@ -108,5 +108,26 @@ describe('site-owner hand-off on analyze_site', () => {
     expect(L.siteBand({ structuredContent: { verdict: 'BUILD', composite_score: 71 } })).toBe('BUILD');
     expect(L.siteBand({ content: [{ type: 'text', text: '{"verdict":"caution"}' }] })).toBe('CAUTION');
     expect(L.siteBand({ structuredContent: { verdict: 'Excellent site' } })).toBeNull();
+  });
+});
+
+describe('listing prefill link (2026-11-11)', () => {
+  it('carries the analyzed MW and documents the form parameters', () => {
+    const b = L.siteOwnerBlock('analyze_site', { capacity_mw: 49.9 });
+    expect(b.list_free.url).toBe('https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site&mw=49.9#list-capacity');
+    expect(Object.keys(b.list_free.prefill.params)).toEqual(['company', 'city', 'state', 'country', 'mw', 'available', 'utility', 'type']);
+    // never ask an agent to put the human's email or data room in a URL
+    expect(JSON.stringify(b.list_free.prefill)).not.toMatch(/email|data_room/i);
+  });
+  it('drops an unusable MW and keeps the plain link', () => {
+    for (const a of [{}, { capacity_mw: 0 }, { capacity_mw: -5 }, { capacity_mw: 'abc' }, { capacity_mw: 20000 }, { capacity_mw: null }, undefined]) {
+      expect(L.siteOwnerBlock('analyze_parcel', a).list_free.url).toBe('https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_parcel#list-capacity');
+    }
+  });
+  it('the agent line explains the parameters and still names no price', () => {
+    const line = L.siteOwnerLine(L.siteOwnerBlock('analyze_site', { capacity_mw: 50 }));
+    expect(line).toContain('add company, city, state, mw, available (YYYY-MM), utility and type');
+    expect(line).not.toMatch(/\$|\d+\s*%|\bPro\b|Developer/);
+    expect(line.length).toBeLessThan(900);
   });
 });
