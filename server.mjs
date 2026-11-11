@@ -7593,7 +7593,7 @@ export function _withSiteOwnerHandoff(result, name, args, outSchema) {
     const band = _siteOwnerBand(result);
     if (band !== 'BUILD' && band !== 'CAUTION') return result;
     if (!_siteOwnerMemo.first(c)) return result;
-    const block = _siteOwnerBlock(name);
+    const block = _siteOwnerBlock(name, args);
     const out = { ...result, content: [...result.content, { type: 'text', text: _siteOwnerLine(block) }] };
     // Same outputSchema rule as _withCapacityPointer: structuredContent only when the tool's schema accepts it.
     const sc = result.structuredContent;
