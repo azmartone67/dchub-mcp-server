@@ -9,25 +9,50 @@
 <script src="functions.js"></script>
 <style>
   body { font-family: "Instrument Sans", "Segoe UI", Arial, sans-serif; background: #0b0f17; color: #e8edf5; padding: 16px; margin: 0; }
-  h1 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
-  h1 span { background: linear-gradient(90deg, #4f8cff, #36d1b5); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  p { font-size: 13px; color: #aab4c4; line-height: 1.45; }
+  .brand { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #aab4c4; margin: 0 0 6px; }
+  .brand span { background: linear-gradient(90deg, #4f8cff, #36d1b5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 { font-size: 18px; font-weight: 800; line-height: 1.25; margin: 0 0 8px; }
+  h2 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: #e8edf5; }
+  p { font-size: 13px; color: #aab4c4; line-height: 1.45; margin: 0 0 8px; }
+  ul.ex { list-style: none; padding: 0; margin: 0; }
+  ul.ex li { background: #121927; border: 1px solid #2a3446; border-radius: 6px; padding: 8px 10px; margin: 0 0 6px; font-size: 12px; color: #aab4c4; line-height: 1.4; }
+  ul.ex code { display: block; font-size: 12px; margin-bottom: 2px; }
+  .key { border-top: 1px solid #2a3446; margin-top: 16px; padding-top: 4px; }
+  label { display: block; font-size: 12px; color: #aab4c4; margin: 0 0 6px; }
   input { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #2a3446; background: #121927; color: #e8edf5; }
   button { margin-top: 10px; padding: 8px 14px; border: 0; border-radius: 6px; background: #4f8cff; color: #fff; font-weight: 700; cursor: pointer; }
+  .cta { display: inline-block; margin: 4px 0 10px; padding: 7px 12px; border-radius: 6px; border: 1px solid #36d1b5; color: #36d1b5; font-size: 13px; font-weight: 700; text-decoration: none; }
   a { color: #36d1b5; }
-  code { color: #e8edf5; }
-  #s { font-size: 12px; margin-top: 8px; color: #36d1b5; }
+  code { color: #e8edf5; font-family: "JetBrains Mono", Consolas, monospace; }
+  #s { font-size: 12px; margin-top: 8px; color: #36d1b5; min-height: 1em; }
+  .foot { font-size: 12px; margin-top: 14px; }
 </style>
 </head>
 <body>
-  <h1>DC Hub <span>for Excel</span></h1>
-  <p>Paste your DC Hub API key. It is stored on this device only and sent only to dchub.cloud.</p>
-  <p>No key yet? <a href="https://dchub.cloud/signup" target="_blank" rel="noopener">Get a free key</a>. Without one, formulas return previews.</p>
-  <input id="k" type="password" autocomplete="off" placeholder="your DC Hub key">
-  <button id="save">Save</button>
-  <div id="s"></div>
-  <p>Formulas: <code>=DCHUB.GRID("PJM")</code>, <code>=DCHUB.DCPI("phoenix")</code>, <code>=DCHUB.FACILITIES("Ashburn",10)</code>, <code>=DCHUB.ENERGY_RATE("VA")</code>.</p>
-  <p>Source: DC Hub, dchub.cloud. Cite with the as-of date.</p>
+  <section id="welcome">
+    <p class="brand">DC Hub <span>for Excel</span></p>
+    <h1>Data center &amp; energy intelligence in Excel</h1>
+    <p>Pull Data Center Power Index (DCPI) verdicts and scores, live grid demand, data center facility lists and state electricity rates straight into cells with <code>=DCHUB</code> functions.</p>
+    <p>Formulas work without a key and return previews. Paste a free key to open fuller answers. Every value comes from DC Hub (dchub.cloud); cite it with its as-of date.</p>
+
+    <h2>Try these in any cell</h2>
+    <ul class="ex">
+      <li><code>=DCHUB.DCPI("phoenix")</code>See at a glance whether a market's power supply says BUILD, CAUTION or AVOID.</li>
+      <li><code>=DCHUB.GRID("PJM")</code>Track live grid demand in MW for an ISO next to your own numbers.</li>
+      <li><code>=DCHUB.FACILITIES("Ashburn",10)</code>Get a ready-made table of facilities with operator, location and profile link.</li>
+    </ul>
+  </section>
+
+  <section class="key">
+    <h2>Your DC Hub key</h2>
+    <a class="cta" href="https://dchub.cloud/connect?via=excel" target="_blank" rel="noopener">Get a free key</a>
+    <label for="k">Paste it here. It is stored on this device only and sent only to dchub.cloud.</label>
+    <input id="k" type="password" autocomplete="off" placeholder="your DC Hub key">
+    <button id="save">Save</button>
+    <div id="s" role="status"></div>
+  </section>
+
+  <p class="foot">All four functions, with parameters and examples: <a href="https://dchub.cloud/spreadsheets#functions" target="_blank" rel="noopener">dchub.cloud/spreadsheets</a>.</p>
 <script src="taskpane.js"></script>
 </body>
 </html>
