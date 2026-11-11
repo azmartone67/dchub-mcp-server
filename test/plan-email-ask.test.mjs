@@ -11,7 +11,8 @@
 //      the email through claim_free_key {email}, names the walled steps, no plan name or price; the
 //      step's wall row reads email_ask 'line' (in a session it keeps the caller's session id);
 //   2) a no-email key: the bind_email line it already had is now credited on the step rows;
-//   3) Grok (G3: never asked) gets no ask and its step rows stay unmarked;
+//   3) Grok (G3: never asked) and the other excluded callers get no ask; step rows are credited only
+//      when the final answer carries the ask (the real send path);
 //   4) CONTROL DCHUB_PLAN_EMAIL_ASK=0: the live row comes back (a sessionless ai_capacity_index step wall
 //      with no ask, no ask on the plan). A grid / queue step already asks on its own, so the control
 //      uses the ai_capacity_index plan;
@@ -22,6 +23,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as W from '../lib/plan-wall-sink.mjs';
+import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
+import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
+import { CORE_PROFILE } from '../lib/core-profile.mjs';
 // The lean step trims inner copy on /mcp; off so these read the plan envelope the handler built.
 process.env.DCHUB_LEAN_RESPONSES = '0';
 
@@ -209,12 +213,38 @@ describe('2) a no-email key: the bind_email line it already gets is credited on 
   });
 });
 
-describe('3) Grok is never asked (G3)', () => {
-  it('no ask on the plan; the step rows carry no plan ask', async () => {
+describe('3) Grok is never asked (G3), nor the other excluded callers', () => {
+  it('a Grok plan carries no ask', async () => {
     const r = await plan(null, 'grok', { sessionless: true }, AI_ARGS);
     expect(r.data._upgrade?.next_tool).not.toBe('claim_free_key');
     expect(JSON.stringify(r.data._upgrade || {})).not.toMatch(ASK_LEAD);
-    for (const w of r.walls) expect(w.email_ask, JSON.stringify(w)).not.toBe('line');
+  });
+  it('the gate: Grok, connectors-manager and the directory / Claude / core profiles are out', () => {
+    expect(S._planAnonEmailAskAllowed({ platform: 'claude' })).toBe(true);
+    for (const platform of ['grok', 'connectors-manager']) expect(S._planAnonEmailAskAllowed({ platform }), platform).toBe(false);
+    for (const profile of [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE]) {
+      expect(profile).toBeTruthy();
+      expect(S._planAnonEmailAskAllowed({ platform: 'claude', profile }), profile).toBe(false);
+    }
+    expect(S._planAnonEmailAskAllowed(null)).toBe(false);
+  });
+  it('step rows leave marked only when the final answer carries the ask (the real send path)', async () => {
+    const sink = S._planWallSinkForTest;
+    const row = (sid) => ({ c: { platform: 'claude', client_ip: '198.51.100.250', session_id: sid }, e: { name: 'ai_capacity_index', status: 'trial_used', sent: false, timer: null } });
+    const asked = { structuredContent: { _upgrade: W.planAnonEmailUpgrade([{ step: 1, tool: 'ai_capacity_index' }]) } };
+    for (const [result, want] of [[{ structuredContent: { _upgrade: { next_tool: 'unlock_more_data', message: 'x' } } }, undefined], [asked, 'line']]) {
+      const plan = {};
+      plan._planWallSinkId = sink.open();
+      const r = row('sink-' + String(want));
+      expect(sink.park(plan._planWallSinkId, r.c, r.e)).toBe(true);
+      const b = events.length;
+      S._drainPlanWallSinkForTest(plan, result);
+      await new Promise((res) => setTimeout(res, 200));
+      const got = events.slice(b).filter((e) => e.event === 'quota_wall_hit' && e.tool === 'ai_capacity_index');
+      expect(got.length).toBe(1);
+      expect(got[0].email_ask).toBe(want);
+      expect(plan._planWallSinkId, 'drained once').toBeNull();
+    }
   });
 });
 

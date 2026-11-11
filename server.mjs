@@ -4913,6 +4913,7 @@ function _drainPlanWallSink(c, result) {
     _planWallSink.drain(id, asks ? (sc) => _markEmailAsk(sc, 'line') : null);
   } catch (_) { /* telemetry never touches a response */ }
 }
+export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
 export function _flushQuotaWallHits(c, name) {
   try {
     const l = c && Array.isArray(c._pendingWallHits) ? c._pendingWallHits : null;
