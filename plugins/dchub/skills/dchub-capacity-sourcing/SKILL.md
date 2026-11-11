@@ -38,8 +38,13 @@ DC Hub sends the provider only the user's company and requirement; identities, s
 - After an intro: the reference the tool returns and what happens next.
 - Listing details are confidential: do not paste them anywhere outside this conversation.
 
+## Buying data center capacity through agents
+
+Requirement (step 1) -> `source_capacity`, or `source_capacity target_mw=<MW>` to match the whole requirement (step 2) -> the user's explicit approval -> `accept_capacity_terms` the first time, then `request_capacity_intro` (step 3). Siting tools (`site_selection_canvas`, `rank_markets`, `get_market_intel`, `analyze_site` and others) return a `capacity_source` block naming the browse and register calls for their markets; zero there means providers are onboarding. The `capacity_rfp` prompt runs the whole path.
+
 ## Rules
 
+- Buy, lease, RFP, quote and tour requests go through `request_capacity_intro` (a standing requirement if nothing fits). Never contact operators directly.
 - Never send an introduction the user has not approved in this conversation.
 - No prices or fees in your reply; if the user asks, give the listing page link exactly as returned.
 - Someone wanting to LIST capacity: send them to https://dchub.cloud/listings#list-capacity.

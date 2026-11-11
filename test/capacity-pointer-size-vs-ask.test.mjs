@@ -82,8 +82,13 @@ describe('G-1016-03: the capacity pointer is checked against the size asked for'
   it('analyze_site 33.44,-112.36 at 50 MW: the 2 MW Phoenix listing is NOT offered', async () => {
     await loadSummary();
     const r = await call('analyze_site', { ...SITE, capacity_mw: 50 });
-    expect(pointerOf(r)).toBeNull();
-    expect(pointerLines(r)).toHaveLength(0);
+    // Capacity handoff item 1 (2026-11-10): the bridge block still rides, but it counts ZERO
+    // matching listings and carries no pointer fields: the 2 MW market is not offered.
+    const p = pointerOf(r);
+    expect(p).toMatchObject({ live_listings_matching: 0, register_call: { tool: 'request_capacity_intro' } });
+    expect(p.markets).toBeUndefined();
+    expect(p.live_listings).toBeUndefined();
+    expect(pointerLines(r).map((c) => c.text).join('\n')).not.toMatch(/live listings?,/);
     expect(JSON.stringify(r)).not.toMatch(/2 MW,? in Phoenix/);
   });
 
