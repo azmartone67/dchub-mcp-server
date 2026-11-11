@@ -124,6 +124,8 @@ test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/compare-isos-source-composed.test.mjs
+test/comparison-primary-metro-e2e.test.mjs
+test/comparison-primary-metro.test.mjs
 test/comparison-symmetry.test.mjs
 test/composed-provenance-caveats.test.mjs
 test/composite-keyless-preview.test.mjs
