@@ -23,11 +23,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as W from '../lib/plan-wall-sink.mjs';
+import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { CORE_PROFILE } from '../lib/core-profile.mjs';
-// The lean step trims inner copy on /mcp; off so these read the plan envelope the handler built.
-process.env.DCHUB_LEAN_RESPONSES = '0';
+// The lean step stays ON (production): it shrinks _upgrade to machine fields, so the ask the agent
+// receives is the plan's prose paragraph. mcp#1356 first shipped with lean off here and the live
+// answer carried no ask.
 
 const foreign = [];
 const realConnect = net.Socket.prototype.connect;
@@ -180,6 +182,9 @@ const OLD_LINE = /gets the same execute_plan preview as no key/;
 
 
 const ASK_LEAD = /ask your human for their email[^.]*call `claim_free_key` with \{email\}/;
+// The plan's ask paragraph: its own prose block (never inside block 0's JSON).
+const askBlock = (r) => (r.result.content || []).map((b) => (b && b.type === 'text' ? b.text : ''))
+  .find((t) => !/^\s*[{[]/.test(t) && t.includes(W.PLAN_ASK_LEAD) && t.includes(EMAIL_ASK)) || null;
 
 describe('1) a keyless plan whose steps walled asks once, and its step rows say so', () => {
   it.each([
@@ -190,11 +195,16 @@ describe('1) a keyless plan whose steps walled asks once, and its step rows say 
     const r = await plan(null, undefined, opts, args);
     const walled = (r.data.executed || []).filter((e) => e.result && e.result.human_url).map((e) => e.tool);
     expect(walled.length, JSON.stringify((r.data.executed || []).map((e) => e.tool))).toBeGreaterThan(0);
-    expect(r.data._upgrade, r.text.slice(0, 600)).toMatchObject({ tier: 'anonymous', next_tool: 'claim_free_key' });
-    expect(r.data._upgrade.message).toMatch(ASK_LEAD);
-    expect(r.data._upgrade.message).not.toMatch(PLAN_OR_PRICE);
+    expect(r.data._upgrade, r.text.slice(0, 600)).toMatchObject({ tier: 'anonymous', next_tool: 'bind_email' });
     for (const t of walled) expect(r.data._upgrade.walled_steps.map((w) => w.tool)).toContain(t);
     expect(r.result.structuredContent._upgrade).toEqual(r.data._upgrade);
+    // What the agent reads after the lean step: one prose paragraph, naming every walled step.
+    const para = askBlock(r);
+    expect(para, r.text.slice(0, 1200)).toBeTruthy();
+    for (const t of walled) expect(para).toMatch(new RegExp('step \\d+ \\(' + t + '\\)'));
+    expect(para).toContain('Only use an address they gave you');
+    expect(para).not.toMatch(PLAN_OR_PRICE);
+    expect(para).not.toMatch(/\n/);
     expect(r.walls.length, 'a step wrote a wall row').toBeGreaterThan(0);
     for (const w of r.walls) {
       expect(w.email_ask, JSON.stringify(w)).toBe('line');
@@ -204,10 +214,25 @@ describe('1) a keyless plan whose steps walled asks once, and its step rows say 
   });
 });
 
+describe('1b) with the lean step off, _upgrade still carries the ask in prose', () => {
+  it('sessionless keyless plan', async () => {
+    await withEnv('DCHUB_LEAN_RESPONSES', '0', async () => {
+      const r = await plan(null, undefined, { sessionless: true }, AI_ARGS);
+      expect(r.data._upgrade.message).toMatch(ASK_LEAD);
+      expect(askBlock(r)).toBeTruthy();
+      for (const w of r.walls) expect(w.email_ask).toBe('line');
+    });
+  });
+});
+
 describe('2) a no-email key: the bind_email line it already gets is credited on the step rows', () => {
   it('the row reads line', async () => {
     const r = await plan(NOEMAIL);
     expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email', steps_ran_under: 'your_key' });
+    expect(r.data._upgrade.walled_steps.length, 'lean keeps walled_steps').toBeGreaterThan(0);
+    const para = askBlock(r);
+    expect(para, r.text.slice(0, 1200)).toContain('`bind_email` {api_key, email}');
+    expect(para).not.toMatch(PLAN_OR_PRICE);
     expect(r.walls.length).toBeGreaterThan(0);
     for (const w of r.walls) expect(w.email_ask, JSON.stringify(w)).toBe('line');
   });
@@ -216,8 +241,8 @@ describe('2) a no-email key: the bind_email line it already gets is credited on 
 describe('3) Grok is never asked (G3), nor the other excluded callers', () => {
   it('a Grok plan carries no ask', async () => {
     const r = await plan(null, 'grok', { sessionless: true }, AI_ARGS);
-    expect(r.data._upgrade?.next_tool).not.toBe('claim_free_key');
-    expect(JSON.stringify(r.data._upgrade || {})).not.toMatch(ASK_LEAD);
+    expect(r.data._upgrade?.walled_steps).toBeUndefined();
+    expect(askBlock(r)).toBeNull();
   });
   it('the gate: Grok, connectors-manager and the directory / Claude / core profiles are out', () => {
     expect(S._planAnonEmailAskAllowed({ platform: 'claude' })).toBe(true);
@@ -252,7 +277,8 @@ describe('4) CONTROL: DCHUB_PLAN_EMAIL_ASK=0', () => {
   it('the sessionless keyless plan asks nothing and its step rows are unmarked, as before', async () => {
     await withEnv('DCHUB_PLAN_EMAIL_ASK', '0', async () => {
       const r = await plan(null, undefined, { sessionless: true }, AI_ARGS);
-      expect(r.data._upgrade?.next_tool).not.toBe('claim_free_key');
+      expect(r.data._upgrade?.walled_steps).toBeUndefined();
+      expect(askBlock(r)).toBeNull();
       expect(r.walls.length).toBeGreaterThan(0);
       for (const w of r.walls) expect(w.email_ask, JSON.stringify(w)).toBeUndefined();
     });
@@ -292,6 +318,12 @@ describe('5) the sink and the helpers', () => {
     expect(W.planAnswerAsks({ structuredContent: { _upgrade: { next_tool: 'unlock_more_data', message: 'email' } } })).toBe(false);
     expect(W.planAnswerAsks({ structuredContent: { _upgrade: { next_tool: 'bind_email', message: 'more answers' } } })).toBe(false);
     expect(W.planAnswerAsks({ structuredContent: {} })).toBe(false);
+    const para = W.planAskParagraph([{ step: 1, tool: 'ai_capacity_index' }]);
+    expect(W.planAnswerAsks({ content: [{ type: 'text', text: '{"a":1}' }, { type: 'text', text: para }] })).toBe(true);
+    expect(W.planAnswerAsks({ content: [{ type: 'text', text: JSON.stringify({ executed: [{ result: para }] }) }] }), 'a copy in the JSON does not count').toBe(false);
+    expect(W.planAnswerAsks({ content: [{ type: 'text', text: EMAIL_ASK }] }), 'another wall line is not the plan ask').toBe(false);
+    expect(W.planAskParagraph([])).toBeNull();
+    expect(W.planAskParagraph([{ step: 2, tool: 'get_grid_data' }], { keyed: true })).toContain('{api_key, email}');
     expect(W.planAnswerAsks(undefined)).toBe(false);
   });
   it('the upgrade is null with no walled step, and the switch reads per call', () => {
