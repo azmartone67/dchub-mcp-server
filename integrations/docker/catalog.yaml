@@ -67,6 +67,8 @@ registry:
         description: "Use this when the user wants a shareable data center Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score."
       - name: "get_agent_registry"
         description: "Use this when the user asks which AI platforms and agent frameworks integrate DC Hub — each with its recommended DC Hub tools and authentication tier."
+      - name: "get_air_permit_context"
+        description: "Use this when the user asks about air permits, EPA nonattainment, or on-site gas turbine / generator permitting near a data center site, for example \"air permits for gas turbines near Midland, TX\"…"
       - name: "get_backup_status"
         description: "Use this when the user asks how current DC Hub's data center and power data feeds are: one row per feed (deals, facilities, news, substations, fiber_routes, transactions, construction_permits,…"
       - name: "get_changes"

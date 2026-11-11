@@ -642,6 +642,65 @@
     }
   },
   {
+    "name": "get_air_permit_context",
+    "description": "Use this when the user asks about air permits, EPA nonattainment, or on-site gas turbine / generator permitting near a data center site, for example \"air permits for gas turbines near Midland, TX\" or \"is this site in an ozone nonattainment area?\". Returns the EPA Green Book designations (nonattainment or maintenance, pollutant, classification, area) for the county the point is in, US-wide, plus TCEQ-listed gas-turbine air permits of 20 MW or more (issued and pending) within radius_km, Texas only: company, permit number, status, date, distance, MW, turbine model, NOx limit, source URL. Dated snapshot with as_of and cite_as. Reciprocating engines, permits by rule and non-Texas filings are not covered and the answer says so. Do NOT use for moratoriums or zoning (use get_permitting_intel). For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "description": "Site latitude in decimal degrees, e.g. 31.97",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Site longitude in decimal degrees, e.g. -102.08",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "site": {
+          "description": "Market NAME or metro slug instead of coordinates, e.g. \"midland-odessa\", \"dallas\". Resolved to that market's PUBLISHED CENTROID through the DCPI market row; the answer carries resolved_from.",
+          "type": "string"
+        },
+        "radius_km": {
+          "description": "Radius for nearby permit filings in km, 1-300 (default 100)",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "status": {
+          "description": "Filing status filter (default all)",
+          "type": "string",
+          "enum": [
+            "all",
+            "issued",
+            "pending"
+          ]
+        },
+        "limit": {
+          "description": "Filings to return, nearest first, 1-50 (default 10)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  {
     "name": "get_backup_status",
     "description": "Use this when the user asks how current DC Hub's data center and power data feeds are: one row per feed (deals, facilities, news, substations, fiber_routes, transactions, construction_permits, pipeline, markets) carrying health (healthy/stale/error/unknown), record_count, refresh_interval and scheduler, plus a summary rollup {healthy, stale, error, unknown, total_feeds, overall_health}. Read the health of each row before trusting a figure drawn from it — a feed reporting \"unknown\" has NOT been measured, which is not the same as healthy. Answers \"are any of your sources stale right now\". Try: get_backup_status. Scope is exactly what /api/health/data-freshness serves: ingest-feed freshness, nothing wider. Do NOT use for the freshness of one dataset (use get_changes); this is ingest health, not content. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {

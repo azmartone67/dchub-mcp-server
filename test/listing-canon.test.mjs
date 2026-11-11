@@ -106,8 +106,8 @@ describe('skill.md and its copies', () => {
     expect(T(path)).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
   });
   it.each([
-    ['a stale metadata count', (s) => s.replace('"tools":94', '"tools":81')],
-    ['a stale prose count', (s) => s.replace('94 tools', '81 tools')],
+    ['a stale metadata count', (s) => s.replace(`"tools":${L.tool_count}`, '"tools":81')],
+    ['a stale prose count', (s) => s.replace(`${L.tool_count} tools`, '81 tools')],
     ['a price', (s) => s + '\nPro is $99.'],
     ['a facility number', (s) => s + '\n24,900+ facilities.'],
     ['an over-long description', (s) => s.replace(/^description: .*$/m, 'description: ' + 'x'.repeat(1025))],

@@ -10,6 +10,7 @@ test/agent-registration-bearer.test.mjs
 test/agent-text-complements-not-dismisses.test.mjs
 test/agentforge-sync.test.mjs
 test/ai-capacity-email-rows-ask.test.mjs
+test/air-permit-context-tool.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-parcel-not-covered.test.mjs
 test/analyze-site-email-unlock-teaser.test.mjs

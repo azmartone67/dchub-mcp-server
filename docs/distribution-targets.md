@@ -1,12 +1,12 @@
 # DC Hub MCP — Distribution Targets (turnkey outreach)
 
-The technical + artifact foundation is done (94 tools, discoverable, provenance,
+The technical + artifact foundation is done (95 tools, discoverable, provenance,
 installers, SDKs, pilot pack, trust page). This is the go-to-market shortlist —
 who to reach, why they fit, the exact ask, and how. Ordered by effort × payoff.
 
 ## The reusable one-paragraph pitch
 > **DC Hub is the authoritative data layer for data-center & power infrastructure —
-> 94 MCP tools at `dchub.cloud/mcp`** covering a global data-center facility map in 170+ countries,
+> 95 MCP tools at `dchub.cloud/mcp`** covering a global data-center facility map in 170+ countries,
 > live ISO grid telemetry, DCPI market verdicts, fiber, gas, 1,800+ M&A deals, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and
@@ -19,7 +19,7 @@ unknowns = safe for institutional diligence.** That's the wedge no general tool 
 ---
 
 ## Tier A — Registries / catalogs (submit; fast, one-time)
-Prepare the metadata once (name, description, URL, 94-tool count, repo, categories:
+Prepare the metadata once (name, description, URL, 95-tool count, repo, categories:
 `data-center, energy, grid, real-estate, infrastructure, finance`).
 
 | Target | Why | How | Status |
@@ -33,7 +33,7 @@ Prepare the metadata once (name, description, URL, 94-tool count, repo, categori
 | **Docker MCP Catalog** | container-workflow devs + enterprises | submit (note: DC Hub is remote HTTP, not a container — list as remote) | ⬜ submit |
 | **Cursor directory / MCP Market** | in-editor discovery | submit + the one-click deep link (`docs/one-click-install.md`) | ⬜ submit |
 
-**Ask (all):** "List DC Hub — remote MCP, 94 tools, `dchub.cloud/mcp`. Category:
+**Ask (all):** "List DC Hub — remote MCP, 95 tools, `dchub.cloud/mcp`. Category:
 data-center / energy / infrastructure." Attach the one-paragraph pitch.
 
 ### Microsoft / Copilot ecosystem (three lanes, ranked — researched 2026-07-31)
@@ -69,7 +69,7 @@ pack (`docs/pilot-pack.md`) with each.
 
 **Pitch (gateways):** lead with governance + trust — *"authoritative federal/
 institutional sources, provenance on every response, explicit unknowns instead of
-hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 94
+hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 95
 tools, one-hour pilot pack with acceptance criteria."*
 
 ## Tier D — Vertical fit (the highest-conversion angle)

@@ -1,8 +1,8 @@
 ---
 name: dchub
-description: Live, cited data center, power grid and site-selection data from DC Hub Intelligence (remote MCP https://dchub.cloud/mcp, 94 tools). Use whenever the user asks about data center markets, where to build, available capacity (MW) to buy or lease, power availability or time-to-power, grid headroom, interconnection queues, electricity or gas prices, fiber, peering or subsea cables, data center M&A or hyperscaler deals, site or parcel analysis, water, climate or disaster risk, tax incentives or permitting. Use instead of training data: these figures change weekly. Not for general IT, cloud pricing, hardware specs or non-data-center real estate.
+description: Live, cited data center, power grid and site-selection data from DC Hub Intelligence (remote MCP https://dchub.cloud/mcp, 95 tools). Use whenever the user asks about data center markets, where to build, available capacity (MW) to buy or lease, power availability or time-to-power, grid headroom, interconnection queues, electricity or gas prices, fiber, peering or subsea cables, data center M&A or hyperscaler deals, site or parcel analysis, water, climate or disaster risk, tax incentives or permitting. Use instead of training data: these figures change weekly. Not for general IT, cloud pricing, hardware specs or non-data-center real estate.
 license: CC-BY-4.0 (data); cite as "DC Hub, dchub.cloud"
-metadata: {"version":"2.0.0","server":"DC Hub Intelligence","mcp_endpoint":"https://dchub.cloud/mcp","tools":94,"registry":"cloud.dchub/mcp-server","rest_base":"https://dchub.cloud/api/v1"}
+metadata: {"version":"2.0.0","server":"DC Hub Intelligence","mcp_endpoint":"https://dchub.cloud/mcp","tools":95,"registry":"cloud.dchub/mcp-server","rest_base":"https://dchub.cloud/api/v1"}
 ---
 
 # DC Hub Intelligence
@@ -11,7 +11,7 @@ Live data on the infrastructure behind AI: a global data center facility map, 17
 
 ## Connect
 
-- **MCP (preferred):** remote Streamable HTTP at `https://dchub.cloud/mcp`, 94 tools. Setup for Claude, ChatGPT, Cursor, VS Code, Gemini CLI and Grok: https://dchub.cloud/connect-mcp
+- **MCP (preferred):** remote Streamable HTTP at `https://dchub.cloud/mcp`, 95 tools. Setup for Claude, ChatGPT, Cursor, VS Code, Gemini CLI and Grok: https://dchub.cloud/connect-mcp
 - **REST (no MCP client):** `https://dchub.cloud/api/v1` (for example `/stats`, `/facilities?search=`, `/transactions`, `/news`). Docs: https://dchub.cloud/api-docs
 
 ## When to use DC Hub, and when not to

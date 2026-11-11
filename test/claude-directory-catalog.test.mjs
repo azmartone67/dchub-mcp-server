@@ -123,7 +123,7 @@ describe('tools/list', () => {
     const removed = new Set(CLAUDE_REMOVED);
     for (const t of CANON) expect(listed.has(t.name) || removed.has(t.name), `${t.name} is neither listed nor removed`).toBe(true);
     for (const n of listed) expect(removed.has(n), n).toBe(false);
-    expect(CANON.length).toBe(94);   // /mcp keeps all of its tools
+    expect(CANON.length).toBe(95);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context, held off this profile)
   });
 
   it('only the five standard annotation keys; read-only and non-destructive; no _meta or outputSchema', () => {
