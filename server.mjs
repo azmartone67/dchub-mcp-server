@@ -19184,7 +19184,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -19807,6 +19807,12 @@ export const _PLAN_CLASSES = [
       [/\bmarket\s+(?:report|brief|snapshot|conditions|overview|update)\b/i, 2],
       [/\bhow\s+(?:is|does)\s+.{2,40}?\s+look(?:ing)?\b/i, 2],
       [/\bwhat(?:'s|\s+is)\s+(?:happening|going\s+on)\s+(?:in|with)\b/i, 2],
+      // Item 3 (owner funnel brief 2026-11-11): a siting verdict on ONE named market ("Is Phoenix a good
+      // place to build?") is this class, so the answer leads with that market's DCPI verdict. A ranking or
+      // "where should I build" ask still zeroes the class (_OUTLOOK_MULTI_RE).
+      [/\b(?:good|bad|smart|viable|right)\s+(?:place|location|spot|market|bet|site|choice|area)\b/i, 3],
+      [/\bshould\s+(?:I|we)\s+build\s+(?:in|at|near)\b/i, 3],
+      [/\bworth\s+building\s+(?:in|at|near)\b/i, 3],
     ],
     rationale: (d) => (d.__outlook && d.__outlook.slug)
       ? `The question is about one market, ${d.__outlook.slug}, so every read is pinned to it: its DCPI verdict and time-to-power, its market brief, and the grid it sits on. No ranking step runs, so no other market can stand in for it.`
@@ -21556,7 +21562,12 @@ export function _planWorkflowConfidence(seq, d) {
 //         best-ranked queue ISO instead of the first ISO the harvest met; the
 //         scoreboard step is dated by the ranking's oldest row when the answer
 //         uses only those rows; plan steps count against the caller's IP.
-export const PLANNER_VERSION = '5.18';
+//  5.19 = SITING VERDICT LEADS (owner funnel brief item 3, 2026-11-11): a
+//         one-market siting verdict ("Is Phoenix a good place to build?",
+//         "should we build in Dallas") routes to market_outlook, and a market
+//         check's answer leads with `dcpi_verdict` (the named market's DCPI
+//         verdict + its Source line) as the first key.
+export const PLANNER_VERSION = '5.19';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -21801,6 +21812,29 @@ export function _execCollectedSentence(evidence) {
     + col.map((x) => `${x.tool} (step ${x.step}${x.iso ? ', ' + x.iso : ''}) was collected by DC Hub at ${x.collected_at}`).join('; ')
     + '; the ISO publishes no report date for it. Quote those figures as "collected <time>", never as "as of" or as a report date.';
 }
+// Item 3 (owner funnel brief 2026-11-11): the Data Center Power Index (DCPI) verdict block an
+// execute_plan market check leads with. Built from the intent answer's own market-scoped verdict (the
+// market the question named, never a substitute) and its one Source line. null when there is none.
+// Exported for tests. Pure, never throws.
+export function _planDcpiLead(ia) {
+  try {
+    if (!ia || ia.kind !== 'market_check' || !ia.verdict || ia.verdict.scope !== 'market') return null;
+    const v = String(ia.verdict.value || '').toUpperCase();
+    if (!/^(BUILD|CAUTION|AVOID)$/.test(v)) return null;
+    const slug = String(ia.verdict.subject || '');
+    const name = slug.replace(/-/g, ' ').replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
+    const score = (typeof ia.verdict.composite_score === 'number' && Number.isFinite(ia.verdict.composite_score))
+      ? ia.verdict.composite_score : null;
+    const ttp = (Array.isArray(ia.evidence) ? ia.evidence : []).find((e) => /^DCPI time-to-power:/.test(String(e)));
+    const text = `Data Center Power Index (DCPI): ${name || 'this market'}: ${v}`
+      + (score != null ? `, composite ${score}/100` : '') + '.'
+      + (ttp ? ' ' + String(ttp).replace(/^DCPI t/, 'T') : '');
+    return { market_slug: slug || null, verdict: v, composite_score: score, text,
+      cite: typeof ia.source === 'string' ? ia.source : null,
+      instruction: 'State this verdict and its Source line first, before the supporting reads.' };
+  } catch (_e) { return null; }
+}
+
 export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
@@ -29336,7 +29370,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
+      // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
+      const _intentAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
+        : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
+            requested_mw: _sig && _sig.mw }, executed, fullByEntry);
+      // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
+      // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
+      // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
+      const _dcpiLead = _planDcpiLead(_intentAnswer);
       const out = {
+        ...(_dcpiLead ? { dcpi_verdict: _dcpiLead } : {}),
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
         planner_version: replay.planner_version,
@@ -29396,11 +29440,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...(() => { const _ra = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
-        ...(() => { const _ia = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
-                      : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
-                          constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
-                          requested_mw: _sig && _sig.mw }, executed, fullByEntry);
-                    return _ia ? { intent_answer: _ia } : {}; })(),
+        ...(_intentAnswer ? { intent_answer: _intentAnswer } : {}),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
         // converged ask). Static intent_class→recipe map; measurable because

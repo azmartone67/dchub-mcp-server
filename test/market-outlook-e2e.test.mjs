@@ -45,7 +45,7 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     const o = await plan('What is the data center power outlook for San Antonio?');
     expect(o && o._entity).toBe('plan_execution');
     expect(o.intent_class).toBe('market_outlook');
-    expect(o.planner_version).toBe('5.18');
+    expect(o.planner_version).toBe('5.19');
     const ran = o.executed.map((e) => e.tool);
     expect(ran).not.toContain('get_dchub_recommendation');
     expect(recommendHits()).toBe(before);

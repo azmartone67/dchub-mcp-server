@@ -420,6 +420,7 @@ test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
 test/plan-caller-ip.test.mjs
+test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
 test/plan-free-fields.test.mjs
 test/plan-query-retirement-text.test.mjs
