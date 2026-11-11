@@ -5969,6 +5969,12 @@ export const QUOTA_EXEMPT_TOOLS = new Set([
   'request_capacity_intro',
   'accept_capacity_terms',
 ]);
+// Funnel item 1 (owner 2026-11-11): discovery is never walled. discover_tools is catalog metadata (the
+// tool families and the not_for list), so the anonymous per-IP HARD wall skips it as the key quotas above
+// already do (the anonymous soft cap skips every tool in QUOTA_EXEMPT_TOOLS). Measured 7d to 11-11: 3
+// discover_tools walls, all keyless 'mcp' sessionless rows with no offer: execute_plan's unknown-intent
+// fallback runs discover_tools as its only step, and that step walled at the soft cap.
+export const ANON_WALL_EXEMPT_TOOLS = new Set(['discover_tools']);
 
 export function _quotaTtlMs(d) {
   if (!d || d.allowed === false) return 30_000;   // blocked → re-check fast
@@ -23395,7 +23401,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
-      if (!c.api_key && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+      if (!c.api_key && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall';
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
@@ -24911,7 +24917,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // preview an anon already receives, PLUS a remaining_today:0 escalation. No 429,
       // isError stays false — anon callers already get trimmed previews, so this just
       // adds the "claim_free_key to keep going" nudge.
-      if (!c.api_key && gate.keyless_full_trial !== true && await _anonOverCap(c.client_ip)) {
+      // Funnel item 1 (2026-11-11): the soft cap meters call VOLUME, so the tools that are never walled by call
+      // volume (QUOTA_EXEMPT_TOOLS: discover_tools, why_dchub, summarize_for_citation, the Capacity Source
+      // write tools ...) skip it. Measured at count 25 of 20: discover_tools walled as a plan step, and the
+      // wall rewrote the terms link in request_capacity_intro / accept_capacity_terms and the licence link in
+      // summarize_for_citation to the wall's own link.
+      if (!c.api_key && gate.keyless_full_trial !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }

@@ -134,7 +134,9 @@ describe('/mcp/chatgpt past the per-IP hard wall', () => {
     expect(dataPaths, 'a walled call still queried the backend').toEqual([]);
     expect(dataHits - before).toBe(0);
     const notRefused = Object.entries(verdicts).filter(([, v]) => v !== 'refused').map(([n, v]) => `${n}: ${v}`);
-    expect(notRefused).toEqual([]);
+    // Funnel item 1 (2026-11-11): discovery is never walled (server.mjs ANON_WALL_EXEMPT_TOOLS). discover_tools
+    // answers its catalog past the wall, and the dataPaths check above proves it queried no backend data.
+    expect(notRefused).toEqual(['discover_tools: data']);
     expect(Object.keys(verdicts).length).toBe(TOOLS.length);
     expect(offenders).toEqual([]);
   }, 240_000);

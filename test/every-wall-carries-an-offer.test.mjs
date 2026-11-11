@@ -26,7 +26,9 @@ const OFFER_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field', 'digest_l
 // tools a keyless caller reaches without a wall, or keyed-only tools that answer with a key error).
 const NO_HARD_WALL = new Set(['save_to_shortlist', 'get_shortlist', 'set_shortlist_alert', 'suggest_reallocation',
   'set_market_alert', 'subscribe_digest', 'set_site_alert', 'register_standing_intent', 'delete_standing_intent',
-  'bind_email', 'recover_my_key', 'report_finding']);
+  'bind_email', 'recover_my_key', 'report_finding',
+  // Funnel item 1 (2026-11-11): discovery is never walled (server.mjs ANON_WALL_EXEMPT_TOOLS).
+  'discover_tools']);
 // Tools the plain stub walls (trial / Pro / Land & Power walls); pinned so the second pass cannot go vacuous.
 const STUB_WALLS = ['list_transactions', 'compare_isos', 'get_pipeline', 'hyperscaler_deals', 'get_tax_incentives',
   'get_dchub_recommendation', 'get_grid_data', 'get_interconnection_queue', 'get_energy_prices', 'get_fiber_intel',
@@ -143,6 +145,33 @@ describe('every wall carries an offer (lean ON)', () => {
     expect([...NO_HARD_WALL].filter((t) => walled.has(t)), 'NO_HARD_WALL tools that walled').toEqual([]);
     expect(walled.size).toBeGreaterThan(70);
   }, 600_000);
+
+  // Funnel items 1-2 (2026-11-11): the anonymous SOFT cap (count 25 of 20, under the hard wall) is its own
+  // wall (anon_daily_cap, after the handler). The live no-offer rows for get_refined_queue, find_sites and
+  // get_retirement_headroom (keyless, sessionless, identities 0) were execute_plan steps at this cap.
+  it('the anonymous soft cap: every tool that walls carries one', async () => {
+    anonCount = 25;
+    const bad = [], walled = new Set();
+    for (const name of tools) {
+      const calls = await runTool(name);
+      for (const c of calls) for (const e of c.rows) if (e.wall_status === 'anon_daily_cap') walled.add(e.tool);
+      bad.push(...offenders(name, calls));
+    }
+    expect(bad).toEqual([]);
+    expect(walled.size, 'soft-cap walls seen').toBeGreaterThan(40);
+    expect(walled.has('discover_tools'), 'discovery is never walled').toBe(false);
+  }, 600_000);
+
+  it.each([
+    ['find sites for a 100 MW campus in Texas', ['find_sites', 'get_refined_queue', 'get_retirement_headroom']],
+    ['timeline for power in Nevada', ['get_refined_queue']],
+  ])('execute_plan at the soft cap (%s): the step walls the funnel showed with no offer now carry one', async (intent, steps) => {
+    anonCount = 25;
+    const calls = await runTool('execute_plan', { intent });
+    const stepRows = new Set(calls.flatMap((c) => c.rows.map((e) => e.tool)));
+    expect(steps.filter((t) => !stepRows.has(t)), 'pinned step walls that did not wall').toEqual([]);
+    expect(offenders('execute_plan', calls)).toEqual([]);
+  }, 120_000);
 
   it('the trial / Pro / Land & Power walls: every tool, every repeat', async () => {
     anonCount = 0;
