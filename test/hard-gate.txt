@@ -632,4 +632,5 @@ test/web-bot-auth-python.test.mjs
 test/web-bot-auth.test.mjs
 test/weekly-summary-disclosure-1023.test.mjs
 test/why-dchub-market-count-scope.test.mjs
+test/windsurf-path-and-claim-copy.test.mjs
 test/write-tool-annotation-accuracy.test.mjs
