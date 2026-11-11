@@ -346,6 +346,7 @@ test/market-outlook-routing.test.mjs
 test/market-pricing-public.test.mjs
 test/market-taste-cites-verdict-as-of.test.mjs
 test/mcp-claude-400-get-405.test.mjs
+test/mcp-get-stream-and-clients.test.mjs
 test/mcp-oauth-own-resource.test.mjs
 test/mcp-oauth-path.test.mjs
 test/mcp-packs.test.mjs

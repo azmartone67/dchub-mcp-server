@@ -180,19 +180,17 @@ describe('protocol versions', () => {
   });
 });
 
-describe('GET /mcp', () => {
-  it('no session: 405 with Allow: POST and a JSON body naming the endpoint', async () => {
+describe('GET /mcp (2026-11-11: no 405; full matrix in test/mcp-get-stream-and-clients.test.mjs)', () => {
+  it('no session, asking for the stream: 200 event stream holding only a retry hint, closed', async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { headers: { accept: 'text/event-stream' } });
-    expect(res.status).toBe(405);
-    expect(res.headers.get('allow')).toMatch(/\bPOST\b/);
-    expect(res.headers.get('content-type')).toMatch(/application\/json/);
-    const j = await res.json();
-    expect(j.endpoint).toBe('https://dchub.cloud/mcp');
-    expect(j.message).toMatch(/POST/);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/event-stream/);
+    expect(await res.text()).toMatch(/^retry: \d+$/m);
   });
-  it('an unknown session id: 404 (re-initialize)', async () => {
+  it('an unknown session id, asking for the stream: the same 200 decline, not a 404', async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { headers: { accept: 'text/event-stream', 'mcp-session-id': 'gone-0002' } });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-dc-hub-mcp-get-reason')).toBe('unknown_session');
   });
 });
 

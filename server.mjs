@@ -245,8 +245,10 @@ import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as 
 import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
+import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
+import { recognizedClientFromName as _recognizedClientFromName, recognizedClientFromUa as _recognizedClientFromUa } from './lib/client-recognition.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
-import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader } from './lib/mcp-request-shape.mjs';
+import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader, getVerdict as _mcpGetVerdict, mcpGetDescription as _mcpGetDescription, sseDeclineFrame as _sseDeclineFrame, chunkText as _chunkText } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
@@ -3974,7 +3976,9 @@ function detectPlatform(ua = '') {
   if (u.includes('meta'))        return 'meta';
   if (u.includes('you'))         return 'you';
   if (u.includes('curl') || u.includes('postman')) return 'curl';
-  return 'mcp';
+  // 2026-11-11: VS Code (Copilot), Codeium, MiniMax, Google ADK (lib/client-recognition.mjs). After
+  // every rule above, so no existing label moves.
+  return _recognizedClientFromUa(ua) || 'mcp';
 }
 
 // r47.30 (2026-05-26): MCP spec ships the canonical client identity in
@@ -4128,7 +4132,9 @@ function _KNOWN_PLATFORM_FROM_NAME(name) {
   if (n.includes('huggingface') || n.includes('hf-space')) return 'huggingface';
   if (n.includes('smithery'))    return 'smithery';
   if (n.includes('mcp-inspector')) return 'mcp-inspector';
-  return '';
+  // 2026-11-11: VS Code (Copilot), Codeium, MiniMax, Google ADK (lib/client-recognition.mjs). After
+  // every rule above, so no existing label moves.
+  return _recognizedClientFromName(n);
 }
 
 // Self-IDs that name the PROTOCOL or nothing at all — never a platform. A
@@ -34466,17 +34472,35 @@ app.use(MCP_PATHS, (req, res, next) => {
 // keeps no body or header, so ~1,552 Claude 400s a week had no recorded cause. Facts are read
 // at entry, before the handler rewrites headers or the body; the error text is the first 300
 // bytes the response wrote. Read with: railway logs | grep '\[mcp-4xx\]'.
-const _MCP_4XX_LOGGED = new Set([400, 404, 405, 406, 413, 415]);
+const _MCP_4XX_LOGGED = new Set([400, 404, 405, 406, 409, 413, 415]);
+// Task B (2026-11-11): the same refusals, counted per {day, client, status, reason} and posted once
+// a minute to /api/v1/mcp/track as event 'mcp_4xx' (lib/mcp-4xx-event.mjs), so the funnel page can
+// read daily /mcp 4xx by client. Kill switch DCHUB_MCP_4XX_EVENT=0.
+const _mcp4xxCounter = _createMcp4xxCounter({ apiBase: API_BASE, internalKey: INTERNAL_KEY });
+export const _mcp4xxCounterForTest = _mcp4xxCounter;   // test seam
+// The client label a refused request is counted under: the platform tagging every other telemetry
+// row uses, with our own QA / test callers folded into 'dchub-internal' (which backend readers drop).
+export function _mcp4xxClient(req) {
+  try {
+    const h = req.headers || {};
+    const ua = String(h['user-agent'] || '');
+    if (String(h['x-dchub-qa'] || '').trim() === '1' || /dchub-qa/i.test(ua) || _UA_SELF_TEST_RE.test(ua)) return 'dchub-internal';
+    const hint = (h['x-mcp-platform'] || h['x-client-source'] || h['x-client-info'] || '').toString();
+    const body = req.body && !Array.isArray(req.body) ? req.body : null;
+    return _resolvePlatform(body, ua, hint, h['mcp-session-id']) || 'mcp';
+  } catch (_) { return 'mcp'; }
+}
 app.use(MCP_PATHS, (req, res, next) => {
   let rec;
   try {
     const sid = req.headers['mcp-session-id'];
-    rec = _describeMcpRequest(req, { sessionKnown: !!(sid && sessions.has(sid)) });
+    rec = _describeMcpRequest(req, { sessionKnown: !!(sid && sessions.has(sid)),
+      path: String(req.originalUrl || req.url || '').split('?')[0] });
   } catch (_) { return next(); }
   let head = '';
   const grab = (chunk) => {
     if (head.length < 300 && chunk && res.statusCode >= 400) {
-      try { head += (Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)).slice(0, 300 - head.length); } catch (_) { /* never affect the response */ }
+      try { head += _chunkText(chunk).slice(0, 300 - head.length); } catch (_) { /* never affect the response */ }
     }
   };
   const _write = res.write, _end = res.end;
@@ -34487,10 +34511,12 @@ app.use(MCP_PATHS, (req, res, next) => {
     try {
       let msg = head;
       try { const j = JSON.parse(head); msg = (j.error && (j.error.message || j.error)) || j.message || head; } catch (_) { /* plain text */ }
+      const reason = _mcpFailureReason(res.statusCode, rec, String(msg));
       console.log('[mcp-4xx] ' + JSON.stringify({
-        status: res.statusCode, reason: _mcpFailureReason(res.statusCode, rec, String(msg)),
+        status: res.statusCode, reason,
         error: String(msg).slice(0, 160), ...rec,
       }));
+      _mcp4xxCounter.note({ client: _mcp4xxClient(req), status: res.statusCode, reason });
     } catch (_) { /* observability must never affect the handler */ }
   });
   next();
@@ -35989,37 +36015,67 @@ app.post(MCP_PATHS, async (req, res) => {
   }
 });
 
-// r-core-profile: /mcp/core is stateless (no SSE stream to resume, no session
-// to delete), so GET and DELETE answer 405. Registered before the MCP_PATHS
-// handlers, which Express would otherwise reach first.
-app.get(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
+// r-core-profile: /mcp/core is stateless (no session to delete), so DELETE answers 405 there (the
+// spec's "termination not allowed"; the SDK client treats a DELETE 405 as success). Registered
+// before the MCP_PATHS handlers, which Express would otherwise reach first. GET /mcp/core is
+// served by the MCP_PATHS GET handler below as a stateless path (2026-11-11).
 app.delete(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 
-export const MCP_GET_405_BODY = Object.freeze({
-  error: 'method_not_allowed',
-  message: 'This endpoint takes JSON-RPC over POST. GET opens an optional server-to-client event stream, which DC Hub does not offer; MCP clients continue normally without it.',
-  allow: ['POST', 'DELETE', 'OPTIONS'],
-  endpoint: 'https://dchub.cloud/mcp',
-  docs: 'https://dchub.cloud/mcp',
-});
+// GET / HEAD on an MCP path (2026-11-11, owner: no 405 to a known AI client). The decision is
+// lib/mcp-request-shape.mjs getVerdict; its header comment cites the SDK client code each answer
+// was chosen against. In short: a live session asking for the stream gets the SDK's standalone
+// SSE stream; HEAD or a GET without text/event-stream gets a 200 JSON description; a GET asking
+// for the stream without a live session (or with its one GET stream already open) gets a 200
+// stream holding only `retry:` and is closed, which every SDK client reads as a graceful end
+// and retries once after that delay, never in a loop and never as an error.
+// _sseOpen: sessions whose GET stream this process is serving, so a second GET is declined
+// instead of reaching the SDK's 409 (which the client raises as an error).
+const _sseOpen = new Set();
+export const _sseOpenForTest = _sseOpen;   // test seam
+const _MCP_GET_STATS = { sse: 0, describe: 0, decline: 0 };
+export const _mcpGetStatsForTest = _MCP_GET_STATS;   // test seam
 
 app.get(MCP_PATHS, async (req, res) => {
+  const path = _normPath(req);
   const sid = req.headers['mcp-session-id'];
-  if (sid && sessions.has(sid)) {
+  // Directory and core profiles never mint a session; a session id sent to them is not theirs.
+  const stateless = !!_pathProfile(req) || _pathIsCore(req);
+  const sessionKnown = !stateless && !!(sid && sessions.has(sid));
+  const verdict = _mcpGetVerdict({ method: req.method, accept: req.headers.accept, sessionId: sid,
+    sessionKnown, streamOpen: sessionKnown && _sseOpen.has(sid), stateless });
+  _MCP_GET_STATS[verdict] = (_MCP_GET_STATS[verdict] || 0) + 1;
+  res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  res.set('x-dc-hub-mcp-get', verdict);
+  if (verdict === 'sse') {
+    if (_protocolHeaderVerdict(req.headers['mcp-protocol-version']) === 'newer') _dropRequestHeader(req, 'mcp-protocol-version');
     touchSession(sid);  // r41
+    _sseOpen.add(sid);
+    res.on('close', () => _sseOpen.delete(sid));
     const meta = sessionMeta.get(sid) || {};
-    return ctx.run({ ...meta, session_id: sid, path: _normPath(req), source: _pathSource(req) }, async () => {
-      await sessions.get(sid).handleRequest(req, res);
-    });
+    try {
+      return await ctx.run({ ...meta, session_id: sid, path, source: _pathSource(req) }, async () => {
+        await sessions.get(sid).handleRequest(req, res);
+      });
+    } catch (e) {
+      _sseOpen.delete(sid);
+      console.error('[MCP] GET stream failed:', _scrubLog((e && e.stack) || e));
+      if (!res.headersSent) return res.status(200).set('Content-Type', 'text/event-stream').set('Cache-Control', 'no-store').end(_sseDeclineFrame({ path }));
+      try { res.end(); } catch (_) { /* nothing valid can be written */ }
+      return undefined;
+    }
   }
-  // r-session-404 (2026-07-03): same spec contract as the POST fall-through —
-  // an unrecognized session id gets 404 (client re-initializes); only a
-  // session-less GET is a 400.
-  if (sid) return res.status(404).json({ error: 'Session not found — re-initialize.' });
-  // GET without a session: the optional server-to-client SSE stream is not offered, and 405 is
-  // the spec's answer for that (clients carry on over POST). It was a 400 here, which a client
-  // reads as a broken request. The edge answers bare GET /mcp first; this covers the origin.
-  res.status(405).set('Allow', 'POST, DELETE, OPTIONS').json(MCP_GET_405_BODY);
+  if (verdict === 'decline') {
+    const why = stateless ? 'stateless_path' : (!sid ? 'no_session' : (!sessionKnown ? 'unknown_session' : 'stream_open'));
+    console.log(`[mcp-get] decline ${why} path=${path} ua=${String(req.headers['user-agent'] || '').slice(0, 60)}`);
+    return res.status(200)
+      .set('Content-Type', 'text/event-stream')
+      .set('Cache-Control', 'no-store, no-transform')
+      .set('x-dc-hub-mcp-get-reason', why)
+      .end(_sseDeclineFrame({ path }));
+  }
+  // 'describe': HEAD, or a GET that did not ask for an event stream. Express sends HEAD without the body.
+  return res.status(200).set('Cache-Control', 'no-store').set('Allow', 'GET, POST, DELETE, OPTIONS')
+    .json(_mcpGetDescription({ path, version: SERVER_VERSION }));
 });
 
 // ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle
@@ -36053,6 +36109,12 @@ app.delete(MCP_PATHS, async (req, res) => {
     // that can now only 404.
     return res.sendStatus(200);
   }
+  // 2026-11-11: a DELETE for a session this process does not hold (evicted by the idle sweeper or
+  // a deploy) has nothing left to end, so it gets 200 like a successful one. It was a 404, which
+  // the SDK client's terminateSession raises as an error at the moment the client is shutting
+  // down (11-10/11: two CLI clients, 5 in 8 hours). A DELETE with no session id at all is
+  // still a 404: there is no session it could mean.
+  if (sid) return res.status(200).json({ ok: true, session: 'not held: already ended' });
   res.status(404).json({ error: 'Session not found' });
 });
 

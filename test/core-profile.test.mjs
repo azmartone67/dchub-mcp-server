@@ -341,9 +341,13 @@ describe('/mcp/core tools/call responses', () => {
     expect((await rpc('/mcp/core', 'resources/list')).body.result.resources).toEqual([]);
   });
 
-  it('GET and DELETE are 405 (stateless endpoint)', async () => {
+  it('GET describes the endpoint (200, never 405: 2026-11-11); DELETE is 405 (stateless endpoint)', async () => {
     const g = await fetch(`http://127.0.0.1:${PORT}/mcp/core`);
-    expect(g.status).toBe(405);
+    expect(g.status).toBe(200);
+    expect((await g.json()).endpoint).toBe('https://dchub.cloud/mcp/core');
+    const s = await fetch(`http://127.0.0.1:${PORT}/mcp/core`, { headers: { accept: 'text/event-stream' } });
+    expect(s.status).toBe(200);
+    expect(s.headers.get('x-dc-hub-mcp-get-reason')).toBe('stateless_path');
     const d = await fetch(`http://127.0.0.1:${PORT}/mcp/core`, { method: 'DELETE' });
     expect(d.status).toBe(405);
   });
