@@ -167,6 +167,7 @@ test/directory-output-schema-contract.test.mjs
 test/directory-safe-copy.test.mjs
 test/directory-text-neutral.test.mjs
 test/discovery-coverage.test.mjs
+test/discovery-never-walled.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs
 test/docker-catalog.test.mjs
 test/ecosystem-sync.test.mjs
