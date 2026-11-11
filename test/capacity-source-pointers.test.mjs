@@ -162,12 +162,16 @@ async function withSummary(body, status = 200) {
   await S._capacitySummary.refresh();
   S._capacitySummary.disarm();
 }
-const DORMANT = [
+// Capacity handoff item 1 (owner-approved 2026-11-10): an UNKNOWN summary says nothing; a KNOWN
+// dormant one (live_count 0) now carries the bridge block with a zero count and the register call.
+const UNKNOWN = [
   ['summary 404 (route not deployed)', () => withSummary({ ok: false, error: 'not_found' }, 404)],
-  ['live_count 0, no markets', () => withSummary(ZERO)],
-  ['live_count 0 while markets are listed', () => withSummary(ZERO_WITH_MARKETS)],
   ['a 200 whose body is off-contract', () => withSummary({ ok: true, live_count: '3', markets: LIVE.markets })],
   ['nothing cached yet', async () => {}],
+];
+const DORMANT = [
+  ['live_count 0, no markets', () => withSummary(ZERO)],
+  ['live_count 0 while markets are listed', () => withSummary(ZERO_WITH_MARKETS)],
 ];
 // A schema that accepts everything the envelope does EXCEPT the pointer key.
 const refusing = () => S._OUTPUT_ENVELOPE.superRefine((v, ctx) => {
@@ -297,14 +301,28 @@ describe('summary client', () => {
 
 // ── 2. pointers on tool results ──────────────────────────────────────────────
 describe('pointers on tool results', () => {
-  it('the pointer set is exactly the six tools, all registered', () => {
+  it('every siting tool description carries the one Next: sentence once, price- and plan-free', () => {
+    expect([...S.CAPACITY_NEXT_TOOLS].sort()).toEqual(['ai_capacity_index', 'analyze_site', 'compare_sites',
+      'find_sites', 'get_market_dcpi_rank', 'get_market_intel', 'rank_markets', 'site_selection_canvas']);
+    for (const n of S.CAPACITY_NEXT_TOOLS) {
+      const d = TOOLS[n] && TOOLS[n].description;
+      expect(d, n).toBeTruthy();
+      expect(d.split(S.CAPACITY_NEXT_SENTENCE).length - 1, `${n}: once`).toBe(1);
+    }
+    expect(S.CAPACITY_NEXT_SENTENCE).toMatch(/source_capacity/);
+    expect(S.CAPACITY_NEXT_SENTENCE).toMatch(/request_capacity_intro/);
+    expect(S.CAPACITY_NEXT_SENTENCE).not.toMatch(/\$|\bpro\b|starter|enterprise|plan\b/i);
+  });
+
+  it('the pointer set is exactly the nine siting tools, all registered', () => {
     expect([...S._CAPACITY_POINTER_TOOLS].sort()).toEqual(
-      ['analyze_site', 'find_sites', 'get_market_context', 'get_market_intel', 'rank_markets', 'site_selection_canvas']);
+      ['ai_capacity_index', 'analyze_site', 'compare_sites', 'find_sites', 'get_market_context',
+        'get_market_dcpi_rank', 'get_market_intel', 'rank_markets', 'site_selection_canvas']);
     for (const n of S._CAPACITY_POINTER_TOOLS) expect(TOOLS[n], `${n} is not registered`).toBeTruthy();
   });
 
-  for (const [label, arrange] of DORMANT) {
-    it(`dormant, ${label}: no block and no line on any matching call`, async () => {
+  for (const [label, arrange] of UNKNOWN) {
+    it(`unknown, ${label}: no block and no line on any matching call`, async () => {
       await arrange();
       for (const [name, args] of MATCHING) {
         rankPayload = RANK_MATCH;
@@ -334,14 +352,69 @@ describe('pointers on tool results', () => {
     }
   });
 
-  it('live: calls about other places get nothing', async () => {
+  it('live: calls about other places get a zero count and the register call, never a pointer', async () => {
     await withSummary(LIVE);
     for (const [name, args, payload] of NOT_MATCHING) {
       rankPayload = payload || RANK_MATCH;
       const r = await call(name, args);
       expect(r.isError, name).toBeFalsy();
-      expect(pointerOf(r), `${name} ${JSON.stringify(args)}`).toBeNull();
-      expect(pointerLines(r), name).toEqual([]);
+      const b = pointerOf(r);
+      if (b) {   // a call that names no place (canvas region=ERCOT) carries nothing at all
+        expect(b.live_listings_matching, `${name} ${JSON.stringify(args)}`).toBe(0);
+        expect(b.register_call.tool, name).toBe('request_capacity_intro');
+        expect(b.markets, name).toBeUndefined();
+      }
+      expect(pointerLines(r).filter((c) => /live listings?,/.test(c.text)), name).toEqual([]);
+    }
+  });
+
+  for (const [label, arrange] of DORMANT) {
+    it(`dormant, ${label}: a zero-count bridge block; a text line only on a sized ask`, async () => {
+      await arrange();
+      for (const [name, args] of MATCHING) {
+        rankPayload = RANK_MATCH;
+        const r = await call(name, args);
+        expect(r.isError, `${name}: ${JSON.stringify(r.content).slice(0, 300)}`).toBeFalsy();
+        const b = pointerOf(r);
+        expect(b, name).toBeTruthy();
+        expect(b.live_listings_matching, name).toBe(0);
+        expect(b.browse_call.tool, name).toBe('source_capacity');
+        expect(b.register_call, name).toMatchObject({ tool: 'request_capacity_intro', arguments: {} });
+        expect(b.url, name).toBe('https://dchub.cloud/listings');
+        expect(b.note, name).toBe(L.CAPACITY_ZERO_NOTE);
+        expect(b.live_listings, name).toBeUndefined();
+        const lines = pointerLines(r);
+        if (args.capacity_mw) {
+          expect(lines, name).toHaveLength(1);
+          expect(lines[0].text, name).toContain('`request_capacity_intro`');
+          expect(lines[0].text, name).not.toMatch(/\d+ live listing/);
+        } else {
+          expect(lines, name).toEqual([]);
+        }
+      }
+    });
+  }
+
+  it('acceptance: keyless-shaped canvas capacity_mw=50 region=AZ while dormant returns 0 + register + next_call', async () => {
+    await withSummary(ZERO);
+    const r = await call('site_selection_canvas', { capacity_mw: 50, region: 'AZ' });
+    const b = pointerOf(r);
+    expect(b).toMatchObject({ live_listings_matching: 0,
+      browse_call: { tool: 'source_capacity', arguments: { state: 'AZ', min_mw: 50 } },
+      register_call: { tool: 'request_capacity_intro' },
+      next_call: { tool: 'source_capacity', arguments: { state: 'AZ', min_mw: 50 } } });
+    // lib/next-call.mjs: the answer's own next_call names the inventory, not another ranking.
+    const nc = r.structuredContent && r.structuredContent.next_call;
+    if (nc) expect(nc).toMatchObject({ tool: 'source_capacity', arguments: { state: 'AZ', min_mw: 50 } });
+  });
+
+  it('live: a matching call carries live_listings_matching equal to the pointer count', async () => {
+    await withSummary(LIVE);
+    for (const [name, args, want] of MATCHING) {
+      rankPayload = RANK_MATCH;
+      const b = pointerOf(await call(name, args));
+      expect(b.live_listings_matching, name).toBe(want.live_listings);
+      expect(b.register_call.tool, name).toBe('request_capacity_intro');
     }
   });
 
@@ -703,13 +776,13 @@ describe('planner routing', () => {
 
 // ── 5. the find_capacity prompt ──────────────────────────────────────────────
 describe('find_capacity prompt', () => {
-  it('prompts/list carries it: requirement required, state and min_mw optional', async () => {
+  it('prompts/list carries it: requirement, state and min_mw all optional (capacity item 5)', async () => {
     const client = await connect(S.createServer());
     const { prompts } = await client.listPrompts();
     const p = prompts.find((x) => x.name === 'find_capacity');
     expect(p, prompts.map((x) => x.name).join(',')).toBeTruthy();
     expect(Object.fromEntries((p.arguments || []).map((a) => [a.name, !!a.required])))
-      .toEqual({ requirement: true, state: false, min_mw: false });
+      .toEqual({ requirement: false, state: false, min_mw: false });
     const got = await client.getPrompt({ name: 'find_capacity',
       arguments: { requirement: '40 MW powered shell, energized by Q2 2027', state: 'Texas', min_mw: '40' } });
     const text = got.messages[0].content.text;
@@ -721,16 +794,39 @@ describe('find_capacity prompt', () => {
     expect(text).not.toContain('operator contact is never shared');
     const bare = await client.getPrompt({ name: 'find_capacity', arguments: { requirement: 'turnkey capacity' } });
     expect(bare.messages[0].content.text).toContain('1. Call source_capacity — ');
+    // No arguments at all: messages that ask for the requirement first, not -32602.
+    const none = await client.getPrompt({ name: 'find_capacity' });
+    expect(none.messages[0].content.text).toContain(S.FIND_CAPACITY_ASK_FIRST);
+    expect(none.messages[0].content.text).toContain('request_capacity_intro');
+    expect(none.messages[0].content.text).not.toContain('undefined');
   });
 
-  it('the kill switch removes it and nothing else', async () => {
+  it('capacity_rfp: listed, all-optional, and gates every send on the human', async () => {
+    const client = await connect(S.createServer());
+    const { prompts } = await client.listPrompts();
+    const p = prompts.find((x) => x.name === 'capacity_rfp');
+    expect(p, prompts.map((x) => x.name).join(',')).toBeTruthy();
+    expect((p.arguments || []).every((a) => !a.required)).toBe(true);
+    const none = (await client.getPrompt({ name: 'capacity_rfp' })).messages[0].content.text;
+    expect(none).toContain('source_capacity target_mw=<MW>');
+    const got = (await client.getPrompt({ name: 'capacity_rfp',
+      arguments: { requirement: '40 MW powered shell in Dallas', target_mw: '40', state: 'Texas' } })).messages[0].content.text;
+    expect(got).toContain('source_capacity target_mw=40 state="TX"');
+    expect(got).toContain("explicit approval before anything is sent");
+    expect(got).toContain('Never contact operators directly');
+    expect(got.indexOf('explicit approval')).toBeLessThan(got.indexOf('request_capacity_intro with'));
+    expect(got).not.toMatch(/\$\d|\bpro\b|per month/i);
+  });
+
+  it('the kill switch removes the two capacity prompts and nothing else', async () => {
     const on = (await (await connect(S.createServer())).listPrompts()).prompts.map((x) => x.name);
     process.env[KILL] = 'off';
     let off;
     try { off = (await (await connect(S.createServer())).listPrompts()).prompts.map((x) => x.name); }
     finally { delete process.env[KILL]; }
     expect(on).toContain('find_capacity');
-    expect(on.filter((n) => n !== 'find_capacity')).toEqual(off);
+    expect(on).toContain('capacity_rfp');
+    expect(on.filter((n) => n !== 'find_capacity' && n !== 'capacity_rfp')).toEqual(off);
   });
 });
 
