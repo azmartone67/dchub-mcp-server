@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
+import { AGENT_DEMAND_TOOL, AGENT_DEMAND_PATH, AGENT_DEMAND_DESCRIPTION, agentDemandEnabled, agentDemandPayload } from './lib/agent-demand.mjs';
 import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLooksWalled, boundPlaces, stripHandoffIfPointered } from './lib/handoff.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
@@ -9707,6 +9708,7 @@ const FREE_FULL_TOOLS = new Set([
   // It is also the deepest differentiated layer DC Hub has — a free-full citation
   // hook is worth more here than a teased one.
   'get_hosting_capacity',
+  'get_agent_demand',      // the weekly Agent Demand Report: public aggregate, registered only while AGENT_DEMAND_PUBLIC is on (lib/agent-demand.mjs)
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
   // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
   // ONLY public, crawlable facility-page fields (name, operator, location, status,
@@ -33969,6 +33971,15 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       recurrence: I.describe('How many times you have seen it (default 1)'),
       note: S.describe('One or two sentences of context') },
     async (a) => _reportFindingTool(getCtx().api_key, a));
+
+  // get_agent_demand (owner 2026-11-10): registered only while AGENT_DEMAND_PUBLIC is on, so the
+  // derived tool count, the manifests and the handshake texts do not move before the owner
+  // publishes the report (lib/agent-demand.mjs). The backend summary 404s until its own flag is on.
+  if (agentDemandEnabled()) {
+    trackedTool(srv, AGENT_DEMAND_TOOL, AGENT_DEMAND_DESCRIPTION, {},
+      async () => ({ content: [{ type: 'text', text: JSON.stringify(
+        agentDemandPayload(await callAPI(AGENT_DEMAND_PATH, {}, { withStatus: true }))) }] }));
+  }
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions

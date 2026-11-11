@@ -1,5 +1,6 @@
 test/404-is-not-a-sales-opportunity.test.mjs
 test/agent-beat.test.mjs
+test/agent-demand-tool.test.mjs
 test/agent-output-names-no-plan.test.mjs
 test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
