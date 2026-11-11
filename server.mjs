@@ -251,7 +251,7 @@ import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isN
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
 import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
-         planAnswerAsks as _planAnswerAsks, createPlanWallSink } from './lib/plan-wall-sink.mjs';
+         planAnswerAsks as _planAnswerAsks, createPlanWallSink, planAskParagraph as _planAskParagraph } from './lib/plan-wall-sink.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -1014,6 +1014,19 @@ export function _planAnonEmailAskAllowed(c) {
     if (_pcIsGrok(c.platform) || _isCleanPlatform() || isBotOrInternalCtx(c)) return false;
     return !(c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE);
   } catch (_) { return false; }
+}
+// The plan's ask paragraph as its own text block right after the JSON block (in place: the result is
+// this call's own object). null paragraph: nothing added.
+// A key in the siting seat: the paragraph only while no email is bound (seat 'email' already has one),
+// with the same exclusions as the keyless ask.
+export function _planKeyedAskParagraph(seat, walled, c) {
+  return seat !== 'email' && _planAnonEmailAskAllowed(c) ? _planAskParagraph(walled, { keyed: true }) : null;
+}
+function _withPlanAskParagraph(result, para) {
+  try {
+    if (!para || !result || !Array.isArray(result.content)) return;
+    result.content = [result.content[0], { type: 'text', text: para }, ...result.content.slice(1)];
+  } catch (_) { /* a line's wording is never worth failing a response over */ }
 }
 export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
@@ -24503,6 +24516,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
         } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
         if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+        // The ask the agent actually receives on /mcp (the lean step keeps no _upgrade prose).
+        _withPlanAskParagraph(result, _planKeyedAskParagraph(_sitingSeatNow, _walled, c));
         // Not a wall row: each walled step logged its own wall under its own tool.
         status = 'plan_steps_caller_key';
       } else if (_sitingPreview && name === 'execute_plan') {
@@ -24525,6 +24540,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
           } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
           if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+          _withPlanAskParagraph(result, _planAskParagraph(_walled));
         }
       }
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
