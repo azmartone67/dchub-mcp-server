@@ -84,18 +84,22 @@ jobs:
     outputs:
       retired: ${{ steps.gate.outputs.retired }}
     steps:
-      - name: Smithery API still exists? (shut down 2026-10-31)
+      # ★ 2026-11-11: the 10-31 date gate retired this lane while the API was
+      # still up. Live check: api.smithery.ai still served our listing (200)
+      # with deploymentUrl = the run.tools proxy, and the CLI publish answered
+      # 403 servers:write (a permission answer, not a dead service). So the gate
+      # now asks the API itself: the lane retires only when the listing read
+      # stops answering 200, never because of a calendar date.
+      - name: Smithery API still answers?
         id: gate
-        env:
-          SMITHERY_SHUTDOWN_DATE: '2026-10-31'
         run: |
-          today=$(date -u +%F)
-          if [[ "$today" > "$SMITHERY_SHUTDOWN_DATE" || "$today" == "$SMITHERY_SHUTDOWN_DATE" ]]; then
-            echo "::notice::Smithery's API, CLI and keys shut down on $SMITHERY_SHUTDOWN_DATE (https://smithery.ai/future). Nothing to publish; this lane is retired. Remove the workflow or its schedule."
-            echo "retired=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "today $today is before the $SMITHERY_SHUTDOWN_DATE Smithery shutdown; the lane runs"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://api.smithery.ai/servers/azmartone67/dchub || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "api.smithery.ai answered $code for azmartone67/dchub; the lane runs"
             echo "retired=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::api.smithery.ai answered $code for azmartone67/dchub (https://smithery.ai/future). Nothing to publish; skipping this run."
+            echo "retired=true" >> "$GITHUB_OUTPUT"
           fi
 
   republish:
