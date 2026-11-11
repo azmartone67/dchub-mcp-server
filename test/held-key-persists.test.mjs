@@ -133,7 +133,7 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
   it('a keyless initialize gets the held key in-band, a keyed one never does', () => {
     // 2026-10-07: the call gained { keyed: !!apiKey } for dchub://inbox; the
     // held-key contract below is unchanged, and the inbox tail is keyed-only.
-    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey });', 'per-session createServer');
+    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });', 'per-session createServer');
     const window = SRC.slice(Math.max(0, i - 1200), i);
     expect(window).toContain('if (!apiKey) {');
     expect(window).toContain('_instrTail = _INSTR_TAIL_HELD(_held.key)');
@@ -144,6 +144,8 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     // base unchanged while no listings are live); the tail contract is the same.
     // Since 2026-09-29 /mcp/grok may rewrite the BASE's lead tool count
     // (instructionsRewrite); the tail is still appended after it, unrewritten.
-    expect(SRC).toMatch(/: _capacityInstructions\(_INSTRUCTIONS_LEAN\)\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
+    // 2026-11-11 (capacity item 5): /mcp may add the buy/RFP clause to the BASE (opts.capacityIntro); the tail
+    // is still appended after it, so the base expression closes one paren deeper.
+    expect(SRC).toMatch(/: _capacityInstructions\(_INSTRUCTIONS_LEAN\)\)\)? \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
   });
 });
