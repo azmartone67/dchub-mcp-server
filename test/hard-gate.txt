@@ -177,6 +177,7 @@ test/email-bound-decision-full.test.mjs
 test/email-entered.test.mjs
 test/email-hint-after-taste.test.mjs
 test/end-of-burst-hook.test.mjs
+test/energy-capacity-cross-link.test.mjs
 test/energy-prices-describes-what-is-served.test.mjs
 test/energy-prices-free-taste.test.mjs
 test/enterprise-hint-quotes-no-stale-floor.test.mjs
