@@ -117,6 +117,7 @@ test/claude-directory-search-plans-line.test.mjs
 test/claude-directory-sell-line.test.mjs
 test/claude-directory-shared-scrub-equality.test.mjs
 test/claude-directory-size-cap.test.mjs
+test/claude-directory-wall-quota-and-compare.test.mjs
 test/claude-passive-arrivals.test.mjs
 test/claude-plugin-skills.test.mjs
 test/claude-review-blockers-1023.test.mjs
