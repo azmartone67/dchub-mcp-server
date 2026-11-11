@@ -250,6 +250,8 @@ import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isN
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
+import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
+         planAnswerAsks as _planAnswerAsks, createPlanWallSink } from './lib/plan-wall-sink.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -1001,6 +1003,17 @@ export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
       + 'not subject to this anonymous limit, and an email-bound key gets ' + FREE_TIER.identified_calls_per_day
       + ' calls a day, free. If they prefer not to give an email, call `claim_free_key` without one.';
   } catch (_) { return ''; }
+}
+// The keyless plan's one email ask (lib/plan-wall-sink.mjs): the same exclusions as the other email asks
+// (Grok, a clean platform, the directory / Claude / core profiles, a bot or our own caller). Not the step
+// test: execute_plan is never dispatched as a step (the planner skips it), so loopback_step on it only
+// means a caller on this host. Kill switch DCHUB_PLAN_EMAIL_ASK=0.
+export function _planAnonEmailAskAllowed(c) {
+  try {
+    if (!_planEmailAskOn() || !_keylessEmailFirstOn() || !c) return false;
+    if (_pcIsGrok(c.platform) || _isCleanPlatform() || isBotOrInternalCtx(c)) return false;
+    return !(c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE);
+  } catch (_) { return false; }
 }
 export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
@@ -4877,12 +4890,35 @@ function _sendParkedWallHit(c, e) {
   try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
   _recordQuotaWallHit(c, e.name, e.status);
 }
+// execute_plan's step rows wait for the plan's final answer and leave marked with the ask it carried
+// (lib/plan-wall-sink.mjs). Kill switch DCHUB_PLAN_EMAIL_ASK=0.
+const _planWallSink = createPlanWallSink({ send: (c, e) => _sendParkedWallHit(c, e) });
+export const _planWallSinkForTest = _planWallSink;   // test seam
+function _sinkStepRow(c, e) {
+  try {
+    if (!c || !c.loopback_step || !c.plan_wall_sink || !_planEmailAskOn()) return false;
+    if (!_planWallSink.park(c.plan_wall_sink, c, e)) return false;
+    try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
+    e.timer = null;
+    return true;
+  } catch (_) { return false; }
+}
+// The plan is done: its steps' rows leave, marked 'line' only when the final answer carries the ask.
+function _drainPlanWallSink(c, result) {
+  try {
+    const id = c && c._planWallSinkId;
+    if (!id) return;
+    c._planWallSinkId = null;
+    const asks = _planAnswerAsks(result);
+    _planWallSink.drain(id, asks ? (sc) => _markEmailAsk(sc, 'line') : null);
+  } catch (_) { /* telemetry never touches a response */ }
+}
 export function _flushQuotaWallHits(c, name) {
   try {
     const l = c && Array.isArray(c._pendingWallHits) ? c._pendingWallHits : null;
     if (!l || !l.length) return;
     c._pendingWallHits = l.filter((e) => {
-      if (e && !e.sent && e.name === name) { _sendParkedWallHit(c, e); return false; }
+      if (e && !e.sent && e.name === name) { if (!_sinkStepRow(c, e)) _sendParkedWallHit(c, e); return false; }
       return !!(e && !e.sent);
     });
   } catch (_) { /* telemetry never touches a response */ }
@@ -22495,6 +22531,7 @@ function _finishWallRow(c, name, result) {
     }
   } catch (_) { /* telemetry never touches a response */ }
   _flushQuotaWallHits(c, name);
+  _drainPlanWallSink(c, result);
 }
 async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) {
   const c = getCtx() || {};
@@ -24475,6 +24512,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
         if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
         status = _sitingSeatNow === 'email' ? 'siting_free_spent' : 'siting_noemail_preview';
+      } else if (name === 'execute_plan' && !c.api_key && !c.email && _planAnonEmailAskAllowed(c)) {
+        // owner 2026-11-11: a keyless plan whose steps walled asked for nothing (every step skips its own
+        // ask). One ask on the plan answer, naming the walled steps (lib/plan-wall-sink.mjs).
+        let _walled = [];
+        try { _walled = _planWalledSteps(JSON.parse(result.content[0].text).executed, c); } catch (_) { _walled = []; }
+        const _up = _planAnonEmailUpgrade(_walled);
+        if (_up) {
+          try {
+            const _p = JSON.parse(result.content[0].text);
+            if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
+          } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
+          if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+        }
       }
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
       // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
@@ -30931,6 +30981,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && (c.profile === DIRECTORY_PROFILE || c.legacy_wall_copy === true)) headers[LEGACY_WALL_LOOPBACK_HEADER] = _mintLegacyWallLoopbackToken();
       // The step belongs to the caller's session: its signals and tracking rows carry that id, not 'no-session'.
       { const _pst = _mintPlanSessionToken(c && c.session_id); if (_pst) headers[PLAN_SESSION_HEADER] = _pst; }
+      // The step's wall row waits in this plan's sink for the plan's one email ask (lib/plan-wall-sink.mjs).
+      if (c && _planEmailAskOn()) {
+        if (!c._planWallSinkId) c._planWallSinkId = _planWallSink.open();
+        const _pws = _planWallSink.mintStepToken(c._planWallSinkId);
+        if (_pws) headers[PLAN_WALL_SINK_HEADER] = _pws;
+      }
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
@@ -34676,6 +34732,10 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planCallerIpTok = req.headers[PLAN_CALLER_IP_HEADER];
     delete req.headers[PLAN_CALLER_IP_HEADER];
     const _planLoopbackIp = _isLoopbackPeer(req) ? consumePlanCallerIpToken(_planCallerIpTok) : null;
+    // And the plan's wall sink (lib/plan-wall-sink.mjs), the same single-use way.
+    const _planWallSinkTok = req.headers[PLAN_WALL_SINK_HEADER];
+    delete req.headers[PLAN_WALL_SINK_HEADER];
+    const _planWallSinkId = _isLoopbackPeer(req) ? _planWallSink.consumeStepToken(_planWallSinkTok) : null;
     const sessionId = req.headers['mcp-session-id'];
     // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
     // 400 on every in-session request. Negotiate down instead: drop the header, and the request
@@ -35767,6 +35827,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // classifies the call as 'mcp'.
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
+        plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
