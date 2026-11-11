@@ -56,7 +56,8 @@ describe('site-owner hand-off on analyze_site', () => {
     expect(ownerLines(run(SEAT, siteAnswer('CAUTION')))).toHaveLength(1);
     _resetSiteOwnerMemoForTest();
     expect(ownerLines(run(SEAT, siteAnswer('AVOID')))).toHaveLength(0);
-    expect(ownerLines(run(SEAT, siteAnswer('')))).toHaveLength(0);
+    const unrated = { _entity: 'site', ok: true, tool: 'analyze_site', verdict: '', overall_score: null };
+    expect(ownerLines(run(SEAT, { content: [{ type: 'text', text: JSON.stringify(unrated) }], structuredContent: unrated }))).toHaveLength(0);
   });
 
   it('once per caller per day: the second site in the same session hears nothing; another caller does', () => {
@@ -108,6 +109,30 @@ describe('site-owner hand-off on analyze_site', () => {
     expect(L.siteBand({ structuredContent: { verdict: 'BUILD', composite_score: 71 } })).toBe('BUILD');
     expect(L.siteBand({ content: [{ type: 'text', text: '{"verdict":"caution"}' }] })).toBe('CAUTION');
     expect(L.siteBand({ structuredContent: { verdict: 'Excellent site' } })).toBeNull();
+  });
+
+  // A keyed full report prints overall_score and interpretation, no verdict word (live 2026-11-11), so before
+  // this the hand-off never fired on a full report.
+  it('bands a full report with no verdict word by overall_score, as the teaser does', () => {
+    const full = (overall_score, extra = {}) => ({ structuredContent: { _entity: 'site', ok: true, success: true,
+      interpretation: 'Viable site', overall_score, ...extra } });
+    expect(L.siteBand(full(83))).toBe('BUILD');
+    expect(L.siteBand(full(50))).toBe('CAUTION');
+    expect(L.siteBand(full('71.5'))).toBe('BUILD');
+    expect(L.siteBand(full(30))).toBe('AVOID');
+    expect(L.siteBand(full(null))).toBeNull();
+    expect(L.siteBand(full(''))).toBeNull();
+    expect(L.siteBand(full(83, { success: false }))).toBeNull();
+    expect(L.siteBand(full(83, { verdict: 'AVOID' }))).toBe('AVOID');   // a printed verdict wins
+    expect(L.siteBand({ content: [{ type: 'text', text: '{"success":true,"overall_score":64}' }] })).toBe('CAUTION');
+  });
+
+  it('a full report with no verdict word gets the line', () => {
+    const sc = { _entity: 'site', ok: true, success: true, tool: 'analyze_site', interpretation: 'Viable site', overall_score: 83 };
+    const full = { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    expect(ownerLines(run(SEAT, full))).toHaveLength(1);
+    const low = { ...sc, overall_score: 30 };
+    expect(ownerLines(run(SEAT, { content: [{ type: 'text', text: JSON.stringify(low) }], structuredContent: low }))).toHaveLength(0);
   });
 });
 
