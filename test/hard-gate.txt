@@ -391,6 +391,7 @@ test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
+test/offer-floor-standing.test.mjs
 test/offers-shown-c3-wire.test.mjs
 test/offers-shown-c3.test.mjs
 test/one-free-tier-rule-one-pro-list.test.mjs

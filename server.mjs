@@ -4944,6 +4944,8 @@ function _drainPlanWallSink(c, result) {
       // The plan answer is what the agent received: a mark the in-process step result earned (an in-session
       // step runs the wall's own ask, which no plan answer shows) is not carried over.
       if (sc && typeof sc === 'object') sc._emailAsk = '';
+      // A drained step row carries the plan answer's floor standing, not the step's own ('plan_step').
+      if (sc && typeof sc === 'object' && c._offerFloor) sc._offerFloor = c._offerFloor;
       if (e && asked.has(e.name)) _markEmailAsk(sc, 'line');
       if (e && digest.has(e.name)) _markEmailAsk(sc, 'digest_line');
       if (offersOn && result) { const o = _offersShown(result, sc._emailAsk); if (o) sc._offersShown = o; }
@@ -4981,9 +4983,17 @@ function _floorKindFor(name, sc, c) {
   const proOnly = _floorProOnly(name, c);
   return { kind: _floorOfferKind({ proOnly, depth, bound: !!(c && c.email) }), depth: proOnly || depth };
 }
-function _floorExcluded(c) {
-  return !c || !!c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()
-    || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
+// The wall's standing under the floor (owner 2026-11-11, "Measure allowed only"): 'allowed', or why the floor
+// skips it by design. It leaves on the wall row as offer_floor (lib/keyless-wall.mjs OFFER_FLOOR_STANDINGS), so
+// the funnel reads the 95% offer target over the walls the floor is allowed on.
+function _floorStanding(c, name) {
+  if (!_wallOfferFloorOn()) return 'off';
+  if (c.loopback_step) return 'plan_step';
+  if (_pcIsGrok(c.platform)) return 'grok';
+  if (_isCleanPlatform()) return 'clean';
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
+  if (_FLOOR_SKIP_TOOLS.has(String(name || ''))) return 'tool';
+  return 'allowed';
 }
 function _planFloor(result, c) {
   const id = c && c._planWallSinkId;
@@ -5021,8 +5031,9 @@ function _planFloor(result, c) {
 }
 export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
-    if (!_wallOfferFloorOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
-    if (_floorExcluded(c) || _FLOOR_SKIP_TOOLS.has(String(name || ''))) return result;
+    if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    c._offerFloor = _floorStanding(c, name);
+    if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
     const walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
     if (!walled) return out;
@@ -23115,7 +23126,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const t0 = Date.now();
     let status = 'ok';
     try { c._askTool = name; } catch (_) { /* the wall's human line is capped per (session, this tool): _wallHumanLineAlreadySent */ }
-    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
+    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; c._offerFloor = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
