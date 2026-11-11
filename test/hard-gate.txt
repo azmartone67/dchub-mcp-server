@@ -6,6 +6,7 @@ test/agent-outreach.test.mjs
 test/agent-qa-a-signals-metros.test.mjs
 test/agent-qa-round2-fiber-envelope.test.mjs
 test/agent-registration-bearer.test.mjs
+test/agent-text-complements-not-dismisses.test.mjs
 test/agentforge-sync.test.mjs
 test/ai-capacity-email-rows-ask.test.mjs
 test/analyst-path-selftag.test.mjs
