@@ -249,7 +249,7 @@ import { challengeCallerKey as _challengeCallerKey, challengeState as _challenge
 import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
-         sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
+         sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -9889,7 +9889,7 @@ export function _withSitingFreeRun(result, fr, tool) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
   const block = { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
     basis: 'per key and per bound email, the higher count; UTC calendar month',
-    note: sitingFreeRunNote(fr, tool) };
+    note: sitingFreeRunNote(fr, tool, { planCallerKey: planStepsCallerKeyOn() }) };
   const out = { ...result };
   try {
     const p = JSON.parse(out.content[0].text);
@@ -9914,6 +9914,19 @@ function _markAskGap(c, kind, url) {
 function _sitingPreviewUpgradeMarked(name, seat, fr) {
   if (seat !== 'email') _markAskGap(getCtx() || {}, 'line');
   return _sitingPreviewUpgrade(name, seat, fr);
+}
+// The plan steps that came back walled, read off each step's own result by the relay's wall test.
+// A step it cannot read is left out, and nothing here calls a step full.
+export function _planWalledSteps(executed, c) {
+  const out = [];
+  if (!Array.isArray(executed)) return out;
+  for (const e of executed) {
+    try {
+      if (!e || typeof e !== 'object' || typeof e.tool !== 'string') continue;
+      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool });
+    } catch (_) { /* unreadable: not named */ }
+  }
+  return out;
 }
 // The keyed caller's line on the keyless preview: the next step is bind_email, never
 // claim_free_key (it already holds a key). No plan name, no price.
@@ -23221,8 +23234,9 @@ function trackedTool(srv, name, description, schema, handler) {
         }
         _sitingPreview = true;   // fail closed
       }
-      // execute_plan's steps are loopback calls under the caller's key: run them keyless.
-      if (_sitingPreview && name === 'execute_plan') c.plan_steps_keyless = true;
+      // execute_plan's steps are loopback calls under the caller's key, each at that tool's own
+      // allowance for the key (owner 2026-11-11). DCHUB_PLAN_STEPS_CALLER_KEY=0: run them keyless.
+      if (_sitingPreview && name === 'execute_plan' && !planStepsCallerKeyOn()) c.plan_steps_keyless = true;
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
       // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
@@ -24425,9 +24439,22 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // Keyless full-answer trial: the funnel tag (mcp_call_log.status / mcp_tool_calls.gate_status),
       // on a charged answer only. A QA observer is tagged nothing.
       if (gate.keyless_full_trial_charged === true) status = KEYLESS_FULL_TRIAL_STATUS;
-      // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; its steps already ran
-      // keyless above), so the keyed caller's bind_email / human-link line is stamped here.
-      if (_sitingPreview && name === 'execute_plan') {
+      // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; each step was gated by its own
+      // loopback call), so the keyed caller's bind_email / human-link line is stamped here. Steps
+      // under the caller's key (owner 2026-11-11): the line names the steps that came back walled
+      // and calls nothing a preview it did not read as one.
+      if (_sitingPreview && name === 'execute_plan' && !c.plan_steps_keyless) {
+        let _walled = [];
+        try { _walled = _planWalledSteps(JSON.parse(result.content[0].text).executed, c); } catch (_) { _walled = []; }
+        const _up = planCallerKeyUpgrade(_sitingSeatNow, _walled, _sitingFr);
+        try {
+          const _p = JSON.parse(result.content[0].text);
+          if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
+        } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
+        if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+        // Not a wall row: each walled step logged its own wall under its own tool.
+        status = 'plan_steps_caller_key';
+      } else if (_sitingPreview && name === 'execute_plan') {
         const _up = _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr);
         try {
           const _p = JSON.parse(result.content[0].text);
@@ -28079,7 +28106,7 @@ export const _INSTR_FREE_TIER = (() => {
 })();
 // The siting sentence every emission of the free-tier rule carries while the switch is on.
 export function _sitingFreeClause(env = process.env) {
-  return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH) : '';
+  return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH, { planCallerKey: planStepsCallerKeyOn(env) }) : '';
 }
 // Item 2 (owner, 2026-10-14): the analyze_site exemption follows the FREE TIER block in the
 // full text (dchub://instructions), so the rule's "per tool per day" is not read as
@@ -28933,7 +28960,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             ? { constraint_iso: [...constraintIsoSet] }
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
-                  tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
+                  tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
+                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): free-preview depth' : 'anonymous — steps returned free-preview depth; claim_free_key raises it') },
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
@@ -30877,7 +30905,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     try {
       const headers = { 'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream' };
-      // Item 1: a key in the siting preview seat runs its plan's steps keyless (the keyless preview).
+      // Steps carry the caller's key (owner 2026-11-11); only DCHUB_PLAN_STEPS_CALLER_KEY=0 sets plan_steps_keyless.
       if (c && c.api_key && !c.plan_steps_keyless) headers['X-API-Key'] = c.api_key;
       if (c && c.platform) headers['X-MCP-Platform'] = String(c.platform);
       // r-core-profile: a plan run from /mcp/core keeps its steps in the core

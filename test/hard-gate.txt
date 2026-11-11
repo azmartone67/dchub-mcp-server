@@ -420,6 +420,7 @@ test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
 test/plan-rerun.test.mjs
 test/plan-step-session-id.test.mjs
+test/plan-steps-caller-key.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
