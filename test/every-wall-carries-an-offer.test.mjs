@@ -125,6 +125,9 @@ function offenders(name, calls) {
       const offers = Array.isArray(e.offers_shown) ? e.offers_shown : [];
       if (!OFFER_ASKS.has(e.email_ask)) bad.push(`${name} ${c.where} row ${e.tool}/${e.wall_status}: email_ask ${e.email_ask || 'none'}`);
       if (!offers.includes('email_unlock') && !offers.includes('digest')) bad.push(`${name} ${c.where} row ${e.tool}/${e.wall_status}: offers ${offers.join('+') || 'none'}`);
+      // Owner 2026-11-11 ("Measure allowed only"): every wall here is one the floor is allowed on, plan step rows
+      // included (they leave with the plan answer's standing), so the funnel counts it in the 95% target.
+      if (e.offer_floor !== 'allowed') bad.push(`${name} ${c.where} row ${e.tool}/${e.wall_status}: offer_floor ${e.offer_floor || 'absent'}`);
     }
     if (c.rows.length && !(/\bemail\b/i.test(c.prose) && PROSE_OFFER.test(c.prose))) bad.push(`${name} ${c.where}: prose names no email step`);
   }
