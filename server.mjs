@@ -11192,7 +11192,10 @@ export function _withCompareTeaser(result, teaser) {
   if (!teaser || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
   const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
   const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
-  content.push({ type: 'text', text: [_compareTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
+  // Two blocks, not one: a directory profile's scrub drops a whole later block that names
+  // claim_free_key, so a shared block took the per-site verdicts down with the key line and
+  // /mcp/claude's keyless compare_sites text was the partial notice alone.
+  content.push({ type: 'text', text: _compareTeaserLine(teaser) }, { type: 'text', text: COMPARE_FREE_KEY_LINE });
   const sc = { ...(result.structuredContent || {}), message: _wallCopy(COMPARE_KEYLESS_MESSAGE, COMPARE_KEYLESS_MESSAGE_LEGACY),
     site_teaser: teaser, next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
@@ -23608,7 +23611,13 @@ function trackedTool(srv, name, description, schema, handler) {
               : await _keylessTrialOfferRelay(c, name, tier, 'siteruns', !!_teaser);
             const _ew = await _lpWallEmailResult(name, _offRelay || _emailRelay, _hl, _teaser, { keyLink: _keyLink });
             if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
-            if (_ew) return _withSiteContextPreview(_withKeylessWallQuota(_withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink)), _scWall);
+            // /mcp/claude: no quota stamp. The profile's scrub drops quota_basis (it names
+            // "keyless") and kept a bare remaining_this_month: 0, which reads as "none left
+            // this month" on a caller's first call; the stamp is a constant, not a counter.
+            if (_ew) {
+              const _ewKey = _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
+              return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey : _withKeylessWallQuota(_ewKey), _scWall);
+            }
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
           if (_cmpoTeaser) return _withCompositeTeaser(await _lpWallResultV11(name, _hl), _cmpoTeaser);
