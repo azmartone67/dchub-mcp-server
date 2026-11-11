@@ -150,7 +150,8 @@ describe('over HTTP: keyed vs keyless session', () => {
   it('keyless: no inbox line, no inbox resource, instructions byte-identical to the lean text', async () => {
     const { h, instructions } = await open({});
     expect(instructions).not.toContain('dchub://inbox');
-    expect(instructions).toBe(S._capacityInstructions(S._INSTRUCTIONS_LEAN));
+    // 2026-11-11 (capacity item 5): /mcp adds the buy/RFP clause after the routing sentence.
+    expect(instructions).toBe(S._withCapacityIntroClause(S._capacityInstructions(S._INSTRUCTIONS_LEAN)));
     const list = (await post(h, { jsonrpc: '2.0', id: 2, method: 'resources/list' })).msg.result.resources.map((r) => r.uri);
     expect(list).not.toContain('dchub://inbox');
     expect(list).toContain('dchub://instructions');
