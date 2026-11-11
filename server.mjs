@@ -5361,7 +5361,7 @@ function _hiClaimLine(name, claim, from, devUrl) {
     'follow up, then call `bind_email` (marketing_opt_in=true): a DC Hub analyst sends the full `' + name +
     '` workup + a paid-plan trial. Self-serve upgrade: ' + devUrl + '\n';
 }
-const VARIANT_COPY = {
+export const VARIANT_COPY = {
   // 2026-07-11 (claim-variant audit): Claude.ai/desktop are HEADER-LESS hosts —
   // they cannot auto-redeem server-side, so the claude cohort's ONLY redemption
   // path is a human click (8 minted / 0 used vs generic's machine-redeem 99%).
@@ -5370,7 +5370,7 @@ const VARIANT_COPY = {
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so share this link with your user ' +
-    'to open — one click, a free 7-day/50-call trial key: ' + claim.claim_url +
+    'to open — one click, a free DC Hub key: ' + claim.claim_url +
     ' — Self-serve upgrade: ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
@@ -32928,9 +32928,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
           snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
         },
+        // Windsurf Cascade (2026-11-11, docs.devin.ai/windsurf/plugins/cascade/mcp): "Open MCP config
+        // file" opens ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/
+        // is now only the editor's MCP discovery file. serverUrl and url are both accepted.
         windsurf: {
           label: 'Windsurf',
-          file: '~/.codeium/windsurf/mcp_config.json',
+          file: "~/.config/devin/mcp_config.json (Cascade → MCP menu → Open MCP config file; %AppData%/devin/mcp_config.json on Windows)",
           snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
         // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
