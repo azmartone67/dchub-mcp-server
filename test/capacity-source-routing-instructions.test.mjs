@@ -57,8 +57,9 @@ describe('the routing sentence', () => {
     // routing sentence must still come before any other instruction.
     expect(i, p).toBeGreaterThan(0);
     expect(INSTR[p].slice(0, i).trim().endsWith('.'), p).toBe(true);
-    // Owner GO 2026-10-20: 'MUST CALL (FRONT DOOR)' became the neutral 'TOOL CHOICE' line, still the next instruction.
-    expect(i, p).toBeLessThan(INSTR[p].indexOf('TOOL CHOICE'));
+    // Owner GO 2026-10-20: 'MUST CALL (FRONT DOOR)' became the neutral 'TOOL CHOICE' line; item 9 (2026-11-11) folded that
+    // line into the canon sentence that opens the text, so the next instruction after routing is the freshness rule.
+    expect(i, p).toBeLessThan(INSTR[p].indexOf('Data moves daily: re-query.'));
     expect(i, p).toBeLessThan(1500);
   });
 

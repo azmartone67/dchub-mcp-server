@@ -149,6 +149,7 @@ test/coverage-counts-not-masked.test.mjs
 test/coverage-gap-log-only.test.mjs
 test/daily-quota-gateway.test.mjs
 test/data-sources-odbl-117627.test.mjs
+test/dchub-identity.test.mjs
 test/dcpi-confidence-public.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
 test/dcpi-markets-refresh.test.mjs

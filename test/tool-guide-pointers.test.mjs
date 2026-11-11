@@ -1,6 +1,7 @@
 // tool-guide-pointers.test.mjs - P1-6 (Grok brief 2026-10-18): the slimmed tools/list description of
 // plan_query and get_grid_scoreboard ends in a one-line pointer to dchub://tool-guides/<tool>, which
 // serves the full registered text. Nothing a directory profile serves is touched.
+import { PLAN_SUFFIX } from '../lib/dchub-identity.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TOOL_GUIDE_TOOLS, toolGuideUri, toolGuidePointer, SLIM_DESC_MAX } from '../lib/list-slim.mjs';
 
@@ -33,11 +34,12 @@ describe('tool guide pointers', () => {
   it('covers exactly plan_query and get_grid_scoreboard', () => {
     expect([...TOOL_GUIDE_TOOLS].sort()).toEqual(['get_grid_scoreboard', 'plan_query']);
   });
-  it('the wire description ends with the pointer and stays inside the cap', async () => {
+  // Item 9 (owner 2026-11-11): every description ends with the execute_plan pointer, so the guide pointer sits right before it.
+  it('the wire description ends with the pointer (then the execute_plan suffix) and stays inside the cap', async () => {
     const tools = new Map((await wireTools()).map((t) => [t.name, t]));
     for (const n of TOOL_GUIDE_TOOLS) {
       const d = tools.get(n).description;
-      expect(d.endsWith(toolGuidePointer(n)), n).toBe(true);
+      expect(d.endsWith(toolGuidePointer(n) + ' ' + PLAN_SUFFIX), n).toBe(true);
       expect(d.length, n).toBeLessThanOrEqual(SLIM_DESC_MAX + 1);
     }
   });

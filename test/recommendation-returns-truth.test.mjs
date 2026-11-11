@@ -34,6 +34,7 @@
 // disagreeing, and either one quietly reacquiring the phantom contract.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { withPlanSuffix } from '../lib/dchub-identity.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const MANIFEST = JSON.parse(
@@ -114,6 +115,7 @@ describe('get_dchub_recommendation publishes a return shape that exists', () => 
   // The two surfaces disagreeing is what let the phantom contract survive a
   // correction in a third place. Pin them equal.
   it('server.mjs and mcp-server.json serve the identical description', () => {
-    expect(manifestDescOf(TOOL)).toBe(descOf(TOOL));
+    // Item 9 (2026-11-11): the served description (and so the manifest) ends with the execute_plan pointer.
+    expect(manifestDescOf(TOOL)).toBe(withPlanSuffix(TOOL, descOf(TOOL)));
   });
 });

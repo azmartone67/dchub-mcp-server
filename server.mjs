@@ -200,8 +200,9 @@ import { meteredTrialNote as _meteredTrialNote, limitedAnswerCopy as _limitedAns
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
+import { CANON_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
-import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
+import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, withAnswerMarkers as _withAnswerMarkers } from './lib/answer-markers.mjs';
@@ -22802,6 +22803,32 @@ export function _sourceLineStep(result, name, args) {
     return _withSourceLine(result, name, args);
   } catch (_e) { return result; }
 }
+// ── the identity footer (owner 2026-11-11, item 9; lib/dchub-identity.mjs) ─────────────────────────────────────────
+// A preview or walled answer ends with ONE line after its citation (Source) line: what DC Hub is and where to connect.
+// A full answer is untouched: its citation line stays the last line. Walled = this call parked a wall row for this
+// tool (the same test the offer floor uses), the gate flagged it paid-blocked, or its payload is a tier preview
+// (lib/source-line.mjs isTierPreview: partial_preview completeness, the preview flags, an _upgrade note), or it is the
+// analyze_site gated_preview (lib/gated-preview.mjs), which a sessionless caller gets without a parked wall row.
+// Not on the frozen directory / Claude / core profiles, a clean platform or an execute_plan loopback step (the plan
+// answer speaks for its steps). Kill switch DCHUB_PREVIEW_FOOTER=0.
+export function _previewFooterStep(result, name, c = getCtx()) {
+  try {
+    if (!previewFooterOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (!c || c.loopback_step || _isCleanPlatform()) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    let sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : null;
+    if (!sc) {   // a result whose outputSchema refused structuredContent: its JSON block (the same fallback the Source line reads)
+      try {
+        const b = result.content.find((it) => it && typeof it.text === 'string' && it.text.trim().startsWith('{'));
+        const p = b ? JSON.parse(b.text) : null;
+        sc = p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+      } catch (_) { sc = null; }
+    }
+    const walled = (Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && e.name === name))
+      || c._paidBlocked === true || _isTierPreview(sc) || (!!sc && sc.status === 'gated_preview');
+    return walled ? withPreviewFooter(result) : result;
+  } catch (_) { return result; }
+}
 function _sourceLineCb(name, fn) {
   // QA B P1 (2026-10-19): the plan-free field names are the LAST rewrite of the result, outside
   // _flagUpstreamError (which stays the arrow's outermost call): lib/plan-free-fields.mjs.
@@ -22821,7 +22848,9 @@ function _sourceLineCb(name, fn) {
       // a clean platform, or an execute_plan loopback step.
       // Item 2 (2026-11-11): the offer floor reads what lean left, so it runs after it (lib/wall-offer-floor.mjs).
       const _floored = _wallOfferFloorStep(_done, name, c);
-      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name);
+      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
+      // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
+      _final = _previewFooterStep(_final, name, c);
       return _final;
     } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };
@@ -22976,7 +23005,12 @@ function trackedTool(srv, name, description, schema, handler) {
   // Directory profiles serve their own reviewed descriptions, so they never see it.
   // Owner GO 2026-10-20 (tool search): a per-platform override from the backend tuner replaces the text
   // but not its "Use this when ..." lead, which is what Claude's and OpenAI's tool search match first.
-  const _desc = withSearchLead(withRoutingLine(name, (typeof _ov === 'string' && _ov.trim()) ? _ov : description), description);
+  // Item 9 (owner 2026-11-11): every served description ends with the one execute_plan pointer (lib/dchub-identity.mjs
+  // PLAN_SUFFIX), after any per-platform override and after the capacity Next: sentence, so it is always the last
+  // sentence. execute_plan's own description does not point at itself. The directory / Claude / core profiles
+  // serve their own reviewed descriptions, so they never see it; /mcp/grok and the wire slim keep it (lib/grok-profile.mjs,
+  // lib/list-slim.mjs cut the body, never the suffix).
+  const _desc = withPlanSuffix(name, withSearchLead(withRoutingLine(name, (typeof _ov === 'string' && _ov.trim()) ? _ov : description), description));
   // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint is
   // false for the closed DC Hub corpus and true for OPEN_WORLD_TOOLS; destructiveHint
   // is false unless the tool is named in DESTRUCTIVE_TOOLS. Both are per-tool sets
@@ -28518,7 +28552,8 @@ export const _INSTRUCTIONS = (() => {
   // A1: the free-tier rule sits before the scope section, which must stay last
   // (test/problem-taxonomy.test.mjs).
   const asf = _analyzeSiteFreeSentence();
-  return OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
+  // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
+  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
     + (asf ? ' ' + asf : '') + _composeScopeSection(_TAXONOMY);
 })();
 
@@ -28711,9 +28746,13 @@ export const _INSTRUCTIONS_LEAN = (() => {
   // Owner GO 2026-10-20 (directory-safe): "MUST CALL (FRONT DOOR)" and "never reuse a figure from
   // memory" are gone. execute_plan stays the RECOMMENDED entry for a multi-part question, stated as a
   // recommendation; the freshness fact (data moves daily) replaces the order.
-  return OUTREACH_LEAD + 'DC Hub' + (n ? ': ' + n + ' tools' : '') + '. '
+  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + 'DC Hub' + (n ? ': ' + n + ' tools' : '') + '. '
     + (routing ? routing + ' ' : '')
-    + 'TOOL CHOICE: a multi-part question fits `execute_plan(intent=<the user\'s question>)` (recommended); one fact fits the tool whose description starts "Use this when". Data moves daily: re-query. '
+    // Item 9 (owner 2026-11-11): the TOOL CHOICE line ("a multi-part question fits execute_plan (recommended); one fact fits
+    // the tool whose description starts Use this when") is gone. The canon sentence that now opens this text says when to call
+    // execute_plan, and a second, different rule beside it would contradict it; the 162 characters pay for the sentence
+    // under the /mcp/grok budget (test/initialize-instructions-length). The freshness fact stays.
+    + 'Data moves daily: re-query. '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).

@@ -24,6 +24,7 @@
 // HARD GATE (test/hard-gate.txt): qualifies because it is offline and reads
 // committed files only.
 import { describe, it, expect } from 'vitest';
+import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 import { readFileSync } from 'node:fs';
 import {
   LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, TIGHT_MAX, MCP_URL, PRICE_LINE, endpointsLine,
@@ -264,11 +265,14 @@ describe('tagline (owner, 2026-10-09)', () => {
     }
   });
 
-  it('is the first line under the title of llms.txt', () => {
+  // Item 9 (owner 2026-11-11): the canon sentence (lib/dchub-identity.mjs) is the first line under the title;
+  // the tagline is the line after it.
+  it('is the first line under the title of llms.txt after the canon sentence', () => {
     const lines = read('llms.txt').split('\n');
     expect(lines[0]).toMatch(/^# /);
-    const next = lines.slice(1).find((l) => l.trim() !== '');
-    expect(next).toBe(COPY.tagline);
+    const body = lines.slice(1).filter((l) => l.trim() !== '');
+    expect(body[0]).toBe(CANON_SENTENCE);
+    expect(body[1]).toBe(COPY.tagline);
   });
 
   it('no file in the repo carries the retired tagline; every copy of the new one is exact', () => {
