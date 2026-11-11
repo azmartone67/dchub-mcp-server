@@ -32917,6 +32917,38 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     return { for_your_client: { client: clientKey, ...own }, ...rest, clients: { [clientKey]: own },
              other_clients: 'https://dchub.cloud/connect' };
   };
+  // 2026-11-11 (owner funnel item 4): the paste-ready line, one wording with the backend's
+  // persist.paste_line (routes/claim_persist.paste_line): server URL + the X-API-Key header.
+  // Spaced exactly as Python's json.dumps prints it, so both servers give the same line.
+  const _pasteLine = (key) => 'url https://dchub.cloud/mcp, headers {"X-API-Key": ' + JSON.stringify(String(key)) + '}';
+  const _KEY_PLACEHOLDER = '<the key from the DC Hub email>';
+  // One key per email (backend routes/one_key_per_email): an email that already has a DC Hub key
+  // gets no second key, and the body never carries that key: it goes to the inbox. That is not a
+  // failure, so it is said plainly, with the paste-ready line holding a placeholder for the key.
+  const _emailHasKeyReply = (r, bind) => {
+    const msg = String((r && r.message) || 'This email already has a DC Hub key, so no second key was made.').slice(0, 400);
+    const sent = !!(r && r.key_sent);
+    const line = String((r && r.paste_line_template) || _pasteLine(_KEY_PLACEHOLDER));
+    const text = 'ℹ️ **One DC Hub key per email.** ' + msg + '\n\n' +
+      'When your human has the key from that email, add it to the DC Hub connector: `' + line + '` ' +
+      '(or paste the connector URL the email gives them). Do not ask for another email to get a second key. ' +
+      (sent ? '' : 'If it does not arrive, `recover_my_key {email}` sends it again (at most 3 a day). ') +
+      'Lost later: `recover_my_key {email}` or https://dchub.cloud/connect.';
+    return {
+      content: [{ type: 'text', text }],
+      structuredContent: {
+        ok: false,
+        error: 'email_has_key',
+        one_key_per_email: true,
+        key_sent: sent,
+        message: msg,
+        ...(bind ? { bound: false } : {}),
+        paste_line_template: line,
+        recover_tool: 'recover_my_key',
+        next_tool: 'recover_my_key',
+      },
+    };
+  };
 
   // r85 (2026-06-13): claim_free_key — the brain's (Opus-4-8) #1 conversion
   // lever. 99.7% of paywall hits are anonymous agents that can't complete an
@@ -33078,6 +33110,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
       if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
+      if (!key && r && r.error === 'email_has_key') return _emailHasKeyReply(r, false);
       if (!key) {
         return { isError: true, content: [{ type: 'text',
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
@@ -33258,6 +33291,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
+        'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' +
         (_backendReused
           ? 'Calling claim_free_key again keeps returning this same key. Save it once with the step below so the next session starts with it.\n\n'
           : '') +
@@ -33316,6 +33350,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
           ...(_sitingFreeClause() ? { free_tier_siting_tools: _sitingFreeClause() } : {}),
           key_is_durable:          true,
+          paste_line:              _pasteLine(key),
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
           // access persists next session instead of re-minting anonymously.
@@ -33415,6 +33450,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // 2026-11-10: the claim door can now drop the email (validate_email). Never claim a bind
           // that did not happen; claim_free_key's own text says why and asks for a real address.
           const _notBound = !!(_minted && _minted.structuredContent && _minted.structuredContent.email_rejected === true);
+          // 2026-11-11: the email already has a key, so nothing was minted; claim_free_key's reply says so.
+          if (_minted && _minted.structuredContent && _minted.structuredContent.error === 'email_has_key') return _minted;
           let _lead = _notBound
             ? 'No key on this session, so `bind_email` minted a free DC Hub key, but the email was NOT bound to it (see below). '
             : 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
@@ -33441,6 +33478,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // SOFT-FAIL contract: relay any backend ok:false / error calmly; never throw,
       // never isError — the key keeps working, email is optional and gates nothing.
       const _ok = r && r.ok !== false && !r.error;
+      if (r && r.error === 'email_has_key') return _emailHasKeyReply(r, true);
       const _consent =
         'Purpose: ' + EMAIL_PURPOSE_TEXT + '. ' +
         'The relaying agent should surface this to its human.';
