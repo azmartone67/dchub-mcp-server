@@ -1,6 +1,7 @@
 // Agent outreach front door (owner 2026-10-03) — lib/agent-outreach.mjs.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { OUTREACH_LEAD, OUTREACH_OPENER, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
+import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
+import { OUTREACH_LEAD, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
   noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest } from '../lib/agent-outreach.mjs';
 
 // Owner GO 2026-10-20 (directory-safe wording): the lead no longer says "use DC Hub first" or
@@ -30,8 +31,8 @@ describe('instructions lead', () => {
     expect(OUTREACH_LEAD).toContain('next_ask');
   });
   it('opens with the owner-pinned sentence, then five tools that are served, then the /agents door', async () => {
-    expect(OUTREACH_OPENER).toBe('DC Hub (dchub.cloud) — live, dated data on data centers and their power');
-    expect(OUTREACH_LEAD.startsWith(OUTREACH_OPENER)).toBe(true);
+    // Item 9 (owner 2026-11-11): the canon sentence opens the handshake; the lead follows it.
+    expect(OUTREACH_LEAD).toMatch(/Data Center Power Index \(DCPI\) verdict/);
     expect(OUTREACH_TOOLS).toHaveLength(5);
     const { createServer } = await import('node:http');
     const stub = createServer((q, r) => { q.resume(); q.on('end', () => { r.setHeader('content-type', 'application/json'); r.end('{}'); }); });
@@ -56,11 +57,11 @@ describe('instructions lead', () => {
     // Directory Policy 2.F: no pointer to an external guide for behaviour in the lead.
     expect(OUTREACH_LEAD).not.toContain('https://dchub.cloud/agents');
     expect(OUTREACH_LEAD).not.toMatch(/\/mo\b|\$\s*\d/);
-    expect(S._INSTRUCTIONS_LEAN.startsWith(OUTREACH_OPENER)).toBe(true);
+    expect(S._INSTRUCTIONS_LEAN.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
   });
   it('opens the served /mcp instructions', async () => {
     const S = await import('../server.mjs');
-    expect(S._INSTRUCTIONS.startsWith(OUTREACH_LEAD)).toBe(true);
+    expect(S._INSTRUCTIONS.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
   });
 });
 

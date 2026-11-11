@@ -9,6 +9,7 @@
 //
 // Real server.mjs app on loopback, stub backend; no network.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { gatedPreviewStep, gatedPreviewHumanMessage, powerBandMeaning, powerBandSentence, powerBandLineStep } from '../lib/gated-preview.mjs';
@@ -163,7 +164,12 @@ for (const session of [true, false]) {
     it('the agent line asks, polite, once', () => {
       // Item 8 (owner 2026-10-16): the citable Source line closes a free answer; the agent line is
       // the last block before it.
-      const blocks = r.res.content.map((b) => b.text);
+      // Item 9 (owner 2026-11-11): the gated preview then closes with the identity footer after the citation line.
+      // A sessionless call from this loopback harness has the shape of an execute_plan step (loopback_step), and a
+      // plan step never carries the footer (the plan answer speaks for it), so only the session call shows it here.
+      const all = r.res.content.map((b) => b.text);
+      expect(all[all.length - 1] === PREVIEW_FOOTER, 'footer on the session call only').toBe(session);
+      const blocks = session ? all.slice(0, -1) : all;
       expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)/);
       const last = blocks[blocks.length - 2];
       expect(last).toBe('(agent) When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');

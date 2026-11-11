@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plainFacilityProse } from './canon-floor.mjs';
+import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEMPLATE_PATH = 'canonical/registry-description-template.json';
@@ -91,6 +92,8 @@ export function buildSlots({ count, facts, phrases, tier }) {
     identified_calls: String(tier.identifiedCalls),
     pack_usd: String(tier.pack.price_usd),
     pack_credits: Number(tier.pack.credits).toLocaleString('en-US'),
+    // Item 9 (2026-11-11): the canon sentence, from its one definition site (lib/dchub-identity.mjs).
+    canon_sentence: CANON_SENTENCE,
   };
   for (const [k, v] of Object.entries(slots)) need(typeof v === 'string' && v && v !== 'undefined' && v !== 'NaN', `slot ${k} has no value`);
   return slots;

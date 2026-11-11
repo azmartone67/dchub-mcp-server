@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
 import { registryRemotes, remoteProfiles } from '../lib/registry-remotes.mjs';
+import { withPlanSuffix } from '../lib/dchub-identity.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
 import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, COUNT_CLAIM_FILES, SKILL_SOURCE, SKILL_TARGETS, healSkillCount, renderSkill, skillProblems, CONTEXT7_PATH } from './listing-canon.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
@@ -110,7 +111,10 @@ function canonicalTools() {
     const name = m[1];
     let description = existing[name] || '';
     try { description = evalDescription(m[2]); } catch { /* keep fallback */ }
-    out.push({ name, description });
+    // Item 9 (2026-11-11): the served description ends with the execute_plan pointer (server.mjs trackedTool,
+    // lib/dchub-identity.mjs), so the manifest copy does too and test/paywall-output-no-monthly-price still finds
+    // the live text equal to the committed one.
+    out.push({ name, description: withPlanSuffix(name, description) });
   }
   return out;
 }

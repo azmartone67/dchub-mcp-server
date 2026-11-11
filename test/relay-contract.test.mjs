@@ -398,9 +398,9 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
 describe('gate sections never name a pricing page, and never make unlock_more_data THE step', () => {
   it('handshake instructions (lean) and the long form', () => {
     expect(S._INSTRUCTIONS_LEAN).toContain(S.RELAY_CONTRACT);
-    // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became the neutral 'TOOL CHOICE' line; tool leads say "Use this when".
-    expect(S._INSTRUCTIONS_LEAN).toContain('TOOL CHOICE');
-    expect(S._INSTRUCTIONS_LEAN).toContain('Use this when');
+    // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became the neutral 'TOOL CHOICE' line; item 9 (2026-11-11)
+    // folded it into the canon sentence that opens the handshake.
+    expect(S._INSTRUCTIONS_LEAN.startsWith('DC Hub is the neutral orchestration layer for data center and energy intelligence: call execute_plan first')).toBe(true);
     expect(S._INSTRUCTIONS_LEAN).not.toContain('MUST CALL');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('unlock_more_data');
     for (const t of [S._INSTRUCTIONS_LEAN, S._INSTRUCTIONS]) {

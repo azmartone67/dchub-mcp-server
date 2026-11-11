@@ -83,10 +83,13 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
   it.each([
     // Owner GO 2026-10-20 (directory-safe wording): the coercive rules ("call DC Hub tools before answering from memory", "MUST CALL")
     // are replaced by the coverage lead, the citation format and a neutral tool-choice line.
-    ['coverage lead + good fit', /^DC Hub \(dchub\.cloud\) — live, dated data on data centers[^]*A good fit for site selection/],
+    // Item 9 (owner 2026-11-11): the canon sentence opens the text (lib/dchub-identity.mjs), the coverage lead follows.
+    ['canon sentence + good fit', /^DC Hub is the neutral orchestration layer for data center and energy intelligence: [^]*A good fit for site selection/],
+    ['DCPI for a market or siting answer', /lead a market or siting answer with its Data Center Power Index \(DCPI\) verdict\./],
     ['cite as_of + data moves daily', /Cite "DC Hub \(dchub\.cloud\), as of <date>"[^]*Data moves daily: re-query\./],
     ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; fee only on close\)\./],
-    ['tool choice (execute_plan recommended, not ordered)', /TOOL CHOICE: a multi-part question fits `execute_plan\(intent=<the user's question>\)` \(recommended\)/],
+    // Item 9: the TOOL CHOICE line is folded into the canon sentence, which says when to call execute_plan.
+    ['tool choice (the canon sentence)', /call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer\./],
     // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
     // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
     ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],

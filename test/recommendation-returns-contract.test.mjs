@@ -27,6 +27,7 @@
 // negative lookbehind.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { withPlanSuffix } from '../lib/dchub-identity.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const TOOL = 'get_dchub_recommendation';
@@ -91,6 +92,7 @@ describe(`${TOOL} Returns: contract`, () => {
 
   // The 08-29 failure was two copies disagreeing while one of them was invisible.
   it('server.mjs and mcp-server.json carry the SAME description', () => {
-    expect(descFromManifest()).toBe(descFromServerMjs());
+    // Item 9 (2026-11-11): the served description (and so the manifest) ends with the execute_plan pointer.
+    expect(descFromManifest()).toBe(withPlanSuffix('get_dchub_recommendation', descFromServerMjs()));
   });
 });

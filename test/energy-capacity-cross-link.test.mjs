@@ -16,6 +16,7 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import { OUTREACH_LEAD } from '../lib/agent-outreach.mjs';
+import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 import { CAPACITY_ZERO_NOTE } from '../lib/capacity-source-summary.mjs';
 
 const market = (name, state, count, mw) => ({ market: name, state, country: 'US', count, mw, delivery_types: ['powered_shell'] });
@@ -93,10 +94,13 @@ describe('the handshake and execute_plan lead with energy', () => {
     const init = await rpc({ 'user-agent': 'node' }, { jsonrpc: '2.0', id: rid++, method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'cursor', version: '1.0' } } });
     const ins = init.result.instructions;
-    expect(ins.startsWith(OUTREACH_LEAD)).toBe(true);
-    const head = ins.slice(0, 260);
-    expect(head).toMatch(/power: grid headroom, interconnection queues, energy and gas prices \(Data Center Gas Index, DCGI\), facilities/);
-    expect(head.indexOf('grid headroom')).toBeLessThan(head.indexOf('facilities'));
+    // Item 9 (owner 2026-11-11): the canon sentence opens the text and names power, grid and interconnection queues
+    // before capacity, sites and markets; the lead after it names gas prices and the Data Center Gas Index.
+    expect(ins.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    const head = ins.slice(0, 360);
+    expect(head).toMatch(/question about power, grid, interconnection queues, capacity, fiber, sites or markets/);
+    expect(head).toMatch(/Also: gas prices \(Data Center Gas Index, DCGI\), facilities/);
+    expect(head.indexOf('interconnection queues')).toBeLessThan(head.indexOf('facilities'));
     const list = await rpc({ 'user-agent': 'node' }, { jsonrpc: '2.0', id: rid++, method: 'tools/list' });
     const ep = list.result.tools.find((t) => t.name === 'execute_plan');
     expect(ep.inputSchema.properties.intent.description).toMatch(/Examples: "how soon can a 100 MW load get power in ERCOT"/);

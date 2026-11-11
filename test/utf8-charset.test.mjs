@@ -145,11 +145,12 @@ describe('server.mjs /mcp', () => {
     return { status: r.status, ct: r.headers.get('content-type'), sid: r.headers.get('mcp-session-id'),
       body: Buffer.from(await r.arrayBuffer()) };
   }
-  it('initialize over SSE names utf-8 and carries the em dash as UTF-8 bytes', async () => {
+  // Item 9 (owner 2026-11-11): the handshake now opens with the canon sentence and carries no em dash, so the
+  // UTF-8 byte check reads the SSE tools/list body below, whose descriptions do.
+  it('initialize over SSE names utf-8', async () => {
     const r = await post(INIT, 'application/json, text/event-stream');
     expect(r.status).toBe(200);
     expect(r.ct).toBe('text/event-stream; charset=utf-8');
-    expect(r.body.includes(EM_DASH)).toBe(true);
   });
   it('tools/list over SSE and over JSON both name utf-8', async () => {
     const init = await post(INIT, 'application/json, text/event-stream');
@@ -158,6 +159,7 @@ describe('server.mjs /mcp', () => {
     const sse = await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, 'application/json, text/event-stream', h);
     expect(sse.status).toBe(200);
     expect(sse.ct).toBe('text/event-stream; charset=utf-8');
+    expect(sse.body.includes(EM_DASH), 'the em dash travels as UTF-8 bytes').toBe(true);
     const json = await post({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, 'application/json');
     expect(json.ct).toMatch(/^application\/json; charset=utf-8$/i);
   });

@@ -3,6 +3,7 @@
 // menu, no "Next question" block, each news URL once in the text. structuredContent keeps
 // next_ask and starter_pack. Same on both arms. Real handler, backend stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -77,7 +78,9 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       if (pc) expect(sc.next_ask && sc.next_ask.tool).toBeTruthy();   // stays in structuredContent (v1's stub is error-flagged, so no outreach)
       expect(sc.user_message).toMatch(/plans that include the full/);
       // Item 8 (owner 2026-10-16): the free answer's closing Source line is a bare citation line too.
-      const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: |^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/.test(x));
+      // Item 9 (owner 2026-11-11): the identity footer is a bare closing line too (no link, no ask), one line after the citation.
+      expect(r.content[r.content.length - 1].text).toBe(PREVIEW_FOOTER);
+      const blocks = r.content.map((b) => b.text).filter((x) => x !== PREVIEW_FOOTER && !/^Cite as: |^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/.test(x));
       {
         // Item 3 (owner draft 2026-10-16): a keyless decision-tool preview ends with the one-step
         // claim_free_key line (no link, no plan, no price). Where it lands after the ask, the ask is

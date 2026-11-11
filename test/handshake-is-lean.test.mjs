@@ -5,6 +5,7 @@
 // with the key and the one snippet for the client named in clientInfo.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
+import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 
 const KEY = 'dch_live_' + 'a1b2c3d4'.repeat(4);
 let S, stub, srv, PORT;
@@ -60,7 +61,10 @@ describe('initialize instructions', () => {
     const { instructions } = await open('lean-test');
     expect(instructions.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
     // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became 'TOOL CHOICE' and tool leads say "Use this when".
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'TOOL CHOICE', 'Use this when', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
+    // Item 9 (owner 2026-11-11): the TOOL CHOICE line is folded into the canon sentence that opens the text.
+    expect(instructions.startsWith(CANON_SENTENCE + ' ')).toBe(true);
+    expect(instructions).not.toContain('TOOL CHOICE');
+    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.

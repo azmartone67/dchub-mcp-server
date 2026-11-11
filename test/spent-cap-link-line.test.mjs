@@ -3,6 +3,7 @@
 // own key-bound relay link. Real server.mjs app on loopback, stub backend whose counter mimics
 // dchub-backend routes/mcp_lp_free_runs.py (limit 3); no network, no disk writes.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
@@ -93,8 +94,10 @@ describe.each(Object.entries(CLIENTS))('%s: 3 full reports, then the preview end
       expect(r4.blocks.some((b) => SRC_RE.test(b)), 'no Source line on a clean platform').toBe(false);
       expect(r4.blocks[r4.blocks.length - 1], 'and it is the last thing the agent reads').toBe(lines[0]);
     } else {
-      expect(r4.blocks[r4.blocks.length - 1], 'the citable source line closes the answer').toMatch(SRC_RE);
-      expect(r4.blocks[r4.blocks.length - 2], 'and the link line is the last thing before it').toBe(lines[0]);
+      // Item 9 (owner 2026-11-11): a preview closes with the identity footer, one line after the citation line.
+      expect(r4.blocks[r4.blocks.length - 1], 'the identity footer closes a preview').toBe(PREVIEW_FOOTER);
+      expect(r4.blocks[r4.blocks.length - 2], 'the citable source line comes right before it').toMatch(SRC_RE);
+      expect(r4.blocks[r4.blocks.length - 3], 'and the link line is the last thing before that').toBe(lines[0]);
     }
     const url = LINE_RE.exec(lines[0])[1];
     expect(url, 'the line carries the response\'s own human_url').toBe(r4.sc.human_url);

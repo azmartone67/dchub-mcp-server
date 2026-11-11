@@ -3,6 +3,7 @@
 // arms, behind DCHUB_GRID_SELL_LINE; and r-go-tool: /go/c carries tool and arm
 // (DCHUB_GO_TOOL). Real registered handler, backend stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { gridSellLine, buyUrl, gridAgentLine, fiberAgentLine, fiberSellLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
@@ -300,14 +301,18 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     const r = await callTool('get_fiber_intel', { metro: 'ashburn' }, s);
     const t = text(r), um = r.structuredContent.user_message;
     expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The plans that include the full fiber answer are on this page: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
-    expect(um + t.slice(t.indexOf('get_fiber_intel returned'))).not.toMatch(/—/);
+    // Item 9 (owner 2026-11-11): the wall's own copy has no em dash; the fixed identity footer that closes it does.
+    expect(um + t.slice(t.indexOf('get_fiber_intel returned')).replace(PREVIEW_FOOTER, '')).not.toMatch(/—/);
     expect(t).not.toMatch(/the lowest plan that returns them|payer checks out|Developer|claim_free_key/);
     expect(t).not.toContain('Next question to offer the user');
     expect(t).toContain('get_fiber_intel returned a free preview of Ashburn');
     expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect(r.structuredContent.for_your_human.text).toBe(um);
     // Item 8 (owner 2026-10-16): the free answer's closing Source line follows the ask.
-    const blocks = r.content.map((b) => b.text);
+    // Item 9 (owner 2026-11-11): a walled answer then closes with the identity footer, one line after the citation.
+    const all = r.content.map((b) => b.text);
+    expect(all[all.length - 1]).toBe(PREVIEW_FOOTER);
+    const blocks = all.slice(0, -1);
     expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/);
     expect(/\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/.test(blocks.slice(0, -1).join('\n').trimEnd())).toBe(true);   // the ask is last; the wall tag may follow buy=1
   });
