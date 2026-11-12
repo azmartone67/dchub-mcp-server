@@ -87,7 +87,7 @@ describe('relay render directive (r-relay-render)', () => {
     // Purely additive: the two fields every current reader depends on must
     // keep their exact names. human_acted v2 reads the link's own open stamp,
     // so `url` in particular must not move.
-    expect(fn).toMatch(/message: 'Your AI assistant hit DC Hub/);
+    expect(fn).toMatch(/message: _relayLead\(toolName\) \+ '\. Open this link/);
     expect(fn).toMatch(/url: _url,/);
   });
 
