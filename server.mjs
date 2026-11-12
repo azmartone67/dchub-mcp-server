@@ -259,6 +259,7 @@ import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmail
          planDigestParagraph as _planDigestParagraph, planDigestTools as _planDigestTools } from './lib/plan-wall-sink.mjs';
 import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind, floorOfferLine as _floorOfferLine,
          hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
+import { keyMintVia } from './lib/via-tags.mjs';
 import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
          withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
@@ -7715,7 +7716,10 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // here, with no browser cookie, so the channel on the connector URL (?via=x|linkedin|substack|reddit|media|
   // mcp-wall) is forwarded as X-DCHub-Via and counted as that channel's unlock / key (dchub-backend
   // routes/via_funnel.py). Only these closed-set names; any other via keeps counting where it did.
-  { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; }
+  // 2026-11-12 (owner, attribution): a registered directory or partner tag (glama, smithery, pipeworx ...) is forwarded as
+  // itself and any other well-formed name as `other` (lib/via-tags.mjs), so a key minted through a listing is no longer
+  // "(no via)". The closed social/wall set above is unchanged and wins.
+  { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; else { const _k = keyMintVia(_v); if (_k) headers['X-DCHub-Via'] = _k; } }
   // 2026-11-05 (owner, "ship ... MCP-side via tag"): a session that was handed a wall link credits its later
   // claim_free_key / bind_email to mcp-wall (lib/wall-via-tag.mjs). Only the two call sites that pass
   // opts.wallVia; a via the connector URL declared wins; no wall seen, no session id or a QA caller: nothing.
