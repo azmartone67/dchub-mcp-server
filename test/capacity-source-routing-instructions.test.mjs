@@ -94,3 +94,29 @@ describe('wording until public listings exist', () => {
     expect(ROUTING).not.toMatch(/\$/);
   });
 });
+
+// 2026-11-12 (owner via Grok): the routing sentence promises source_capacity for "where to find …
+// MW"; the planner now keeps that promise for the bare "where can I get X MW … by <date>" ask, which
+// execute_plan used to plan without a Capacity Source step. And the two tools link the
+// machine-readable "who sees what, when" terms summary in tools/list.
+describe('the planner keeps the routing promise; tools/list links the terms summary', () => {
+  const TERMS_API = 'https://dchub.cloud/api/v1/listings/terms';
+  it('/mcp plan_query: "where can I get 50 MW in Texas by Q2 2027" ends with source_capacity, size, state and date', async () => {
+    const r = await H.call('/mcp', 'plan_query', { intent: 'where can I get 50 MW in Texas by Q2 2027' });
+    const plan = r.msg.result.structuredContent || JSON.parse(r.msg.result.content[0].text);
+    const seq = plan.recommended_sequence;
+    const last = seq[seq.length - 1];
+    expect(last.tool).toBe('source_capacity');
+    expect(last.args_hint).toEqual({ state: 'TX', min_mw: 50, available_by: '2027-06' });
+    expect(plan.execution_waves[plan.execution_waves.length - 1]).toEqual([last.step]);
+    expect(seq.map((s) => s.tool)).not.toContain('request_capacity_intro');
+    expect(seq.map((s) => s.tool)).not.toContain('accept_capacity_terms');
+  });
+
+  it('/mcp tools/list: source_capacity and request_capacity_intro each link it once; accept_capacity_terms does not', async () => {
+    const tools = (await H.list('/mcp')).msg.result.tools;
+    const d = (n) => tools.find((x) => x.name === n).description;
+    for (const n of ['source_capacity', 'request_capacity_intro']) expect(d(n).split(TERMS_API).length - 1, n).toBe(1);
+    expect(d('accept_capacity_terms')).not.toContain(TERMS_API);
+  });
+});

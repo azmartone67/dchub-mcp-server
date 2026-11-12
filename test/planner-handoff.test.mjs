@@ -492,6 +492,76 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
     expect(stepsRow(r.hits).body.params.handoff_need).toBe('colocation_procurement|brokerage_deal_execution');
   }, 120_000);
 
+  // 2026-11-12 (owner via Grok): a capacity ask ends with source_capacity, and a no-fit closes on the
+  // register offer: request_capacity_intro with no slug, OFFERED (never called), ahead of the complement.
+  const WHERE = 'where can I get 50 MW in Texas by Q2 2027';
+  const BINDING = ['request_capacity_intro', 'accept_capacity_terms'];
+  const bindingHits = (hits) => hits.filter((h) => /^\/api\/v1\/listings\/(?:interest|terms\/accept)|\/intro$/.test(h.path));
+
+  it('where-can-I-get no fit: source_capacity runs last with the asked size, place and date; the close offers request_capacity_intro and calls nothing', async () => {
+    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
+    const r = await plan(WHERE);
+    const ran = r.out.executed.filter((e) => e.status === 'executed');
+    const last = r.out.executed[r.out.executed.length - 1];
+    expect(ran.length, 'control: other steps ran before it').toBeGreaterThan(1);
+    expect(last.tool).toBe('source_capacity');
+    expect(last.status).toBe('executed');
+    expect(last.args).toMatchObject({ state: 'TX', min_mw: 50, available_by: '2027-06' });
+    expect(r.out.executed.map((e) => e.tool).filter((t) => BINDING.includes(t))).toEqual([]);
+    expect(bindingHits(r.hits), 'no binding call reached the backend').toEqual([]);
+    expect(r.out.capacity_register).toEqual({
+      kind: 'register_requirement', tool: 'request_capacity_intro', slug: null,
+      arguments: { states: 'TX', capacity_mw: 50, timeline: '2027-06' },
+      needs_human_approval: true, auto_called: false, terms: S.CAPACITY_TERMS_API_URL });
+    const g = r.out.answer_guide;
+    expect(g).toContain('No live listing matches yet');
+    expect(g).toContain('request_capacity_intro states="TX" capacity_mw=50 timeline="2027-06"');
+    expect(g).toContain('Send it only after your human approves; this plan did not call it.');
+    expect(g).toContain(S.CAPACITY_TERMS_API_URL);
+    expect(g).not.toMatch(/\b(?:texas|tx)\s+has\s+no\s+capacity\b/i);
+    expect(g).not.toMatch(/\bno\s+capacity\s+(?:in|exists)\b/i);
+  }, 120_000);
+
+  it('no fit: the register offer precedes the complement in answer_guide', async () => {
+    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
+    const r = await plan(NOFIT);
+    expect(r.out.handoff && r.out.handoff.basis, 'control: the complement is there').toBe('capacity_no_fit');
+    const g = r.out.answer_guide;
+    const reg = g.indexOf('Offer your human to register the requirement');
+    expect(reg).toBeGreaterThan(-1);
+    expect(reg).toBeLessThan(g.indexOf(renderHandoffSentence(r.out.handoff)));
+    expect(r.out.capacity_register.slug).toBeNull();
+  }, 120_000);
+
+  it('a listing fits: no register offer', async () => {
+    listings = { ok: true, total: 1, as_of: AS_OF, items: [{ id: 7, slug: 'tx-a', market: 'Dallas', state: 'TX', capacity_kw: 50000, delivery_type: 'powered_shell' }] };
+    try {
+      const r = await plan(WHERE);
+      expect(r.out.executed.some((e) => e.tool === 'source_capacity' && e.status === 'executed')).toBe(true);
+      expect('capacity_register' in r.out).toBe(false);
+      expect(r.out.answer_guide).not.toContain('Offer your human to register the requirement');
+    } finally { listings = { ok: true, items: [], total: 0, as_of: AS_OF }; }
+  }, 120_000);
+
+  it('DCHUB_CAPACITY_POINTERS=off: no source_capacity step and no register offer', async () => {
+    process.env.DCHUB_CAPACITY_POINTERS = 'off';
+    try {
+      const r = await plan(WHERE);
+      expect(r.out.executed.map((e) => e.tool)).not.toContain('source_capacity');
+      expect('capacity_register' in r.out).toBe(false);
+      expect(r.out.answer_guide).not.toContain('register the requirement');
+    } finally { delete process.env.DCHUB_CAPACITY_POINTERS; }
+  }, 120_000);
+
+  it('max_steps holds one step for the capacity step: max_steps=2 runs the lead and source_capacity', async () => {
+    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
+    const r = await plan(WHERE, '/mcp', PRO, 'execute_plan', { max_steps: 2 });
+    const ran = r.out.executed.filter((e) => e.status === 'executed').map((e) => e.tool);
+    expect(ran).toHaveLength(2);
+    expect(ran[ran.length - 1]).toBe('source_capacity');
+    expect(r.out.executed.filter((e) => e.status === 'not_run').length).toBeGreaterThan(0);
+  }, 120_000);
+
   it('capacity_search with a match -> no complement (DC Hub answered it)', async () => {
     listings = { ok: true, total: 1, as_of: AS_OF, items: [{ id: 7, slug: 'dallas-a', market: 'Dallas', state: 'TX', capacity_kw: 20000, delivery_type: 'colocation' }] };
     try {

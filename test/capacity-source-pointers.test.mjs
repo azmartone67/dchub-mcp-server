@@ -699,8 +699,9 @@ describe('planner routing', () => {
   const ROUTED = [
     ['lease 40 MW powered shell in Texas', 'capacity_search', 'get_retirement_headroom',
       ['get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank'], { state: 'TX', min_mw: 40 }],
+    // 2026-11-12: a stated deadline rides along as available_by (a bare year is its December).
     ['available data center capacity to buy in Dallas by 2027', 'power_timeline', 'get_power_availability_timeline',
-      ['get_power_availability_timeline', 'get_grid_intelligence', 'get_refined_queue'], { state: 'TX' }],
+      ['get_power_availability_timeline', 'get_grid_intelligence', 'get_refined_queue'], { state: 'TX', available_by: '2027-12' }],
     ['turnkey colocation space 5 MW Phoenix', 'facility_search', 'search_facilities',
       ['search_facilities', 'get_facility'], { state: 'AZ', min_mw: 5 }],
   ];
@@ -728,8 +729,12 @@ describe('planner routing', () => {
       expect(p.recommended_sequence.map((s) => s.tool)).toEqual([...before, 'source_capacity']);
       const step = p.recommended_sequence.find((s) => s.tool === 'source_capacity');
       expect(step.args_hint).toEqual(args);
-      expect(step.depends_on).toEqual([]);
-      expect(p.execution_waves[0]).toContain(step.step);
+      // 2026-11-12 (owner, "ends with a Capacity Source step"): last in the sequence AND last to run:
+      // it depends on every other step, so it is alone in the final wave.
+      expect(step.step).toBe(p.recommended_sequence.length);
+      expect(step.depends_on).toEqual(before.map((_, i) => i + 1));
+      expect(p.execution_waves[p.execution_waves.length - 1]).toEqual([step.step]);
+      expect(p.execution_waves.slice(0, -1).flat()).not.toContain(step.step);
       expect(p.estimated_calls).toBe(p.recommended_sequence.reduce((n, s) => n + s.estimated_calls, 0));
       const v = await TOOLS.plan_query.outputSchema.safeParseAsync(p);
       expect(v.success, JSON.stringify(v.error && v.error.issues)).toBe(true);
@@ -775,6 +780,120 @@ describe('planner routing', () => {
     expect(TOOLS.plan_query.handler.toString()).toBeTruthy();
     const src = S._planQuery.toString();
     expect(src).toContain('_capacityProcurementStep(text, d,');
+  });
+});
+
+// ── 4b. "where can I get X MW" asks (2026-11-12, owner via Grok) ─────────────
+describe('planner routing: where-can-I-get / need-X-MW asks end with source_capacity', () => {
+  const NOW = new Date('2026-11-12T12:00:00Z');
+  const planOff = (intent, ctx = {}) => {
+    process.env[KILL] = 'off';
+    try { return S._planQuery(intent, ctx); } finally { delete process.env[KILL]; }
+  };
+  // [intent, source_capacity args]. available_by is derived from the date in the intent.
+  const ASKS = [
+    ['where can I get 50 MW in Texas by Q2 2027', { state: 'TX', min_mw: 50, available_by: '2027-06' }],
+    ['need 20 MW in Phoenix by 2027', { state: 'AZ', min_mw: 20, available_by: '2027-12' }],
+    ['who has 30 MW available in Dallas', { state: 'TX', min_mw: 30 }],
+    ['we need 500 kW of colo in Europe by March 2027', { region: 'europe', min_kw: 500, available_by: '2027-03' }],
+  ];
+  // Controls the widening must not swallow: grid, energy, M&A, pricing, siting, density.
+  const CONTROLS = [
+    'evaluate 100 MW power headroom for a GPU training cluster in PJM',
+    'how soon can a 100 MW load get power in ERCOT',
+    'how much available capacity does ERCOT have',
+    'buy 100 MW of power in Texas',
+    'where can I get 100 MW of power in Texas',
+    'who is buying data centers in Dallas',
+    'lease rates in Dallas',
+    'lease rates in Dallas for 10 MW',
+    'I need 100 MW of grid headroom in PJM by 2027',
+    'find 100 MW of buildable capacity near Dallas',
+    'where can I find sites for 100 MW in Ohio',
+    'we need 30 kW per rack in Dallas',
+    'rank markets for a 200 MW AI campus',
+  ];
+
+  for (const [intent, args] of ASKS) {
+    it(`"${intent}": ends with source_capacity ${JSON.stringify(args)}, last wave; class and lead unchanged`, () => {
+      const p = S._planQuery(intent, {});
+      const off = planOff(intent);
+      const seq = p.recommended_sequence;
+      const last = seq[seq.length - 1];
+      expect(last.tool).toBe('source_capacity');
+      expect(last.routing).toBe('capacity_procurement');
+      expect(last.args_hint).toEqual(args);
+      expect(p.execution_waves[p.execution_waves.length - 1]).toEqual([last.step]);
+      expect(last.depends_on).toEqual(seq.slice(0, -1).map((s) => s.step));
+      // Class scoring and the lead are the layer-off plan's; the other steps are exactly its steps.
+      expect(p.intent_class).toBe(off.intent_class);
+      expect(p.best_tool).toBe(off.best_tool);
+      expect(seq.slice(0, -1).map((s) => s.tool)).toEqual(off.recommended_sequence.map((s) => s.tool));
+      expect(off.recommended_sequence.map((s) => s.tool)).not.toContain('source_capacity');
+      // Binding steps are never plan steps: the plan offers request_capacity_intro, it does not run it.
+      for (const s of seq) expect(['request_capacity_intro', 'accept_capacity_terms']).not.toContain(s.tool);
+      expect(p.estimated_calls).toBe(seq.reduce((n, s) => n + s.estimated_calls, 0));
+    });
+  }
+
+  it('controls: no source_capacity step, and the plan is identical with the layer on and off', () => {
+    for (const intent of CONTROLS) {
+      const on = S._planQuery(intent, {});
+      expect(on.recommended_sequence.map((s) => s.tool), intent).not.toContain('source_capacity');
+      expect(on, intent).toEqual(planOff(intent));
+    }
+  });
+
+  it('detection: the sibling detector matches the asks and refuses every control', () => {
+    for (const [t] of ASKS) expect(L.capacityStepIntent(t), t).toBe(true);
+    for (const t of ['where could we source 12 MW in Atlanta', 'looking for 8 MW in Chicago by H1 2027',
+      'in the market for 40 MW in Ashburn']) expect(L.capacityAcquireIntent(t), t).toBe(true);
+    for (const t of CONTROLS) expect(L.capacityStepIntent(t), t).toBe(false);
+  });
+
+  it('available_by: quarter, half, month, season, bare year, "within N months"; past or absent -> null', () => {
+    const by = (t) => L.capacityAvailableBy(t, NOW);
+    expect(by('by Q2 2027')).toBe('2027-06');
+    expect(by('2027 Q4')).toBe('2027-12');
+    expect(by('by H1 2027')).toBe('2027-06');
+    expect(by('ready by March 2027')).toBe('2027-03');
+    expect(by('energized by early 2028')).toBe('2028-03');
+    expect(by('by late 2027')).toBe('2027-12');
+    expect(by('by 2027')).toBe('2027-12');
+    expect(by('within 6 months')).toBe('2027-05');
+    expect(by('by 2025')).toBeNull();
+    expect(by('by Q1 2026')).toBeNull();
+    expect(by('need 20 MW in Phoenix')).toBeNull();
+  });
+
+  it('a buy/lease positive that names a date passes it through too', () => {
+    const step = S._planQuery('lease 40 MW powered shell in Texas by Q3 2027', {}).recommended_sequence
+      .find((s) => s.tool === 'source_capacity');
+    expect(step.args_hint).toEqual({ state: 'TX', min_mw: 40, available_by: '2027-09' });
+  });
+
+  it('the kill switch removes the step and leaves the plan the class built', () => {
+    for (const [intent] of ASKS) {
+      const off = planOff(intent);
+      expect(off.recommended_sequence.map((s) => s.tool), intent).not.toContain('source_capacity');
+      expect(off.recommended_sequence.every((s) => s.routing !== 'capacity_procurement')).toBe(true);
+    }
+  });
+
+  it('_capacityStepLast: renumbers the others and remaps their depends_on; no step, no change', () => {
+    const seq = [
+      { step: 1, tool: 'a', depends_on: [] },
+      { step: 2, tool: 'source_capacity', routing: 'capacity_procurement', depends_on: [] },
+      { step: 3, tool: 'b', depends_on: [1] },
+      { step: 4, tool: 'c', depends_on: [3] },
+    ];
+    S._capacityStepLast(seq);
+    expect(seq.map((s) => [s.step, s.tool, s.depends_on])).toEqual([
+      [1, 'a', []], [2, 'b', [1]], [3, 'c', [2]], [4, 'source_capacity', [1, 2, 3]]]);
+    const plain = [{ step: 1, tool: 'a', depends_on: [] }, { step: 2, tool: 'b', depends_on: [1] }];
+    expect(S._capacityStepLast(JSON.parse(JSON.stringify(plain)))).toEqual(plain);
+    const alone = [{ step: 1, tool: 'source_capacity', routing: 'capacity_procurement', depends_on: [] }];
+    expect(S._capacityStepLast(JSON.parse(JSON.stringify(alone)))).toEqual(alone);
   });
 });
 
