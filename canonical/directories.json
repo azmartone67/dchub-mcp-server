@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-09T19:00:00Z",
+  "updated_at": "2026-11-12T20:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -1248,6 +1248,123 @@
       "tracking_url": null,
       "added_at": "2026-11-05",
       "note": "Registered 2026-10-27; public listing URL not yet confirmed (asked since 2026-10-24). Set listing_url and status live once the page is found."
+    },
+    {
+      "id": "agentforge",
+      "name": "AgentForge",
+      "status": "live",
+      "listing_url": "https://agentforge.community/en/server/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-12",
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Found listed by Grok 2026-11-12 (slug dc-hub, 95 tools); page 200 with DC Hub named. Its copy says 'paid plans'."
+    },
+    {
+      "id": "mcp-world",
+      "name": "MCP World (Baidu)",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Was listed from a GitHub crawl (dchub-mcp-server, id 2f51bd63ef484bf0fb580137fdcb5afb). MCP World took it offline 2026-11-11 because a crawled listing shows no tool list; they ask for a new MCP submission. Resubmitting is the owner's call."
+    },
+    {
+      "id": "launch-mcp",
+      "name": "Launch MCP",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted. Free community listing at https://launchmcp.co/submit, reviewed by hand; Featured is paid (not wanted). Found by Grok 2026-11-12. Owner submits."
+    },
+    {
+      "id": "plug-and-ship",
+      "name": "Plug and Ship",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted. https://plugandship.dev/submit; free queue opens 2026-11-18. Owner submits."
+    },
+    {
+      "id": "agentndx",
+      "name": "AgentNDX",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted. https://agentndx.ai/submit/ (the bare /submit path redirects there). Owner submits."
+    },
+    {
+      "id": "mcpnav",
+      "name": "MCPNav",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted; submit page answered 200 on 2026-11-12 (Grok). Owner submits."
+    },
+    {
+      "id": "mcp-agents-market",
+      "name": "MCP Agents Market",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted. https://mcpagentsmarket.com/submit. Owner submits."
+    },
+    {
+      "id": "mcp-directory",
+      "name": "MCP.Directory",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Not submitted; /servers/dchub-mcp-server is 404. https://mcp.directory/submit. Owner submits."
+    },
+    {
+      "id": "perplexity-connectors",
+      "name": "Perplexity connectors",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-12",
+      "note": "Connector outreach sent by the owner 2026-11-12 (remote MCP https://dchub.cloud/mcp); no reply yet."
     }
   ]
 }
