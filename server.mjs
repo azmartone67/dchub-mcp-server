@@ -19260,7 +19260,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -19657,6 +19657,57 @@ export function _planStateScope(d) {
     ? fromCity : null;
 }
 
+
+// grid_headroom sequence. Only a real US RTO is a valid `iso` for the queue
+// tools and for a deep get_grid_intelligence ISO read. Phoenix and Las Vegas
+// resolve isoFromPlace to WECC (and Atlanta to SERC), which is not in
+// _EXEC_RTOS. Live 2026-11-12 (keyless, planner 5.20): execute_plan(intent=
+// "What is grid headroom and time to power for a 100 MW campus in Phoenix?")
+// passed iso=WECC to get_interconnection_queue (gated, error invalid_iso) and
+// get_refined_queue (failed, invalid_iso). The market_outlook class already
+// gates on _EXEC_RTOS (v2.7.8); this is the same rule for grid_headroom.
+// When the place is in a US state, run the state's power timeline and a
+// state-filtered refined queue instead of a failing ISO call.
+export function _gridHeadroomSequence(d) {
+  const rawIso = d && (d.iso || d.isoFromPlace);
+  const st = _planStateScope(d);
+  if (_EXEC_IS_RTO(rawIso)) {
+    const iso = rawIso;
+    return [
+      { step: 1, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+        why: 'Deep single-ISO read: headroom, constraints, generation additions, time-to-power (recipe grid_and_queue).',
+        args_hint: { iso } },
+      { step: 2, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
+        why: 'Queue depth / GW aggregate for the same ISO — the leading indicator of where new power is coming online. Independent of step 1 — run in parallel.',
+        args_hint: { iso } },
+      { step: 3, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+        why: 'De-duplicated, filterable queue survivors (min_mw / fuel_type / max_ttp_months) — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent — run in parallel.',
+        args_hint: { iso, ...(d.mw ? { min_mw: d.mw } : {}) } },
+    ];
+  }
+  if (st) {
+    return [
+      { step: 1, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
+        why: 'State-level power timeline for ' + st + ' (dated new capacity, scheduled retirements, queue context). This place is not on a US RTO, so an ISO-scoped grid or queue call would fail or answer the wrong geography.',
+        args_hint: { state: st } },
+      { step: 2, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+        why: 'Queue survivors in ' + st + ' (state filter, not an ISO code). Independent of step 1 — run in parallel.',
+        args_hint: { state: st, ...(d && d.mw ? { min_mw: d.mw } : {}), geocoded_only: true } },
+    ];
+  }
+  return [
+    { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
+      why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
+      args_hint: {} },
+    { step: 2, tool: 'get_grid_intelligence', depends_on: [1], estimated_calls: 1,
+      why: 'Deep-dive the ISO the scoreboard surfaces: headroom, constraints, time-to-power.',
+      args_hint: { iso: '<ISO chosen from the step-1 scoreboard>' } },
+    { step: 3, tool: 'get_interconnection_queue', depends_on: [1], estimated_calls: 1,
+      why: 'Queue depth / GW aggregate for that ISO — parallel with step 2 once the ISO is chosen.',
+      args_hint: { iso: '<same ISO>' } },
+  ];
+}
+
 export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
@@ -19957,27 +20008,7 @@ export const _PLAN_CLASSES = [
       [/\bisos?\b/i, 1.5], [/\bmw\s+availab/i, 2.5],
     ],
     rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
-    sequence: (d) => ((d.iso || d.isoFromPlace) ? [
-      { step: 1, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
-        why: 'Deep single-ISO read: headroom, constraints, generation additions, time-to-power (recipe grid_and_queue).',
-        args_hint: { iso: (d.iso || d.isoFromPlace) } },
-      { step: 2, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
-        why: 'Queue depth / GW aggregate for the same ISO — the leading indicator of where new power is coming online. Independent of step 1 — run in parallel.',
-        args_hint: { iso: (d.iso || d.isoFromPlace) } },
-      { step: 3, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
-        why: 'De-duplicated, filterable queue survivors (min_mw / fuel_type / max_ttp_months) — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent — run in parallel.',
-        args_hint: { iso: (d.iso || d.isoFromPlace), ...(d.mw ? { min_mw: d.mw } : {}) } },
-    ] : [
-      { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
-        why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
-        args_hint: {} },
-      { step: 2, tool: 'get_grid_intelligence', depends_on: [1], estimated_calls: 1,
-        why: 'Deep-dive the ISO the scoreboard surfaces: headroom, constraints, time-to-power.',
-        args_hint: { iso: '<ISO chosen from the step-1 scoreboard>' } },
-      { step: 3, tool: 'get_interconnection_queue', depends_on: [1], estimated_calls: 1,
-        why: 'Queue depth / GW aggregate for that ISO — parallel with step 2 once the ISO is chosen.',
-        args_hint: { iso: '<same ISO>' } },
-    ]),
+    sequence: (d) => _gridHeadroomSequence(d),
     alternatives: [
       { tool: 'compare_isos', when: 'You want a side-by-side of 2+ named ISOs instead of one deep read.',
         rejected_because: 'The intent named at most one ISO — a side-by-side needs 2+ named grids.' },
@@ -21790,7 +21821,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         "should we build in Dallas") routes to market_outlook, and a market
 //         check's answer leads with `dcpi_verdict` (the named market's DCPI
 //         verdict + its Source line) as the first key.
-export const PLANNER_VERSION = '5.21';
+export const PLANNER_VERSION = '5.22';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the

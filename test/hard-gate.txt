@@ -262,6 +262,7 @@ test/grid-ba-coverage-note.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
 test/grid-gating-one-rule.test.mjs
+test/grid-headroom-non-rto.test.mjs
 test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
 test/grid-provenance-source-own-as-of.test.mjs
