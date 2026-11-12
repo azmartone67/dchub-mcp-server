@@ -22477,25 +22477,52 @@ export function _capacityProcurementStep(text, d, considered) {
 }
 
 /**
- * Moves the capacity_procurement step to the END of `seq`, in place: last in
- * the sequence, and depending on every other step so _planWaves puts it in a
- * wave of its own after them. The other steps are renumbered in order and
- * their depends_on remapped, so the graph is unchanged for them. A plan with
- * no such step, or only that step, is left exactly as it was. Never throws.
+ * Moves the capacity_procurement step(s) to the END of `seq`, in place: last in
+ * the sequence, and depending on every other step so _planWaves puts them in a
+ * wave of their own after them. A plan naming two countries has one per country
+ * (_capacityCountrySteps); they keep their order and share that last wave. The
+ * other steps are renumbered in order and their depends_on remapped, so the
+ * graph is unchanged for them. A plan with no such step, or only such steps, is
+ * left exactly as it was. Never throws.
  */
 export function _capacityStepLast(seq) {
   try {
     if (!Array.isArray(seq)) return seq;
-    const i = seq.findIndex((s) => s && s.routing === 'capacity_procurement');
-    if (i < 0 || seq.length < 2) return seq;
-    const [cp] = seq.splice(i, 1);
-    const renum = new Map(seq.map((s, k) => [s.step, k + 1]));
-    renum.set(cp.step, null);
-    for (const s of seq) {
+    const isCap = (s) => s && s.routing === 'capacity_procurement';
+    const caps = seq.filter(isCap);
+    if (!caps.length || caps.length === seq.length) return seq;
+    const rest = seq.filter((s) => !isCap(s));
+    const renum = new Map(rest.map((s, k) => [s.step, k + 1]));
+    for (const cp of caps) renum.set(cp.step, null);
+    for (const s of rest) {
       if (Array.isArray(s.depends_on)) s.depends_on = s.depends_on.map((n) => (renum.has(n) ? renum.get(n) : n)).filter((n) => n !== null);
       s.step = renum.get(s.step);
     }
-    seq.push({ ...cp, step: seq.length + 1, depends_on: seq.map((s) => s.step) });
+    const deps = rest.map((s) => s.step);
+    seq.splice(0, seq.length, ...rest, ...caps.map((cp, k) => ({ ...cp, step: rest.length + k + 1, depends_on: deps })));
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
+
+/**
+ * A capacity ask that names a non-US country (2026-11-12, owner via Grok, item 4): the country plan
+ * (lib/country-scope.mjs) replaces the US capacity step with one source_capacity per country,
+ * location=<country>. Those steps become the capacity step: routing capacity_procurement, so they run
+ * last and the no-fit register offer follows, and they carry the deadline and kW size the ask named.
+ * Only when the plan had a capacity step before the swap (capacityStepIntent held and
+ * DCHUB_CAPACITY_POINTERS is on); a country plan for any other ask is unchanged. In place; never throws.
+ */
+export function _capacityCountrySteps(seq, capStep) {
+  try {
+    if (!Array.isArray(seq) || !capStep || capStep.routing !== 'capacity_procurement') return seq;
+    const from = capStep.args_hint || {};
+    for (const s of seq) {
+      if (!s || s.tool !== 'source_capacity' || s.routing || !s.args_hint || !s.args_hint.location) continue;
+      s.routing = 'capacity_procurement';
+      s.args_hint = { ...s.args_hint,
+        ...(!s.args_hint.min_mw && from.min_kw ? { min_kw: from.min_kw } : {}),
+        ...(from.available_by ? { available_by: from.available_by } : {}) };
+    }
   } catch (_e) { /* routing must never throw */ }
   return seq;
 }
@@ -22924,7 +22951,11 @@ export function _planQuery(intent, context) {
   // waves/estimates/confidence are derived, like the constraint leads above.
   let _country = null;
   try { _country = countryScopedPlan(text, d, seq, top.cls.id); } catch (_e) { _country = null; }
-  if (_country) seq.splice(0, seq.length, ..._country.seq);
+  if (_country) {
+    const capStep = seq.find((x) => x && x.routing === 'capacity_procurement');
+    seq.splice(0, seq.length, ..._country.seq);
+    _capacityCountrySteps(seq, capStep);
+  }
   // 2026-11-12: the Capacity Source step closes the plan (see _capacityProcurementStep).
   _capacityStepLast(seq);
   // intent_confidence: deterministic function of the winning score + margin.
@@ -29643,6 +29674,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // route_back and the complement (DC Hub's own path first). Every surface gets the sentence; the
       // structured field follows the answer-block gate.
       const _capReg = _capacityRegisterOffer(executed, (e) => fullByEntry.get(e));
+      // 2026-11-12 (owner via Grok, item 4): when the register offer is there, the capacity_no_fit
+      // complement is not: a buyer with no listed match is offered DC Hub's own register path, not
+      // outside procurement or brokerage desks. The market_answer complement is unchanged.
+      // DCHUB_NOFIT_COMPLEMENT=on restores the complement after the offer.
+      if (_capReg && _ho && _ho.basis === 'capacity_no_fit'
+          && !/^(1|on|true|yes)$/i.test(String(process.env.DCHUB_NOFIT_COMPLEMENT || '').trim())) _ho = null;
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;

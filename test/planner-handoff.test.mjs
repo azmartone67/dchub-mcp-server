@@ -482,14 +482,34 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
     expect(stepsRow(r.hits).body.params.handoff_need).toBe('news_editorial');
   }, 120_000);
 
-  it('capacity_search with no fit -> procurement and brokerage complement', async () => {
+  // 2026-11-12 (owner via Grok, item 4): with the register offer there, a no-fit carries no
+  // procurement/brokerage complement. DCHUB_NOFIT_COMPLEMENT=on brings it back, after the offer.
+  it('capacity_search with no fit -> the register offer, and no procurement or brokerage complement', async () => {
     listings = { ok: true, items: [], total: 0, as_of: AS_OF };
     const r = await plan(NOFIT);
     expect(r.out.intent_class).toBe('capacity_search');
     expect(r.out.executed.some((e) => e.tool === 'source_capacity' && e.status === 'executed')).toBe(true);
-    expect(r.out.handoff && r.out.handoff.basis).toBe('capacity_no_fit');
-    expect(r.out.handoff.for).toBe('Dallas');
-    expect(stepsRow(r.hits).body.params.handoff_need).toBe('colocation_procurement|brokerage_deal_execution');
+    expect(r.out.capacity_register && r.out.capacity_register.tool, 'control: the register offer is there').toBe('request_capacity_intro');
+    expect(r.out.capacity_register.slug).toBeNull();
+    expect('handoff' in r.out).toBe(false);
+    expect(r.text.includes(HANDOFF_BASES.capacity_no_fit.lead)).toBe(false);
+    const params = stepsRow(r.hits).body.params;
+    expect('handoff_kind' in params || 'handoff_need' in params).toBe(false);
+  }, 120_000);
+
+  it('DCHUB_NOFIT_COMPLEMENT=on: the complement comes back, after the register offer', async () => {
+    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
+    process.env.DCHUB_NOFIT_COMPLEMENT = 'on';
+    try {
+      const r = await plan(NOFIT);
+      expect(r.out.handoff && r.out.handoff.basis).toBe('capacity_no_fit');
+      expect(r.out.handoff.for).toBe('Dallas');
+      expect(stepsRow(r.hits).body.params.handoff_need).toBe('colocation_procurement|brokerage_deal_execution');
+      const g = r.out.answer_guide;
+      const reg = g.indexOf('Offer your human to register the requirement');
+      expect(reg).toBeGreaterThan(-1);
+      expect(reg).toBeLessThan(g.indexOf(renderHandoffSentence(r.out.handoff)));
+    } finally { delete process.env.DCHUB_NOFIT_COMPLEMENT; }
   }, 120_000);
 
   // 2026-11-12 (owner via Grok): a capacity ask ends with source_capacity, and a no-fit closes on the
@@ -520,17 +540,6 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
     expect(g).toContain(S.CAPACITY_TERMS_API_URL);
     expect(g).not.toMatch(/\b(?:texas|tx)\s+has\s+no\s+capacity\b/i);
     expect(g).not.toMatch(/\bno\s+capacity\s+(?:in|exists)\b/i);
-  }, 120_000);
-
-  it('no fit: the register offer precedes the complement in answer_guide', async () => {
-    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
-    const r = await plan(NOFIT);
-    expect(r.out.handoff && r.out.handoff.basis, 'control: the complement is there').toBe('capacity_no_fit');
-    const g = r.out.answer_guide;
-    const reg = g.indexOf('Offer your human to register the requirement');
-    expect(reg).toBeGreaterThan(-1);
-    expect(reg).toBeLessThan(g.indexOf(renderHandoffSentence(r.out.handoff)));
-    expect(r.out.capacity_register.slug).toBeNull();
   }, 120_000);
 
   it('a listing fits: no register offer', async () => {

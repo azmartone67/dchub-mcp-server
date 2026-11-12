@@ -897,6 +897,58 @@ describe('planner routing: where-can-I-get / need-X-MW asks end with source_capa
   });
 });
 
+// ── 4c. a capacity ask naming a non-US country (2026-11-12, owner via Grok, item 4) ─────────────
+describe('planner routing: a capacity ask naming a non-US country ends with source_capacity there', () => {
+  const planOff = (intent) => {
+    process.env[KILL] = 'off';
+    try { return S._planQuery(intent, {}); } finally { delete process.env[KILL]; }
+  };
+  const caps = (p) => p.recommended_sequence.filter((s) => s.tool === 'source_capacity');
+
+  it('Germany: source_capacity location=Germany carries the size and date, runs last, alone in the final wave', () => {
+    const p = S._planQuery('where can I get 20 MW in Germany by Q3 2027', {});
+    const seq = p.recommended_sequence;
+    const last = seq[seq.length - 1];
+    expect(seq.some((s) => s.tool === 'search_facilities' && s.args_hint.country === 'DE'), 'control: the country plan ran').toBe(true);
+    expect(caps(p)).toHaveLength(1);
+    expect(last.tool).toBe('source_capacity');
+    expect(last.routing).toBe('capacity_procurement');
+    expect(last.args_hint).toEqual({ location: 'Germany', min_mw: 20, available_by: '2027-09' });
+    expect(last.depends_on).toEqual(seq.slice(0, -1).map((s) => s.step));
+    expect(p.execution_waves[p.execution_waves.length - 1]).toEqual([last.step]);
+  });
+
+  it('two countries: one capacity step each, both last, sharing the final wave; a kW size rides along', () => {
+    const p = S._planQuery('need 500 kW in Ireland or Germany by 2027', {});
+    const seq = p.recommended_sequence;
+    const tail = seq.slice(-2);
+    expect(tail.map((s) => s.tool)).toEqual(['source_capacity', 'source_capacity']);
+    expect(tail.map((s) => s.args_hint.location).sort()).toEqual(['Germany', 'Ireland']);
+    for (const s of tail) {
+      expect(s.routing).toBe('capacity_procurement');
+      expect(s.args_hint).toMatchObject({ min_kw: 500, available_by: '2027-12' });
+      expect(s.depends_on).toEqual(seq.slice(0, -2).map((x) => x.step));
+    }
+    expect(p.execution_waves[p.execution_waves.length - 1].slice().sort()).toEqual(tail.map((s) => s.step).sort());
+  });
+
+  it('kill switch off: the country plan keeps its own source_capacity, untagged and without the date', () => {
+    const off = planOff('where can I get 20 MW in Germany by Q3 2027');
+    const sc = caps(off);
+    expect(sc).toHaveLength(1);
+    expect(sc[0].routing).toBeUndefined();
+    expect(sc[0].args_hint).toEqual({ location: 'Germany', min_mw: 20 });
+  });
+
+  it('a country question that is not a capacity ask is unchanged by the tagging', () => {
+    const intent = 'grid demand and data centers in Germany';
+    const on = S._planQuery(intent, {});
+    const off = planOff(intent);
+    expect(on.recommended_sequence.some((s) => s.routing === 'capacity_procurement')).toBe(false);
+    expect(on.recommended_sequence.map((s) => [s.tool, s.args_hint])).toEqual(off.recommended_sequence.map((s) => [s.tool, s.args_hint]));
+  });
+});
+
 // ── 5. the find_capacity prompt ──────────────────────────────────────────────
 describe('find_capacity prompt', () => {
   it('prompts/list carries it: requirement, state and min_mw all optional (capacity item 5)', async () => {
