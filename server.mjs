@@ -4963,6 +4963,11 @@ function _drainPlanWallSink(c, result) {
 // bind_email / recover_my_key / subscribe_digest never wall (they are the email steps themselves). claim_free_key
 // and unlock_more_data DO wall on the anonymous hard wall, and bind_email (not walled) is the way on from there.
 const _FLOOR_SKIP_TOOLS = new Set(['bind_email', 'recover_my_key', 'subscribe_digest']);
+// Kill switch DCHUB_WALL_OFFER_FLOOR_PREVIEW=0 puts the floor back on parked wall rows only.
+// Only these two: other tools' keyless previews are frozen by contract (test/paywall-contract: search_facilities "no key ask",
+// capacity-source-tools byte-for-byte) and are not part of the 2026-11-12 finding.
+const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_queue']);
+const _floorPreviewOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_OFFER_FLOOR_PREVIEW || '').trim());
 // analyze_site: a keyless caller's email opens its email teaser (the siting seat); a key's free monthly runs
 // are per key, so once they are spent an email opens nothing more there.
 function _floorProOnly(name, c) {
@@ -5035,7 +5040,19 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     c._offerFloor = _floorStanding(c, name);
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
-    const walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
+    let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
+    // Funnel 2026-11-12 (item 2): a tier-masked PREVIEW is a walled answer too, though no wall row is parked for it
+    // (status 'ok'). get_retirement_headroom's MW mask (_maskRetirementHeadroom) and get_refined_queue's preview
+    // reach a keyless / free caller with the "your agent got 3 of N rows" relay line and no email or digest offer,
+    // and the floor skipped them because it only read the parked wall rows. Same test the preview footer uses
+    // (_previewFooterStep: isTierPreview or status gated_preview), for a caller below a paid plan, on these two tools.
+    if (!walled && _floorPreviewOn() && _FLOOR_PREVIEW_TOOLS.has(String(name || ''))) {
+      try {
+        const sc0 = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : null;
+        const unpaid = _tierRank(String(c.tier || '')) < _tierRank('starter');
+        walled = unpaid && !!sc0 && (_isTierPreview(sc0) || sc0.status === 'gated_preview');
+      } catch (_) { walled = false; }
+    }
     if (!walled) return out;
     // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
     // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
@@ -33227,7 +33244,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // and get a key-bearing snippet at all rather than a connect_url.
         gemini_cli: {
           label: 'Gemini CLI',
-          file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add --transport http dchub ' + _u,
+          file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add -s user --transport http dchub ' + _u,
           snippet: JSON.stringify({ mcpServers: { dchub: { httpUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
         antigravity: {
