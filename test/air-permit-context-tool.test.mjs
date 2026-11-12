@@ -164,6 +164,10 @@ describe('get_air_permit_context', () => {
     const r1 = await call({ site: 'Atlantis' });
     expect(r1.isError).toBe(true);
     expect(sc(r1).error).toBe('location not resolved');
+    // Grok QA 2026-11-12: the hint said location= on a tool whose parameter is site.
+    expect(sc(r1).hint).toMatch(/site="ashburn"/);
+    expect(sc(r1).hint).not.toMatch(/location=/);
+    expect(sc(r1).example).toMatch(/site="midland-tx"/);
     const r2 = await call({});
     expect(r2.isError).toBe(true);
     expect(sc(r2).error).toMatch(/lat and lon \(or site\) required/);
@@ -184,6 +188,33 @@ describe('get_air_permit_context', () => {
     expect(t, 'get_air_permit_context missing from tools/list').toBeTruthy();
     expect(Object.keys(t.inputSchema.properties)).toEqual(
       expect.arrayContaining(['lat', 'lon', 'site', 'radius_km', 'status', 'limit']));
+  });
+});
+
+describe('get_air_permit_context site example', () => {
+  // Grok QA 2026-11-12: the description's example "midland-odessa" is no DCPI
+  // slug (live 404); the market is midland-tx. The example must be the slug.
+  it('names midland-tx, not midland-odessa', async () => {
+    const r = await rpc('tools/list', {});
+    const d = (r.tools || []).find((x) => x.name === 'get_air_permit_context').inputSchema.properties.site.description;
+    expect(d).toMatch(/"midland-tx"/);
+    expect(d).not.toMatch(/midland-odessa/);
+  });
+});
+
+describe('execute_plan runs the air_permits lead step', () => {
+  // Grok QA 2026-11-12 (v_plan): planner 5.20 led air_permits with
+  // get_air_permit_context, but the executor allowlist did not carry it, so
+  // every air-permit plan returned step 1 not_allowed.
+  it('get_air_permit_context is on the executor allowlist for /mcp', () => {
+    expect(S._EXEC_ALLOWED_TOOLS).toContain('get_air_permit_context');
+    expect(S._execStepAllowed('get_air_permit_context', undefined)).toBe(true);
+  });
+  it('every tool a planner class leads with is runnable on /mcp', () => {
+    const p = S._planQuery('air permits for gas turbines near Abilene, TX', {});
+    for (const s of (p.recommended_sequence || [])) {
+      expect(S._execStepAllowed(s.tool, undefined), s.tool).toBe(true);
+    }
   });
 });
 

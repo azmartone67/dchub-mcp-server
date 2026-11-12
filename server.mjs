@@ -18368,7 +18368,10 @@ function _coord(v, limit) {
   return (Number.isFinite(n) && Math.abs(n) <= limit) ? n : NaN;
 }
 
-export function _locationPoint(rawLocation, slug, row) {
+// `param` names the argument the caller used (get_air_permit_context takes `site`,
+// the others `location`), so the hint never tells an agent to pass a parameter
+// the tool does not have (Grok QA 2026-11-12).
+export function _locationPoint(rawLocation, slug, row, param = 'location') {
   const ok = row && typeof row === 'object' && !row.error;
   const lat = ok ? _coord(row.latitude, 90) : NaN;
   const lon = ok ? _coord(row.longitude, 180) : NaN;
@@ -18380,7 +18383,7 @@ export function _locationPoint(rawLocation, slug, row) {
       requested_location: rawLocation,
       tried_market_slug: slug,
       hint: 'Pass the metro slug as it appears in rank_markets / get_market_dcpi_rank '
-          + '(e.g. location="ashburn", "northern-virginia", "dallas"), or pass lat and lon directly '
+          + `(e.g. ${param}="ashburn", "northern-virginia", "dallas"), or pass lat and lon directly `
           + 'for a specific parcel. A trailing state is NOT stripped — "Ashburn, VA" will not resolve, '
           + 'because guessing which token is the state risks answering for the wrong market.',
       example: 'analyze_site lat=39.04 lon=-77.48',
@@ -18401,7 +18404,7 @@ export function _locationPoint(rawLocation, slug, row) {
       resolved_lat: lat,
       resolved_lon: lon,
       via: '/api/v1/dcpi/scores — published DCPI market row',
-      note: `location="${rawLocation}" is not a coordinate; it was resolved to the PUBLISHED CENTROID `
+      note: `${param}="${rawLocation}" is not a coordinate; it was resolved to the PUBLISHED CENTROID `
           + `of the "${slug}" market (${lat}, ${lon}) before this site was scored. This is a `
           + 'MARKET-level read, not the parcel you named — pass lat/lon for a specific site.',
     } };
@@ -20865,7 +20868,7 @@ export const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','I
 export const _EXEC_ALLOWED_TOOLS = Object.freeze([
   'ai_capacity_index', 'analyze_parcel', 'analyze_site', 'cluster_sites_by_latency',
   'compare_isos', 'compare_sites', 'deal_autopsy', 'discover_tools', 'find_alternatives',
-  'find_sites', 'generate_site_analysis', 'get_changes', 'get_climate_intel',
+  'find_sites', 'generate_site_analysis', 'get_air_permit_context', 'get_changes', 'get_climate_intel',
   'get_composite_site_score', 'get_dchub_recommendation', 'get_disaster_risk',
   'get_energy_prices', 'get_facility', 'get_facility_risk_delta', 'get_fiber_intel',
   'get_fiber_readiness', 'get_gas_economics', 'get_gas_index', 'get_grid_data',
@@ -32888,7 +32891,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { lat: N.describe('Site latitude in decimal degrees, e.g. 31.97'),
       lon: N.describe('Site longitude in decimal degrees, e.g. -102.08'),
       ...COORD_ALIASES,
-      site: S.describe('Market NAME or metro slug instead of coordinates, e.g. "midland-odessa", "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row; the answer carries resolved_from. A market-level read, not your parcel: pass lat/lon for a specific site'),
+      site: S.describe('DC Hub market slug instead of coordinates, as rank_markets lists it, e.g. "midland-tx" (Midland–Odessa), "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row; the answer carries resolved_from. A market-level read, not your parcel: pass lat/lon for a specific site'),
       radius_km: z.number().min(1).max(300).optional().describe('Radius for nearby permit filings in km, 1-300 (default 100)'),
       status: z.enum(['all', 'issued', 'pending']).optional().describe('Filing status filter (default all)'),
       limit: z.number().int().min(1).max(50).optional().describe('Filings to return, nearest first, 1-50 (default 10)') },
@@ -32904,9 +32907,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const row = slug
           ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true })
           : null;
-        const res = _locationPoint(rawSite, slug, row);
+        const res = _locationPoint(rawSite, slug, row, 'site');
         if (!res.ok) {
-          const err = { ...res.error, example: 'get_air_permit_context lat=31.97 lon=-102.08' };
+          const err = { ...res.error, example: 'get_air_permit_context site="midland-tx" (or lat=31.97 lon=-102.08)' };
           return { isError: true, content: [{ type: 'text', text: JSON.stringify(err) }], structuredContent: err };
         }
         q.lat = res.lat; q.lon = res.lon; resolved_from = res.resolved_from;
