@@ -1,6 +1,6 @@
 // A tier-masked PREVIEW carries the free offer too (funnel 2026-11-12, item 2; lib/wall-offer-floor.mjs).
 //
-// get_retirement_headroom's MW mask and get_refined_queue's preview answer a keyless caller with status 'ok', so no wall
+// get_retirement_headroom's MW mask, get_refined_queue's preview and find_sites' coarsened preview answer a keyless caller with status 'ok', so no wall
 // row is parked for them and the offer floor (which read parked wall rows only) skipped them: live 2026-11-12 the answer
 // said "your agent got 3 of N rows ... open <link>" and offered nothing a person could say yes to for free. Measured with
 // the real /mcp handler (DCHUB_INTERNAL_KEY set, a non-loopback peer, the dchub-qa-readonly UA the live probe used).
@@ -131,6 +131,8 @@ describe('a tier-masked preview carries the free offer', () => {
   it.each([
     ['get_retirement_headroom', { target_mw: 100, horizon_months: 24 }],
     ['get_refined_queue', {}],
+    // Funnel 2026-11-12 ~3:37 AM: find_sites was offer_kind none on a masked preview (2 hits / 0 offers).
+    ['find_sites', { state: 'TX', target_mw: 100 }],
   ])('%s: keyless preview, sessionless and repeated in one session', async (name, args) => {
     anonCount = 0;
     const calls = await runTool(name, args);
