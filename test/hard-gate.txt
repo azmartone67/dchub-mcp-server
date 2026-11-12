@@ -614,6 +614,7 @@ test/verbatim-follower-is-data.test.mjs
 test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
+test/via-tags.test.mjs
 test/wall-alert-line-d.test.mjs
 test/wall-ask-guard.test.mjs
 test/wall-email-line-freekey.test.mjs
