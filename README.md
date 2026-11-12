@@ -269,7 +269,7 @@ DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — sear
 }
 ```
 
-Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp/github`
+Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp/github`
 
 > **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the free Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
 
