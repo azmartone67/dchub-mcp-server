@@ -13,8 +13,10 @@ let S, fence;
 const prev = {};
 beforeAll(async () => {
   fence = fenceNetwork();
-  for (const k of ['DCHUB_WALL_OFFER_FLOOR', 'DCHUB_API_BASE']) prev[k] = process.env[k];
+  for (const k of ['DCHUB_WALL_OFFER_FLOOR', 'DCHUB_API_BASE', 'DCHUB_WORKOS_OAUTH_ENABLED']) prev[k] = process.env[k];
   delete process.env.DCHUB_WALL_OFFER_FLOOR;
+  // The standing is read with WorkOS validation off; the OAuth lead (and Grok's extra block) are in test/wall-oauth-lead.test.mjs.
+  delete process.env.DCHUB_WORKOS_OAUTH_ENABLED;
   process.env.DCHUB_API_BASE = 'http://127.0.0.1:9';
   S = await import('../server.mjs');
 }, 60_000);

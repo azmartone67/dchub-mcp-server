@@ -259,6 +259,8 @@ import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmail
          planDigestParagraph as _planDigestParagraph, planDigestTools as _planDigestTools } from './lib/plan-wall-sink.mjs';
 import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind, floorOfferLine as _floorOfferLine,
          hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
+import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
+         withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -4964,9 +4966,14 @@ function _drainPlanWallSink(c, result) {
 // and unlock_more_data DO wall on the anonymous hard wall, and bind_email (not walled) is the way on from there.
 const _FLOOR_SKIP_TOOLS = new Set(['bind_email', 'recover_my_key', 'subscribe_digest']);
 // Kill switch DCHUB_WALL_OFFER_FLOOR_PREVIEW=0 puts the floor back on parked wall rows only.
-// Only these two: other tools' keyless previews are frozen by contract (test/paywall-contract: search_facilities "no key ask",
-// capacity-source-tools byte-for-byte) and are not part of the 2026-11-12 finding.
-const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_queue']);
+// These tools answer a keyless caller with a tier-masked PREVIEW (status 'ok', no parked wall
+// row), so the parked-row floor never ran on them. get_retirement_headroom / get_refined_queue
+// were added in #1382; find_sites was the remaining live gap (funnel 2026-11-12 3:37 AM Phoenix:
+// 2 find_sites walls, offer_kind none; live prose was "Open <url> to see what it found and how
+// to unlock it" with no bind_email / subscribe_digest / claim_free_key line). Other tools'
+// keyless previews stay frozen by contract (test/paywall-contract: search_facilities "no key ask",
+// capacity-source-tools byte-for-byte) and are not widened here.
+const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_queue', 'find_sites']);
 const _floorPreviewOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_OFFER_FLOOR_PREVIEW || '').trim());
 // analyze_site: a keyless caller's email opens its email teaser (the siting seat); a key's free monthly runs
 // are per key, so once they are spent an email opens nothing more there.
@@ -5034,34 +5041,59 @@ function _planFloor(result, c) {
   }
   return out;
 }
+// OAuth sign-in leads the wall (owner 2026-11-12; lib/wall-oauth-lead.mjs). One own text block right after block 0, ahead
+// of the floor / email / digest line, so the email ask and the digest stay as the secondary offers. Grok (contract G3) keeps
+// its wall copy byte for byte and gets one extra block after it naming /mcp/grok/oauth as its free key.
+function _oauthLead(out, name, c, { grok = false, depth = false } = {}) {
+  try {
+    if (!_wallOauthLeadEligible({ walled: true, workosEnabled: _workosEnabled(), signedIn: c.auth_oauth === true, bound: !!c.email })) return out;
+    return _withOauthLeadLine(out, _wallOauthLeadLine({ grok, depth }));
+  } catch (_) { return out; }
+}
+function _wallIsWalled(out, name, c) {
+  let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
+  // Funnel 2026-11-12 (item 2): a tier-masked PREVIEW is a walled answer too, though no wall row is parked for it
+  // (status 'ok'). get_retirement_headroom's MW mask (_maskRetirementHeadroom), get_refined_queue's preview, and
+  // find_sites' coarsened preview reach a keyless / free caller with a relay line and no email or digest offer,
+  // and the floor skipped them because it only read the parked wall rows. Same test the preview footer uses
+  // (_previewFooterStep: isTierPreview or status gated_preview), for a caller below a paid plan, on _FLOOR_PREVIEW_TOOLS.
+  if (!walled && _floorPreviewOn() && _FLOOR_PREVIEW_TOOLS.has(String(name || ''))) {
+    try {
+      const sc0 = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : null;
+      const unpaid = _tierRank(String(c.tier || '')) < _tierRank('starter');
+      walled = unpaid && !!sc0 && (_isTierPreview(sc0) || sc0.status === 'gated_preview');
+    } catch (_) { walled = false; }
+  }
+  return walled;
+}
 export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
     if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     c._offerFloor = _floorStanding(c, name);
+    if (c._offerFloor === 'grok') {
+      if (!_wallIsWalled(result, name, c)) return result;
+      const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
+      return _oauthLead(result, name, c, { grok: true, depth: _floorKindFor(name, sc, c).depth });
+    }
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
-    let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
-    // Funnel 2026-11-12 (item 2): a tier-masked PREVIEW is a walled answer too, though no wall row is parked for it
-    // (status 'ok'). get_retirement_headroom's MW mask (_maskRetirementHeadroom) and get_refined_queue's preview
-    // reach a keyless / free caller with the "your agent got 3 of N rows" relay line and no email or digest offer,
-    // and the floor skipped them because it only read the parked wall rows. Same test the preview footer uses
-    // (_previewFooterStep: isTierPreview or status gated_preview), for a caller below a paid plan, on these two tools.
-    if (!walled && _floorPreviewOn() && _FLOOR_PREVIEW_TOOLS.has(String(name || ''))) {
-      try {
-        const sc0 = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : null;
-        const unpaid = _tierRank(String(c.tier || '')) < _tierRank('starter');
-        walled = unpaid && !!sc0 && (_isTierPreview(sc0) || sc0.status === 'gated_preview');
-      } catch (_) { walled = false; }
-    }
-    if (!walled) return out;
-    // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
-    // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
-    if (_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) return out;
+    const walled = _wallIsWalled(out, name, c);
     const sc = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : {};
     const { kind, depth } = _floorKindFor(name, sc, c);
-    out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
-    _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
-    return out;
+    if (!walled) {
+      // An execute_plan answer whose steps walled (the plan's own paragraphs above already name each step's ask) leads
+      // with the sign-in too; the floor line itself is unchanged for it.
+      let planWalled = false;
+      try { const id = name === 'execute_plan' && c._planWallSinkId; planWalled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { planWalled = false; }
+      return planWalled ? _oauthLead(out, name, c, { grok: false, depth }) : out;
+    }
+    // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
+    // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
+    if (!_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) {
+      out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
+      _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
+    }
+    return _oauthLead(out, name, c, { grok: false, depth });
   } catch (_) { return result; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
