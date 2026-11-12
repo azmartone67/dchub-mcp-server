@@ -25,5 +25,12 @@ export default defineConfig({
     // beforeAll/afterAll hooks bind ports and import server.mjs, so they need
     // the same headroom for the same reason.
     hookTimeout: 30_000,
+    // ★2026-11-12 — vitest 5 turns fsModuleCache on by default and never
+    // prunes it. Each run writes the transformed server.mjs (~13 MB) under a
+    // new content hash in node_modules/.vitest-cache, so every edit leaves a
+    // copy behind. Measured on the owner's Mac: 49 GB in this checkout and
+    // 46 GB in one worktree, 104 GB across seven, after two weeks on vitest 5.
+    // server.mjs changes on nearly every run, so the cache rarely hits anyway.
+    fsModuleCache: false,
   },
 });
