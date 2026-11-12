@@ -147,6 +147,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
+import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest } from './lib/light-profile.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
          installGrokResultCap as _installGrokResultCap,
@@ -4544,9 +4545,17 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 
 // The pack definition for this request, or null for /mcp and for every source
 // or self path (which are attribution tags and serve the full catalog).
+// Light profile (2026-11-12): execute_plan first, ten tools, listing scope only. Not in MCP_PACKS (that suite pins
+// membership); `light` routes _packFilter to lib/light-profile.mjs. LIGHT_PACK_IMPLICIT is what a coding-CLI client gets
+// on bare /mcp when DCHUB_LIGHT_FOR_CLI=1 (off by default).
+const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
+const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
+
 export function _pathPack(req) {
   const p = _normPath(req);
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
+  if (p === LIGHT_PATH) return LIGHT_PACK;
+  if (p === '/mcp' && _lightForRequest({ path: p, userAgent: req && req.headers && req.headers['user-agent'] })) return LIGHT_PACK_IMPLICIT;
   return MCP_PACKS.get(p) || null;
 }
 
@@ -4559,6 +4568,7 @@ export function _pathPack(req) {
 // an agent reads once per session.
 export function _packFilter(result, def) {
   if (def && def.compact) return _grokToolsList(result);
+  if (def && def.light) return _lightToolsList(result);
   const want = packToolNames(def);
   const have = new Map((result?.tools || []).map((t) => [t.name, t]));
   const tools = [];
@@ -4601,6 +4611,7 @@ export function _INSTR_TAIL_PACK(def) {
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
+  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest.`;
   return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; discover_tools lists the rest.`;
 }
 
@@ -4623,6 +4634,8 @@ export const MCP_PATHS = [
   CORE_PATH,
   // G1/G5 (2026-09-27): the Grok-sized listing and its opt-in OAuth variant.
   GROK_PATH, GROK_OAUTH_PATH,
+  // 2026-11-12: the light, execute_plan-first listing (lib/light-profile.mjs).
+  LIGHT_PATH,
   // Item 5 (2026-10-17): the full /mcp profile behind an opt-in OAuth challenge.
   // See lib/mcp-oauth-path.mjs.
   MCP_OAUTH_PATH,
