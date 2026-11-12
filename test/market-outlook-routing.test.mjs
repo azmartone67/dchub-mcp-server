@@ -22,6 +22,7 @@ import { _planQuery, _execAnswerGuide, _execSameMarket, _execResolveArgs } from 
 const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 // Tools that pick their own markets: none may run for a one-market question.
+const stateOf = { 'san-antonio': 'TX', phoenix: 'AZ', 'las-vegas': 'NV' };
 const PICKERS = ['get_dchub_recommendation', 'rank_markets', 'site_selection_canvas', 'ai_capacity_index'];
 
 describe('a named tracked metro routes to its own reads', () => {
@@ -41,8 +42,14 @@ describe('a named tracked metro routes to its own reads', () => {
       expect(step(p, 'get_market_intel').args_hint).toEqual({ market: intel });
       for (const t of PICKERS) expect(tools(p), t).not.toContain(t);
       // The grid step runs only for a real RTO; WECC is not a valid iso arg.
-      if (iso) expect(step(p, 'get_grid_intelligence').args_hint).toEqual({ iso });
-      else expect(tools(p)).not.toContain('get_grid_intelligence');
+      if (iso) {
+        expect(step(p, 'get_grid_intelligence').args_hint).toEqual({ iso });
+        expect(tools(p)).not.toContain('get_power_availability_timeline');
+      } else {
+        expect(tools(p)).not.toContain('get_grid_intelligence');
+        // 5.21: a market on no RTO reads the power side for its state instead of nothing.
+        expect(step(p, 'get_power_availability_timeline').args_hint).toEqual({ state: stateOf[dcpi] });
+      }
       expect(p.unresolved).toBeUndefined();
     });
   }
@@ -127,5 +134,48 @@ describe('answer_guide holds the market, not just the ISO', () => {
     expect(_execSameMarket('Midland–Odessa', 'san-antonio-tx')).toBe(false);
     expect(_execSameMarket('San Diego', 'san-antonio-tx')).toBe(false);
     expect(_execSameMarket(null, 'san-antonio-tx')).toBe(true);   // no name: nothing to judge
+  });
+});
+
+
+describe('5.21: a market on no US RTO gets a state-level power read (orchestration gap, 2026-11-12)', () => {
+  it('"power and interconnection outlook for Phoenix" plans DCPI, brief and the Arizona timeline, in one wave', () => {
+    const p = _planQuery('What is the power and interconnection outlook for data centers in Phoenix?', {});
+    expect(p.intent_class).toBe('market_outlook');
+    expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_power_availability_timeline']);
+    const s3 = step(p, 'get_power_availability_timeline');
+    expect(s3.args_hint).toEqual({ state: 'AZ' });
+    expect(s3.depends_on).toEqual([]);                 // independent: same wave as steps 1 and 2
+    expect(s3.why).toMatch(/does not score the market/);
+    for (const t of PICKERS) expect(tools(p), t).not.toContain(t);
+  });
+  it('an RTO market is unchanged: DCPI, brief, grid; no timeline step', () => {
+    const p = _planQuery('What is the data center power outlook for San Antonio?', {});
+    expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_grid_intelligence']);
+  });
+  it('the kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0 restores the two-step plan', () => {
+    process.env.DCHUB_OUTLOOK_STATE_TIMELINE = '0';
+    try {
+      const p = _planQuery('power outlook for Phoenix', {});
+      expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel']);
+    } finally { delete process.env.DCHUB_OUTLOOK_STATE_TIMELINE; }
+  });
+  it('an untracked place is still unresolved and gets no state step', () => {
+    const p = _planQuery('power outlook for Timbuktu', {});
+    expect(tools(p)).not.toContain('get_power_availability_timeline');
+    expect(p.unresolved).toMatchObject({ kind: 'market_not_matched' });
+  });
+  it('a non-US market (a country code in the state slot) gets no state step', () => {
+    for (const q of ['power outlook for Mexico City', 'power outlook for Singapore']) {
+      const p = _planQuery(q, {});
+      expect(p.intent_class).toBe('market_outlook');
+      expect(tools(p), q).not.toContain('get_power_availability_timeline');
+    }
+  });
+  it('the step arg is a 2-letter state the tool accepts (never a slug or a name)', () => {
+    for (const q of ['power outlook for Phoenix', 'power outlook for Las Vegas']) {
+      const a = step(_planQuery(q, {}), 'get_power_availability_timeline').args_hint;
+      expect(a.state).toMatch(/^[A-Z]{2}$/);
+    }
   });
 });
