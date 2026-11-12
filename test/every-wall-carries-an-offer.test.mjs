@@ -97,7 +97,8 @@ async function call(name, args, hdr) {
   const content = (r.msg && r.msg.result && r.msg.result.content) || [];
   const prose = content.filter((b) => b && b.type === 'text' && typeof b.text === 'string' && !/^\s*[{[]/.test(b.text))
     .map((b) => b.text).join('\n');
-  return { prose, rows: events.slice(before) };
+  let executed = null; try { executed = JSON.parse(content[0].text).executed; } catch (_) {}
+  return { prose, rows: events.slice(before), executed };
 }
 async function session(ipAddr) {
   const hdr = { 'user-agent': 'node', 'x-dc-client-ip': ipAddr };
@@ -196,6 +197,7 @@ describe('every wall carries an offer (lean ON)', () => {
     const calls = await runTool('execute_plan', { intent });
     expect(calls.every((c) => c.rows.length > 0), 'every plan run walled a step').toBe(true);
     expect(offenders('execute_plan', calls)).toEqual([]);
+    for (const c of calls) { if (!line.test(c.prose)) console.error('DBGEXEC', c.where, JSON.stringify(c.executed).slice(0, 6000)); }
     for (const c of calls) expect(c.prose, c.where).toMatch(line);
   }, 120_000);
 
