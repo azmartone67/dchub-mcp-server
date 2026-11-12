@@ -192,6 +192,14 @@ describe('get_gas_index below a paid seat withholds the whole backend DCGI paid 
     expect(scrubRelayTokens(JSON.stringify({ human_url: tok, gas_price: 0.37 }))).toContain('0.37');
   });
 
+  it('the leak scan ignores a timestamp that spells a fragment, and still sees a real value', () => {
+    const at = '2026-11-12T19:15:46.458Z';
+    expect(at).toContain('46.4');
+    expect(scrubRelayTokens(JSON.stringify({ retrieved_at: at }))).not.toContain('46.4');
+    expect(scrubRelayTokens(JSON.stringify({ retrieved_at: at, gas_cost_score: 46.4 }))).toContain('46.4');
+    expect(scrubRelayTokens(JSON.stringify({ data_as_of: '2026-08-01' }))).toContain('2026-08-01');
+  });
+
   it('the server field list is the backend tuple, exactly', () => {
     expect([...S.DCGI_PAID_KEYS]).toEqual(BACKEND_MASK_FIELDS);
   });

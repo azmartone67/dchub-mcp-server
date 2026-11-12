@@ -40,7 +40,7 @@ describe('offersShown: what the final result carried', () => {
     expect(offersShown('x')).toBeNull();
   });
   it('every kind is one the backend stores (routes/mcp_funnel_events.OFFER_KINDS)', () => {
-    expect([...OFFER_KINDS]).toEqual(['credit_pack', 'digest', 'email_unlock', 'free_key', 'pro']);
+    expect([...OFFER_KINDS]).toEqual(['credit_pack', 'digest', 'email_unlock', 'free_key', 'oauth_signin', 'pro']);   // oauth_signin: owner 2026-11-12, mirrored in routes/mcp_funnel_events.OFFER_KINDS (dchub-backend)
   });
   it('switch DCHUB_OFFERS_SHOWN_EVENT=0', () => {
     expect(offersShownOn({})).toBe(true);

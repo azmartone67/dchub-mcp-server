@@ -234,7 +234,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
-import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
+import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark } from './lib/offers-shown.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
@@ -259,6 +259,8 @@ import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmail
          planDigestParagraph as _planDigestParagraph, planDigestTools as _planDigestTools } from './lib/plan-wall-sink.mjs';
 import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind, floorOfferLine as _floorOfferLine,
          hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
+import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
+         withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -281,7 +283,8 @@ import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAg
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
   buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent,
-  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY } from './lib/capacity-source-summary.mjs';
+  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY,
+  capacityStepIntent, capacityAvailableBy, capacityKwFromText, capacityRegionFromText } from './lib/capacity-source-summary.mjs';
 export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, FOUNDING_URL, PRO_URL };
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
@@ -4964,9 +4967,14 @@ function _drainPlanWallSink(c, result) {
 // and unlock_more_data DO wall on the anonymous hard wall, and bind_email (not walled) is the way on from there.
 const _FLOOR_SKIP_TOOLS = new Set(['bind_email', 'recover_my_key', 'subscribe_digest']);
 // Kill switch DCHUB_WALL_OFFER_FLOOR_PREVIEW=0 puts the floor back on parked wall rows only.
-// Only these two: other tools' keyless previews are frozen by contract (test/paywall-contract: search_facilities "no key ask",
-// capacity-source-tools byte-for-byte) and are not part of the 2026-11-12 finding.
-const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_queue']);
+// These tools answer a keyless caller with a tier-masked PREVIEW (status 'ok', no parked wall
+// row), so the parked-row floor never ran on them. get_retirement_headroom / get_refined_queue
+// were added in #1382; find_sites was the remaining live gap (funnel 2026-11-12 3:37 AM Phoenix:
+// 2 find_sites walls, offer_kind none; live prose was "Open <url> to see what it found and how
+// to unlock it" with no bind_email / subscribe_digest / claim_free_key line). Other tools'
+// keyless previews stay frozen by contract (test/paywall-contract: search_facilities "no key ask",
+// capacity-source-tools byte-for-byte) and are not widened here.
+const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_queue', 'find_sites']);
 const _floorPreviewOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_OFFER_FLOOR_PREVIEW || '').trim());
 // analyze_site: a keyless caller's email opens its email teaser (the siting seat); a key's free monthly runs
 // are per key, so once they are spent an email opens nothing more there.
@@ -5034,34 +5042,59 @@ function _planFloor(result, c) {
   }
   return out;
 }
+// OAuth sign-in leads the wall (owner 2026-11-12; lib/wall-oauth-lead.mjs). One own text block right after block 0, ahead
+// of the floor / email / digest line, so the email ask and the digest stay as the secondary offers. Grok (contract G3) keeps
+// its wall copy byte for byte and gets one extra block after it naming /mcp/grok/oauth as its free key.
+function _oauthLead(out, name, c, { grok = false, depth = false } = {}) {
+  try {
+    if (!_wallOauthLeadEligible({ walled: true, workosEnabled: _workosEnabled(), signedIn: c.auth_oauth === true, bound: !!c.email })) return out;
+    return _withOauthLeadLine(out, _wallOauthLeadLine({ grok, depth }));
+  } catch (_) { return out; }
+}
+function _wallIsWalled(out, name, c) {
+  let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
+  // Funnel 2026-11-12 (item 2): a tier-masked PREVIEW is a walled answer too, though no wall row is parked for it
+  // (status 'ok'). get_retirement_headroom's MW mask (_maskRetirementHeadroom), get_refined_queue's preview, and
+  // find_sites' coarsened preview reach a keyless / free caller with a relay line and no email or digest offer,
+  // and the floor skipped them because it only read the parked wall rows. Same test the preview footer uses
+  // (_previewFooterStep: isTierPreview or status gated_preview), for a caller below a paid plan, on _FLOOR_PREVIEW_TOOLS.
+  if (!walled && _floorPreviewOn() && _FLOOR_PREVIEW_TOOLS.has(String(name || ''))) {
+    try {
+      const sc0 = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : null;
+      const unpaid = _tierRank(String(c.tier || '')) < _tierRank('starter');
+      walled = unpaid && !!sc0 && (_isTierPreview(sc0) || sc0.status === 'gated_preview');
+    } catch (_) { walled = false; }
+  }
+  return walled;
+}
 export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
     if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     c._offerFloor = _floorStanding(c, name);
+    if (c._offerFloor === 'grok') {
+      if (!_wallIsWalled(result, name, c)) return result;
+      const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
+      return _oauthLead(result, name, c, { grok: true, depth: _floorKindFor(name, sc, c).depth });
+    }
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
-    let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
-    // Funnel 2026-11-12 (item 2): a tier-masked PREVIEW is a walled answer too, though no wall row is parked for it
-    // (status 'ok'). get_retirement_headroom's MW mask (_maskRetirementHeadroom) and get_refined_queue's preview
-    // reach a keyless / free caller with the "your agent got 3 of N rows" relay line and no email or digest offer,
-    // and the floor skipped them because it only read the parked wall rows. Same test the preview footer uses
-    // (_previewFooterStep: isTierPreview or status gated_preview), for a caller below a paid plan, on these two tools.
-    if (!walled && _floorPreviewOn() && _FLOOR_PREVIEW_TOOLS.has(String(name || ''))) {
-      try {
-        const sc0 = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : null;
-        const unpaid = _tierRank(String(c.tier || '')) < _tierRank('starter');
-        walled = unpaid && !!sc0 && (_isTierPreview(sc0) || sc0.status === 'gated_preview');
-      } catch (_) { walled = false; }
-    }
-    if (!walled) return out;
-    // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
-    // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
-    if (_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) return out;
+    const walled = _wallIsWalled(out, name, c);
     const sc = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : {};
     const { kind, depth } = _floorKindFor(name, sc, c);
-    out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
-    _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
-    return out;
+    if (!walled) {
+      // An execute_plan answer whose steps walled (the plan's own paragraphs above already name each step's ask) leads
+      // with the sign-in too; the floor line itself is unchanged for it.
+      let planWalled = false;
+      try { const id = name === 'execute_plan' && c._planWallSinkId; planWalled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { planWalled = false; }
+      return planWalled ? _oauthLead(out, name, c, { grok: false, depth }) : out;
+    }
+    // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
+    // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
+    if (!_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) {
+      out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
+      _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
+    }
+    return _oauthLead(out, name, c, { grok: false, depth });
   } catch (_) { return result; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
@@ -18336,7 +18369,10 @@ function _coord(v, limit) {
   return (Number.isFinite(n) && Math.abs(n) <= limit) ? n : NaN;
 }
 
-export function _locationPoint(rawLocation, slug, row) {
+// `param` names the argument the caller used (get_air_permit_context takes `site`,
+// the others `location`), so the hint never tells an agent to pass a parameter
+// the tool does not have (Grok QA 2026-11-12).
+export function _locationPoint(rawLocation, slug, row, param = 'location') {
   const ok = row && typeof row === 'object' && !row.error;
   const lat = ok ? _coord(row.latitude, 90) : NaN;
   const lon = ok ? _coord(row.longitude, 180) : NaN;
@@ -18348,7 +18384,7 @@ export function _locationPoint(rawLocation, slug, row) {
       requested_location: rawLocation,
       tried_market_slug: slug,
       hint: 'Pass the metro slug as it appears in rank_markets / get_market_dcpi_rank '
-          + '(e.g. location="ashburn", "northern-virginia", "dallas"), or pass lat and lon directly '
+          + `(e.g. ${param}="ashburn", "northern-virginia", "dallas"), or pass lat and lon directly `
           + 'for a specific parcel. A trailing state is NOT stripped — "Ashburn, VA" will not resolve, '
           + 'because guessing which token is the state risks answering for the wrong market.',
       example: 'analyze_site lat=39.04 lon=-77.48',
@@ -18369,7 +18405,7 @@ export function _locationPoint(rawLocation, slug, row) {
       resolved_lat: lat,
       resolved_lon: lon,
       via: '/api/v1/dcpi/scores — published DCPI market row',
-      note: `location="${rawLocation}" is not a coordinate; it was resolved to the PUBLISHED CENTROID `
+      note: `${param}="${rawLocation}" is not a coordinate; it was resolved to the PUBLISHED CENTROID `
           + `of the "${slug}" market (${lat}, ${lon}) before this site was scored. This is a `
           + 'MARKET-level read, not the parcel you named — pass lat/lon for a specific site.',
     } };
@@ -19224,7 +19260,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool. → 5.21 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -19940,6 +19976,18 @@ export const _PLAN_CLASSES = [
         (iso && _EXEC_RTOS.has(iso)) ? { step: 3, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
           why: `Grid headroom and time-to-power for ${iso}, the grid the market sits on. Grid context only: it does not score the market.`,
           args_hint: { iso } } : null,
+        // 5.21 (2026-11-12, orchestration gap): a market on no US RTO (Phoenix, Las Vegas: WECC)
+        // got the DCPI card and the brief and NOTHING on the power side, so "power and
+        // interconnection outlook for Phoenix" came back with no queue or timing evidence. The state
+        // the index put the market in selects get_power_availability_timeline (dated new capacity,
+        // retirements, queue context, the iso_context naming the serving grid). RTO markets keep the
+        // grid step above and are unchanged; a place bound only from the city table has no state
+        // and gets no step. Kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0.
+        (!(iso && _EXEC_RTOS.has(iso)) && o && o.state && _PLAN_STATE_CODES.has(String(o.state))   // US states only: a non-US market's 'state' is a country code
+          && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_OUTLOOK_STATE_TIMELINE || '')))
+          ? { step: 3, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
+              why: `The market sits on no US RTO that has its own grid read, so the power side is read for its state, ${o.state}: dated new capacity by confidence class, scheduled retirements, queue context and the grid that serves it. State-level context: it does not score the market.`,
+              args_hint: { state: o.state } } : null,
       ];
     },
     alternatives: [
@@ -20864,7 +20912,7 @@ export const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','I
 export const _EXEC_ALLOWED_TOOLS = Object.freeze([
   'ai_capacity_index', 'analyze_parcel', 'analyze_site', 'cluster_sites_by_latency',
   'compare_isos', 'compare_sites', 'deal_autopsy', 'discover_tools', 'find_alternatives',
-  'find_sites', 'generate_site_analysis', 'get_changes', 'get_climate_intel',
+  'find_sites', 'generate_site_analysis', 'get_air_permit_context', 'get_changes', 'get_climate_intel',
   'get_composite_site_score', 'get_dchub_recommendation', 'get_disaster_risk',
   'get_energy_prices', 'get_facility', 'get_facility_risk_delta', 'get_fiber_intel',
   'get_fiber_readiness', 'get_gas_economics', 'get_gas_index', 'get_grid_data',
@@ -21773,7 +21821,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         "should we build in Dallas") routes to market_outlook, and a market
 //         check's answer leads with `dcpi_verdict` (the named market's DCPI
 //         verdict + its Source line) as the first key.
-export const PLANNER_VERSION = '5.21';
+export const PLANNER_VERSION = '5.22';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -21903,6 +21951,8 @@ const _EXEC_STEP_TIMEOUT_MS = 20000;
  * budget, losing the WHOLE envelope instead of one leg. Exported so the guard
  * can pin the arithmetic directly rather than inferring it from a live run.
  */
+// The floor a Capacity Source step gets when it runs after a slow plan (see capReserve in execute_plan).
+export const _CAPACITY_STEP_MIN_MS = 6000;
 export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEOUT_MS) {
   return Math.max(0, Math.min(stepMs, deadlineMs - elapsedMs));
 }
@@ -22445,11 +22495,22 @@ export const _CONSTRAINT_LEAD_CAP = 2;
 //
 // Arguments: the state whenever one resolves, because the backend's market
 // filter is an exact match (a state finds a "Dallas-Fort Worth" listing that
-// market="Dallas" would miss); a market only when no state resolves; min_mw
-// from the size the intent names.
+// market="Dallas" would miss); a market only when no state resolves; a region
+// ("Europe", "APAC") only when neither does; min_mw from the size the intent
+// names, else min_kw from a kW size; available_by (YYYY-MM) from a stated
+// deadline (lib/capacity-source-summary capacityAvailableBy).
+//
+// 2026-11-12 (owner via Grok, "ends with a Capacity Source step"): the intent
+// test also takes the "where can I get 50 MW in Texas by Q2 2027" / "need 20
+// MW in Phoenix by 2027" asks (capacityAcquireIntent), and the step is placed
+// LAST — last in recommended_sequence and in the last execution wave — by
+// _capacityStepLast once the rest of the plan is built, so the answer closes
+// on listings or on the no-match register offer (_capacityRegisterOffer).
+// request_capacity_intro and accept_capacity_terms are never plan steps: both
+// bind the human, so the plan offers the first and runs neither.
 export function _capacityProcurementStep(text, d, considered) {
   try {
-    if (!capacityPointersEnabled() || !capacityProcurementIntent(text)) return null;
+    if (!capacityPointersEnabled() || !capacityStepIntent(text)) return null;
     if (Array.isArray(considered) && considered.includes('source_capacity')) return null;
     const sig = (d && typeof d === 'object') ? d : {};
     const args = {};
@@ -22464,7 +22525,17 @@ export function _capacityProcurementStep(text, d, considered) {
         args.market = sig.__citySlug.replace(/-[a-z]{2}$/, '').replace(/-/g, ' ');
       }
     }
+    if (!args.state && !args.market) {
+      const region = capacityRegionFromText(text);
+      if (region) args.region = region;
+    }
     if (typeof sig.mw === 'number' && Number.isFinite(sig.mw) && sig.mw > 0) args.min_mw = sig.mw;
+    else {
+      const kw = capacityKwFromText(text);
+      if (kw) args.min_kw = kw;
+    }
+    const by = capacityAvailableBy(text);
+    if (by) args.available_by = by;
     return {
       tool: 'source_capacity', args_hint: args, estimated_calls: 1, depends_on: [],
       routing: 'capacity_procurement',
@@ -22473,13 +22544,93 @@ export function _capacityProcurementStep(text, d, considered) {
          + 'capacity for this geography and size, or the program status while listings are onboarded. The size is '
          + 'matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous '
          + 'block, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total. '
-         + 'No dependency on any other step, so it runs in the first wave. A listing is reached through a DC Hub '
+         + 'It runs last, after the plan\'s other reads, so the answer closes on the listings or, when none fits '
+         + 'yet, on the offer to register the requirement. A listing is reached through a DC Hub '
          + 'deal registration: the provider sees only the buyer\'s company name and requirement, and identities '
          + 'and contact are exchanged only if the provider accepts.',
     };
   } catch (_e) {
     return null;   // routing must never throw
   }
+}
+
+/**
+ * Moves the capacity_procurement step(s) to the END of `seq`, in place: last in
+ * the sequence, and depending on every other step so _planWaves puts them in a
+ * wave of their own after them. A plan naming two countries has one per country
+ * (_capacityCountrySteps); they keep their order and share that last wave. The
+ * other steps are renumbered in order and their depends_on remapped, so the
+ * graph is unchanged for them. A plan with no such step, or only such steps, is
+ * left exactly as it was. Never throws.
+ */
+export function _capacityStepLast(seq) {
+  try {
+    if (!Array.isArray(seq)) return seq;
+    const isCap = (s) => s && s.routing === 'capacity_procurement';
+    const caps = seq.filter(isCap);
+    if (!caps.length || caps.length === seq.length) return seq;
+    const rest = seq.filter((s) => !isCap(s));
+    const renum = new Map(rest.map((s, k) => [s.step, k + 1]));
+    for (const cp of caps) renum.set(cp.step, null);
+    for (const s of rest) {
+      if (Array.isArray(s.depends_on)) s.depends_on = s.depends_on.map((n) => (renum.has(n) ? renum.get(n) : n)).filter((n) => n !== null);
+      s.step = renum.get(s.step);
+    }
+    const deps = rest.map((s) => s.step);
+    seq.splice(0, seq.length, ...rest, ...caps.map((cp, k) => ({ ...cp, step: rest.length + k + 1, depends_on: deps })));
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
+
+/**
+ * A capacity ask that names a non-US country (2026-11-12, owner via Grok, item 4): the country plan
+ * (lib/country-scope.mjs) replaces the US capacity step with one source_capacity per country,
+ * location=<country>. Those steps become the capacity step: routing capacity_procurement, so they run
+ * last and the no-fit register offer follows, and they carry the deadline and kW size the ask named.
+ * Only when the plan had a capacity step before the swap (capacityStepIntent held and
+ * DCHUB_CAPACITY_POINTERS is on); a country plan for any other ask is unchanged. In place; never throws.
+ */
+export function _capacityCountrySteps(seq, capStep) {
+  try {
+    if (!Array.isArray(seq) || !capStep || capStep.routing !== 'capacity_procurement') return seq;
+    const from = capStep.args_hint || {};
+    for (const s of seq) {
+      if (!s || s.tool !== 'source_capacity' || s.routing || !s.args_hint || !s.args_hint.location) continue;
+      s.routing = 'capacity_procurement';
+      s.args_hint = { ...s.args_hint,
+        ...(!s.args_hint.min_mw && from.min_kw ? { min_kw: from.min_kw } : {}),
+        ...(from.available_by ? { available_by: from.available_by } : {}) };
+    }
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
+
+/**
+ * The close for a finished plan whose every executed source_capacity step found
+ * no fit: { field, sentence } or null. An OFFER, never a step: the plan calls
+ * neither request_capacity_intro nor accept_capacity_terms. The register call
+ * is _listingRegisterCall's, built from that step's own args, and the words are
+ * CAPACITY_ZERO_NOTE's: "no listed match yet", never "no capacity there".
+ * DCHUB_CAPACITY_POINTERS=off removes it. Pure; never throws.
+ */
+export const CAPACITY_TERMS_API_URL = 'https://dchub.cloud/api/v1/listings/terms';
+// The one clause source_capacity and request_capacity_intro carry in tools/list (item C, 2026-11-12).
+export const CAPACITY_TERMS_CLAUSE = `Who sees what, and when, in machine-readable form: ${CAPACITY_TERMS_API_URL}.`;
+export function _capacityRegisterOffer(executed, fullOf) {
+  try {
+    if (!capacityPointersEnabled() || !Array.isArray(executed)) return null;
+    const full = typeof fullOf === 'function' ? fullOf : () => undefined;
+    const sc = executed.filter((e) => e && e.tool === 'source_capacity' && e.status === 'executed');
+    if (!sc.length || !sc.every((e) => sourceCapacityNoFit(full(e) || e.result))) return null;
+    const call = _listingRegisterCall(sc[0].args);
+    const field = { kind: 'register_requirement', tool: call.tool, slug: null, arguments: call.arguments,
+                    needs_human_approval: true, auto_called: false, terms: CAPACITY_TERMS_API_URL };
+    const args = _callArgsText(call.arguments);
+    const sentence = `${CAPACITY_ZERO_NOTE} Offer your human to register the requirement: \`request_capacity_intro${args ? ` ${args}` : ''}\``
+      + ' (no slug), so matching listings reach them as providers are onboarded. Who sees what, and when: '
+      + `${CAPACITY_TERMS_API_URL}. Send it only after your human approves; this plan did not call it.`;
+    return { field, sentence };
+  } catch (_e) { return null; }
 }
 
 /**
@@ -22767,7 +22918,7 @@ export function _planQuery(intent, context) {
     // Capacity Source (2026-09-14): the same buy/lease step as the routed path.
     try {
       const cp = _capacityProcurementStep(text, d, fbSeq.map((x) => x.tool));
-      if (cp) fbSeq.push({ ...cp, step: fbSeq.length + 1 });
+      if (cp) { fbSeq.push({ ...cp, step: fbSeq.length + 1 }); _capacityStepLast(fbSeq); }
     } catch (_e) { /* routing must never throw */ }
     const fbWc = _planWorkflowConfidence(fbSeq, d);
     const fbWaves = _planWaves(fbSeq);
@@ -22878,7 +23029,13 @@ export function _planQuery(intent, context) {
   // waves/estimates/confidence are derived, like the constraint leads above.
   let _country = null;
   try { _country = countryScopedPlan(text, d, seq, top.cls.id); } catch (_e) { _country = null; }
-  if (_country) seq.splice(0, seq.length, ..._country.seq);
+  if (_country) {
+    const capStep = seq.find((x) => x && x.routing === 'capacity_procurement');
+    seq.splice(0, seq.length, ..._country.seq);
+    _capacityCountrySteps(seq, capStep);
+  }
+  // 2026-11-12: the Capacity Source step closes the plan (see _capacityProcurementStep).
+  _capacityStepLast(seq);
   // intent_confidence: deterministic function of the winning score + margin.
   // 0.35 base + 0.06/score-point, capped 0.95; ambiguous margins (<1) pay -0.1.
   // (v1 exposed this as `confidence` — kept as an alias for back-compat.)
@@ -29366,6 +29523,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const fullByEntry = new Map();
       let gridDeepIso = null;   // 5.18: the ISO the grid_headroom deep read took from the ranking
       let ran = 0; let calls = 0;
+      // 2026-11-12: the Capacity Source step runs LAST (_capacityStepLast), where max_steps and the time
+      // budget would cut it. In the first wave it used to spend one of the max_steps ahead of the runner-up
+      // and constraint leads; it still does: one step is held for it, so a cut drops those first, and it
+      // gets at least _CAPACITY_STEP_MIN_MS even when the earlier waves used the budget.
+      const capReserve = (maxSteps > 1 && seq.some((x) => x && x.routing === 'capacity_procurement')) ? 1 : 0;
       for (const wave of waves) {
         const doable = [];
         const deferred = [];
@@ -29384,7 +29546,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                             note: _EXEC_NOT_ALLOWED_NOTE });
             continue;
           }
-          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+          const isCap = s.routing === 'capacity_procurement';
+          const stepCap = isCap ? maxSteps : maxSteps - capReserve;
+          if (ran >= stepCap || (!isCap && (Date.now() - t0) > DEADLINE_MS)) {
             executed.push({ step: s.step, tool: s.tool, status: 'not_run',
                             args_hint: s.args_hint || {},
                             note: ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue' });
@@ -29413,7 +29577,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           const variants = (r.fanKey && r.fanVals)
             ? r.fanVals.slice(0, maxFan).map((v) => ({ ...r.args, [r.fanKey]: v }))
             : [r.args];
-          for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= maxSteps) break; }
+          for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= stepCap) break; }
         }
         if (doable.length) {
           const results = await Promise.all(doable.map(({ s, args }) => {
@@ -29423,7 +29587,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
                 && args[isoKey] == null) args[isoKey] = constraintIso;
             const geo = _execInjectGeo(s.tool, args, _sig);
-            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent) }));
+            const budget = s.routing === 'capacity_procurement'
+              ? Math.max(_CAPACITY_STEP_MIN_MS, _execStepBudget(Date.now() - t0, DEADLINE_MS))
+              : _execStepBudget(Date.now() - t0, DEADLINE_MS);
+            return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent) }));
           }));
           for (const { s, args, out, geo, scope } of results) {
             calls += 1;
@@ -29479,7 +29646,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // that resolves now runs; one that still can't reads
         // skipped_unresolved, honestly.
         for (const s of deferred) {
-          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+          if (ran >= maxSteps - (s.routing === 'capacity_procurement' ? 0 : capReserve) || (Date.now() - t0) > DEADLINE_MS) {
             executed.push({ step: s.step, tool: s.tool, status: 'not_run',
                             note: 'budget reached before the intra-wave retry' });
             continue;
@@ -29581,6 +29748,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               cityTable: _CITY_ISO_META, cityHit: _execCityHit }) });
         }
       } catch (_e) { _ho = null; }
+      // 2026-11-12: a plan whose source_capacity found nothing closes on the register offer, ahead of
+      // route_back and the complement (DC Hub's own path first). Every surface gets the sentence; the
+      // structured field follows the answer-block gate.
+      const _capReg = _capacityRegisterOffer(executed, (e) => fullByEntry.get(e));
+      // 2026-11-12 (owner via Grok, item 4): when the register offer is there, the capacity_no_fit
+      // complement is not: a buyer with no listed match is offered DC Hub's own register path, not
+      // outside procurement or brokerage desks. The market_answer complement is unchanged.
+      // DCHUB_NOFIT_COMPLEMENT=on restores the complement after the offer.
+      if (_capReg && _ho && _ho.basis === 'capacity_no_fit'
+          && !/^(1|on|true|yes)$/i.test(String(process.env.DCHUB_NOFIT_COMPLEMENT || '').trim())) _ho = null;
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
@@ -29714,7 +29891,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + (_undated ? _undated + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
+          + (_capReg ? ' ' + _capReg.sentence : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
+        ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
@@ -32887,7 +33066,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { lat: N.describe('Site latitude in decimal degrees, e.g. 31.97'),
       lon: N.describe('Site longitude in decimal degrees, e.g. -102.08'),
       ...COORD_ALIASES,
-      site: S.describe('Market NAME or metro slug instead of coordinates, e.g. "midland-odessa", "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row; the answer carries resolved_from. A market-level read, not your parcel: pass lat/lon for a specific site'),
+      site: S.describe('DC Hub market slug instead of coordinates, as rank_markets lists it, e.g. "midland-tx" (Midland–Odessa), "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row; the answer carries resolved_from. A market-level read, not your parcel: pass lat/lon for a specific site'),
       radius_km: z.number().min(1).max(300).optional().describe('Radius for nearby permit filings in km, 1-300 (default 100)'),
       status: z.enum(['all', 'issued', 'pending']).optional().describe('Filing status filter (default all)'),
       limit: z.number().int().min(1).max(50).optional().describe('Filings to return, nearest first, 1-50 (default 10)') },
@@ -32903,9 +33082,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const row = slug
           ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true, serverView: true })
           : null;
-        const res = _locationPoint(rawSite, slug, row);
+        const res = _locationPoint(rawSite, slug, row, 'site');
         if (!res.ok) {
-          const err = { ...res.error, example: 'get_air_permit_context lat=31.97 lon=-102.08' };
+          const err = { ...res.error, example: 'get_air_permit_context site="midland-tx" (or lat=31.97 lon=-102.08)' };
           return { isError: true, content: [{ type: 'text', text: JSON.stringify(err) }], structuredContent: err };
         }
         q.lat = res.lat; q.lon = res.lon; resolved_from = res.resolved_from;
@@ -34011,8 +34190,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // regions and countries in the requirement. Both pass the values through
   // unchanged; the backend contract for them ships in parallel.
   const _CAPACITY_GPU_ON = String(process.env.CAPACITY_GPU_COMPUTE || '').toLowerCase() === 'on';
+  // 2026-11-12 (owner via Grok, item C): both descriptions link the machine-readable "who sees what, when"
+  // summary of the introduction terms: CAPACITY_TERMS_CLAUSE, written out as literal text so the manifest
+  // scanners read it; byte-stable (test/capacity-source-tools.test.mjs pins it against the constant). In
+  // source_capacity it sits before "Returns listing cards" because the wire copy is cut at ~1.3 KB
+  // (lib/list-slim.mjs SLIM_DESC_MAX) and the later sentences never reach tools/list on /mcp.
   trackedTool(srv, 'source_capacity',
-    'Use this when the user needs data center or colocation capacity to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
+    'Use this when the user needs data center or colocation capacity to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
     { slug: ID.describe('One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards'),
       market: S.describe('Browse filter: market name as it appears on a listing, e.g. "Dallas"'),
       state: S.describe('Browse filter: two-letter US state, e.g. "TX"'),
@@ -34060,7 +34244,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'request_capacity_intro',
-    'Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or wants first access to capacity matching a requirement as listings are onboarded (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). This registers a deal: DC Hub records the request in its lead register and sends the provider ONLY your human\'s company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider\'s identity, site details and contact with your human, and your human\'s name, role and email with the provider; on a decline nothing is shared. Requires an identified caller (claim_free_key, then bind_email with your human\'s address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and the next step. For a listing, source_capacity with its slug then shows the deal status in the disclosure block and, once the provider accepts, the provider\'s identity, site and contact. Do NOT use to save or monitor a site (use save_site / set_site_alert).',
+    'Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or wants first access to capacity matching a requirement as listings are onboarded (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). This registers a deal: DC Hub records the request in its lead register and sends the provider ONLY your human\'s company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider\'s identity, site details and contact with your human, and your human\'s name, role and email with the provider; on a decline nothing is shared. Requires an identified caller (claim_free_key, then bind_email with your human\'s address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and the next step. For a listing, source_capacity with its slug then shows the deal status in the disclosure block and, once the provider accepts, the provider\'s identity, site and contact. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Do NOT use to save or monitor a site (use save_site / set_site_alert).',
     { slug: ID.describe('The listing to register a deal for: its slug or id from source_capacity. Omit to register a standing requirement for upcoming listings instead'),
       name: S.describe("Your human's full name. Nothing is sent without it; use only what they gave you, never invent it"),
       company: S.describe("Your human's company. Nothing is sent without it"),

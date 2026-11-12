@@ -409,14 +409,29 @@ describe('registration', () => {
   // example is digits. It is cut out before the check and must be there exactly
   // once, so the rule still holds for everything else in all three descriptions.
   const SIZE_EXAMPLE = '"500 kW anywhere in Europe" → min_kw=500, region=europe';
-  it("descriptions carry no digits, apart from source_capacity's one size example", () => {
+  // 2026-11-12 (owner via Grok, item C): source_capacity and request_capacity_intro each carry ONE
+  // clause linking the machine-readable terms summary, whose URL has a "1" in /api/v1/. Pinned
+  // byte for byte here, cut out like the size example, and nowhere else in the three descriptions.
+  const TERMS_CLAUSE = 'Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms.';
+  it("descriptions carry no digits, apart from source_capacity's one size example and the terms clause", () => {
+    expect(S.CAPACITY_TERMS_CLAUSE).toBe(TERMS_CLAUSE);
     for (const n of [READ, WRITE, ACCEPT]) {
       const d = TOOLS[n].description;
       expect(d.length, `${n} description implausibly short`).toBeGreaterThan(300);
       const parts = d.split(SIZE_EXAMPLE);
       expect(parts.length - 1, `${n}: size example count`).toBe(n === READ ? 1 : 0);
-      expect(parts.join(' '), n).not.toMatch(/\d/);
+      const rest = parts.join(' ').split(TERMS_CLAUSE);
+      expect(rest.length - 1, `${n}: terms clause count`).toBe(n === ACCEPT ? 0 : 1);
+      expect(rest.join(' '), n).not.toMatch(/\d/);
     }
+  });
+
+  // Placed where the ~1.3 KB wire cut (lib/list-slim.mjs) keeps it; the wire copy itself is asserted in
+  // test/capacity-source-routing-instructions.test.mjs.
+  it('the terms clause sits where the wire copy keeps it, and carries no fee, price, plan or partner word', () => {
+    expect(TOOLS[READ].description).toContain('agent-led procurement. ' + TERMS_CLAUSE + ' Returns listing cards');
+    expect(TOOLS[WRITE].description).toContain(TERMS_CLAUSE + ' Do NOT use ');
+    expect(TERMS_CLAUSE).not.toMatch(/%|\$|fee|price|pricing|plan\b|\bpro\b|enterprise|partner/i);
   });
 
   it('declares no required argument, so {} passes schema validation and the handler decides', async () => {
