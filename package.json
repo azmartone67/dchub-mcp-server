@@ -14,7 +14,7 @@
     "hooks:install": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.17",
+    "@hono/node-server": "^2.1.6",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "express": "^4.22.3",
     "jose": "^6.2.14",
