@@ -332,6 +332,7 @@ test/lean-keeps-daily-site-note.test.mjs
 test/lean-response.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
+test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/list-transactions-no-deal-floor.test.mjs
