@@ -54,9 +54,14 @@ describe('claim_free_key forwards the connector URL channel', () => {
   it('the header form works too', async () => {
     expect((await claimWith('', { 'x-dchub-via': 'reddit' }))['x-dchub-via']).toBe('reddit');
   });
-  it('a gateway / unknown / absent via is not forwarded', async () => {
-    expect((await claimWith('?via=pipeworx'))['x-dchub-via']).toBeUndefined();
-    expect((await claimWith('?via=twitter'))['x-dchub-via']).toBeUndefined();
+  it('a registered directory or partner tag is forwarded as itself (2026-11-12)', async () => {
+    expect((await claimWith('?via=pipeworx'))['x-dchub-via']).toBe('pipeworx');
+    expect((await claimWith('?via=mcp.so'))['x-dchub-via']).toBe('mcpso');
+    expect((await claimWith('', { 'x-dchub-via': 'Glama' }))['x-dchub-via']).toBe('glama');
+  });
+  it('any other well-formed via is forwarded as `other`; an absent via is not forwarded', async () => {
+    expect((await claimWith('?via=twitter'))['x-dchub-via']).toBe('other');
+    expect((await claimWith('?via=some-new-site'))['x-dchub-via']).toBe('other');
     expect((await claimWith(''))['x-dchub-via']).toBeUndefined();
   });
 });

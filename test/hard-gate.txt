@@ -262,6 +262,7 @@ test/grid-ba-coverage-note.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
 test/grid-gating-one-rule.test.mjs
+test/grid-headroom-non-rto.test.mjs
 test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
 test/grid-provenance-source-own-as-of.test.mjs
@@ -332,6 +333,7 @@ test/lean-keeps-daily-site-note.test.mjs
 test/lean-response.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
+test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/list-transactions-no-deal-floor.test.mjs
@@ -614,6 +616,7 @@ test/verbatim-follower-is-data.test.mjs
 test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
+test/via-tags.test.mjs
 test/wall-alert-line-d.test.mjs
 test/wall-ask-guard.test.mjs
 test/wall-email-line-freekey.test.mjs

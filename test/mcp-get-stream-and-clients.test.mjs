@@ -378,6 +378,19 @@ describe('client recognition (names and UAs from each client\'s public source)',
     // the explicit platform header uses the same vocabulary
     expect(S.detectPlatformFromInit(null, 'node', 'google-adk')).toBe('google-adk');
   });
+  it('new: opencode, WorkBuddy, Clono by User-Agent and by clientInfo name', () => {
+    expect(S.detectPlatformFromInit(null, 'opencode/2.2.4/cli')).toBe('opencode');
+    expect(S.detectPlatformFromInit(init('opencode'), 'node')).toBe('opencode');
+    expect(S.detectPlatformFromInit(null, 'WorkBuddy/5.9.6')).toBe('workbuddy');
+    expect(S.detectPlatformFromInit(init('WorkBuddy'), 'node')).toBe('workbuddy');
+    expect(S.detectPlatformFromInit(null, 'Clono (+https://clono.sh)')).toBe('clono');
+    expect(S.detectPlatformFromInit(init('clono'), 'node')).toBe('clono');
+    // Copilot CLI and Codex CLI were already named
+    expect(S.detectPlatformFromInit(null, 'copilot-cli/1.0.34')).toBe('copilot');
+    expect(S.detectPlatformFromInit(null, 'codex-mcp-client/0.121.0')).toBe('codex');
+    // a name that merely contains the word is not claimed
+    expect(S.detectPlatformFromInit(init('my-opencode-fork-tool'), 'node')).not.toBe('opencode');
+  });
   it('existing labels do not move', () => {
     expect(S.detectPlatformFromInit(init('gemini-cli-mcp-client'), 'node')).toBe('gemini');
     expect(S.detectPlatformFromInit(init('windsurf-client'), 'node')).toBe('windsurf');

@@ -45,7 +45,7 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     const o = await plan('What is the data center power outlook for San Antonio?');
     expect(o && o._entity).toBe('plan_execution');
     expect(o.intent_class).toBe('market_outlook');
-    expect(o.planner_version).toBe('5.20');
+    expect(o.planner_version).toBe('5.22');
     const ran = o.executed.map((e) => e.tool);
     expect(ran).not.toContain('get_dchub_recommendation');
     expect(recommendHits()).toBe(before);
@@ -63,6 +63,21 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     expect(o.executed.find((e) => e.tool === 'get_grid_intelligence').status).toBe('gated_preview');
     expect(ev.get_grid_intelligence).toMatchObject({ iso: 'ERCOT', ok: false, missing: ['as_of'] });
     expect(o.answer_guide).toMatch(/UNDATED — get_grid_intelligence \(step 3\) returned no as_of/);
+  }, 120_000);
+
+  // 5.21: a market on no US RTO (WECC) used to run DCPI + brief only. The state's power timeline now runs
+  // with the state the index placed the market in; nothing else is read for another place.
+  it('Phoenix (WECC): the Arizona power timeline runs beside DCPI and the brief', async () => {
+    const o = await plan('What is the power and interconnection outlook for data centers in Phoenix?');
+    expect(o.intent_class).toBe('market_outlook');
+    expect(o.planner_version).toBe('5.22');
+    const ran = o.executed.map((e) => e.tool);
+    expect(ran).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_power_availability_timeline']);
+    const tl = o.executed.find((e) => e.tool === 'get_power_availability_timeline');
+    expect(tl.args).toMatchObject({ state: 'AZ' });
+    expect(['executed', 'gated_preview']).toContain(tl.status);
+    expect(ran).not.toContain('get_dchub_recommendation');
+    expect(o.unresolved).toBeUndefined();
   }, 120_000);
 
   it('an unmatched question says it is unresolved and runs no recommendation', async () => {

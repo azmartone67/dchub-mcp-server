@@ -108,10 +108,10 @@ describe('a session handed a wall link credits its later claim / bind to mcp-wal
     expect(await viaOn(s, ...CLAIM)).toBe('reddit');
     expect(await viaOn(s, ...BIND_KEYED)).toBe('reddit');
   });
-  it('explicit gateway via (not a funnel channel) is not overridden with mcp-wall', async () => {
+  it('explicit directory via (not a funnel channel) is not overridden with mcp-wall; it is forwarded as itself', async () => {
     const s = await session('?via=pipeworx');
     await hitWall(s);
-    expect(await viaOn(s, ...CLAIM)).toBeUndefined();
+    expect(await viaOn(s, ...CLAIM)).toBe('pipeworx');
   });
   it('kill switch DCHUB_WALL_VIA_TAG=0 at claim time -> absent', async () => {
     const s = await session();
