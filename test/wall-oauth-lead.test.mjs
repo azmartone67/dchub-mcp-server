@@ -54,6 +54,25 @@ describe('a walled /mcp answer leads with the OAuth sign-in', () => {
     expect(blocks(out).at(-1)).toBe('Source: DC Hub (dchub.cloud)');
     expect(c._offerFloor).toBe('allowed');
   });
+  it('a trial-key caller (not signed in, not email-bound) still gets one-click OAuth first, then the email ask', () => {
+    const c = ctx({ api_key: 'dch_trial_walloauth1', tier: 'trial', auth_source: 'trial' });
+    const out = S._wallOfferFloorStep(wall(), 'rank_markets', c);
+    const lead = idx(out, OAUTH_LEAD);
+    const floor = Math.max(idx(out, FLOOR_EMAIL_LEAD), idx(out, FLOOR_DIGEST_LEAD));
+    expect(lead).toBe(1);
+    expect(floor).toBeGreaterThan(lead);
+    expect(blocks(out)[lead]).toMatch(/^One-click sign-in, free:/);
+    expect(textOf(out)).toContain(OAUTH_SIGNIN_URL);
+    expect(textOf(out)).toMatch(/`(?:bind_email|subscribe_digest)`|share your email/i);
+    expect(textOf(out)).not.toMatch(FORBIDDEN);
+  });
+  it('an anonymous keyless caller gets the same one-click OAuth line as the first offer', () => {
+    const out = S._wallOfferFloorStep(wall(), 'rank_markets', ctx({ auth_source: 'none', tier: 'anonymous' }));
+    expect(idx(out, OAUTH_LEAD)).toBe(1);
+    expect(idx(out, OAUTH_LEAD)).toBeLessThan(Math.max(idx(out, FLOOR_EMAIL_LEAD), idx(out, FLOOR_DIGEST_LEAD)));
+    expect(blocks(out)[1].startsWith(OAUTH_LEAD)).toBe(true);
+    expect(blocks(out)[1]).toContain(OAUTH_SIGNIN_URL);
+  });
   it('a wall that already carries an email ask keeps it and still gets the lead', () => {
     const c = ctx();
     const input = wall();

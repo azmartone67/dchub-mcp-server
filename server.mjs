@@ -4570,15 +4570,34 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 // or self path (which are attribution tags and serve the full catalog).
 // Light profile (2026-11-12): execute_plan first, ten tools, listing scope only. Not in MCP_PACKS (that suite pins
 // membership); `light` routes _packFilter to lib/light-profile.mjs. LIGHT_PACK_IMPLICIT is what a coding-CLI client gets
-// on bare /mcp when DCHUB_LIGHT_FOR_CLI=1 (off by default).
+// on bare /mcp when DCHUB_LIGHT_FOR_CLI is on (the default since 2026-11-12; set 0 to turn off).
 const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
 const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
+
+// User-Agent, initialize clientInfo.name, a recalled session name, or X-MCP-Client. Gemini CLI often
+// has a generic UA and only names itself in clientInfo, which arrives on initialize and is recalled after.
+function _lightIdentityFromReq(req) {
+  try {
+    const headers = (req && req.headers) || {};
+    const userAgent = headers['user-agent'];
+    const bodyName = req && req.body && req.body.params && req.body.params.clientInfo && req.body.params.clientInfo.name;
+    const hdrName = headers['x-mcp-client'];
+    const sid = headers['mcp-session-id'];
+    const recalled = sid ? _recallClientName(sid) : null;
+    let metaName = null;
+    try { if (sid && sessionMeta.has(sid)) metaName = sessionMeta.get(sid).client_name_raw; } catch (_) { metaName = null; }
+    const clientName = bodyName || recalled || metaName || hdrName || '';
+    return { userAgent, clientName };
+  } catch (_) {
+    return { userAgent: req && req.headers && req.headers['user-agent'], clientName: '' };
+  }
+}
 
 export function _pathPack(req) {
   const p = _normPath(req);
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
-  if (p === '/mcp' && _lightForRequest({ path: p, userAgent: req && req.headers && req.headers['user-agent'] })) return LIGHT_PACK_IMPLICIT;
+  if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req) })) return LIGHT_PACK_IMPLICIT;
   return MCP_PACKS.get(p) || null;
 }
 
@@ -4634,7 +4653,8 @@ export function _INSTR_TAIL_PACK(def) {
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
-  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest.`;
+  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at https://dchub.cloud/mcp.`;
+  if (def.light) return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at https://dchub.cloud/mcp.`;
   return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; discover_tools lists the rest.`;
 }
 
