@@ -15622,10 +15622,14 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       // anonymous call (and marked them withheld), so the same inputs echoed differently keyless and keyed.
       // Withhold only DC Hub's data, never what the caller sent. Exact keys, this tool only.
       out[k] = v;
-    } else if (toolName === 'get_dchub_recommendation' && k === 'available_categories') {
+    } else if (toolName === 'get_dchub_recommendation' && (k === 'available_categories' || k === 'next_tools')) {
       // Grok 2026-10-07: the four category names are DC Hub's own description menu,
       // not product data. Trimming 4 -> 3 behind `_available_categories_total_in_pro`
       // hid `technical` and advertised a paywall on a list the caller needs to use the tool.
+      // Grok QA 2026-11-13: `next_tools` is the same kind of guidance (which tool to call
+      // next, with example arguments). The trim cut it 4 -> 3 (analyze_site behind
+      // `_next_tools_total_available`) and nulled the example's capacity_mw and max_months
+      // (`_max_months_withheld`), so the example call it hands the agent did not run.
       out[k] = v;
     } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = _keepProvenanceCredit(v, trimForTrial(v, toolName, _inRate));   // G-2: credit lists survive
