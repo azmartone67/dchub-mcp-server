@@ -1073,6 +1073,17 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  '.cursor-plugin/plugin.json',
                  // ★2026-10-31: the Claude Code plugin manifest says "N tools" too.
                  'plugins/dchub/.claude-plugin/plugin.json',
+                 // ★2026-11-13: shipped SDK / integration copy that said "94 tools"
+                 // while /mcp served 95, because no list named them. Now count-free;
+                 // listed so a count re-added later heals instead of rotting.
+                 // test/tool-count-drift.test.mjs scans EVERY tracked file, so a
+                 // file missing from this list now fails CI instead of going quiet.
+                 // (npm-launcher/* joins after PR #1403 drops its count.)
+                 'sdk/node/README.md', 'sdk/node/index.mjs', 'sdk/python/dchub/mcp.py',
+                 'integrations/postman/build_collection.py',
+                 'integrations/postman/dchub.postman_collection.json',
+                 'integrations/strands/energy_agent.py',
+                 'integrations/poe/dchub_bot.py', 'integrations/poe/modal_deploy.py',
                  // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
                  // a file, so no guard that walks the working tree could ever see
                  // it: git grep returns nothing and COVERAGE could not list it.

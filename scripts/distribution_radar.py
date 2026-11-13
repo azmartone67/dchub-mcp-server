@@ -33,7 +33,7 @@ FIND = ("dchub", "dc hub")  # presence signals (case-insensitive)
 # Curated targets. directory = submittable; roundup = editorial (pitch the author).
 TARGETS = [
     {"name": "mcp.directory",        "type": "directory", "url": "https://mcp.directory/best-mcp-servers",                    "action": "submit (suggest-a-server) + pitch #2"},
-    {"name": "Cursor Directory",     "type": "directory", "url": "https://cursor.directory/mcp",                              "action": "cursor.directory submission (live=47 tools)"},
+    {"name": "Cursor Directory",     "type": "directory", "url": "https://cursor.directory/mcp",                              "action": "cursor.directory submission"},
     # 2026-09-29: #1668 was closed as a duplicate of #1823, the one live submission.
     {"name": "Cline marketplace",    "type": "directory", "url": "https://github.com/cline/mcp-marketplace/issues/1823",      "action": "pending review on #1823 — do not open another issue"},
     # Continue.dev hub RETIRED 2026-09-29: hub.continue.dev does not resolve

@@ -39,7 +39,7 @@ DC Hub — Power, Energy & Data Center Intelligence
 
 ★ **The text is NOT duplicated here.** It used to be, and the copy went stale:
 measured 2026-09-05 this block still said **18,800+** facilities (canon 20,500+),
-**1,900+** deals (canon 2,100+) and **82 tools** (canon 83) — because
+**1,900+** deals (canon 2,100+) and **82 tools** (canon 83) — because <!-- canon:frozen: dated 2026-09-05 measurement, not a current claim -->
 `scripts/sync-tools-manifest.mjs` heals quantities in
 `scripts/smithery_description.txt` and has never known this file existed.
 Pasting from here would have REGRESSED the live listing by three canon numbers.

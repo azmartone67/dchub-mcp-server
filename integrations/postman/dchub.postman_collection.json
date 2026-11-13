@@ -106,7 +106,7 @@
                 }
               }
             },
-            "description": "Every tool with its input schema. /mcp serves 94 tools; /mcp/core serves 10."
+            "description": "Every tool with its input schema. /mcp serves the full catalog; /mcp/core serves 10."
           }
         },
         {

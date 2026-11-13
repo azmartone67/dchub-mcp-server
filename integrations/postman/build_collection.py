@@ -141,7 +141,7 @@ def build(spec):
             "clientInfo": {"name": "postman", "version": "1.0"}}},
             "Opens an MCP session. Optional for a single call: tools/list and tools/call also answer without it."),
         mcp_item("tools/list", {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-                 "Every tool with its input schema. /mcp serves 94 tools; /mcp/core serves 10."),
+                 "Every tool with its input schema. /mcp serves the full catalog; /mcp/core serves 10."),
         mcp_item("tools/call: execute_plan", {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
             "name": "execute_plan", "arguments": {"intent": "rank markets for a 200 MW AI campus"}}},
             "A multi-topic question answered in one call."),

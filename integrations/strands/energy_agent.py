@@ -6,7 +6,7 @@
 The model is Strands' default (Amazon Bedrock; needs AWS credentials). Pass any
 Strands model instead via Agent(model=...). No DC Hub key is needed to start:
 anonymous calls return previews. Set DCHUB_API_KEY to send it as X-API-Key.
-DCHUB_MCP_URL picks the endpoint: /mcp/core (default, 10 tools) or /mcp (94 tools).
+DCHUB_MCP_URL picks the endpoint: /mcp/core (default, 10 tools) or /mcp (the full catalog).
 """
 import os
 import sys
