@@ -21912,7 +21912,11 @@ export function _planWorkflowConfidence(seq, d) {
 //         "Texas 50 MW power" (a MW figure beside "power", no other class
 //         word) routes to grid_headroom instead of the navigator, and
 //         "who operates in Dallas" routes to facility_search.
-export const PLANNER_VERSION = '5.23';
+//  5.24 = STATE-GRAIN POWER STEP IS SOURCED (same relay, live re-test 11-13):
+//         get_power_availability_timeline names its grid in iso_context and
+//         its feeds in sources.<lane>.feed; power_evidence now reads both, so
+//         answer_guide no longer calls that step "UNDATED".
+export const PLANNER_VERSION = '5.24';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22118,8 +22122,15 @@ export function _execPowerEvidence(executed, fullByEntry = null, derived = null)
       const collectedAt = (!asOf && _EXEC_COLLECTED_TOOLS.has(e.tool) && /^UNMEASURED\b/.test(String(p.as_of_basis || '')))
         ? dated(p.fetched_at) : null;
       const a = e.args || {};
-      const iso = [r.iso, r.region_id, a.iso, a.region_id].find((x) => typeof x === 'string' && x.trim()) || null;
-      const source = named(p.source) || named(r.source) || null;
+      // 5.24: a state-grain step (get_power_availability_timeline, live 11-13 "Texas 50 MW power")
+      // names its grid in iso_context and its feeds in sources.<lane>.feed, not in iso / source.
+      // One grid in iso_context is that step's grid; several (a multi-ISO state) name none.
+      const isoCtx = Array.isArray(r.iso_context) ? r.iso_context.filter((x) => typeof x === 'string' && x.trim()) : [];
+      const iso = [r.iso, r.region_id, a.iso, a.region_id, isoCtx.length === 1 ? isoCtx[0] : null]
+        .find((x) => typeof x === 'string' && x.trim()) || null;
+      const feeds = (r.sources && typeof r.sources === 'object' && !Array.isArray(r.sources))
+        ? Object.values(r.sources).map((s) => s && named(s.feed)).filter(Boolean) : [];
+      const source = named(p.source) || named(r.source) || (feeds.length ? feeds.join('; ') : null);
       const missing = [];
       if (!asOf && !collectedAt) missing.push('as_of');
       if (!iso && !source) missing.push('iso_or_source');
