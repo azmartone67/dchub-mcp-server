@@ -94,6 +94,13 @@ describe('execute_plan provenance.as_of is never null', () => {
     expect(out.structuredContent.provenance.as_of_kind).toBeUndefined();
   });
 
+  it('an execute_plan wall ran no plan, so it keeps the null', () => {
+    const wall = { _entity: 'execute_plan', error: 'anon_hard_wall', tool: 'execute_plan' };
+    const out = stampEnvelopeAttribution(asResult(wall), { toolName: 'execute_plan', now: NOW });
+    expect(out.structuredContent.provenance.as_of).toBeNull();
+    expect(out.structuredContent.provenance.as_of_kind).toBeUndefined();
+  });
+
   it('other tools keep the honest null (the fallback is execute_plan only)', () => {
     const out = stampEnvelopeAttribution(asResult({ ok: true, count: 3 }), { toolName: 'discover_tools', now: NOW });
     expect(out.structuredContent.provenance.as_of).toBeNull();
