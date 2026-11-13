@@ -1,7 +1,7 @@
 // light-profile.test.mjs: /mcp/light, the execute_plan-first light listing (2026-11-12).
 //
 // Real handler over HTTP, local stub backend, no network.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import net from 'node:net';
@@ -144,6 +144,8 @@ describe('/mcp/light lists the light, front-door-first catalog', () => {
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
     expect(ins).toMatch(/ENDPOINT SCOPE: \/mcp\/light lists 10 DC Hub tools/);
+    expect(ins).toMatch(/the full list is at https:\/\/dchub\.cloud\/mcp/);
+    expect(ins).toMatch(/start with execute_plan/);
     expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name/);
   });
 
@@ -155,26 +157,36 @@ describe('/mcp/light lists the light, front-door-first catalog', () => {
   });
 });
 
-describe('client-aware default: DCHUB_LIGHT_FOR_CLI (off unless set)', () => {
-  const CLI_UAS = ['copilot-cli/1.0.34', 'codex-mcp-client/0.121.0', 'opencode/2.2.4/cli', 'WorkBuddy/5.9.6', 'Clono (+https://clono.sh)'];
+describe('client-aware default: DCHUB_LIGHT_FOR_CLI (on unless set to 0)', () => {
+  const CLI_UAS = [
+    'copilot-cli/1.0.34',
+    'codex-mcp-client/0.121.0',
+    'opencode/2.2.4/cli',
+    'WorkBuddy/5.9.6',
+    'Clono (+https://clono.sh)',
+    'claude-code/2.0',
+    'Claude-User (claude-code/2.1.0; +https://support.anthropic.com/)',
+  ];
   const prev = process.env.DCHUB_LIGHT_FOR_CLI;
   afterAll(() => { if (prev === undefined) delete process.env.DCHUB_LIGHT_FOR_CLI; else process.env.DCHUB_LIGHT_FOR_CLI = prev; });
+  afterEach(() => { delete process.env.DCHUB_LIGHT_FOR_CLI; });
 
-  it('flag off: a coding-CLI user agent gets the full /mcp list', async () => {
-    delete process.env.DCHUB_LIGHT_FOR_CLI;
+  it('kill switch: a coding-CLI user agent gets the full /mcp list when the flag is off', async () => {
+    process.env.DCHUB_LIGHT_FOR_CLI = '0';
     for (const ua of CLI_UAS) {
       const r = await post('/mcp', LIST, { 'user-agent': ua });
       expect(r.json.result.tools.length, ua).toBeGreaterThan(80);
     }
   });
 
-  it('flag on: a coding-CLI user agent gets the light list on /mcp, any other client the full list', async () => {
-    process.env.DCHUB_LIGHT_FOR_CLI = '1';
+  it('default on: a coding-CLI user agent gets the light list on /mcp, any other client the full list', async () => {
+    delete process.env.DCHUB_LIGHT_FOR_CLI;
     for (const ua of CLI_UAS) {
       const r = await post('/mcp', LIST, { 'user-agent': ua });
       expect(r.json.result.tools.map((t) => t.name), ua).toEqual(EXPECTED_TOOLS);
+      expect(r.json.result.tools[0].name, ua).toBe('execute_plan');
     }
-    for (const ua of ['Mozilla/5.0', 'claude-code/2.0', 'node']) {
+    for (const ua of ['Mozilla/5.0', 'node', 'claude-ai/1.0']) {
       const r = await post('/mcp', LIST, { 'user-agent': ua });
       expect(r.json.result.tools.length, ua).toBeGreaterThan(80);
     }
@@ -184,11 +196,26 @@ describe('client-aware default: DCHUB_LIGHT_FOR_CLI (off unless set)', () => {
     expect(g.json.result.tools.length).toBe(11);
   });
 
-  it('lightForRequest is false for every input when the flag is off, and never throws', () => {
-    expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', env: {} })).toBe(false);
-    expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', env: { DCHUB_LIGHT_FOR_CLI: '1' } })).toBe(true);
-    expect(G.lightForRequest({ path: '/mcp/core', userAgent: 'copilot-cli/1.0.34', env: { DCHUB_LIGHT_FOR_CLI: '1' } })).toBe(false);
-    expect(G.lightForRequest({ path: '/mcp', userAgent: undefined, env: { DCHUB_LIGHT_FOR_CLI: '1' } })).toBe(false);
+  it('clientInfo.name (and X-MCP-Client) is enough when the User-Agent is generic', async () => {
+    delete process.env.DCHUB_LIGHT_FOR_CLI;
+    for (const name of ['claude-code', 'gemini-cli-mcp-client', 'gemini-cli', 'github-copilot-developer', 'codex-mcp-client', 'opencode', 'Clono']) {
+      const r = await post('/mcp', LIST, { 'user-agent': 'node', 'x-mcp-client': name });
+      expect(r.json.result.tools.map((t) => t.name), name).toEqual(EXPECTED_TOOLS);
+      expect(r.json.result.tools[0].name, name).toBe('execute_plan');
+    }
+    const full = await post('/mcp', LIST, { 'user-agent': 'node', 'x-mcp-client': 'mcp' });
+    expect(full.json.result.tools.length).toBeGreaterThan(80);
+  });
+
+  it('lightForRequest follows the default-on kill switch, matches names, and never throws', () => {
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'gemini-cli-mcp-client', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'Claude-User (claude-code/2.1.0; +https://support.anthropic.com/)', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', env: { DCHUB_LIGHT_FOR_CLI: '0' } })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp/core', userAgent: 'copilot-cli/1.0.34', env: {} })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: undefined, env: {} })).toBe(false);
     expect(G.lightForRequest()).toBe(false);
+    expect(G.lightForCliOn({})).toBe(true);
+    expect(G.lightForCliOn({ DCHUB_LIGHT_FOR_CLI: 'off' })).toBe(false);
   });
 });
