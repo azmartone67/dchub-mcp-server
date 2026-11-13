@@ -308,11 +308,12 @@ describe('guard (real handler): the digest line is never sent where an email ope
       const result = JSON.parse(body).result || {};
       return { sc: result.structuredContent || {}, text: (result.content || []).map((c) => c.text || '').join('\n') };
     };
-    const h0 = { 'x-forwarded-for': '203.0.113.251', 'user-agent': 'claude-code/2.0' };
-    const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
-      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Code', version: '1.0' } } });
+    // List the full catalog (a non-CLI UA) so every tool can be checked; the calls below still use Claude Code.
+    const listH = { 'x-forwarded-for': '203.0.113.251', 'user-agent': 'dchub-qa-readonly' };
+    const init = await post(listH, { jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wall-ask-guard', version: '1.0' } } });
     const sid = init.headers.get('mcp-session-id');
-    const { body } = await post({ ...h0, ...(sid ? { 'mcp-session-id': sid } : {}) }, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    const { body } = await post({ ...listH, ...(sid ? { 'mcp-session-id': sid } : {}) }, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const listed = JSON.parse(body).result.tools || [];
     expect(listed.length).toBeGreaterThan(80);
     const noSample = [], digestFalse = [], noEmailAsk = [], digestTrue = [], emailOpens = [];
