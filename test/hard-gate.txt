@@ -122,6 +122,7 @@ test/claude-directory-wall-quota-and-compare.test.mjs
 test/claude-passive-arrivals.test.mjs
 test/claude-plugin-skills.test.mjs
 test/claude-review-blockers-1023.test.mjs
+test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs

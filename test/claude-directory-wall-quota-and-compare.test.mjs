@@ -11,8 +11,10 @@
 //     The scrub drops any later block naming claim_free_key (lib/chatgpt-directory.mjs,
 //     scrubToolResult), so the verdicts went with it and the text was the partial notice
 //     alone. The teaser is its own block now; the key line is still dropped on /mcp/claude.
-// The profile still carries no ask, link or plan (lib/claude-directory.mjs): asserted below
-// with the probe patterns and the sell-line BANNED list.
+// The profile still carries no ask or plan (lib/claude-directory.mjs): asserted below with the
+// probe patterns and the sell-line BANNED list. 2026-11-13 (Grok QA v2.12.48, owner decision on
+// merge): these two walls now carry the link the wall minted (test/claude-site-wall-unlock.test.mjs),
+// so the link's own probe hits and its human_url key are excepted here and nothing else.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE } from '../lib/claude-directory.mjs';
 import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf } from './helpers/claude-directory-harness.mjs';
@@ -21,6 +23,10 @@ import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf } from './helpe
 // without re-registering its suites).
 const BANNED = /after they pay|show your user|free preview|human_url|show_to_user|contract plans|\/enterprise\b/i;
 const PATTERNS = claudeProbePatterns(CLAUDE_REMOVED);
+// The site-wall link (human_url) and what it trips by itself; see claude-site-wall-unlock.test.mjs.
+const LINK_ONLY = new Set(['/upgrade/h', 'upgrade/unlock wording', 'pricing link', 'relay keys']);
+const nonLinkHits = (raw) => hitsOf(PATTERNS, raw).filter((k) => !LINK_ONLY.has(k));
+const withoutLink = (raw) => raw.replace(/"human_url":"[^"]*",?/g, '');
 const DIR = '/mcp/claude';
 const TWO_SITES = { locations: '39.04,-77.48;33.45,-112.07' };
 
@@ -43,7 +49,7 @@ afterAll(async () => {
 const texts = (r) => ((r.msg && r.msg.result && r.msg.result.content) || []).map((c) => c.text || '');
 
 describe('/mcp/claude keyless analyze_site wall: no constant "0 left this month"', () => {
-  it('carries no remaining_this_month or resets_at, and still no ask, link or plan', async () => {
+  it('carries no remaining_this_month or resets_at, and still no ask or plan (the link only)', async () => {
     const r = await H.call(DIR, 'analyze_site', { lat: 39.04, lon: -77.48 });
     const sc = r.msg.result.structuredContent;
     expect(sc._wall, r.raw.slice(0, 300)).toBe(true);           // really the keyless wall
@@ -52,8 +58,8 @@ describe('/mcp/claude keyless analyze_site wall: no constant "0 left this month"
     expect('resets_at' in sc).toBe(false);
     expect(r.raw).not.toMatch(/remaining_this_month/);
     expect(texts(r).at(-1)).toBe(CLAUDE_PLANS_NOTICE);
-    expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
-    expect(r.raw).not.toMatch(BANNED);
+    expect(nonLinkHits(r.raw)).toEqual([]);
+    expect(withoutLink(r.raw)).not.toMatch(BANNED);
     expect(fence.foreign).toEqual([]);
   }, 60_000);
 
@@ -67,7 +73,7 @@ describe('/mcp/claude keyless analyze_site wall: no constant "0 left this month"
 });
 
 describe('/mcp/claude keyless compare_sites wall: the per-site verdicts survive the scrub', () => {
-  it('the text names each site\'s verdict and power band, and no ask, key line, link or plan', async () => {
+  it('the text names each site\'s verdict and power band, and no ask, key line or plan (the link only)', async () => {
     const r = await H.call(DIR, 'compare_sites', TWO_SITES);
     const all = texts(r).join('\n');
     expect(r.msg.result.structuredContent._wall).toBe(true);
@@ -75,8 +81,8 @@ describe('/mcp/claude keyless compare_sites wall: the per-site verdicts survive 
     expect(all).toMatch(/site 2 verdict AVOID, power infrastructure AVOID/);
     expect(texts(r).at(-1)).toBe(CLAUDE_PLANS_NOTICE);
     expect(all).not.toMatch(/claim_free_key|X-API-Key/);
-    expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
-    expect(r.raw).not.toMatch(BANNED);
+    expect(nonLinkHits(r.raw)).toEqual([]);
+    expect(withoutLink(r.raw)).not.toMatch(BANNED);
   }, 60_000);
 
   it('control: /mcp keeps the teaser and the free-key line, now in separate blocks', async () => {
