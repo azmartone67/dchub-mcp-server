@@ -219,3 +219,65 @@ describe('client-aware default: DCHUB_LIGHT_FOR_CLI (on unless set to 0)', () =>
     expect(G.lightForCliOn({ DCHUB_LIGHT_FOR_CLI: 'off' })).toBe(false);
   });
 });
+
+
+describe('directory crawlers get the full /mcp list; Copilot CLI gets the light list', () => {
+  // Representative directory/indexer and generic-bot User-Agents. These are
+  // test identities, not claimed official crawler strings: they must not match
+  // LIGHT_CLI_UA, so a Smithery/Glama/Muse/PulseMCP/mcp.so/registry crawl of
+  // bare /mcp still sees the full catalog after DCHUB_LIGHT_FOR_CLI defaulted on.
+  const DIRECTORY_UAS = [
+    'Smithery/1.0 (+https://smithery.ai)',
+    'Mozilla/5.0 (compatible; Glama/1.0; +https://glama.ai/mcp)',
+    'MuseDirectory/1.0 (+https://musedirectory.ai)',
+    'PulseMCP/1.0 (+https://www.pulsemcp.com)',
+    'mcp.so-bot/1.0 (+https://mcp.so)',
+    'GitHub-MCP-Registry/1.0 (+https://github.com/mcp)',
+    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)',
+  ];
+  const prev = process.env.DCHUB_LIGHT_FOR_CLI;
+  afterAll(() => { if (prev === undefined) delete process.env.DCHUB_LIGHT_FOR_CLI; else process.env.DCHUB_LIGHT_FOR_CLI = prev; });
+  afterEach(() => { delete process.env.DCHUB_LIGHT_FOR_CLI; });
+
+  it('default on: directory and generic-bot user-agents get the full catalog, execute_plan first', async () => {
+    delete process.env.DCHUB_LIGHT_FOR_CLI;
+    for (const ua of DIRECTORY_UAS) {
+      expect(G.isLightCliIdentity({ userAgent: ua }), ua).toBe(false);
+      const r = await post('/mcp', LIST, { 'user-agent': ua });
+      expect(r.status, ua).toBe(200);
+      const names = r.json.result.tools.map((t) => t.name);
+      expect(names.length, ua).toBeGreaterThan(80);
+      expect(names[0], ua).toBe('execute_plan');
+      expect(names, ua).not.toEqual(EXPECTED_TOOLS);
+      expect(r.json.result.nextCursor, ua).toBeUndefined();
+    }
+  });
+
+  it('default on: Copilot CLI still gets the 10-tool light list, execute_plan first', async () => {
+    delete process.env.DCHUB_LIGHT_FOR_CLI;
+    const r = await post('/mcp', LIST, { 'user-agent': 'copilot-cli/0.0.394' });
+    expect(r.json.result.tools.map((t) => t.name)).toEqual(EXPECTED_TOOLS);
+    expect(r.json.result.tools[0].name).toBe('execute_plan');
+    expect(r.json.result.tools.length).toBe(10);
+  });
+
+  // Investigation of Muse Directory publishing 40 tools: tools/list on /mcp is
+  // one unpaginated page (server.mjs pack comment; SDK ListTools handler returns
+  // every registered tool with no cursor). No server-side cap of 40 was found.
+  it('tools/list on /mcp is one unpaginated page: full catalog, no nextCursor, cursor param does not cap at 40', async () => {
+    delete process.env.DCHUB_LIGHT_FOR_CLI;
+    const ua = { 'user-agent': 'MuseDirectory/1.0 (+https://musedirectory.ai)' };
+    const bare = await post('/mcp', LIST, ua);
+    expect(bare.status).toBe(200);
+    expect(bare.json.result.nextCursor).toBeUndefined();
+    expect(bare.json.result.tools.length).toBeGreaterThan(80);
+    expect(bare.json.result.tools.length).not.toBe(40);
+    expect(bare.json.result.tools[0].name).toBe('execute_plan');
+    const paged = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: { cursor: 'page-2' } }, ua);
+    expect(paged.status).toBe(200);
+    expect(paged.json.error, JSON.stringify(paged.json).slice(0, 300)).toBeUndefined();
+    expect(paged.json.result.tools.length).toBe(bare.json.result.tools.length);
+    expect(paged.json.result.nextCursor).toBeUndefined();
+  });
+});
