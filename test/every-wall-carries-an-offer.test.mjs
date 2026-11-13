@@ -62,6 +62,7 @@ beforeAll(async () => {
   tools = list.msg.result.tools.map((t) => t.name);
 }, 60_000);
 afterAll(async () => {
+  if (STRAYS.length) console.warn(`every-wall: ${STRAYS.length} row(s) arrived during another call:`, STRAYS.slice(0, 20));
   net.Socket.prototype._getpeername = _peer;
   if (H) await H.stop(); if (fence) fence.restore();
 });
@@ -89,15 +90,33 @@ function rpc(headers, body) {
 }
 let ip = 1, rid = 100;
 const freshIp = () => `198.51.${100 + Math.floor(ip / 250)}.${(ip++ % 250) + 1}`;
+// A call is credited only with the rows it can have produced: its own tool's, and for execute_plan its own
+// steps' (structuredContent.executed). Rows are matched to calls by arrival time, and a parked row can leave
+// seconds late (the 5 s wall-hit fallback, the plan sink's 60 s one), so under CI load another call's row
+// landed in a call's window: main's smoke went red 11-12/11-13 on all five execute_plan calls at the start of
+// the trial pass ("prose names no email step"), whose plan walled nothing of its own, while the file alone
+// passes. Measured 11-13 over the whole file: no direct call produced a row for another tool, so this drops
+// only strays; they are kept in STRAYS and printed, never silently lost.
+const STRAYS = [];
+function ownTools(name, result) {
+  const own = new Set([name]);
+  const ex = name === 'execute_plan' && result && result.structuredContent && result.structuredContent.executed;
+  if (Array.isArray(ex)) for (const e of ex) if (e && typeof e.tool === 'string') own.add(e.tool);
+  return own;
+}
 async function call(name, args, hdr) {
   const before = events.length;
   const r = await rpc(hdr, { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name, arguments: args } });
-  for (let i = 0; i < 12 && events.length === before; i++) await new Promise((res) => setTimeout(res, 10));
+  const result = r.msg && r.msg.result;
+  const own = ownTools(name, result);
+  const mine = () => events.slice(before).filter((e) => own.has(e.tool));
+  for (let i = 0; i < 12 && !mine().length; i++) await new Promise((res) => setTimeout(res, 10));
   await new Promise((res) => setTimeout(res, 30));
-  const content = (r.msg && r.msg.result && r.msg.result.content) || [];
+  const content = (result && result.content) || [];
   const prose = content.filter((b) => b && b.type === 'text' && typeof b.text === 'string' && !/^\s*[{[]/.test(b.text))
     .map((b) => b.text).join('\n');
-  return { prose, rows: events.slice(before) };
+  for (const e of events.slice(before)) if (!own.has(e.tool)) STRAYS.push(`${e.tool}/${e.wall_status} during ${name}`);
+  return { prose, rows: mine() };
 }
 async function session(ipAddr) {
   const hdr = { 'user-agent': 'node', 'x-dc-client-ip': ipAddr };
@@ -129,7 +148,11 @@ function offenders(name, calls) {
       // included (they leave with the plan answer's standing), so the funnel counts it in the 95% target.
       if (e.offer_floor !== 'allowed') bad.push(`${name} ${c.where} row ${e.tool}/${e.wall_status}: offer_floor ${e.offer_floor || 'absent'}`);
     }
-    if (c.rows.length && !(/\bemail\b/i.test(c.prose) && PROSE_OFFER.test(c.prose))) bad.push(`${name} ${c.where}: prose names no email step`);
+    if (c.rows.length && !(/\bemail\b/i.test(c.prose) && PROSE_OFFER.test(c.prose))) {
+      bad.push(`${name} ${c.where}: prose names no email step`
+        + ` [rows ${c.rows.map((e) => `${e.tool}/${e.wall_status}/${e.email_ask || '-'}`).join(' ')}]`
+        + ` [prose ${c.prose.replace(/\s+/g, ' ').slice(0, 160)}]`);
+    }
   }
   return bad;
 }
