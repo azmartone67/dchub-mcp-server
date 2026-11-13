@@ -20083,6 +20083,14 @@ export const _PLAN_CLASSES = [
       [_PLAN_ISO_RE, 2.5], [/\btime[-\s]to[-\s]power\b/i, 2], [/\bfuel\s+mix\b/i, 2],
       [/\brenewable\s+share\b/i, 2], [/\bgreenest\b/i, 2], [/\bdemand\b/i, 1],
       [/\bisos?\b/i, 1.5], [/\bmw\s+availab/i, 2.5],
+      // 5.23 (Grok QA relay 2026-11-13, Gemini cold start): "Texas 50 MW power"
+      // matched no class and fell to the navigator. A MW figure next to the word
+      // "power" is a power-supply question. Weight 1 only, like the 11-11 Atlanta
+      // patterns: it routes a short ask nothing else matched, and ties lose to
+      // capacity_search by declaration order ("Georgia Power 200MW data center
+      // Atlanta GA" stays capacity_search). "power plant(s)" and "power
+      // purchase" are other questions and do not count.
+      [/\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b[^.?!]{0,30}\bpower\b(?!\s+(?:plants?|purchase))|\bpower\b(?!\s+(?:plants?|purchase))[^.?!]{0,30}\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b/i, 1],
     ],
     rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
     sequence: (d) => _gridHeadroomSequence(d),
@@ -20574,6 +20582,8 @@ export const _PLAN_CLASSES = [
       [/\bfacilit(?:y|ies)\b/i, 3], [/\bdata\s*cent(?:er|re)s?\s+in\b/i, 3],
       [/\bfind\s+(?:all\s+)?data\s*cent/i, 3], [/\bcolo(?:cation)?\b/i, 2],
       [/\boperators?\b/i, 1.5], [/\btenants?\b/i, 2], [/\bcampus(?:es)?\b/i, 1],
+      // 5.23: "who operates in Dallas" matched nothing (the line above needs the noun).
+      [/\bwho\s+operates\b/i, 1.5],
       [/\bequinix|digital\s+realty|ntt|vantage|qts|cyrusone|switch|stack\b/i, 2],
       [/\bunder\s+construction\b/i, 2], [/\boperational\b/i, 1.5],
     ],
@@ -21898,7 +21908,11 @@ export function _planWorkflowConfidence(seq, d) {
 //         "should we build in Dallas") routes to market_outlook, and a market
 //         check's answer leads with `dcpi_verdict` (the named market's DCPI
 //         verdict + its Source line) as the first key.
-export const PLANNER_VERSION = '5.22';
+//  5.23 = SHORT POWER ASKS (Grok QA relay 2026-11-13, Gemini cold start):
+//         "Texas 50 MW power" (a MW figure beside "power", no other class
+//         word) routes to grid_headroom instead of the navigator, and
+//         "who operates in Dallas" routes to facility_search.
+export const PLANNER_VERSION = '5.23';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
