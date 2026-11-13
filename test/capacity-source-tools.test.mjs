@@ -1548,6 +1548,32 @@ describe('browse-path access block → next_steps', () => {
     expect(ok.ok, ok.issues).toBe(true);
   });
 
+  // Grok QA 2026-11-12: next_steps said sign in first while next_call named request_capacity_intro, which
+  // needs an identified caller. On a wall next_call is the first unlock step, and register_call names the
+  // identity steps it waits on.
+  it('a walled empty browse: next_call is the first unlock step, register_call waits on identity', async () => {
+    responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_SIGN_IN });
+    const anon = (await call(READ, { min_mw: 500 })).structuredContent;
+    expect(anon.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(anon.next_call && anon.next_call.tool).toBe('claim_free_key');
+    expect(anon.register_call.tool).toBe('request_capacity_intro');
+    expect(anon.register_call.arguments).toEqual({ capacity_mw: 500 });
+    expect(anon.register_call.requires_first).toEqual(['claim_free_key', 'bind_email']);
+    expect(anon.register_call.order[2]).toMatch(/^request_capacity_intro/);
+    expect((await accepts(READ, anon)).ok).toBe(true);
+    // Identified, terms not accepted: next call is accept_capacity_terms; the register call needs no
+    // identity step (it takes accept_terms=true itself), so it carries no requires_first.
+    responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_TERMS });
+    const keyed = (await call(READ, { min_mw: 500 })).structuredContent;
+    expect(keyed.next_call && keyed.next_call.tool).toBe('accept_capacity_terms');
+    expect(keyed.register_call.requires_first).toBeUndefined();
+    // Control: an ungated empty browse keeps the register call as its next call.
+    responder = () => json(200, LIST_UPCOMING_EMPTY);
+    const open = (await call(READ, { min_mw: 500 })).structuredContent;
+    expect(open.next_tool).toBeUndefined();
+    expect(open.register_call.requires_first).toBeUndefined();
+  });
+
   it('an empty gated browse leads with no match and the requirement option, then the sign-in steps', async () => {
     responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_SIGN_IN });
     const r = await call(READ, {});

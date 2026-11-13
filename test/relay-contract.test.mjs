@@ -429,3 +429,44 @@ describe('gate sections never name a pricing page, and never make unlock_more_da
     expect(code.match(/[Cc]all `?\\?`?unlock_more_data/g) || []).toEqual([]);
   });
 });
+
+// Grok QA 2026-11-12: an anonymous air-permits plan ran 3 of 4 steps (step 1 not_allowed) and its human
+// line said "hit DC Hub's free-tier limit on execute_plan", read as "the plan did not run". The plan's line
+// says how many lookups ran and how many came back as previews; every other tool keeps its line.
+describe('execute_plan relay line says the lookups ran (Grok QA 2026-11-12)', () => {
+  const plan = () => {
+    const sc = { _entity: 'plan_execution', ok: true, _upgrade: { tier: 'free', message: 'more on a paid plan' },
+      executed: [
+        { step: 1, tool: 'get_air_permit_context', status: 'not_allowed', ms: 0 },
+        { step: 2, tool: 'get_permitting_intel', status: 'executed', ms: 346 },
+        { step: 3, tool: 'get_gas_index', status: 'executed', depth: 'preview', ms: 815 },
+        { step: 4, tool: 'get_interconnection_queue', status: 'executed', depth: 'preview', ms: 1799 },
+      ] };
+    return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+  };
+  it('names 3 lookups and 2 previews, never a free-tier limit on execute_plan', async () => {
+    const out = await S._ctxALS.run(anon(), () => S._relayContractStep(plan(), 'execute_plan'));
+    const sc = out.structuredContent;
+    expectContract(out, 'execute_plan wall');
+    expect(sc.human_message).toMatch(/^Your AI assistant ran 3 DC Hub lookups for your question; 2 returned previews at your access level\. Open https:/);
+    expect(JSON.stringify(sc)).not.toMatch(/limit on execute_plan/);
+  });
+  it('a plan line without the envelope stays honest; other tools keep the wall line', () => {
+    expect(S._relayLead('execute_plan')).not.toMatch(/limit/);
+    expect(S._relayLead('get_gas_index')).toBe('Your AI assistant hit DC Hub’s free-tier limit on get_gas_index');
+    expect(S._relayLead('execute_plan', { executed: [{ status: 'executed' }] })).toBe('Your AI assistant ran 1 DC Hub lookup for your question');
+  });
+});
+
+describe('execute_plan marks a step that ran at preview depth (Grok QA 2026-11-12)', () => {
+  it('a tier preview or a relay-wall body is depth preview; a full answer is not', () => {
+    expect(S._execStepPreview({ rows: [1], _upgrade: { tier: 'free', message: 'more' } }, { tier: 'free' })).toBe(true);
+    expect(S._execStepPreview({ _gated: true }, { tier: 'free' })).toBe(true);
+    expect(S._execStepPreview({ rows: [1], completeness: { status: 'full', withheld: [] } }, { tier: 'free' })).toBe(false);
+    expect(S._execStepPreview(null, {})).toBe(false);
+  });
+  it('both step builders (first run and retry after the wave) stamp it', () => {
+    expect(SRC).toContain("...(out.ok && _execStepPreview(out.full, c) ? { depth: 'preview' } : {}),");
+    expect(SRC).toContain("...(out2.ok && _execStepPreview(out2.full, c) ? { depth: 'preview' } : {}),");
+  });
+});

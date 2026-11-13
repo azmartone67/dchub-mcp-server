@@ -29,7 +29,10 @@ describe('_boundaryPhrase', () => {
     const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
     const hits = code.match(/paid data boundary/g) || [];
     expect(hits.length).toBe(1);                                  // the helper's own return
-    expect(code).toMatch(/hit DC Hub’s ' \+ _boundaryPhrase\(toolName\)/);
-    expect((code.match(/hit DC Hub\\u2019s ' \+ _boundaryPhrase\(name\)/g) || []).length).toBe(2);
+    // Grok QA 2026-11-12: the wall line lives once in _relayLead (execute_plan has its own line there);
+    // the relay builder and both relay steps call it.
+    expect((code.match(/hit DC Hub\\u2019s ' \+ _boundaryPhrase\(tool\)/g) || []).length).toBe(1);
+    expect(code).toMatch(/message: _relayLead\(toolName\) \+/);
+    expect((code.match(/= _relayLead\(name, sc0\) \+ '\. Open '/g) || []).length).toBe(2);
   });
 });

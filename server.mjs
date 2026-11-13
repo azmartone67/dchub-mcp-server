@@ -797,6 +797,30 @@ export function _boundaryPhrase(tool) {
   return paid ? 'paid data boundary' : 'free-tier limit';
 }
 
+// Grok QA 2026-11-12: an anonymous air-permits plan ran 3 of its 4 steps and its human line said
+// "Your AI assistant hit DC Hub's free-tier limit on execute_plan", which reads as "the plan did not run".
+// execute_plan never hits a limit of its own: its steps run, some at preview depth (executed[].depth).
+// The plan's line says that, with the counts when the envelope is at hand. Every other tool keeps its line.
+export function _relayLead(tool, sc) {
+  if (tool !== 'execute_plan') {
+    return 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(tool) + (tool ? ' on ' + tool : '');
+  }
+  const ex = sc && Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : null;
+  if (!ex) return 'Your AI assistant ran DC Hub lookups for your question; some returned previews at your access level';
+  const ran = ex.filter((e) => e.status === 'executed' || e.status === 'gated_preview').length;
+  const prev = ex.filter((e) => e.status === 'gated_preview' || e.depth === 'preview').length;
+  return 'Your AI assistant ran ' + ran + ' DC Hub lookup' + (ran === 1 ? '' : 's') + ' for your question'
+    + (prev ? '; ' + prev + ' returned ' + (prev === 1 ? 'a preview' : 'previews') + ' at your access level' : '');
+}
+
+// A step that ran but came back at preview depth (a tier preview or a relay wall body).
+export function _execStepPreview(full, c) {
+  try {
+    if (!full || typeof full !== 'object' || Array.isArray(full)) return false;
+    return !!(_isTierPreview(full) || _isRelayWall(full, c || {}));
+  } catch (_) { return false; }
+}
+
 function buildHumanRelay(toolName, tier, sessionId, opts) {
   try {
     if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
@@ -840,9 +864,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     // action). Purely additive — `message` and `url` keep their exact meaning
     // and position for every existing consumer.
     const _relay = {
-      message: 'Your AI assistant hit DC Hub’s ' + _boundaryPhrase(toolName)
-        + (toolName ? ' on ' + toolName : '')
-        + '. Open this link to see what it found and how to unlock it:',
+      message: _relayLead(toolName) + '. Open this link to see what it found and how to unlock it:',
       url: _url,
       render: 'verbatim_link_required',
       markdown: _relayLinkLabel(undefined, toolName) + '(' + _url + ')',
@@ -8923,6 +8945,24 @@ export function _matchToolResult(r, args) {
 // zero line _listingLines already leads with), the person-approved register call for that market when
 // the answer is empty or thin, and the grid check for the place. null for an opened listing or a
 // body that is not a browse.
+// Grok QA 2026-11-12: a walled browse said next_steps = claim_free_key, bind_email, source_capacity while
+// next_call / next_ask named request_capacity_intro, which needs an identified caller. On a wall the next
+// call is the wall's first unlock step (next_tool, which lib/next-call.mjs follows first), and the register
+// call names the identity steps it waits on. Terms are not among them: request_capacity_intro takes
+// accept_terms=true itself, after the human agrees.
+const _LISTING_IDENTITY_STEPS = new Set(['claim_free_key', 'bind_email']);
+export function _listingGateOrder(tool, gate, fields) {
+  const steps = gate && Array.isArray(gate.next_steps) ? gate.next_steps.filter((s) => s !== tool) : [];
+  const out = { ...(fields || {}) };
+  if (steps.length) out.next_tool = steps[0];
+  const before = steps.filter((s) => _LISTING_IDENTITY_STEPS.has(s));
+  if (out.register_call && before.length) {
+    out.register_call = { ...out.register_call, requires_first: before,
+      order: [...before, 'request_capacity_intro (only after your human approves)'] };
+  }
+  return out;
+}
+
 export function _listingBrowseExtras(body, args) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || body.ok === false || !Array.isArray(body.items)) return null;
   if (body.listing && typeof body.listing === 'object') return null;
@@ -8978,7 +9018,7 @@ export function _listingsToolResult(tool, r, opts = {}) {
       const gate = _listingBrowseAccess(tool, body);
       // An empty search leads with that, not with the sign-in steps.
       if (gate && !body.items.length) gate.next_steps_note = LISTING_NO_MATCH_LINE + ' ' + gate.next_steps_note;
-      if (gate) return _listingResult({ ...body, ...gate, ...(x ? x.fields : {}) }, {}, withX(_listingLines(body)));
+      if (gate) return _listingResult({ ...body, ...gate, ..._listingGateOrder(tool, gate, x ? x.fields : {}) }, {}, withX(_listingLines(body)));
     }
     return _listingResult(body ? { ...body, ...(x ? x.fields : {}) } : { raw: String(r.text || '').slice(0, 2000) }, {}, withX(_listingLines(body)));
   }
@@ -27610,8 +27650,7 @@ export async function _cleanPlatformWallLineStep(result, name) {
     if (!relay) return result;   // no signing secret: nothing to hand a person
     const link = SHORT_LINK_RE.test(relay) ? relay : await _shortRelayPageLink(relay, name);
     const swap = (t) => String(t).split(relay).join(link);
-    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
-      + '. Open ' + link + ' to see what it found and how to unlock it.';
+    const fallbackLine = _relayLead(name, sc0) + '. Open ' + link + ' to see what it found and how to unlock it.';
     let line;
     if (um && um.includes(relay)) line = swap(um);
     else if (um) line = um.replace(/\s*$/, '') + ' ' + link;
@@ -27712,8 +27751,7 @@ export function _relayContractStep(result, name) {
       url = (r && r.url) || '';
     }
     if (!url) return result;   // no signing secret: nothing to relay, leave the response as it was
-    const relayLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
-      + '. Open ' + url + ' to see what it found and how to unlock it.';
+    const relayLine = _relayLead(name, sc0) + '. Open ' + url + ' to see what it found and how to unlock it.';
     // Keyless: r-one-checkout-url already says the relay is the ONE human link and /go/c gives
     // way everywhere in the wall.
     const _proShape = (typeof sc0.required_plan === 'string' && /^pro$/i.test(sc0.required_plan)) || PRO_ONLY_TOOLS.has(name);
@@ -29617,6 +29655,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
+                            ...(out.ok && _execStepPreview(out.full, c) ? { depth: 'preview' } : {}),
                             ms: out.ms, result: out.result };
             executed.push(entry);
             if (out.full) fullByEntry.set(entry, out.full);
@@ -29692,6 +29731,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                            status: out2.ok ? 'executed'
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),
+                           ...(out2.ok && _execStepPreview(out2.full, c) ? { depth: 'preview' } : {}),
                            retried_after_wave: true, ms: out2.ms, result: out2.result };
           executed.push(entry2);
           // The retry path pushes a SECOND time with the same shape. Covering
