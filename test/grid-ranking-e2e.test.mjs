@@ -51,7 +51,7 @@ describe('execute_plan: US grid headroom, anonymous (real server.mjs on loopback
       { 'user-agent': 'test-client', 'x-dc-client-ip': CALLER_IP });
     const o = r.msg.result.structuredContent || JSON.parse(r.msg.result.content[0].text);
     expect(o.intent_class).toBe('grid_headroom');
-    expect(o.planner_version).toBe('5.23');
+    expect(o.planner_version).toBe('5.24');
     expect(o.executed.map((e) => e.tool)).toEqual(['get_grid_scoreboard', 'get_grid_intelligence', 'get_interconnection_queue']);
 
     // Every plan step was counted against the caller, none against the loopback.
