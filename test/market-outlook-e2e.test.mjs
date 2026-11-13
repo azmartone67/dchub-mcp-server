@@ -45,7 +45,7 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     const o = await plan('What is the data center power outlook for San Antonio?');
     expect(o && o._entity).toBe('plan_execution');
     expect(o.intent_class).toBe('market_outlook');
-    expect(o.planner_version).toBe('5.22');
+    expect(o.planner_version).toBe('5.23');
     const ran = o.executed.map((e) => e.tool);
     expect(ran).not.toContain('get_dchub_recommendation');
     expect(recommendHits()).toBe(before);
@@ -70,7 +70,7 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
   it('Phoenix (WECC): the Arizona power timeline runs beside DCPI and the brief', async () => {
     const o = await plan('What is the power and interconnection outlook for data centers in Phoenix?');
     expect(o.intent_class).toBe('market_outlook');
-    expect(o.planner_version).toBe('5.22');
+    expect(o.planner_version).toBe('5.23');
     const ran = o.executed.map((e) => e.tool);
     expect(ran).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_power_availability_timeline']);
     const tl = o.executed.find((e) => e.tool === 'get_power_availability_timeline');
