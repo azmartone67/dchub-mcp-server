@@ -97,7 +97,8 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     expect(S._INSTRUCTIONS).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
     expect(instr).not.toContain('curated subset');
     // Capacity handoff item 5 (owner 2026-11-11): /mcp alone adds the buy/RFP clause after the routing sentence.
-    expect(instr).toBe(S._withCapacityIntroClause(S._INSTRUCTIONS_LEAN));
+    // Front desk item 4 (owner 2026-11-13): and the welcome after its lead.
+    expect(instr).toBe(S._withWelcome(S._withCapacityIntroClause(S._INSTRUCTIONS_LEAN)));
     expect(instr).not.toBe(S._INSTRUCTIONS_LEAN);
   });
 
