@@ -1,4 +1,3 @@
-<!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
 **[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
@@ -7,7 +6,7 @@ DC Hub returns live data on data center (datacenter) markets, site selection, th
 
 To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
-DC Hub (dchub.cloud) is a live data layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
+DC Hub (dchub.cloud) is the orchestration layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
 MCP server: https://dchub.cloud/mcp  
 Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
@@ -38,7 +37,7 @@ Published counts change over time; `/api/v1/canon/phrases` serves the current va
 
 - `as_of` is the data date. When several sources feed one answer, it is the oldest of their timestamps, since an answer is no fresher than its stalest input. When a response carries only per-record dates, or no source timestamp at all, `as_of` is `null` and `as_of_basis` states why.
 - `retrieved_at` is when DC Hub served the response, not when the data was collected.
-- `cite_as` is a ready citation line. It names DC Hub and dchub.cloud, adds the `as_of` date when one is known, and marks a tier-gated preview as `PARTIAL`.
+- `cite_as` is a ready citation line. It names DC Hub and dchub.cloud, adds the `as_of` date when one is known, and marks a gated preview as `PARTIAL`.
 
 **Citation format.** A short attribution block for text that quotes DC Hub data. [`/llms.txt`](https://dchub.cloud/llms.txt) gives a longer form that adds the `as_of` date and the licence terms of each data layer.
 
@@ -162,7 +161,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 | `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
 | `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
 
-**Core profile for multi-server hosts:** `https://dchub.cloud/mcp/core` lists 10 task-shaped, read-only tools (`plan_and_answer`, `find_sites`, `evaluate_site`, `compare_sites`, `market_snapshot`, `rank_markets`, `grid_power`, `fiber_connectivity`, `facility_lookup`, `get_evidence`) composed from the same handlers, so its `tools/list` is about 17 KB against about 211 KB for the full catalog at `/mcp` (measured 2026-11-09). It suits hosts that load DC Hub beside other MCP servers, where context is tight; same key, tiers and gates. It is an alternate, not the default: `/mcp` stays the canonical endpoint. Details: [docs/core-profile.md](docs/core-profile.md).
+**Core profile for multi-server hosts:** `https://dchub.cloud/mcp/core` lists 10 task-shaped, read-only tools (`plan_and_answer`, `find_sites`, `evaluate_site`, `compare_sites`, `market_snapshot`, `rank_markets`, `grid_power`, `fiber_connectivity`, `facility_lookup`, `get_evidence`) composed from the same handlers, so its `tools/list` is about 17 KB against about 211 KB for the full catalog at `/mcp` (measured 2026-11-09). It suits hosts that load DC Hub beside other MCP servers, where context is tight; same key and gates. It is an alternate, not the default: `/mcp` stays the canonical endpoint. Details: [docs/core-profile.md](docs/core-profile.md).
 
 ## What DC Hub adds
 
@@ -232,8 +231,8 @@ Use DC Hub when the question needs live data-center or energy context — Data C
 
 Hosted Copilot / M365 connector packages are submitted through Partner Center (separate from this README). For any MCP-capable Copilot surface that accepts a remote server, use:
 
-- Core endpoint: `https://dchub.cloud/mcp/core` (soft defaults for empty-arg test panes)
 - Full catalog: `https://dchub.cloud/mcp`
+- Optional core profile for empty-arg test panes: `https://dchub.cloud/mcp/core` (an alternate, not the default)
 
 Positioning: data-center and energy intelligence — DCPI, grid, interconnection, facilities — cited and read-only. Do not treat this README as a Partner Center resubmit instruction.
 
@@ -271,7 +270,7 @@ DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — sear
 
 Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp/github`
 
-> **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the free Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
+> **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the public Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
 
 ### Antigravity
 
