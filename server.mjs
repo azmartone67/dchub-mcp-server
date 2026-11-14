@@ -19716,6 +19716,58 @@ export const _DISCOVERY_EXEMPT = {
 // route rather than be passed to a tool as an unrecognized region filter —
 // silently returning zero rows is a worse failure than answering nationally
 // and saying so. Pure, never throws.
+// 5.25: "Abilene, TX" / "Abilene TX" -> 'TX' (see _planSignals stateFromPlace). One distinct code
+// only: two different codes after place names ("Abilene TX vs Reno NV") bind nothing.
+const _PLAN_STATE_WORD_CODES = new Set(['OR', 'IN', 'ME', 'HI', 'OK']);
+export function _planStateAfterPlace(text) {
+  const t = String(text || '');
+  const found = new Set();
+  for (const m of t.matchAll(/\b[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*(,?)\s+([A-Z]{2})(?=$|[\s.,;:!?)])/g)) {
+    const code = m[2];
+    if (!_PLAN_STATE_CODES.has(code)) continue;
+    if (!m[1] && _PLAN_STATE_WORD_CODES.has(code)) continue;
+    found.add(code);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+// 5.25: the US state a constraint lead or the air-permit step should read. The text's own state
+// first, then the state of the one DCPI market the text bound ("Abilene TX" -> abilene, TX), then
+// the city table's slug suffix (_planStateScope). Was d.state || d.stateFromPlace only, so
+// "Abilene TX ... behind-the-meter gas" planned get_gas_index with a '<2-letter US state>'
+// placeholder and the step was skipped_unresolved (live 2026-11-13, planner 5.24).
+export function _planLeadState(d) {
+  if (!d || typeof d !== 'object') return null;
+  const direct = d.state || d.stateFromPlace;
+  if (direct) return String(direct).toUpperCase();
+  const fromMarket = _planUsMarketState(d.__outlook);
+  if (fromMarket) return fromMarket;
+  return _planStateScope(d);
+}
+// 5.25: a bound market's state is a US state only when the market is on a US grid. The index stores
+// a non-US market's country in the same field, and five collide with US codes (live 2026-11-13,
+// planner 5.24: "power outlook for Frankfurt" planned get_power_availability_timeline state=DE,
+// Delaware; Mumbai state=IN, Indiana; also ID Indonesia, CO Colombia, WA Perth). A US label not
+// listed here yields no state, which is the safe side.
+const _PLAN_US_GRID_LABELS = new Set(['ERCOT', 'PJM', 'NYISO', 'WECC', 'SOCO', 'MISO', 'AK', 'ISONE', 'ISO-NE',
+  'SERC', 'FRCC', 'TVA', 'CAISO', 'HECO', 'SPP', 'BPA']);
+export function _planUsMarketState(o) {
+  if (!o || typeof o.state !== 'string') return null;
+  const st = o.state.toUpperCase();
+  if (!_PLAN_STATE_CODES.has(st)) return null;
+  if (o.rto) return st;   // a US RTO
+  return _PLAN_US_GRID_LABELS.has(String(o.iso || '').toUpperCase()) ? st : null;
+}
+// 5.25: where get_air_permit_context reads, the same for the air_permits class and the
+// air-permit constraint lead: the point the text gave (or a corridor centroid), else the DCPI
+// market the text bound (`site` resolves through that published row; abilene, midland-tx), else
+// placeholders. The constraint lead used to take coordinates only, so a plan whose class was not
+// air_permits ran it with '<site lat>' even when the market was bound.
+export function _planAirPermitWhere(d) {
+  const mk = (d && d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug) ? d.__outlook : null;
+  if (d && d.coords) return { lat: d.coords.lat, lon: d.coords.lon, ...(d.radiusKm ? { radius_km: d.radiusKm } : {}) };
+  if (mk) return { site: mk.slug };
+  return { lat: '<site lat>', lon: '<site lon>' };
+}
 export function _planStateScope(d) {
   const st = d && (d.state || d.stateFromPlace);
   const up = st ? String(st).toUpperCase() : null;
@@ -20060,11 +20112,12 @@ export const _PLAN_CLASSES = [
         // retirements, queue context, the iso_context naming the serving grid). RTO markets keep the
         // grid step above and are unchanged; a place bound only from the city table has no state
         // and gets no step. Kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0.
-        (!(iso && _EXEC_RTOS.has(iso)) && o && o.state && _PLAN_STATE_CODES.has(String(o.state))   // US states only: a non-US market's 'state' is a country code
+        // 5.25: US states only, by the market's grid too (_planUsMarketState): Frankfurt's 'DE' is Germany.
+        (!(iso && _EXEC_RTOS.has(iso)) && _planUsMarketState(o)
           && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_OUTLOOK_STATE_TIMELINE || '')))
           ? { step: 3, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
-              why: `The market sits on no US RTO that has its own grid read, so the power side is read for its state, ${o.state}: dated new capacity by confidence class, scheduled retirements, queue context and the grid that serves it. State-level context: it does not score the market.`,
-              args_hint: { state: o.state } } : null,
+              why: `The market sits on no US RTO that has its own grid read, so the power side is read for its state, ${_planUsMarketState(o)}: dated new capacity by confidence class, scheduled retirements, queue context and the grid that serves it. State-level context: it does not score the market.`,
+              args_hint: { state: _planUsMarketState(o) } } : null,
       ];
     },
     alternatives: [
@@ -20246,12 +20299,10 @@ export const _PLAN_CLASSES = [
       // The DCPI market the text named (5.17's binder): `site` resolves through
       // that same published row, so only a DCPI slug is passed, never the
       // city-table slug (abilene-tx is not a DCPI slug; abilene is).
-      const mk = (d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug) ? d.__outlook : null;
-      const slug = mk ? mk.slug : null;
-      const where = d.coords
-        ? { lat: d.coords.lat, lon: d.coords.lon, ...(d.radiusKm ? { radius_km: d.radiusKm } : {}) }
-        : slug ? { site: slug } : { lat: '<site lat>', lon: '<site lon>' };
-      const st = d.state || d.stateFromPlace || (mk && mk.state) || null;
+      // 5.25: one rule for this step and the air-permit constraint lead (_planAirPermitWhere), and
+      // the state from _planLeadState (text, then the bound market, then the city table).
+      const where = _planAirPermitWhere(d);
+      const st = _planLeadState(d);
       return [
         { step: 1, tool: 'get_air_permit_context', depends_on: [], estimated_calls: 1,
           why: 'EPA Green Book designations for the county the site is in (US-wide) plus TCEQ-listed gas-turbine air permits of 20 MW or more within the radius (Texas only), each dated and cited.',
@@ -21626,6 +21677,10 @@ export function _planSignals(intent, context) {
     for (const m of text.matchAll(/\b(?:in|for)\s+([A-Z]{2})(?![A-Za-z])/g)) {
       if (_PLAN_STATE_CODES.has(m[1])) code = m[1];
     }
+    // 5.25 (Grok QA 2026-11-13, Abilene): a code written after a place name, "Abilene, TX" or
+    // "Abilene TX", is the same evidence as "in TX". The comma form takes any code; the bare form
+    // skips the five codes that are also English words (OR, IN, ME, HI, OK) so "gas OR Power" is not Oregon.
+    if (!code) code = _planStateAfterPlace(text);
     return code || (corridor && corridor.state) || null;
   })();
   const candidateId = (typeof c.candidate_id === 'string' && c.candidate_id.trim())
@@ -21916,7 +21971,15 @@ export function _planWorkflowConfidence(seq, d) {
 //         get_power_availability_timeline names its grid in iso_context and
 //         its feeds in sources.<lane>.feed; power_evidence now reads both, so
 //         answer_guide no longer calls that step "UNDATED".
-export const PLANNER_VERSION = '5.24';
+//  5.25 = NAMED PLACES + ALTERNATIVES + WHAT WAS DROPPED (Grok QA 2026-11-13, v2.12.48):
+//         the air-permit constraint lead reads the bound DCPI market (site=<slug>) like the
+//         air_permits class; "Abilene, TX" / "Abilene TX" give the state; constraint leads take
+//         the bound market's US state (a non-US market's country code is never read as a US
+//         state: Frankfurt DE, Mumbai IN); a DCPI / time-to-power ask gets a step that reads one;
+//         an ask for alternatives gets a site_selection_canvas step (region=us, size, deadline);
+//         answer_guide names every filter a step did not apply, with the step's own reason
+//         (DROPPED —), and a one-ISO state queue read says the rest of the state is not in it.
+export const PLANNER_VERSION = '5.25';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22197,6 +22260,91 @@ export function _planDcpiLead(ia) {
 // _CITY_ISO_META declares by reliability region (see its 'atlanta' and
 // 'nashville' notes). Read by the answer guide's ISO check only.
 const _EXEC_BA_REGION = { SOCO: 'SERC', TVA: 'SERC' };
+// 5.25 (Grok QA 2026-11-13, /mcp/chatgpt Reno 200 MW): a step that did not apply what the question
+// asked said so only inside its own result (get_retirement_headroom `_ignored_params.target_mw`: "a MW
+// threshold is a paid filter; this preview uses the default 50"; get_refined_queue
+// `filters_applied._min_mw_not_applied`), and the queue step for a state read one ISO's file without
+// saying the rest of that state is not in any queue DC Hub reads. An agent composing from
+// answer_guide never saw any of it. This lists each drop with the step's OWN reason, and
+// answer_guide names them. Reporting only: what a tier opens is unchanged.
+const _DROP_REASON_MAX = 200;
+function _dropReason(v) {
+  if (typeof v !== 'string' || !v.trim()) return null;
+  // The backend's own sentence often restates "<param>=<v> was asked and NOT applied:"; the list says that.
+  const s = v.replace(/\s+/g, ' ').trim().replace(/^[a-z0-9_]+(?:=\S+)? was (?:asked and )?NOT applied:\s*/i, '');
+  return s.length > _DROP_REASON_MAX ? s.slice(0, _DROP_REASON_MAX - 1) + '…' : s;
+}
+export function _execDroppedFilters(executed, fullByEntry) {
+  const out = [];
+  const seen = new Set();
+  const add = (e, param, reason, kind) => {
+    const k = `${e.step}|${e.tool}|${param}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const asked = e.args && e.args[param] != null && typeof e.args[param] !== 'object' ? e.args[param] : null;
+    out.push({ step: e.step, tool: e.tool, param, ...(asked != null ? { asked } : {}), kind, reason });
+  };
+  try {
+    for (const e of (Array.isArray(executed) ? executed : [])) {
+      if (!e || !e.tool || !(e.status === 'executed' || e.status === 'gated_preview')) continue;
+      const r = (fullByEntry && fullByEntry.get && fullByEntry.get(e)) || e.result;
+      if (!r || typeof r !== 'object') continue;
+      const ign = r._ignored_params;
+      if (ign && typeof ign === 'object' && !Array.isArray(ign)) {
+        for (const [p, why] of Object.entries(ign)) {
+          const reason = _dropReason(why);
+          if (reason) add(e, p, reason, 'not_applied');
+        }
+      }
+      const fa = r.filters_applied;
+      if (fa && typeof fa === 'object') {
+        for (const [k, why] of Object.entries(fa)) {
+          const m = /^_([a-z0-9_]+)_not_applied$/.exec(k);
+          if (!m) continue;
+          const reason = _dropReason(why);
+          if (reason) add(e, m[1], reason, 'not_applied');
+        }
+      }
+      // site_selection_canvas / rank_sites argument disposition: {<param>: {applied:false, reason, status}}.
+      // (The timeline tool's list-of-strings shape names no parameter, so it is not read here.)
+      const cc = r.constraint_coverage;
+      if (cc && typeof cc === 'object' && !Array.isArray(cc)) {
+        for (const [p, v] of Object.entries(cc)) {
+          if (!v || typeof v !== 'object' || v.applied !== false) continue;
+          if (!e.args || e.args[p] == null) continue;   // only what this step was asked to apply
+          const reason = _dropReason(v.reason);
+          if (reason) add(e, p, reason, v.status === 'locked' ? 'locked' : 'not_applied');
+        }
+      }
+      if (Array.isArray(r.unapplied_constraints)) {
+        for (const p of r.unapplied_constraints) {
+          if (typeof p !== 'string' || !p) continue;
+          add(e, p, _dropReason(r.unapplied_constraints_warning) || _dropReason(r.note)
+            || 'the layer this filter needs did not answer, so the rows are not cut by it', 'not_applied');
+        }
+      }
+      // A state-filtered queue read that came back from ONE ISO's file: the state's projects in any other
+      // queue (a utility outside the ISOs DC Hub reads, e.g. NV Energy outside CAISO) are not in it.
+      if (e.tool === 'get_refined_queue' && e.args && e.args.state && !e.args.iso
+          && r.freshness_by_iso && typeof r.freshness_by_iso === 'object') {
+        const isos = Object.keys(r.freshness_by_iso);
+        if (isos.length === 1) {
+          add(e, 'state', `queue rows for ${String(e.args.state).toUpperCase()} come only from ${isos[0]}'s queue; `
+            + `projects in a queue DC Hub does not read (a utility outside the ISOs it covers) are not in this answer`, 'coverage');
+        }
+      }
+    }
+  } catch (_e) { /* reporting never breaks the answer */ }
+  return out;
+}
+export function _execDroppedSentence(items) {
+  if (!Array.isArray(items) || !items.length) return '';
+  return 'DROPPED — ' + items.map((x) => `step ${x.step} ${x.tool}: `
+    + (x.kind === 'coverage' ? x.reason
+      : `${x.param}${x.asked != null ? '=' + x.asked : ''} was not applied (${x.reason})`)).join('; ')
+    + '. Say this plainly in the answer: those results are not cut to what was asked.';
+}
+
 export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
@@ -22519,24 +22667,23 @@ const _CONSTRAINT_NOUNS = [
   { key: 'tax',          re: /\b(tax|incentive|abatement)\b/i,
     tools: ['get_tax_incentives'],
     lead: (d) => ({ tool: 'get_tax_incentives',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   // 2026-11-11: "gas turbine(s)" is equipment, not a gas-price noun; in an
   // air-permit question it is covered by the air-permit read, not get_gas_index.
   { key: 'gas',          re: /\b(gas(?!\s+turbines?\b)|lng|pipeline gas|behind.the.meter|btm)\b/i,
     tools: ['get_gas_index', 'get_gas_economics', 'get_gas_intelligence'],
     lead: (d) => ({ tool: 'get_gas_index',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   // 2026-11-11: an AIR permit / nonattainment noun is covered by the air-permit
   // read; a bare "permit" is covered by either permitting tool.
   { key: 'air_permits',  re: /\b(air[-\s]?permits?|nonattainment|non-attainment)\b/i,
     tools: ['get_air_permit_context'],
-    lead: (d) => ({ tool: 'get_air_permit_context', args_hint: d.coords
-      ? { lat: d.coords.lat, lon: d.coords.lon }
-      : { lat: '<site lat>', lon: '<site lon>' } }) },
+    // 5.25: the same place rule as the air_permits class (a bound DCPI market reads as site=<slug>).
+    lead: (d) => ({ tool: 'get_air_permit_context', args_hint: _planAirPermitWhere(d) }) },
   { key: 'permitting',   re: /\b(permit|permitting|moratorium|zoning)\b/i,
     tools: ['get_permitting_intel', 'get_air_permit_context'],
     lead: (d) => ({ tool: 'get_permitting_intel',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   { key: 'climate',      re: /\b(climate|heat|temperature)\b/i,
     tools: ['get_climate_intel'],
     lead: (d) => ({ tool: 'get_climate_intel', args_hint: d.coords
@@ -22552,7 +22699,7 @@ const _CONSTRAINT_NOUNS = [
     tools: ['get_renewable_energy'],
     lead: (d) => ({ tool: 'get_renewable_energy', args_hint: d.coords
       ? { lat: d.coords.lat, lon: d.coords.lon }
-      : { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      : { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   { key: 'queue',        re: /\b(queue|interconnect|interconnection)\b/i,
     tools: ['get_interconnection_queue', 'get_refined_queue'],
     // No ISO placeholder: _EXEC_ISO_ARG injects the plan's constraint ISO into
@@ -22562,6 +22709,24 @@ const _CONSTRAINT_NOUNS = [
   { key: 'deals',        re: /\b(m&a|acquisition|acquire|deal flow|transaction)\b/i,
     tools: ['list_transactions', 'hyperscaler_deals', 'deal_autopsy'],
     lead: () => ({ tool: 'list_transactions', args_hint: { limit: 10 } }) },
+  // 5.25 (Grok QA 2026-11-13): "...air permit constraints, and what is the DCPI and time to power?" for
+  // Abilene ran the air-permit, permitting and gas steps and nothing that reads a verdict or a time to
+  // power. Covered by any tool that returns one; the lead reads the DCPI card of the market the text
+  // bound (verdict + time-to-power band), else the state's power timeline, else nothing (H4 names it).
+  // Last in the table, so it never takes a lead slot from the rows above. `plannedOnly`: a runner-up
+  // class that merely WEIGHED a verdict tool does not count as covering it (the Abilene plan's runner-up
+  // led with one, so the ask was "considered" and never run).
+  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b/i,
+    tools: ['get_market_dcpi_rank', 'get_power_availability_timeline', 'site_selection_canvas', 'rank_markets',
+      'ai_capacity_index', 'grid_transition_radar', 'get_grid_intelligence', 'get_market_context',
+      'get_iso_context', 'compare_isos', 'deal_autopsy', 'get_dchub_recommendation', 'simulate_scenario',
+      'predict_market_trajectory', 'analyze_site', 'get_composite_site_score', 'find_sites'],
+    lead: (d) => {
+      const o = d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug ? d.__outlook : null;
+      if (o) return { tool: 'get_market_dcpi_rank', args_hint: { market_slug: o.slug } };
+      const st = _planLeadState(d);
+      return st ? { tool: 'get_power_availability_timeline', args_hint: { state: st } } : null;
+    } },
 ];
 
 /**
@@ -22748,22 +22913,61 @@ export function _capacityRegisterOffer(executed, fullOf) {
  * Pure. Never throws — routing degrades to today's behaviour rather than
  * failing the user's question.
  */
-export function _constraintLeadSteps(text, d, considered) {
+// 5.25 (Grok QA 2026-11-13, /mcp/chatgpt): "I need 200 MW in Reno within 24 months. Can I get power
+// there in time, and what are faster alternatives?" planned retirement headroom, the NV queue and Reno's
+// DCPI card, all about Reno, and nothing that names another place. A question that asks for
+// alternatives gets one site_selection_canvas step: US markets ranked by DCPI verdict, headroom and time
+// to power, cut to the size and the deadline the text gave. region=us on purpose: the plan's state would
+// otherwise be injected (_execInjectGeo) and the alternatives would be Reno's own state again.
+// Not added when the plan already ranks or lists places, or for a facility look-alike question
+// (find_alternatives covers "alternatives to <facility>").
+const _ALTERNATIVES_RE = /\b(?:alternatives?|faster\s+(?:options?|markets?|sites?|places?|locations?|routes?)|other\s+(?:markets?|sites?|locations?|places?|options?)|elsewhere|somewhere\s+else)\b/i;
+const _ALTERNATIVES_COVERED = ['site_selection_canvas', 'find_sites', 'find_alternatives', 'rank_markets', 'ai_capacity_index',
+  'grid_transition_radar', 'rank_sites', 'compare_isos', 'get_dchub_recommendation'];
+export function _planDeadlineMonths(text) {
+  const t = String(text || '');
+  const m = t.match(/\b(?:within|in|under|less\s+than|inside(?:\s+of)?|by)\s+(\d{1,3})\s*(months?|mos?|years?|yrs?)\b/i);
+  if (!m) return null;
+  const n = Number(m[1]) * (/^y/i.test(m[2]) ? 12 : 1);
+  return Number.isInteger(n) && n >= 1 && n <= 120 ? n : null;
+}
+export function _alternativesStep(text, d, considered) {
+  try {
+    const t = String(text || '');
+    if (!_ALTERNATIVES_RE.test(t)) return null;
+    const seen = new Set(Array.isArray(considered) ? considered : []);
+    if (_ALTERNATIVES_COVERED.some((tool) => seen.has(tool))) return null;
+    const sig = (d && typeof d === 'object') ? d : {};
+    const months = _planDeadlineMonths(t);
+    const mw = (typeof sig.mw === 'number' && Number.isFinite(sig.mw) && sig.mw >= 1) ? Math.min(5000, Math.round(sig.mw)) : null;
+    return { tool: 'site_selection_canvas', estimated_calls: 1, depends_on: [], constraint: 'alternatives',
+      why: 'The intent asked for alternatives to the place it named. US markets ranked by DCPI verdict, '
+        + 'excess-power headroom and time to power'
+        + (mw ? `, for ${mw} MW` : '') + (months ? `, within ${months} months` : '')
+        + ': the places to compare against the named one.',
+      args_hint: { region: 'us', ...(mw ? { capacity_mw: mw } : {}), ...(months ? { max_months: months } : {}) } };
+  } catch (_e) { return null; }
+}
+
+export function _constraintLeadSteps(text, d, considered, planned) {
   const out = [];
   try {
     const t = String(text || '');
     if (!t) return out;
     const seen = new Set(Array.isArray(considered) ? considered : []);
+    // 5.25: the tools the plan RUNS (no runner-up), for rows marked plannedOnly; the steps this
+    // function appends join it, so one lead never repeats another's tool.
+    const inPlan = new Set(Array.isArray(planned) ? planned : (Array.isArray(considered) ? considered : []));
     const sig = (d && typeof d === 'object') ? d : {};
     for (const n of _CONSTRAINT_NOUNS) {
       if (out.length >= _CONSTRAINT_LEAD_CAP) break;
       if (!n.re.test(t)) continue;
-      if (n.tools.some((tool) => seen.has(tool))) continue;   // covered or weighed
+      if (n.tools.some((tool) => (n.plannedOnly ? inPlan : seen).has(tool))) continue;   // covered or weighed
       if (typeof n.lead !== 'function') continue;
       let step = null;
       try { step = n.lead(sig); } catch (_e) { step = null; }
-      if (!step || !step.tool || seen.has(step.tool)) continue;
-      seen.add(step.tool);
+      if (!step || !step.tool || seen.has(step.tool) || inPlan.has(step.tool)) continue;
+      seen.add(step.tool); inPlan.add(step.tool);
       out.push({ tool: step.tool, args_hint: step.args_hint || {}, estimated_calls: 1,
         constraint: n.key,
         why: `The intent NAMED "${n.key}" and no step in the routed plan covers it. `
@@ -23079,6 +23283,11 @@ export function _planQuery(intent, context) {
     const ls = top.cls.id === 'capacity_search' ? _landSiteStep(text, { ...d, state: _execIntentState(text, d) || d.state }, seq.map((x) => x.tool)) : null;
     if (ls) seq.push({ ...ls, step: seq.length + 1 });
   } catch (_e) { /* routing must never throw */ }
+  // 5.25: an intent that asks for alternatives gets the shortlist of other places (_alternativesStep).
+  try {
+    const alt = _alternativesStep(text, d, seq.map((x) => x.tool));
+    if (alt) seq.push({ ...alt, step: seq.length + 1 });
+  } catch (_e) { /* routing must never throw */ }
   // ★★★2026-08-19 [margin<1 => run both classes]. The router ALREADY detects a
   //  two-class question: when the top two scores are within 1 point it docks
   //  intent_confidence by 0.1 to say so (below). It then ran ONE class and
@@ -23121,7 +23330,7 @@ export function _planQuery(intent, context) {
         if (ru && ru.tool) consideredTools.push(ru.tool);
       } catch (_e) { /* an unbuildable runner-up simply is not considered */ }
     }
-    for (const cs of _constraintLeadSteps(text, d, consideredTools)) {
+    for (const cs of _constraintLeadSteps(text, d, consideredTools, seq.map((x) => x.tool))) {
       seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
     }
   } catch (_e) { /* routing must never throw */ }
@@ -29933,6 +30142,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         (_gridRank && _gridRank.evidence) ? new Map([[_gridRank.evidence.entry, _gridRank.evidence]]) : null);
       // 11-09: the lead names undated steps, then live-export queue steps labelled collected.
       const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
+      // 5.25: what a step did not apply, with its own reason (_execDroppedFilters); named after UNDATED.
+      const _dropped = _execDroppedFilters(executed, fullByEntry);
+      const _droppedLine = _execDroppedSentence(_dropped);
+      const _notes = [_undated, _droppedLine].filter(Boolean).join(' ');   // UNDATED, then DROPPED
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
@@ -29990,7 +30203,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // surface; the structured field follows the answer-block gate below.
         // 5.17: an undated power step is named next, and its verdict is not led with.
         answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
-          + (_undated ? _undated + ' ' : '') + _gridLead
+          + (_notes ? _notes + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
           + (_capReg ? ' ' + _capReg.sentence : '')
@@ -29998,6 +30211,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
+        ...((_dropped.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { dropped_filters: _dropped } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         ...(_ho ? { handoff: _ho.field } : {}),

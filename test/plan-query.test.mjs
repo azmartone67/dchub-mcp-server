@@ -92,7 +92,7 @@ describe('plan_query router (pure)', () => {
     // schema_version stays 1. Exactly the split this assertion exists to prove.
     // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
     // 5.17: market_outlook binds every tracked DCPI market (owner priority 1, 2026-11-08).
-    expect(r.planner_version).toBe('5.24');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.25');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
