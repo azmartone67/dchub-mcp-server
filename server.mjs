@@ -128,7 +128,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
-import { leanResponseStep } from './lib/lean-response.mjs';
+import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
+import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
@@ -24090,6 +24091,9 @@ function _sourceLineCb(name, fn) {
       _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
       _final = _previewFooterStep(_final, name, c);
+      // Item 5 (Grok live review 2026-11-13): data rows ahead of the relay / upsell keys, and a 30 KB budget per
+      // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
+      _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name) });
       return _final;
     } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };
