@@ -85,7 +85,7 @@ describe('check mode fails when a file differs from the render (must-fail contro
     });
   });
   it('server.json description edited', () => {
-    mutate('server.json', (s) => s.replace('Orchestration layer for the Data Center Power Index (DCPI).', 'Orchestration layer for the Data Center Power Index (DCPI)!'), () => {
+    mutate('server.json', (s) => s.replace('Orchestration layer for data center and energy intelligence.', 'Orchestration layer for data center and energy intelligence!'), () => {
       const { ok, out } = run();
       expect(ok).toBe(false);
       expect(out).toMatch(/server\.json description differs from the render/);

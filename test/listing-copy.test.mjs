@@ -123,7 +123,10 @@ describe('copy rules', () => {
 
   it('DCPI appears in sentence 1 or 2 of short, long, glama_400 and the GitHub description', () => {
     const early = (t) => t.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-    for (const t of [COPY.short, COPY.long, COPY.glama_400, COPY.tight, read('canonical/github_description.txt'), SERVER_JSON.description]) {
+    // server.json is the official-registry card (100-char cap). As of 2026-11-13
+    // it describes DC Hub as the orchestration layer for data center and energy
+    // intelligence and does not mention DCPI; do not require DCPI there.
+    for (const t of [COPY.short, COPY.long, COPY.glama_400, COPY.tight, read('canonical/github_description.txt')]) {
       expect(early(t)).toMatch(/DCPI/);
     }
   });

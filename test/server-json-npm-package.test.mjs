@@ -50,10 +50,9 @@ describe('server.json packages: the npm launcher', () => {
     expect(SJ.title).toBe('DC Hub');
     expect(SJ.title.length).toBeLessThanOrEqual(100);
     expect(SJ.description.length).toBeLessThanOrEqual(100);
-    expect(SJ.description).toMatch(/orchestration/i);
-    expect(SJ.description).toContain('execute_plan first');
-    expect(SJ.description).toContain('Data Center Power Index (DCPI)');
-    expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bplan\b|\bfree tier\b/i);
+    expect(SJ.description).toBe('Orchestration layer for data center and energy intelligence. Start with execute_plan.');
+    expect(SJ.description.length).toBe(85);
+    expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bfree tier\b/i);
   });
 });
 

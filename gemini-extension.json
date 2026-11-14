@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "2.12.51",
+  "version": "2.12.52",
   "description": "The orchestration layer for data center and energy intelligence. Live data center market, power, grid and fiber data for site selection. Data Center Power Index (DCPI) across 300+ markets.",
   "mcpServers": {
     "dchub": {

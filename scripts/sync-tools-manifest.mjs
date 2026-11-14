@@ -1205,13 +1205,15 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // GitHub MCP registry) show the description as the card text, so it then
   // led with the search terms and "query and cite".
   // 2026-11-13: owner approved replacing that official-registry card with the
-  // orchestration-layer wording (title "DC Hub"; description names the
-  // Data Center Power Index (DCPI) and "execute_plan first"), within the
-  // 100-character registry cap. The longer search-term title and the
-  // "query and cite" / "capacity to buy or lease" lead stay on surfaces
-  // that are not capped at 100 characters (mcp-server.json, smithery.yaml).
-  if (!/orchestration/i.test(sjDesc) || !/execute_plan first/.test(sjDesc) || !/Data Center Power Index \(DCPI\)/.test(sjDesc))
-    problems.push('server.json: description lost canonical positioning (must mention orchestration, "execute_plan first", and "Data Center Power Index (DCPI)")');
+  // orchestration-layer wording (title "DC Hub"), within the 100-character
+  // registry cap. DC Hub is the orchestration layer for data center and
+  // energy intelligence, not for the Data Center Power Index (DCPI). The
+  // approved official description is pinned exactly below. The longer
+  // search-term title and the "query and cite" / "capacity to buy or lease"
+  // lead stay on surfaces that are not capped at 100 characters
+  // (mcp-server.json, smithery.yaml).
+  if (sjDesc !== 'Orchestration layer for data center and energy intelligence. Start with execute_plan.')
+    problems.push('server.json: description lost canonical positioning (must be "Orchestration layer for data center and energy intelligence. Start with execute_plan.")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans
