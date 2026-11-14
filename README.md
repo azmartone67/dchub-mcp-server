@@ -1,12 +1,10 @@
 # DC Hub MCP Server
 
-DC Hub is the orchestration layer for data center and energy intelligence. Start with `execute_plan`: one question about grid power, electricity prices or interconnection queues returns one dated, cited answer.
+**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
-**[Data Center Power Index (DCPI)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
+DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers; limits are at [dchub.cloud/pricing](https://dchub.cloud/pricing). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
-DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. `DCHUB_API_KEY` is optional; previews need no key. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
-
-To start, [add the MCP server](https://dchub.cloud/connect). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
+To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
 DC Hub (dchub.cloud) is the orchestration layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
 MCP server: https://dchub.cloud/mcp  
@@ -52,9 +50,9 @@ https://dchub.cloud/connect
 
 ### Data reuse and agent authorization
 
-DCPI verdicts/composites for days from 2026-12-01 become CC-BY-4.0 after 30 days; earlier days, thresholds, methodology and monthly Rankings are CC-BY-4.0. Current values may be quoted with attribution for any number of markets in editorial work; bulk (full current list or a table of more than 25 markets in one piece) or recurring republication needs a DCPI licence. Sub-scores/detail are licensed separately. Facility/third-party layers retain upstream terms (OpenStreetMap: ODbL 1.0, attribution/share-alike). https://dchub.cloud/terms#dcpi-current-data · https://dchub.cloud/data-sources. Editorial work includes articles, reports, research notes, posts, presentations and AI answers. The editorial quote rule is separate from bulk/recurring redistribution rights. Attribution names DC Hub, the source link, method_version where provided and the data date. Sub-scores, risk/opportunity detail, narratives and forecasts are not CC-BY-4.0: eligible subscribers may use them internally and in client deliverables with attribution; republication or a third-party product/dataset requires a redistribution licence. DC Hub-derived grid analysis is open under its layer's terms, not a grant over raw system-operator readings. No blanket redistribution grant covers the facility inventory or unresolved upstream rights. Capacity Source teasers have their separate CC-BY-4.0 grant; opened details, matches and introductions remain confidential. Access limits remain separate from content licences. An API CC-BY label does not override the current-value terms.
+DCPI verdicts/composites for days from 2026-12-01 become CC-BY-4.0 after 30 days; earlier days, thresholds, methodology and monthly Rankings are CC-BY-4.0. Current values may be quoted with attribution for any number of markets in editorial work; bulk (full current list or a table of more than 25 markets in one piece) or recurring republication needs a DCPI licence. Sub-scores/detail are licensed separately. Facility/third-party layers retain upstream terms (OpenStreetMap: ODbL 1.0, attribution/share-alike). https://dchub.cloud/terms#dcpi-current-data · https://dchub.cloud/data-sources. Editorial work includes articles, reports, research notes, posts, presentations and AI answers. The editorial quote rule is separate from bulk/recurring redistribution rights. Attribution names DC Hub, the source link, method_version where provided and the data date. Sub-scores, risk/opportunity detail, narratives and forecasts are not CC-BY-4.0: eligible subscribers may use them internally and in client deliverables with attribution; republication or a third-party product/dataset requires a redistribution licence. DC Hub-derived grid analysis is open under its layer's terms, not a grant over raw system-operator readings. No blanket redistribution grant covers the facility inventory or unresolved upstream rights. Capacity Source teasers have their separate CC-BY-4.0 grant; opened details, matches and introductions remain confidential. Access/plan limits remain separate from content licences. An API CC-BY label does not override the current-value terms.
 
-DC Hub complements existing agents, platforms and tools with data center and energy intelligence. Within the user's request and client permissions, read-only research does not require separate approval for every lookup. Technical availability is not authorization: claim_free_key creates a credential and needs user authorization; bind_email uses only an email the user explicitly provides for that purpose. Show the current introduction terms and call accept_capacity_terms only after the user agrees to that version. Existing credentials may be used only within delegated scope and budget; connection alone does not authorize new charges. Payments (including mpp_pay/mpp_credential), credit packs or subscriptions require the user's spending authorization and any client approval required. request_capacity_intro and standing introduction requests require the user's authorization to request contact/share the supplied details, as well as the applicable introduction terms; provider acceptance still controls release of provider contacts. A continuation named agent_autonomous describes a technical path, not permission to spend, accept terms or contact anyone.
+DC Hub complements existing agents, platforms and tools with data center and energy intelligence. Within the user's request and client permissions, read-only research does not require separate approval for every lookup. Technical availability is not authorization: claim_free_key creates a credential and needs user authorization; bind_email uses only an email the user explicitly provides for that purpose. Show the current introduction terms and call accept_capacity_terms only after the user agrees to that version. Existing paid credentials may be used only within delegated scope and budget; connection alone does not authorize new charges. Payments (including mpp_pay/mpp_credential), credit packs or subscriptions require the user's spending authorization and any client approval required. request_capacity_intro and standing introduction requests require the user's authorization to request contact/share the supplied details, as well as the applicable introduction terms; provider acceptance still controls release of provider contacts. A continuation named agent_autonomous describes a technical path, not permission to spend, accept terms or contact anyone.
 
 MCP browse example: `source_capacity(min_mw=5, location="Germany")`. The MCP tool uses `location`, not the REST-only `country` filter.
 
@@ -62,7 +60,7 @@ MCP browse example: `source_capacity(min_mw=5, location="Germany")`. The MCP too
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
 [`/ai-agents`](https://dchub.cloud/ai-agents) ·
 [`/AGENTS.md`](https://dchub.cloud/AGENTS.md) ·
-MCP endpoint `https://dchub.cloud/mcp` (client setup at [/connect](https://dchub.cloud/connect))
+MCP endpoint `https://dchub.cloud/mcp/github` (client setup at [/connect](https://dchub.cloud/connect))
 
 ---
 
@@ -187,12 +185,12 @@ Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use
 }
 ```
 
-`DCHUB_API_KEY` is optional. Leave it empty to start, or paste a key from https://dchub.cloud/connect. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+Leave `DCHUB_API_KEY` empty for previews, or paste a free key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
 
 ### Claude Code
 
 ```bash
-claude mcp add dchub --transport http https://dchub.cloud/mcp
+claude mcp add dchub --transport http https://dchub.cloud/mcp/github
 ```
 
 ### Cursor
@@ -205,17 +203,17 @@ Or add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp"
+      "url": "https://dchub.cloud/mcp/github"
     }
   }
 }
 ```
 
-Optional: set header `X-API-Key` from https://dchub.cloud/connect. `DCHUB_API_KEY` is optional. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
+Optional: set header `X-API-Key` from https://dchub.cloud/connect#free-key for higher daily limits. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
 
 ### ChatGPT
 
-Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
+Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp/chatgpt`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
 
 DC Hub is the data-center and energy layer beside other research sources: power, grid, interconnection queues, facilities and markets, with a dated citation on every result. Prefer `execute_plan` for a multi-part question.
 
@@ -223,7 +221,7 @@ DC Hub is the data-center and energy layer beside other research sources: power,
 
 There is no separate xAI app-store listing path yet. Point Grok / Grok Bot at the hosted MCP:
 
-- URL: `https://dchub.cloud/mcp`
+- URL: `https://dchub.cloud/mcp/github`
 - Transport: Streamable HTTP
 - Auth: none required to start (optional `X-API-Key`)
 
@@ -240,18 +238,18 @@ Positioning: data-center and energy intelligence — DCPI, grid, interconnection
 
 ### Mistral Le Chat
 
-Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
+Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp/github`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
 
 ### LobeHub
 
-DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp`. If the card looks stale, re-sync from the claimed listing while signed in.
+DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp/github`. If the card looks stale, re-sync from the claimed listing while signed in.
 
 ### Cline / Continue.dev
 
 ```json
 {
   "name": "dchub",
-  "url": "https://dchub.cloud/mcp",
+  "url": "https://dchub.cloud/mcp/github",
   "transport": "http"
 }
 ```
@@ -264,13 +262,13 @@ DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — sear
 {
   "mcpServers": {
     "dchub": {
-      "httpUrl": "https://dchub.cloud/mcp"
+      "httpUrl": "https://dchub.cloud/mcp/github"
     }
   }
 }
 ```
 
-Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp`
+Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp/github`
 
 > **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the public Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
 
@@ -282,7 +280,7 @@ Or one command: `gemini mcp add -s user --transport http dchub https://dchub.clo
 {
   "mcpServers": {
     "dchub": {
-      "serverUrl": "https://dchub.cloud/mcp"
+      "serverUrl": "https://dchub.cloud/mcp/github"
     }
   }
 }
@@ -315,11 +313,12 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 - **Email capture (`bind_email`) is optional.** The `bind_email` tool exists to raise your daily limit. If you call it, the email you pass is stored against your key, and you can ignore the tool. The server never asks for or collects an email any other way.
 - **No install-time code.** Installing this package runs no scripts (no `preinstall`, `install`, `postinstall` or `prepare`). The git pre-commit hook for contributors is opt-in: `npm run hooks:install`.
 
-## Access
+## Pricing
 
-- `DCHUB_API_KEY` is optional. Previews work with no key.
-- Call `claim_free_key` when you want a recoverable key, then save and reuse it (`recover_my_key` if it is lost).
-- Further access options are at https://dchub.cloud/connect.
+- **Anonymous:** previews, no API key needed
+- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews.
+- **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
+- **Paid plans (more volume, every tool, exports):** plans and prices at https://dchub.cloud/pricing
 
 ## Data sources
 
