@@ -162,7 +162,7 @@ describe('an execute_plan step keeps the raw markers its caller reads', () => {
     // item 4 (2026-10-28): next_call is added after the plan-free step, not on a loopback step or a frozen profile
     // item 2 (2026-11-11): the offer floor (lib/wall-offer-floor.mjs) reads what lean left, so it sits between them.
     // item 9 (2026-11-11): next_call carries the call's args (its Next: line), and the identity footer closes a walled answer last.
-    expect(src).toMatch(/const _floored = _wallOfferFloorStep\(_done, name, c\);\s*_final = \(c\.loopback_step \|\| ownScrub \|\| _isCleanPlatform\(\)\) \? _floored : withNextCall\(_floored, name, \{ args \}\);\s*(?:\/\/[^\n]*\n\s*)*_final = _previewFooterStep\(_final, name, c\);\s*(?:\/\/[^\n]*\n\s*)*_final = _answerShapeStep\(_final, \{ skip: leanSkip \|\| _LEAN_SKIP_TOOLS\.has\(name\) \}\);\s*return _final;\s*\} finally \{ _finishWallRow\(c, name, _final\); \}/);
+    expect(src).toMatch(/const _floored = _wallOfferFloorStep\(_done, name, c\);\s*_final = \(c\.loopback_step \|\| ownScrub \|\| _isCleanPlatform\(\)\) \? _floored : withNextCall\(_floored, name, \{ args \}\);\s*(?:\/\/[^\n]*\n\s*)*_final = _previewFooterStep\(_final, name, c\);\s*(?:\/\/[^\n]*\n\s*)*_final = _answerShapeStep\(_final, \{ skip: leanSkip \|\| _LEAN_SKIP_TOOLS\.has\(name\), budget: _answerBudgetAppliesTo\(c\) \}\);\s*return _final;\s*\} finally \{ _finishWallRow\(c, name, _final\); \}/);
     expect(src).toMatch(/const ownScrub = c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| c\.profile === CORE_PROFILE;/);
   });
 });

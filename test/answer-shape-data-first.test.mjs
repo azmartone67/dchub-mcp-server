@@ -181,6 +181,23 @@ describe('size budget (unit)', () => {
   });
 });
 
+describe('paid answers are exempt from the budget (owner 11-14, OWNER DECISION 6)', () => {
+  const rows = (n) => Array.from({ length: n }, (_, i) => ({ id: i, name: `Campus ${i}`, note: 'n'.repeat(120) }));
+  it('answerShapeStep budget:false: every row, no size_cap; data-first still applies', () => {
+    const sc = { agent_instruction: 'x', data: rows(600) };
+    const r = { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    expect(B(sc), 'control: over the budget').toBeGreaterThan(30_000);
+    const paid = answerShapeStep(r, { budget: false });
+    expect(paid.structuredContent.data.length).toBe(600);
+    expect(paid.structuredContent.size_cap).toBeUndefined();
+    expect(splitLeadingJson(paid.content[0].text).json.data.length).toBe(600);
+    expect(Object.keys(paid.structuredContent)[0], 'data first for every tier').toBe('data');
+    const free = answerShapeStep(r, { budget: true });
+    expect(free.structuredContent.size_cap, 'control: the same answer is capped for a free caller').toBeTruthy();
+    expect(free.structuredContent.data.length).toBeLessThan(600);
+  });
+});
+
 describe('/mcp e2e (real server.mjs, stub backend)', () => {
   let H, fence;
   const BIG_ROWS = 600;
@@ -188,6 +205,9 @@ describe('/mcp e2e (real server.mjs, stub backend)', () => {
     data: Array.from({ length: BIG_ROWS }, (_, i) => ({ id: i, name: `Campus ${i}`, market: 'northern-virginia',
       state: 'VA', capacity_mw: 10 + (i % 90), status: 'operational', note: 'n'.repeat(120) })) });
   const PRO = { 'x-api-key': PRO_KEY };
+  // A valid FREE key (bound email, so no bind wall): the stub answers it the same 600 rows as Pro.
+  const FREE_KEY = 'dch_live_FREEbudgetkey0123456789abcdef';
+  const FREE = { 'x-api-key': FREE_KEY };
   const KEYLESS = {};
   // One fresh caller (own IP, own session) per call. A sessionless loopback request is an execute_plan step
   // (server.mjs _isLoopbackPeer), which the step skips by design; a session from a forwarded IP is a caller.
@@ -212,8 +232,12 @@ describe('/mcp e2e (real server.mjs, stub backend)', () => {
 
   beforeAll(async () => {
     fence = fenceNetwork();
-    H = await startHarness({ extraRoutes: (p, req) => {
-      if (req.headers['x-api-key'] !== PRO_KEY) return undefined;   // keyless: the harness's walled bodies
+    H = await startHarness({ extraRoutes: (p, req, body) => {
+      if (p === '/api/v1/keys/validate' && body && body.api_key === FREE_KEY) {
+        return { status: 200, body: { valid: true, tier: 'free', developer_id: 'dev_free_budget', email: 'free@example.com',
+          tier_detail: { users_plan: 'free' } } };
+      }
+      if (req.headers['x-api-key'] !== PRO_KEY && req.headers['x-api-key'] !== FREE_KEY) return undefined;   // keyless: the harness's walled bodies
       if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
       return { status: 200, body: big() };
     } });
@@ -232,18 +256,43 @@ describe('/mcp e2e (real server.mjs, stub backend)', () => {
     expect(firstRelay(keys), `relay key before data: ${keys.join(',')}`).toBeGreaterThan(lastData(keys));
   }, 60_000);
 
-  it('keyed big search_facilities: each copy within 30 KB, rows cut in order with size_cap, and no tier wall', async () => {
-    const { res, sc, b0 } = parse(await callAs(PRO, 'search_facilities', { state: 'VA' }));
+  it('Pro big search_facilities (600 rows): every row in both copies, no size_cap (owner 11-14)', async () => {
+    const { sc, j } = parse(await callAs(PRO, 'search_facilities', { state: 'VA' }));
+    expect(sc && Array.isArray(sc.data), 'control: rows came back').toBe(true);
+    expect(sc.size_cap).toBeUndefined();
+    expect(sc.data.length).toBe(BIG_ROWS);
+    expect(B(sc), 'control: the whole answer is over the budget').toBeGreaterThan(30_000);
+    expect(j && j.size_cap).toBeUndefined();
+    expect(j && j.data && j.data.length).toBe(BIG_ROWS);
+  }, 60_000);
+
+  it('free-key big search_facilities: each copy within 30 KB, rows cut in order with size_cap, and no tier wall', async () => {
+    const { res, sc, b0 } = parse(await callAs(FREE, 'search_facilities', { state: 'VA' }));
     expect(sc && Array.isArray(sc.data), 'control: rows came back').toBe(true);
     expect(B(sc)).toBeLessThanOrEqual(30_000);
     expect(B(b0)).toBeLessThanOrEqual(30_000);
     expect(sc.size_cap && sc.size_cap.cut.map((c) => c.field)).toContain('data');
     expect(sc.data.length).toBeLessThan(BIG_ROWS);
     expect(sc.data.map((r) => r.id)).toEqual(Array.from({ length: sc.data.length }, (_, i) => i));
-    // A size cut is not tier gating: no relay link, no _upgrade, no partial_preview stamp.
-    const text = res.content.map((b) => b.text || '').join('\n');
-    expect(text).not.toMatch(/dchub\.cloud\/(?:u|upgrade\/h)\//);
-    expect(sc._upgrade).toBeUndefined();
+    // A size cut is not tier gating: the size_cap block carries no link and no partial_preview stamp is added.
+    // (A free key's answer carries the free tier's own one relay link; that is the wall step's, not this one's.
+    // The unit tests pin that capToBudget adds no wall marker, relay link or _upgrade.)
+    expect(res.isError).not.toBe(true);
+    expect(JSON.stringify(sc.size_cap)).not.toMatch(/https?:\/\//);
     expect(sc.provenance && sc.provenance.completeness).not.toBe('partial_preview');
   }, 60_000);
+
+  // server.mjs is imported here, after beforeAll pointed it at the stub backend.
+  it('the budget applies only to a caller KNOWN to be free; paid, trial, admin and unknown tiers get every row', async () => {
+    const { _answerBudgetAppliesTo } = await import('../server.mjs');
+    for (const tier of ['free', 'anonymous', 'anon', 'identified', 'FREE']) {
+      expect(_answerBudgetAppliesTo({ tier }), tier).toBe(true);
+    }
+    for (const tier of ['starter', 'developer', 'paid', 'pro', 'founding', 'team', 'metered', 'enterprise',
+      'research_seed', 'admin', 'internal', 'trial', 'pro_trial', '', undefined, null, 'something-new']) {
+      expect(_answerBudgetAppliesTo({ tier }), String(tier)).toBe(false);
+    }
+    expect(_answerBudgetAppliesTo(null), 'no request context').toBe(false);
+    expect(_answerBudgetAppliesTo({}), 'no tier on the context').toBe(false);
+  });
 });
