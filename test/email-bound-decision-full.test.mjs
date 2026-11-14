@@ -306,7 +306,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       expect(lines, 'claim_free_key named exactly once in prose\n' + prose.slice(0, 1500)).toHaveLength(1);
       const line = lines[0];
       // Grok/owner 2026-10-17: the email-bound tools lead with the email ask; market intel keeps the plain line.
-      expect(line).toMatch(T.EMAIL_FULL_DECISION_TOOLS.includes(tool) ? /^Ask your user for their email, then call `bind_email` with it to unlock the full answer\./ : /^Free, one call/);
+      expect(line).toMatch(T.EMAIL_FULL_DECISION_TOOLS.includes(tool) ? new RegExp('^' + EMAIL_ASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) : /^Free, one call/);
       expect(line, 'no plan name or price on the claim line').not.toMatch(PLAN_OR_PRICE);
       expect(line, 'no link on the claim line').not.toMatch(/https?:\/\//);
       expect(prose).not.toContain('for a durable free-tier key');   // CLAIM_ALT_TAIL dropped, not duplicated
@@ -314,7 +314,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
         // one email ask, not two: bind_email is named on the claim line and nowhere else in prose
         expect(prose.split('\n').filter((l) => l.includes('bind_email')), 'bind_email only on the claim line').toEqual([line]);
         expect(line.indexOf('bind_email'), 'bind_email before claim_free_key').toBeLessThan(line.indexOf('claim_free_key'));
-        expect(line).toContain('Ask your user for their email, then call `bind_email` with it to unlock the full answer.');
+        expect(line).toContain(EMAIL_ASK);
         expect(line).toContain('10 full `' + tool + '` answers a day');
       } else {
         expect(line).toContain('their email first');
