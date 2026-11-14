@@ -26,6 +26,10 @@ beforeAll(async () => {
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: (p) => {
     if (p === '/api/v1/ai-capacity-index') return { ok: true, index_name: 'AI Compute Capacity Index', markets: MARKETS };
+    // 5.27: the AI-campus ranking leads with rank_markets criteria=ai_ready.
+    if (p === '/api/v1/mcp/tools/rank_markets') return { criteria: 'ai_ready', region: 'us', count: 2, results: [
+      { rank: 1, market: 'Columbus', slug: 'columbus-oh', state: 'OH', dcpi_verdict: 'BUILD', score: 70 },
+      { rank: 2, market: 'Ashburn', slug: 'ashburn-va', state: 'VA', dcpi_verdict: 'AVOID', score: 26.7 }] };
     const m = /^\/api\/v1\/dcpi\/scores\/([^/]+)$/.exec(p);
     if (m) return { ok: true, market_slug: m[1], verdict: 'BUILD', composite_score: 70 };
     return undefined;

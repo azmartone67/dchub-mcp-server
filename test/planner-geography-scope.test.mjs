@@ -94,7 +94,7 @@ describe('geography resolution', () => {
   it('leaves an ungeographed intent on the national AI route', () => {
     // r-planner-v4 behaviour must be untouched when no geography is named.
     const p = plan('rank markets for a 200 MW AI campus');
-    expect(p.best_tool).toBe('ai_capacity_index');
+    expect(p.best_tool).toBe('rank_markets');   // 5.27: criteria=ai_ready (was ai_capacity_index)
     expect(p.recommended_sequence[0].args_hint.region).toBeUndefined();
     expect(isoSet('rank markets for a 200 MW AI campus')).toEqual([]);
   });
@@ -157,6 +157,6 @@ describe('version', () => {
   it('bumped the planner version for the routing change', () => {
     // Routing changed, so planner_version must move; schema_version must not
     // (the replay SHAPE is untouched).
-    expect(PLANNER_VERSION).toBe('5.26');
+    expect(PLANNER_VERSION).toBe('5.27');
   });
 });

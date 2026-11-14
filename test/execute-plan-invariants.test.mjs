@@ -317,9 +317,10 @@ describe('planner routing (classes must not steal each other)', () => {
     }
   });
 
-  it('keeps the AI-campus branch leading with the deployability index', () => {
-    // Deliberate r-planner-v4 decision (partner-panel rationale): the hand-off
-    // was fixed, the lead was NOT swapped.
-    expect(tools('rank markets for a 200 MW AI campus')[0]).toBe('ai_capacity_index');
+  it('5.27: the AI-campus branch leads with rank_markets ai_ready; a stated horizon keeps the index', () => {
+    // r-planner-v4 led with the deployability index; the 2026-11-14 live QA saw its top two read
+    // AVOID. A ranking by suitability is rank_markets criteria=ai_ready (planner 5.27).
+    expect(tools('rank markets for a 200 MW AI campus')[0]).toBe('rank_markets');
+    expect(tools('rank markets where 100 MW of AI can land in the next 90 days')[0]).toBe('ai_capacity_index');
   });
 });
