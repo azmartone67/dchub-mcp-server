@@ -700,8 +700,10 @@ describe('planner routing', () => {
     ['lease 40 MW powered shell in Texas', 'capacity_search', 'get_retirement_headroom',
       ['get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank'], { state: 'TX', min_mw: 40 }],
     // 2026-11-12: a stated deadline rides along as available_by (a bare year is its December).
-    ['available data center capacity to buy in Dallas by 2027', 'power_timeline', 'get_power_availability_timeline',
-      ['get_power_availability_timeline', 'get_grid_intelligence', 'get_refined_queue'], { state: 'TX', available_by: '2027-12' }],
+    // Planner 5.26 (item 2): "available data center capacity" is a data-center supply question, so it
+    // routes to dc_capacity (pipeline, facilities, the power timeline as backup) instead of power_timeline.
+    ['available data center capacity to buy in Dallas by 2027', 'dc_capacity', 'get_pipeline',
+      ['get_pipeline', 'search_facilities', 'get_power_availability_timeline'], { state: 'TX', available_by: '2027-12' }],
     ['turnkey colocation space 5 MW Phoenix', 'facility_search', 'search_facilities',
       ['search_facilities', 'get_facility'], { state: 'AZ', min_mw: 5 }],
   ];

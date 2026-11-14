@@ -23386,7 +23386,8 @@ export function _planBindIntentArgs(seq, d) {
       if (dl) {
         put(spec.months, Math.min(120, dl.months));
         put(spec.years, Math.min(6, Math.max(1, Math.ceil(dl.months / 12))));
-        put(spec.by, dl.by);
+        // The Capacity Source kill switch keeps its own source_capacity undated (capacityStepArgs owns the date).
+        put(s.tool === 'source_capacity' && !capacityPointersEnabled() ? null : spec.by, dl.by);
         if (spec.before) {
           const [y, m] = dl.by.split('-').map(Number);
           put(spec.before, m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`);
