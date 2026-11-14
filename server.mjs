@@ -150,7 +150,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
-import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest } from './lib/light-profile.mjs';
+import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
          installGrokResultCap as _installGrokResultCap,
@@ -4609,7 +4609,7 @@ export function _pathPack(req) {
   const p = _normPath(req);
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
-  if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req) })) return LIGHT_PACK_IMPLICIT;
+  if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req), fullCatalog: _wantsFullCatalog(req) })) return LIGHT_PACK_IMPLICIT;
   return MCP_PACKS.get(p) || null;
 }
 
@@ -4665,8 +4665,8 @@ export function _INSTR_TAIL_PACK(def) {
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
-  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at https://dchub.cloud/mcp.`;
-  if (def.light) return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at https://dchub.cloud/mcp.`;
+  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}.`;
+  if (def.light) return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}.`;
   return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; discover_tools lists the rest.`;
 }
 
