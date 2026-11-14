@@ -114,6 +114,12 @@ export const STAY_PROMPTS = [
   { id: 'two-markets-stay-markets', prompt: 'compare Dallas, Texas vs Phoenix, Arizona', expect: { intent_class: 'market_comparison' } },
   { id: 'power-coming-online-stays-power', prompt: 'where is new power generation coming online in Virginia', expect: { intent_class: 'power_timeline' } },
   { id: 'one-state-no-fanout', prompt: 'rank markets for a 200 MW AI campus in Texas', expect: { intent_class: 'market_ranking', state_fanout: null } },
+  // Power coming online is not data-center supply: dc_capacity's patterns match these, and only
+  // the no-data-center-noun guard in _planQuery keeps them on the power classes.
+  { id: 'generation-capacity-stays-power', prompt: 'how much new generation capacity is coming online in Texas', expect: { intent_class: 'power_timeline' } },
+  { id: 'power-capacity-construction-stays-grid', prompt: 'how much power capacity is under construction in Ohio', expect: { intent_class: 'grid_headroom' } },
+  { id: 'solar-coming-online-stays-power', prompt: 'solar projects coming online in Arizona', expect: { intent_class: 'power_timeline' } },
+  { id: 'gas-plants-construction-stays', prompt: 'gas plants under construction in Texas', expect: { intent_class: 'facility_search' } },
 ];
 
 // ── SLOT: the three verbatim Nov 13 review prompts (Claude, Grok, Mistral) ─────────────────
