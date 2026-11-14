@@ -44,7 +44,7 @@
       "environmentVariables": [
         {
           "name": "DCHUB_API_KEY",
-          "description": "Optional DC Hub API key. Leave unset to use the free tier with no key.",
+          "description": "Optional DC Hub API key, sent as the X-API-Key header. Leave it unset to connect without one.",
           "isRequired": false,
           "isSecret": true,
           "format": "string"
