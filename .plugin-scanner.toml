@@ -1,0 +1,36 @@
+# HOL plugin-scanner repository policy (read by .github/workflows/plugin-scanner.yml,
+# which sets trust_repository_policy: true so this file is honoured).
+#
+# Only path exclusions live here. No rule is disabled, no severity is lowered and no
+# baseline is used: a baseline in this scanner suppresses a rule id repo-wide, which
+# would hide a real secret anywhere. min_score / fail_on_severity stay in the workflow.
+#
+# Every entry below is a false positive that was inspected on 2026-11-14 (values were
+# read and classified, none is a working credential):
+#
+#   test/*.test.mjs
+#     Vitest suites. The HARDCODED_SECRET hits are synthetic fixture keys and HMAC
+#     secrets (named fixture keys, test-only signing secrets, repeated-digit keys,
+#     the sha256 of the string abc) that exercise key and tier handling.
+#     Other files under test/helpers and test/fixtures are NOT excluded.
+#   test/helpers/claude-directory-harness.mjs
+#     Plants a fake live-shaped key in a fake upstream body so the directory tests can
+#     assert the key never leaks into a reply. The literal is the point of the test.
+#   sdk/ai-sdk/test/tools.test.mjs
+#     Asserts an apiKey option is forwarded as the X-API-Key header (fixture keys).
+#   integrations/langchain-dchub/tests/unit_tests/test_tools.py
+#     Asserts an explicit api key argument beats the env var (fixture value).
+#   integrations/chatgpt/openapi.json
+#     ChatGPT Actions schema; one description documents the response shape with a
+#     dch_live_... placeholder. The text is the live GPT's frozen copy, so it is
+#     excluded rather than reworded.
+#
+# The fnmatch patterns are matched against repo-relative finding paths.
+[scanner]
+ignore_paths = [
+  "test/*.test.mjs",
+  "test/helpers/claude-directory-harness.mjs",
+  "sdk/ai-sdk/test/tools.test.mjs",
+  "integrations/langchain-dchub/tests/unit_tests/test_tools.py",
+  "integrations/chatgpt/openapi.json",
+]

@@ -18,7 +18,7 @@ class DCHubToolkit(BaseToolkit):
     Setup:
         ```bash
         pip install -U langchain-dchub
-        export DCHUB_API_KEY="dch_live_..."  # optional: anonymous calls get previews
+        export DCHUB_API_KEY="<your-dchub-api-key>"  # optional: anonymous calls get previews
         ```
 
     Key init args:

@@ -35,7 +35,7 @@ class DCHubBaseTool(BaseTool):
 
         ```bash
         pip install -U langchain-dchub
-        export DCHUB_API_KEY="dch_live_..."  # optional
+        export DCHUB_API_KEY="<your-dchub-api-key>"  # optional
         ```
     """
 

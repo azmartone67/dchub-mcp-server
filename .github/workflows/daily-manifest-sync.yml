@@ -157,7 +157,7 @@ jobs:
           # READ with GITHUB_TOKEN, and keep a failed read DISTINCT from a
           # drift verdict — conflating them is what produced a year of blank
           # `live:` lines that looked like findings.
-          if ! LIVE="$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY" \
+          if ! LIVE="$(GH_TOKEN="${READ_TOKEN}" gh api "repos/$GITHUB_REPOSITORY" \
                          --jq '.description // ""' 2>/tmp/gh-desc-read.err)"; then
             echo "::warning::[gh-desc] UNKNOWN — cannot READ the published description, so drift is undetermined. This is NOT 'in sync' and NOT 'drifted':"
             sed 's/^/[gh-desc]   /' /tmp/gh-desc-read.err || true

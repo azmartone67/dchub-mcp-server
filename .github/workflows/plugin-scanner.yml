@@ -5,6 +5,11 @@ name: plugin-scanner
 # Third-party actions are pinned to commit SHAs, matching this repo's workflow convention.
 # report_to_hol lets the public HOL Plugins listing show this repository as checked in CI
 # and requires id-token: write. submission_enabled stays off; DC Hub is already listed.
+#
+# trust_repository_policy: true makes the action read .plugin-scanner.toml, which holds
+# ONLY narrow path exclusions for inspected false positives (test fixtures, a frozen
+# ChatGPT schema). No rule is disabled and the thresholds below are unchanged. This adds
+# no new bypass: on pull_request the workflow file itself already comes from the PR.
 
 on:
   push:
@@ -30,5 +35,6 @@ jobs:
           mode: scan
           min_score: 80
           fail_on_severity: high
+          trust_repository_policy: true
           report_to_hol: true
           submission_enabled: false
