@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-12T20:00:00Z",
+  "updated_at": "2026-11-14T05:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -49,7 +49,7 @@
       "logo_url": null,
       "verified_at": "2026-10-09",
       "added_at": "2026-10-09",
-      "note": "connector page also live: https://glama.ai/mcp/connectors/cloud.dchub/mcp-server"
+      "note": "connector page also live: https://glama.ai/mcp/connectors/cloud.dchub/mcp-server (claimed, ownership verified; edit in its Admin tab). On 2026-11-13 the connector page still read 94 tools and named paid plans."
     },
     {
       "id": "lobehub",
@@ -274,7 +274,7 @@
       "logo_url": null,
       "verified_at": "2026-10-14",
       "added_at": "2026-10-14",
-      "note": "Maintainer closed our PR #41 after landing DC Hub in their own commit; under Specialised / Vertical (README L324) confirmed 2026-10-14 16:20 PT"
+      "note": "Maintainer closed our PR #41 after landing DC Hub in their own commit; under Specialised / Vertical (README L324) confirmed 2026-10-14 16:20 PT Our PR #88 (copy update) was closed unmerged 2026-11-09; the maintainer-worded entry mentions paid plans and call logging."
     },
     {
       "id": "ha2345567",
@@ -334,7 +334,7 @@
       "logo_url": null,
       "verified_at": "2026-11-06",
       "added_at": "2026-10-15",
-      "note": "MCP Harbor registry at ai.mcpharbor.dev (mirror of official registry entry cloud.dchub/mcp-server). Was flipped unverified 2026-11-03 when the whole site timed out; confirmed live again 2026-11-06 (page title DC Hub, cloud.dchub/mcp-server, v2.12.45, tools: 94 in HTML). No badge_url (badge path redirects to HTML homepage, not an image)."
+      "note": "MCP Harbor registry at ai.mcpharbor.dev (mirror of official registry entry cloud.dchub/mcp-server). Was flipped unverified 2026-11-03 when the whole site timed out; confirmed live again 2026-11-06 (page title DC Hub, cloud.dchub/mcp-server, v2.12.45, tools: 94 in HTML). No badge_url (badge path redirects to HTML homepage, not an image). Alternate mirror https://mcpharbor.app/tools/npm-dchub-mcp-server/ answered 200 on 2026-11-14 (94 tools, /mcp) while ai.mcpharbor.dev timed out."
     },
     {
       "id": "mcp-tc",
@@ -1239,15 +1239,15 @@
     {
       "id": "trillionagent",
       "name": "TrillionAgent",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://trillionagent.com/agents/1300",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-14",
       "tracking_url": null,
       "added_at": "2026-11-05",
-      "note": "Registered 2026-10-27; public listing URL not yet confirmed (asked since 2026-10-24). Set listing_url and status live once the page is found."
+      "note": "Registered 2026-10-27; public page found 2026-11-13 (Grok), 200 on 2026-11-14."
     },
     {
       "id": "agentforge",
@@ -1278,28 +1278,28 @@
     {
       "id": "launch-mcp",
       "name": "Launch MCP",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://launchmcp.co/mcp/servers/azmartone67/dchub-mcp-server",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-14",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. Free community listing at https://launchmcp.co/submit, reviewed by hand; Featured is paid (not wanted). Found by Grok 2026-11-12. Owner submits."
+      "note": "Auto-indexed from GitHub (shows 94 tools, updated 2026-10-28). Do not submit; update by re-submission."
     },
     {
       "id": "plug-and-ship",
       "name": "Plug and Ship",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://plugandship.dev/p/dc-hub-data-center-site-selection-colocation-electricity-power-grid-gas-fiber",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-14",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://plugandship.dev/submit; free queue opens 2026-11-18. Owner submits."
+      "note": "Auto-imported from the official registry; page shows endpoint /mcp/registry. Free submit queue next opens 2026-12-05. Do not submit."
     },
     {
       "id": "agentndx",
@@ -1312,20 +1312,20 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://agentndx.ai/submit/ (the bare /submit path redirects there). Owner submits."
+      "note": "Submitted 2026-10-20 via the free form (submission id 206); not in its servers.json as of 2026-11-13. Do not resubmit."
     },
     {
       "id": "mcpnav",
       "name": "MCPNav",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://mcpnav.net/server/mcp-server-43/",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-14",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted; submit page answered 200 on 2026-11-12 (Grok). Owner submits."
+      "note": "Auto-listed (v2.12.46; lists /mcp/registry and other alternate endpoints). Duplicate slug https://mcpnav.net/server/datacenter-power-grid-fiber/ still live at v2.12.9. Form also submitted 2026-11-04. Do not submit again; merge the duplicate by email."
     },
     {
       "id": "mcp-agents-market",
@@ -1338,7 +1338,7 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://mcpagentsmarket.com/submit. Owner submits."
+      "note": "Not submitted. https://mcpagentsmarket.com/submit charges a one-time $14.99 listing fee; owner decides."
     },
     {
       "id": "mcp-directory",
@@ -1351,7 +1351,7 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted; /servers/dchub-mcp-server is 404. https://mcp.directory/submit. Owner submits."
+      "note": "Submitted 2026-10-12 (form answered: already submitted); /servers/dchub-mcp-server not live on 2026-11-14. Do not resubmit. Once live, claim via hello@mcp.directory."
     },
     {
       "id": "perplexity-connectors",
@@ -1364,7 +1364,7 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Connector outreach sent by the owner 2026-11-12 (remote MCP https://dchub.cloud/mcp); no reply yet."
+      "note": "Proposal emailed 2026-10-10, follow-up 2026-10-27, owner outreach 2026-11-12 (remote MCP https://dchub.cloud/mcp); no reply yet."
     }
   ]
 }
