@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
-  noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest } from '../lib/agent-outreach.mjs';
+  noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest, citeAsUrlFor, CITE_VIA } from '../lib/agent-outreach.mjs';
 
 // Owner GO 2026-10-20 (directory-safe wording): the lead no longer says "use DC Hub first" or
 // "before answering from memory"; the no-"first" rule now covers the whole lead.
@@ -127,6 +127,42 @@ describe('stampOutreach', () => {
     const r = stampOutreach(ok(), 'rank_markets', {}, { nextAsk: false });
     expect(r.structuredContent.next_ask).toBeUndefined();
     expect(r.structuredContent.cite_as).toMatch(/^DC Hub \(dchub\.cloud\)/);
+  });
+});
+
+// F4 (owner 2026-11-14, "build on us"): every stamped result carries cite_as_url, the link behind
+// cite_as, tagged ?via=agent-cite. The visible text and cite_as itself are unchanged.
+describe('cite_as_url', () => {
+  const ok = (citation = { cite_as: 'DC Hub, dchub.cloud (as of 2026-10-01)' }) => ({
+    content: [{ type: 'text', text: '{"a":1}' }], structuredContent: { a: 1, citation } });
+  it('is the site with ?via=agent-cite when the citation names no dchub.cloud page', () => {
+    expect(CITE_VIA).toBe('agent-cite');
+    const r = stampOutreach(ok(), 'rank_markets', {});
+    expect(r.structuredContent.cite_as_url).toBe('https://dchub.cloud/?via=agent-cite');
+    expect(r.structuredContent.cite_as).toBe('DC Hub (dchub.cloud), as of 2026-10-01');
+    expect(r.content[1].text).toBe('Cite as: DC Hub (dchub.cloud), as of 2026-10-01.');
+    expect(JSON.stringify(r.content)).not.toContain('agent-cite');
+  });
+  it('keeps the dchub.cloud page the citation names, and only that host', () => {
+    expect(citeAsUrlFor({ citation: { url: 'https://dchub.cloud/listings/abc?x=1' } }))
+      .toBe('https://dchub.cloud/listings/abc?x=1&via=agent-cite');
+    expect(citeAsUrlFor({ citation: { url: 'https://dchub.cloud/markets/dallas?via=other#frag' } }))
+      .toBe('https://dchub.cloud/markets/dallas?via=agent-cite');
+    expect(citeAsUrlFor({ citation: { url: 'https://evil.example/x' } })).toBe('https://dchub.cloud/?via=agent-cite');
+    expect(citeAsUrlFor({ citation: { url: 'http://dchub.cloud/x' } })).toBe('https://dchub.cloud/?via=agent-cite');
+    expect(citeAsUrlFor({ citation: { url: 'not a url' } })).toBe('https://dchub.cloud/?via=agent-cite');
+    expect(citeAsUrlFor(null)).toBe('https://dchub.cloud/?via=agent-cite');
+  });
+  it('never carries a key, token, email or session from the citation url', () => {
+    const u = citeAsUrlFor({ citation: { url: 'https://dchub.cloud/u/x?api_key=k&token=t&email=a@b.c&session_id=s&m=1' } });
+    expect(u).toBe('https://dchub.cloud/u/x?m=1&via=agent-cite');
+  });
+  it('is not added to a walled result, in directory mode, or over a producer value', () => {
+    const wall = { content: [{ type: 'text', text: 'x' }], structuredContent: { human_url: 'https://dchub.cloud/u/abc', citation: {} } };
+    expect(stampOutreach(wall, 'get_grid_intelligence', {}).structuredContent.cite_as_url).toBeUndefined();
+    expect(stampOutreach(ok(), 'rank_markets', {}, { nextAsk: false, citeUrl: false }).structuredContent.cite_as_url).toBeUndefined();
+    const own = { content: [], structuredContent: { cite_as_url: 'https://dchub.cloud/x', citation: {} } };
+    expect(stampOutreach(own, 'rank_markets', {}).structuredContent.cite_as_url).toBe('https://dchub.cloud/x');
   });
 });
 

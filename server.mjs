@@ -208,7 +208,7 @@ import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 import { CANON_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
-import { withNewsFooter as _withNewsFooter } from './lib/news-footer.mjs';
+import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks, WALL_LINK_STATUSES as _WALL_LINK_STATUSES } from './lib/wall-link-track.mjs';
 // The MCP as front desk (owner 2026-11-13): the dchub_services list, the one execute_plan next-step line, the referral line.
 import { servicesFor as _servicesFor, frontDeskIntentClass as _fdIntentClass, frontDeskFooter as _fdFooter,
@@ -24218,7 +24218,7 @@ function _outreachStep(result, name, args) {
       market: (typeof c._wallMarket === 'string' && c._wallMarket) || '',
       siteFree: !c.api_key && _wfnSiteFullOn(),
     }) : result;
-    const out = stampOutreach(input, name, args, { nextAsk: !directory });
+    const out = stampOutreach(input, name, args, { nextAsk: !directory, citeUrl: !directory });
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
     if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);
     return out;
@@ -24254,7 +24254,10 @@ export async function _newsFooterStep(result) {
     let credits = 0;
     try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
     if (credits > 0) return result;
-    return _withNewsFooter(result);
+    // E9 (owner 2026-11-14): an email-bound free key (_emailFullSeat) is pointed at the website's free
+    // monthly site report instead, by the map's one-click entry. Still one line; a key with no email
+    // keeps the line above, unchanged.
+    return _withNewsFooter(result, _emailFullSeat(c) ? _NEWS_SITE_REPORT_LINE : undefined);
   } catch (_e) { return result; }
 }
 export function _sourceLineStep(result, name, args) {
