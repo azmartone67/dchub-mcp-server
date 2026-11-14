@@ -24,6 +24,11 @@ import { depthTrialEligible, depthTrialLine, DEPTH_TRIAL_TOOLS } from '../lib/wa
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
 import { TIER_CANON } from '../lib/tier-canon.mjs';
 
+// These tests pin the keyless wall a caller meets AFTER its first full answer of the day
+// (lib/keyless-first-full.mjs, #1438). With that grant on, a keyless first call to
+// get_interconnection_queue is no longer walled, so section 3 runs with it off.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
+
 const LINK = 'https://dchub.cloud/u/abcdef';
 const ENV = {};   // no kill switch set: every offer on
 
