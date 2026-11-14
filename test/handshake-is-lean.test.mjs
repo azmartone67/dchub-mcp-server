@@ -124,7 +124,7 @@ describe('claim_free_key', () => {
   it('leads with the key, then the snippet for the client named in clientInfo', async () => {
     const { result } = await claim('Claude Desktop');
     const text = result.content[0].text;
-    const iKey = text.indexOf('**Your key:**'), iSnip = text.indexOf('**Save it for Claude Desktop**');
+    const iKey = text.indexOf('**Your key:**'), iSnip = text.indexOf('**Paste this into Claude Desktop**');
     expect(iKey).toBeGreaterThan(-1);
     expect(iSnip).toBeGreaterThan(iKey);
     expect(text.indexOf('```')).toBeGreaterThan(iSnip);
@@ -138,13 +138,13 @@ describe('claim_free_key', () => {
     const { result } = await claim('cursor-vscode-extension');
     const pc = result.structuredContent.persist_config;
     expect(Object.keys(pc.clients)).toEqual(['cursor']);
-    expect(result.content[0].text).toContain('**Save it for Cursor**');
+    expect(result.content[0].text).toContain('**Paste this into Cursor**');
   });
   it('an unrecognised client keeps the full block, and the recognised reply is smaller', async () => {
     const known = await claim('Claude Desktop');
     const unknown = await claim('acme-siting-bot');
     expect(Object.keys(unknown.result.structuredContent.persist_config.clients).length).toBeGreaterThanOrEqual(8);
-    expect(unknown.result.content[0].text).not.toContain('**Save it for ');
+    expect(unknown.result.content[0].text).not.toContain('**Paste this into ');
     // 0.8 before #779 (the Claude Desktop entry gained a launcher note and connector_url, ~400 bytes).
     expect(known.bytes).toBeLessThan(unknown.bytes * 0.88);
   });

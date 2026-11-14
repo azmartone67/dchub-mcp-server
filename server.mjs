@@ -128,9 +128,12 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
-import { leanResponseStep } from './lib/lean-response.mjs';
+import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
+import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
+// Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
+import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -2847,9 +2850,9 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   const human_message = _byoApplies
     ? _byoLead()
     : _isTrial
-    ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the credit pack above.*'
+    ? _unboundKeyLine(FREE_TIER.identified_calls_per_day)
     : (_platform === 'claude')
-      ? '*(Claude.ai web can\u2019t hold an API key \u2014 the credit-pack link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
+      ? _claudePlatformLine()
       : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + _freeKeyAllowanceText() + ') \u2014 the credit pack above adds API capacity.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
@@ -10690,8 +10693,19 @@ function _lpProLink() {
   return _subCheckoutUrl(PRO_URL + promoParam(), sid);
 }
 
+// The daily site lane's cap as it would apply to THIS keyless caller (mcp#1419): the cap when the lane would seat
+// it (on, analyze_site, an allowed profile, not a bot or our own probe), else 0, so a wall never promises a daily
+// run the lane would not serve. Read per call, like the lane.
+export function _keylessSiteDailyFor(c, name = 'analyze_site') {
+  try {
+    const cc = c || getCtx() || {};
+    if (cc.api_key) return 0;
+    return _keylessSiteFullSeat(name, cc) ? _keylessSiteFullCap() : 0;
+  } catch (_) { return 0; }
+}
 export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
+  const _siteDaily = name === 'analyze_site' ? _keylessSiteDailyFor(null, name) : 0;
   // B2 (owner 2026-10-03; merge on/after 2026-10-19): analyze_site's keyless
   // answer is a headline on every arm: the verdict band, the NAME of the
   // weakest factor and counts. No score, factor band, MW, distance or
@@ -10715,15 +10729,13 @@ export function _lpWallResult(name, headline = null) {
         + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
       : _wallCopy(`\`${name}\` is Land & Power. ` + _WALL_NEUTRAL_LINE + ' ',
         `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. `) + 'Without a key it '
-        + 'returns no data: no verdict, score or figure. A free key opens the preview '
-        + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
+        + 'returns no data: no verdict, score or figure. ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), dailyCap: _siteDaily }),
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
     content: [{ type: 'text', text: _wallCopy('🔒 **`' + name + '` is Land & Power.** ' + _WALL_NEUTRAL_LINE + ' ',
       '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** ') + 'No data without a key. '
-      + 'Get a paid DC Hub plan → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
-      + 'verdicts and bands, no scores or figures.' }],
+      + 'Get a paid DC Hub plan → ' + url + ' · ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), text: true, dailyCap: _siteDaily }) }],
     isError: _wallIsError(),
     structuredContent: payload,
   };
@@ -15908,7 +15920,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
                 // r86-reach: surface the NATIVE claim_free_key tool + persist on the MAIN anon path
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
                 // fires in the mint/upgrade branch). One in-protocol call an agent can actually follow.
-                'Call `claim_free_key` (no email) for the full free tier — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
+                _claimNudge() + ' — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
                 'Your human can pay in one click — ' + _rungsText(toolName, 'free', _ctaSid) + '.\n' +
                 _trialGapLine(parsed);
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
@@ -17742,6 +17754,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   // picks named fields and would silently drop related_intel.
   if (gi && !gi.error && Array.isArray(gi.related_intel) && gi.related_intel.length) {
     out.related_intel = gi.related_intel;
+  }
+  // Item 4 add-on (Grok live review 2026-11-13, item 3 "ERCOT has no DCPI score"): the ISO row IS there, the
+  // backend withheld its averages at this tier (/api/v1/dcpi/iso-comparison row locked: true, avg_constraint and
+  // avg_excess null). Say so with the usual marker, so the taste reads "withheld", not "no DCPI row".
+  // Kill switch DCHUB_UNLOCK_LINE_V1=0 (lib/unlock-line.mjs).
+  if (_unlockLineV1On() && row && row.locked === true) {
+    if (out.constraint_score == null) out._constraint_score_in_pro = true;
+    if (out.excess_power_score == null) out._excess_power_score_in_pro = true;
   }
   return out;
 }
@@ -24112,6 +24132,18 @@ export function _previewFooterStep(result, name, c = getCtx()) {
     return walled ? withPreviewFooter(result) : result;
   } catch (_) { return result; }
 }
+// OWNER DECISION 6 (owner 2026-11-14): paid answers are exempt from the answer size budget
+// (lib/answer-shape.mjs). The budget applies only to a caller KNOWN to be free: c.tier ranks below Starter on
+// the same _tierRank ladder the other paid / unpaid splits here use (`_tierRank(c.tier) >= _tierRank('starter')`
+// is paid), and is not an unranked operator plan (_planIsProOrAbove: admin). Anything else, including an
+// unranked or missing tier and no request context at all, keeps every row: fail toward NOT cutting.
+export function _answerBudgetAppliesTo(c) {
+  if (!c || typeof c !== 'object') return false;
+  const t = String(c.tier || '').trim().toLowerCase();
+  if (!t || _planIsProOrAbove(t)) return false;
+  const r = _tierRank(t);
+  return r >= 0 && r < _tierRank('starter');
+}
 function _sourceLineCb(name, fn) {
   // QA B P1 (2026-10-19): the plan-free field names are the LAST rewrite of the result, outside
   // _flagUpstreamError (which stays the arrow's outermost call): lib/plan-free-fields.mjs.
@@ -24134,6 +24166,11 @@ function _sourceLineCb(name, fn) {
       _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
       _final = _previewFooterStep(_final, name, c);
+      // Item 5 (Grok live review 2026-11-13): data rows ahead of the relay / upsell keys, and a 30 KB budget per
+      // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
+      // The budget is for free / anonymous callers only; paid and unknown tiers keep every row (owner 11-14).
+      // c.tier is read here, after the handler, so a paid lift inside the call counts.
+      _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name), budget: _answerBudgetAppliesTo(c) });
       return _final;
     } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };
@@ -24856,7 +24893,8 @@ function trackedTool(srv, name, description, schema, handler) {
             // this month" on a caller's first call; the stamp is a constant, not a counter.
             if (_ew) {
               const _ewKey = _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
-              return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey : _withKeylessWallQuota(_ewKey), _scWall);
+              return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey
+                : _withKeylessWallQuota(_ewKey, new Date(), { dailyCap: _keylessSiteDailyFor(c, name) }), _scWall);
             }
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
@@ -25816,7 +25854,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   // to DC Hub" beside a link to the marketing page; it now
                   // points at the relay page, which is a page about THIS
                   // session's result, not a sign-in.
-                  note: 'Free preview — a sample is shown. Call claim_free_key (free, no email, one call) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.',
+                  note: _previewNote(true),
                   upgrade_url: _cleanPlatformUnlockUrl(name, ''),
                   // r-cite-toplevel (2026-08-12): was a bare STRING here while
                   // every other surface emitted an OBJECT — the exact "handle
@@ -26345,7 +26383,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
               trimmed._note = _sitingPreview ? _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr).message
-                : 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
+                : _previewNote(false);
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
                        // #836: the trimmed preview rides structuredContent too (what the
@@ -26372,7 +26410,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 ? _missedUp.text + (_missedUp.rung === 'free_key'
                   ? ' Call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.'
                   : ' Relay the link in human_url to your human.')
-                : 'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
+                : _anonMaskNote(),
               // r86-reach: the live anon _upgrade pointed only at redeem/Stripe (browser steps a
               // headless agent can't follow). Surface the NATIVE claim_free_key tool + persist as a
               // structured next_tool so an arriving agent has a one-call in-protocol path to a key it
@@ -32169,7 +32207,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
       a = _foldIsoArg(a);
-      const data = await callAPI('/api/v1/interconnection-queue/refined', a);
+      // Item 4 add-on (2026-11-13): a row field the backend nulled under `_locked_fields` (capacity_mw) carries
+      // its `_<f>_in_pro` marker (renamed `_<f>_withheld` on the way out), as project_name and queue_id do.
+      const data = _markLockedRowFields(await callAPI('/api/v1/interconnection-queue/refined', a), ['results']);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length && sc === data) {
@@ -34387,6 +34427,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     return { for_your_client: { client: clientKey, ...own }, ...rest, clients: { [clientKey]: own },
              other_clients: 'https://dchub.cloud/connect' };
   };
+  // 2026-11-13 (owner, "MCP as front desk"): the claim reply hands back a LASTING key with the ONE
+  // ready-to-paste snippet for the calling client directly under the key, and says the key does not
+  // expire. True of a dch_live_ key: nothing expires it; dchub-backend routes/privacy_retention.py
+  // retires a free key only after 24 months unused (/privacy 13.8, the same sentence as the backend's
+  // claim_persist.DURABLE_NOTE). Never said of any other key shape (a dch_trial_ key does expire).
+  // Kill switch DCHUB_CLAIM_CLIENT_SNIPPET=0 restores the previous reply text, read per call.
+  const _clientSnippetOn = () => !/^(0|off|false|no)$/i.test(String(process.env.DCHUB_CLAIM_CLIENT_SNIPPET || '').trim());
+  const _KEY_LASTS = 'This key does not expire: it keeps working as long as it is used (only a key left unused for 24 months is retired). Save it once and reuse it; do not mint another.';
+  const _keyLasts = (key) => _clientSnippetOn() && /^dch_live_/.test(String(key || ''));
+  const _ownSnippetBlock = (key, via, clientKey) => {
+    const cfg = clientKey ? (_persistConfig(key, via).clients || {})[clientKey] : null;
+    if (!cfg) return '';
+    return '**Paste this into ' + cfg.label + '**' + (cfg.file ? ' (`' + cfg.file + '`)' : '') + ', key already filled in:\n```\n' + cfg.snippet + '\n```\n'
+      + 'Show your human this and ask them to save it once: the key is then sent on every future session. '
+      + (_keyLasts(key) ? _KEY_LASTS + ' ' : '') + 'Other clients: https://dchub.cloud/connect\n\n';
+  };
   // 2026-11-11 (owner funnel item 4): the paste-ready line, one wording with the backend's
   // persist.paste_line (routes/claim_persist.paste_line): server URL + the X-API-Key header.
   // Spaced exactly as Python's json.dumps prints it, so both servers give the same line.
@@ -34439,7 +34495,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // there: the next call is another session, keyed only if the URL is saved.
       const _perCallSession = _GROK_RELAY_PLATFORMS.has(_via);
       const _ownClientKey = (() => {
-        try { const c = getCtx() || {}; return _clientKeyFromNames(c.client_name_raw, c.platform, a && a.client_name); }
+        try { const c = getCtx() || {}; return _clientKeyFromNames(c.client_name_raw, c.platform, a && a.client_name, c.client_ua || c.user_agent); }
         catch (_) { return null; }
       })();
       // r-claim-idempotent (2026-08-08, audit P0#3 key persistence): a caller
@@ -34537,8 +34593,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 'A previous session from the same client minted it; re-minting would orphan its usage history ' +
                 'and restart the daily allowance from zero.\n\n' +
                 '**Your key:** `' + _e.key + '`' + (_bound ? ' *(applied to this session — no reconnect)*' : '') + '\n\n' +
+                (_ok && _clientSnippetOn() ? _ownSnippetBlock(_e.key, _via, _ownClientKey) : '') +
                 _heldKeyUrlLine(_ok, _connectUrl(_e.key, _via)) +
-                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' }],
+                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' +
+                (_ok && _keyLasts(_e.key) && !_ownClientKey ? ' ' + _KEY_LASTS : '') }],
               structuredContent: {
                 api_key:                 _e.key,
                 tier:                    (_v && _v.tier) || 'free',
@@ -34553,6 +34611,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   connect_url:    _connectUrl(_e.key, _via),
                   for_your_human: _connectRelay(_e.key, _via),
                   persist_config: _persistConfigFor(_e.key, _via, _ownClientKey),
+                  ...(_keyLasts(_e.key) ? { key_expires: false, key_lifetime: _KEY_LASTS } : {}),
                 } : {
                   connect_url_withheld: _CONNECT_URL_WITHHELD,
                 }),
@@ -34748,10 +34807,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // Item 7: a caller whose client we recognise gets the key, then THE snippet for that client,
       // then a short save line, instead of the long every-client save block.
       const _ownCfg = _ownClientKey ? _persistConfig(key, _via).clients[_ownClientKey] : null;
-      const _ownSnip = _ownCfg
+      // 2026-11-13: with the client snippet on, a recognised client's snippet sits directly under the
+      // key in place of the generic paste line, and every live key is said to last (_KEY_LASTS).
+      const _snipFirst = _clientSnippetOn() && !!_ownCfg;
+      const _ownSnip = _snipFirst ? _ownSnippetBlock(key, _via, _ownClientKey) : _ownCfg
         ? '**Save it for ' + _ownCfg.label + '**' + (_ownCfg.file ? ' (`' + _ownCfg.file + '`)' : '') + ':\n```\n' + _ownCfg.snippet + '\n```\n'
           + 'Show your human this snippet and ask them to save it: the key is then sent on every future session. Do not re-mint each session. Other clients: https://dchub.cloud/connect\n\n'
         : '';
+      const _lastsLine = (!_snipFirst && _keyLasts(key)) ? _KEY_LASTS + '\n\n' : '';
       const text = _emailRejectLine +
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         (_backendReused
@@ -34761,11 +34824,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
-        'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' +
+        (_snipFirst ? _ownSnip
+          : 'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' + _lastsLine) +
         (_backendReused
-          ? 'Calling claim_free_key again keeps returning this same key. Save it once with the step below so the next session starts with it.\n\n'
+          ? 'Calling claim_free_key again keeps returning this same key.' + (_snipFirst ? '' : ' Save it once with the step below so the next session starts with it.') + '\n\n'
           : '') +
-        _ownSnip +
+        (_snipFirst ? '' : _ownSnip) +
         _headerlessLead +
         (_ownSnip ? '' : _saveLine) +
         _tierLine +
@@ -34795,8 +34859,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           reused:                  _backendReused,
           ...(_backendReused ? {
             already_held: true,
-            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap' : 'backend_claim_dedupe',
+            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap'
+              : (r && r.one_key_per_email === true) ? 'one_key_per_email' : 'backend_claim_dedupe',
           } : {}),
+          ...(_keyLasts(key) ? { key_expires: false, key_lifetime: _KEY_LASTS } : {}),
           // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
           // a free key is N calls TO TRY in total, then a per-day rung once an
           // email is bound. daily_limit used to echo the backend's claim figure

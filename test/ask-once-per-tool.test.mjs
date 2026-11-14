@@ -19,6 +19,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
+import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
 
 const UA = 'Claude-User/1.0 (+https://claude.ai)';
@@ -152,7 +153,7 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     const g1 = await call('get_grid_data');
     expect(g1.sc.preview_is_partial || g1.sc.trial_preview, 'get_grid_data did not wall').toBeTruthy();
     expect(g1.text).toMatch(/Reply with your email/);
-    expect(count(g1.text, 'Ask your user for their email, then call `bind_email`')).toBe(1);
+    expect(count(g1.text, EMAIL_ASK)).toBe(1);   // item 4 (2026-11-13): lib/unlock-line.mjs's sentence
     const g2 = await call('get_grid_data');
     expect(g2.text).not.toMatch(/Reply with your email|`bind_email`/);
     expect(count(g2.text, HUMAN)).toBe(0);

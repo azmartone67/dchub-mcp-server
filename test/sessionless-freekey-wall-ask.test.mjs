@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
-import { claimHandoffFreekeyText } from '../lib/claim-handoff.mjs';
+import { claimHandoffFreekeyText, EMAIL_ASK } from '../lib/claim-handoff.mjs';
 
 const FREE_NO_EMAIL = 'dch_live_sessionless_freekey_noemail_01';
 const AGENT_LINE = claimHandoffFreekeyText();
@@ -144,7 +144,7 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
   it('CONTROL: a sessionless grid / queue wall keeps its own ask and gets no second one', async () => {
     const r = await call('get_grid_intelligence', { iso: 'MISO' }, { hdr: freshIp() });
     expect(r.rows.map((e) => e.email_ask)).toEqual(['line']);            // the decision hand-off's ask, as on main
-    expect(r.text.split('Ask your user for their email').length - 1).toBe(1);
+    expect(r.text.split(EMAIL_ASK).length - 1).toBe(1);
     expect(r.text).not.toContain(AGENT_LINE);
     expect(r.text).not.toMatch(HUMAN_LINE);                                // its human line keeps the page wording
   });
