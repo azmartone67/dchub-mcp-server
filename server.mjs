@@ -4118,7 +4118,7 @@ function _INTERNAL_SELF_TAG(name) {
 // Twin of dchub-backend mcp_calls_deloop.OWN_TEST_UA_REGEX / OWN_TEST_CALLER_TAG_REGEX;
 // test/own-test-telemetry-tag.test.mjs pins the same literals as the backend test.
 export const _UA_SELF_TEST_RE = /^dchub-[a-z0-9._-]*(test|probe|verify|audit|check|smoke|regression|canary|harness|diag|sweep)/i;
-export const _OWN_TEST_CALLER_NAME_RE = /^(handoff-proof|site-eval(-[a-z0-9_-]*)?)$/;
+export const _OWN_TEST_CALLER_NAME_RE = /^(handoff-proof|site-eval|site-eval-[a-z0-9_-]*)$/;
 export function _selfTestTelemetryTag(c) {
   try {
     if (!c) return '';
