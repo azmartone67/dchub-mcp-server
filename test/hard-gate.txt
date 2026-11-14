@@ -100,6 +100,7 @@ test/citation-shape-contract.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
+test/claim-client-snippet-lasting-key.test.mjs
 test/claim-email-has-key-paste-line.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claim-handoff-keyless-walls.test.mjs
