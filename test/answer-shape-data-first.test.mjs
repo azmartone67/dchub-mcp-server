@@ -69,20 +69,22 @@ describe('data first: relay / upsell keys after the data (unit)', () => {
     expect(out.content[1]).toBe(r.content[1]);
   });
 
-  it('an ask paragraph ahead of the JSON in its block moves after it; a plain lead sentence stays first', () => {
+  it('opt-in: an ask paragraph ahead of the JSON in its block moves after it; a plain lead sentence stays first', () => {
     const json = JSON.stringify({ count: 1, data: [{ id: 1 }] });
     const text = 'Rows for Virginia.\n\nCall `claim_free_key` with your email for 2 full answers per tool per day.\n' + json;
-    const out = dataFirstResult({ content: [{ type: 'text', text }] });
+    // opt-in (DCHUB_DATA_FIRST_PROSE=1): by default prose keeps its place (the paywall contract leads with its sentence)
+    expect(dataFirstResult({ content: [{ type: 'text', text }] }).content[0].text).toBe(text);
+    const out = dataFirstResult({ content: [{ type: 'text', text }] }, { prose: true });
     const t = out.content[0].text;
     expect(t.startsWith('Rows for Virginia.')).toBe(true);
     expect(t.indexOf(json)).toBeLessThan(t.indexOf('claim_free_key'));
   });
 
-  it('a prose-only ask block ahead of the first JSON block moves after it', () => {
+  it('opt-in: a prose-only ask block ahead of the first JSON block moves after it (default: stays)', () => {
     const ask = { type: 'text', text: 'Open https://dchub.cloud/u/abc234 to unlock the full list.' };
     const data = { type: 'text', text: JSON.stringify({ count: 1, data: [{ id: 1 }] }) };
-    const out = dataFirstResult({ content: [ask, data] });
-    expect(out.content).toEqual([data, ask]);
+    expect(dataFirstResult({ content: [ask, data] }).content).toEqual([ask, data]);
+    expect(dataFirstResult({ content: [ask, data] }, { prose: true }).content).toEqual([data, ask]);
   });
 });
 
