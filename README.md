@@ -169,6 +169,8 @@ Facility directories list sites you can browse. DC Hub adds the power side, quer
 
 ## Install
 
+One-line setup for Codex CLI, GitHub Copilot CLI, opencode, VS Code and Windsurf: [docs/quick-start.md](docs/quick-start.md).
+
 ### Claude Desktop — Quickstart (stdio)
 
 Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use the launcher package, which connects it to the hosted server. Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
