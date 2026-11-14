@@ -85,6 +85,10 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
+import { keylessFirstFullOn, keylessFirstFullTool as _kffTool, keylessFirstFullSeat as _kffSeatFor, KEYLESS_FIRST_FULL_CAP,
+         KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_STEP_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_PLAN_STEP, KEYLESS_PLAN_STEP,
+         KEYLESS_FIRST_PLAN_HEADER, mintKeylessFirstPlanToken, consumeKeylessFirstPlanToken, firstFullMeter as _kffMeter,
+         firstPlanAnswer as _kffFirstPlanAnswer } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -813,8 +817,21 @@ export function _boundaryPhrase(tool) {
 // "Your AI assistant hit DC Hub's free-tier limit on execute_plan", which reads as "the plan did not run".
 // execute_plan never hits a limit of its own: its steps run, some at preview depth (executed[].depth).
 // The plan's line says that, with the counts when the envelope is at hand. Every other tool keeps its line.
+// Keyless first full answer (2026-11-14, DCHUB_KEYLESS_FIRST_FULL): on the five lane tools a keyless preview says
+// "free-tier limit" only when a limit was hit (today's full answer used, or the anonymous daily cap); any other
+// keyless answer there says only that some fields were held back. Off, on a key, or on the frozen /mcp/chatgpt seat: unchanged.
+export function _kffPreviewNotLimit(tool, c) {
+  try {
+    if (!keylessFirstFullOn() || !_kffTool(tool) || tool === 'execute_plan') return false;
+    let s = c;
+    if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
+    if (!s || s.api_key || _chatgptFrozenSeat(s) || _toolSellsPro(tool)) return false;
+    return s._kffSpent !== tool && s._anonCapHit !== true;
+  } catch (_) { return false; }
+}
 export function _relayLead(tool, sc) {
   if (tool !== 'execute_plan') {
+    if (_kffPreviewNotLimit(tool)) return 'Your AI assistant got a DC Hub answer on ' + tool + ' with some fields held back at its access level';
     return 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(tool) + (tool ? ' on ' + tool : '');
   }
   const ex = sc && Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : null;
@@ -9544,6 +9561,58 @@ export async function _keylessFullTrialCharge(c, tool, cap) {
     _fullCapConsume(id, tool, cap);
     return true;
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// ── Keyless first full answer (owner 2026-11-14, lib/keyless-first-full.mjs; ships OFF) ─────────────────
+// The first call of the UTC day per keyless caller IP on execute_plan, get_grid_intelligence,
+// get_interconnection_queue, get_grid_data and get_energy_prices is the full answer (the email-bound free key's
+// gate and masks), before any wall. Same caller rules as the trial; its own counter ('kff:' + IP, cap 1).
+export function _keylessFirstFullSeat(name, c, env = process.env) {
+  return _kffSeatFor(name, c, {
+    env, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
+    isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
+    isBot: isBotOrInternalCtx,
+  });
+}
+export function _keylessFirstFullId(c) {
+  return KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
+}
+function _keylessFirstFullDayKey(c, tool) {
+  return `${_keylessFirstFullId(c)}:${tool}:${new Date().toISOString().slice(0, 10)}`;
+}
+// Same store and shape as _keylessFullTrialCharge. true = charged (serve full); false = spent or unreadable.
+export async function _keylessFirstFullCharge(c, tool) {
+  try {
+    const cap = KEYLESS_FIRST_FULL_CAP;
+    const id = _keylessFirstFullId(c);
+    const key = _keylessFirstFullDayKey(c, tool);
+    const hydrating = _hydrateOnce(key, key, id, tool, cap);
+    if (FULL_CAP_PEEK_MS > 0) await hydrating;
+    const n = _trialDayCounts.get(key) || 0;
+    if (n >= cap) return false;
+    _trialDayCounts.set(key, n + 1);
+    if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
+    _fullCapConsume(id, tool, cap);
+    return true;
+  } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// An answer that failed gives the in-process count back (the durable mirror keeps it; it only floors a fresh
+// replica), so an error never costs the caller the day's answer on this replica.
+export function _keylessFirstFullRefund(c, tool) {
+  try {
+    const key = _keylessFirstFullDayKey(c, tool);
+    const n = _trialDayCounts.get(key) || 0;
+    if (n > 0) _trialDayCounts.set(key, n - 1);
+  } catch (_) { /* a lost refund costs one answer, never an extra one */ }
+}
+// The gate: the seat, charged. null = today's path; a spent answer marks the ctx so the preview's relay line
+// may say "free-tier limit" (a limit was hit).
+export async function _keylessFirstFullGate(name, c) {
+  const seat = _keylessFirstFullSeat(name, c);
+  if (!seat) return null;
+  if (seat !== 'charge') return seat;
+  if (await _keylessFirstFullCharge(c, name)) return seat;
+  try { c._kffSpent = name; } catch (_) { /* ctx is best-effort */ }
+  return null;
 }
 // ── The daily site lane (owner 2026-11-01, lib/keyless-full-trial.mjs keylessSiteFullSeat) ──
 // The FULL analyze_site answer DCHUB_KEYLESS_SITE_FULL_CAP times per IP per UTC day: keyless from
@@ -24393,6 +24462,11 @@ function _sourceLineCb(name, fn) {
       // Front desk (owner 2026-11-13): execute_plan's one next-step line, LAST, after every trim: it replaces the
       // identity line rather than adding a second one, and never rides a wall (_frontDeskStep).
       _final = _frontDeskStep(_final, name, c);
+      // Keyless first full answer (lib/keyless-first-full.mjs): the day's first plan answer leads with a direct
+      // answer and stays under its budget. Last, so the budget holds for what the caller receives.
+      if (name === 'execute_plan' && c._keylessFirstPlan) {
+        _final = _kffFirstPlanAnswer(_final, { keepBlock: (b) => _isFrontDeskLine(b.text) });
+      }
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -25234,6 +25308,20 @@ function trackedTool(srv, name, description, schema, handler) {
       if (!gate.trial_taste && !_isPaidDepthTier(_gateTier) && _chatgptFirstFullCall(name, c)
           && !(await _chatgptFirstFullExceeded(c, name))) {
         gate = { allowed: true, params: gate.params || args, trial_taste: true, chatgpt_first: true };
+      }
+      // Keyless first full answer (DCHUB_KEYLESS_FIRST_FULL, default OFF; lib/keyless-first-full.mjs). Charged here,
+      // before anything below can wall, preview, trim or cap the call. The four single tools take a full gate (the
+      // email-bound free key's: no taste, no trim, broker rates masked below); execute_plan keeps its gate and runs
+      // its steps on the same full seat (_execLoopbackCall hands each step a first-plan token). Off, nothing runs.
+      if (!c.api_key && !gate.trial_taste && !_isPaidDepthTier(_gateTier) && keylessFirstFullOn()) {
+        const _kff = await _keylessFirstFullGate(name, c);
+        if (_kff) {
+          gate = name === 'execute_plan'
+            ? { ...gate, keyless_first_full: true, keyless_first_full_seat: _kff }
+            : { allowed: true, params: gate.params || args, trial_taste: true, keyless_first_full: true, keyless_first_full_seat: _kff };
+          if (name === 'execute_plan') c._keylessFirstPlan = _kff;
+          if (_kff === 'charge') c._kffCharged = name;
+        }
       }
       // ── Top-20 metros free (owner decision 2026-10-20; DCHUB_TOP_METROS_FREE=0 kills it) ──
       // "make the full market briefing (grid, risk, time-to-power) free for the top 20 metros":
@@ -26403,7 +26491,13 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // capped rewrites below rebuild the result and dropped isError: live,
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
       // with no isError (2026-09-25, 23:18Z, a caller past the anonymous cap).
+      if (result && result.isError === true && c._kffCharged === name) _keylessFirstFullRefund(c, name);
       if (result && result.isError === true) return result;
+      // Keyless first full answer: the funnel tag, on a charged answer (or a first-plan step). A QA observer is tagged nothing.
+      if (gate.keyless_first_full === true) {
+        if (gate.keyless_first_full_seat === 'charge') status = KEYLESS_FIRST_FULL_STATUS;
+        else if (gate.keyless_first_full_seat === 'step') status = KEYLESS_FIRST_FULL_STEP_STATUS;
+      }
       // Keyless full-answer trial: the funnel tag (mcp_call_log.status / mcp_tool_calls.gate_status),
       // on a charged answer only. A QA observer is tagged nothing.
       if (gate.keyless_full_trial_charged === true) status = KEYLESS_FULL_TRIAL_STATUS;
@@ -26472,7 +26566,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // write tools ...) skip it. Measured at count 25 of 20: discover_tools walled as a plan step, and the
       // wall rewrote the terms link in request_capacity_intro / accept_capacity_terms and the licence link in
       // summarize_for_citation to the wall's own link.
-      if (!c.api_key && gate.keyless_full_trial !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
+      if (!c.api_key && gate.keyless_full_trial !== true && gate.keyless_first_full !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
+        // The keyless first full answer's relay line says "free-tier limit" here: a limit was hit.
+        if (keylessFirstFullOn()) { try { c._anonCapHit = true; } catch (_) { /* ctx is best-effort */ } }
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -26564,7 +26660,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // with broker rates masked in the trial_taste block below); every other call is unchanged.
       // The keyless full-answer trial's promoted call skips it too (it takes the free key's masks below).
       const _anonTrimApplies = ((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name)
-        && gate.chatgpt_first !== true && gate.keyless_full_trial !== true;
+        && gate.chatgpt_first !== true && gate.keyless_full_trial !== true && gate.keyless_first_full !== true;
       if (gate.capped && !_anonTrimApplies) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
@@ -26747,7 +26843,23 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           result.content = [{ type: 'text', text: JSON.stringify({ ok: false, error: 'temporarily_unavailable', retry: true }) }];
         }
       }
-      if (gate.trial_taste && gate.chatgpt_first !== true && !_resultIsArgError(result)) {
+      // Keyless first full answer: served full (charged at the gate), broker rates masked like the email-bound
+      // allowance, and one plain meter. An argument error spends nothing.
+      if (gate.keyless_first_full === true && name !== 'execute_plan') {
+        if (_resultIsArgError(result)) {
+          if (c._kffCharged === name) _keylessFirstFullRefund(c, name);
+          if (status === KEYLESS_FIRST_FULL_STATUS || status === KEYLESS_FIRST_FULL_STEP_STATUS) status = 'ok';
+        } else {
+          try {
+            const _kp = _maskBrokerRatesBelowPro(JSON.parse(result.content?.[0]?.text || ''));
+            if (_kp && typeof _kp === 'object' && !Array.isArray(_kp)) {
+              if (gate.keyless_first_full_seat === 'charge') _kp.first_full_answer = _kffMeter(name);
+              result.content[0] = { ...result.content[0], text: JSON.stringify(_kp) };
+            }
+          } catch (_) { /* a non-JSON answer keeps its text: these tools carry no broker rates */ }
+        }
+      }
+      if (gate.trial_taste && gate.chatgpt_first !== true && gate.keyless_first_full !== true && !_resultIsArgError(result)) {
         // r-bind-ladder (2026-06-27): bound (email-captured) callers get the higher
         // IDENTIFIED cap; unbound free keys stay at the base cap — so binding an
         // email buys a real, visible benefit (more full flagship answers/day).
@@ -27265,6 +27377,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     return await _dcpiSubscoresBelowPro(_pw.result, name, c, args);
     } catch (err) {
       status = 'error';
+      if (c && c._kffCharged === name) _keylessFirstFullRefund(c, name);
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
       // error into a bare `isError` text blob — no structure, no retry hint —
       // and the raw err.message (often an internal fetch/parse detail) leaked
@@ -27345,6 +27458,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ...(_isQaCaller(c) ? { is_qa: true } : {}),
         // Keyless full-answer trial: the served full answer, beside its status (an older backend ignores it).
         ...(status === KEYLESS_FULL_TRIAL_STATUS ? { keyless_full_trial: true } : {}),
+        ...(status === KEYLESS_FIRST_FULL_STATUS ? { keyless_first_full: true } : {}),
         // Onboarding item 1 (2026-10-20): which channel the credential came on (see
         // _trackAuthChannel). An older backend ignores the key.
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
@@ -33026,6 +33140,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
+      // Keyless first full answer: the day's first plan runs its steps on the full seat (lib/keyless-first-full.mjs).
+      if (c && c._keylessFirstPlan) { const _kpt = mintKeylessFirstPlanToken(); if (_kpt) headers[KEYLESS_FIRST_PLAN_HEADER] = _kpt; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -36970,6 +37086,10 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planWallSinkTok = req.headers[PLAN_WALL_SINK_HEADER];
     delete req.headers[PLAN_WALL_SINK_HEADER];
     const _planWallSinkId = _isLoopbackPeer(req) ? _planWallSink.consumeStepToken(_planWallSinkTok) : null;
+    // And the keyless first-plan step token (lib/keyless-first-full.mjs), the same single-use way.
+    const _kffPlanTok = req.headers[KEYLESS_FIRST_PLAN_HEADER];
+    delete req.headers[KEYLESS_FIRST_PLAN_HEADER];
+    const _kffPlanStep = _isLoopbackPeer(req) && consumeKeylessFirstPlanToken(_kffPlanTok);
     const sessionId = req.headers['mcp-session-id'];
     // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
     // 400 on every in-session request. Negotiate down instead: drop the header, and the request
@@ -38062,6 +38182,8 @@ app.post(MCP_PATHS, async (req, res) => {
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
+        ...(_kffPlanStep ? { [KEYLESS_FIRST_PLAN_STEP]: true } : {}),   // a step of the day's keyless first full plan
+        ...(_planLoopbackIp ? { [KEYLESS_PLAN_STEP]: true } : {}),   // any execute_plan step (it carried the plan's caller-IP token)
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
