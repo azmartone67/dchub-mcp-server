@@ -447,6 +447,8 @@ test/plan-short-power-asks.test.mjs
 test/plan-step-session-id.test.mjs
 test/plan-steps-caller-key.test.mjs
 test/planner-525-geo-alternatives-dropped.test.mjs
+test/planner-526-review-prompts.test.mjs
+test/planner-526-submarket-e2e.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

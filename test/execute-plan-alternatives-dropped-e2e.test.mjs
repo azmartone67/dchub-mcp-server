@@ -39,7 +39,7 @@ describe('execute_plan Reno, anonymous (real server.mjs on loopback)', () => {
     const r = await H.call('/mcp', 'execute_plan', { intent: RENO },
       { 'user-agent': 'dchub-qa-brain/1113', 'x-dc-client-ip': '203.0.113.9' });
     const o = r.msg.result.structuredContent || JSON.parse(r.msg.result.content[0].text);
-    expect(o.planner_version).toBe('5.25');
+    expect(o.planner_version).toBe('5.26');
     const canvas = o.executed.find((e) => e.tool === 'site_selection_canvas');
     expect(canvas, JSON.stringify(o.executed.map((e) => [e.tool, e.status]))).toBeTruthy();
     expect(canvas.args).toMatchObject({ region: 'us', capacity_mw: 200, max_months: 24 });

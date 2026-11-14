@@ -19,7 +19,8 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
     expect(blob).not.toContain('WECC');
     expect(blob).not.toContain('"iso"');
     const byTool = Object.fromEntries(steps.map((s) => [s.tool, s]));
-    expect(byTool.get_power_availability_timeline.args_hint).toEqual({ state: 'AZ' });
+    // Planner 5.26: the intent's MW rides along (the timeline echoes it as context).
+    expect(byTool.get_power_availability_timeline.args_hint).toEqual({ state: 'AZ', mw: 100 });
     expect(byTool.get_refined_queue.args_hint).toEqual({
       state: 'AZ', min_mw: 100, geocoded_only: true,
     });
@@ -62,6 +63,6 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
   });
 
   it('planner_version moved with the routing change', () => {
-    expect(PLANNER_VERSION).toBe('5.25');
+    expect(PLANNER_VERSION).toBe('5.26');
   });
 });

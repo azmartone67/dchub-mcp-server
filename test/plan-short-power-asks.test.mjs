@@ -19,7 +19,8 @@ describe('short power asks route to grid_headroom (planner 5.23)', () => {
       expect(tools).not.toContain('search_facilities');
       expect(tools).not.toContain('discover_tools');
       const byTool = Object.fromEntries(p.recommended_sequence.map((s) => [s.tool, s]));
-      expect(byTool.get_power_availability_timeline.args_hint).toEqual({ state: 'TX' });
+      // Planner 5.26: the intent's MW rides along (the timeline echoes it as context).
+      expect(byTool.get_power_availability_timeline.args_hint).toEqual({ state: 'TX', mw: 50 });
       expect(byTool.get_refined_queue.args_hint).toMatchObject({ state: 'TX', min_mw: 50 });
     });
   }
@@ -57,7 +58,7 @@ describe('short power asks route to grid_headroom (planner 5.23)', () => {
   });
 
   it('planner_version moved with the routing change', () => {
-    expect(PLANNER_VERSION).toBe('5.25');
+    expect(PLANNER_VERSION).toBe('5.26');
   });
 });
 
