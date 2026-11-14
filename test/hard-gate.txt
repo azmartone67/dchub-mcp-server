@@ -196,6 +196,7 @@ test/evidence-content-block.test.mjs
 test/evidence-contract.test.mjs
 test/evidence-per-layer.test.mjs
 test/exec-step-budget.test.mjs
+test/execute-plan-alternatives-dropped-e2e.test.mjs
 test/execute-plan-asof-e2e.test.mjs
 test/execute-plan-cohort.test.mjs
 test/execute-plan-corridors-and-slim.test.mjs
@@ -442,6 +443,7 @@ test/plan-rerun.test.mjs
 test/plan-short-power-asks.test.mjs
 test/plan-step-session-id.test.mjs
 test/plan-steps-caller-key.test.mjs
+test/planner-525-geo-alternatives-dropped.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
