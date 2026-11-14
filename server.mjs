@@ -10692,8 +10692,19 @@ function _lpProLink() {
   return _subCheckoutUrl(PRO_URL + promoParam(), sid);
 }
 
+// The daily site lane's cap as it would apply to THIS keyless caller (mcp#1419): the cap when the lane would seat
+// it (on, analyze_site, an allowed profile, not a bot or our own probe), else 0, so a wall never promises a daily
+// run the lane would not serve. Read per call, like the lane.
+export function _keylessSiteDailyFor(c, name = 'analyze_site') {
+  try {
+    const cc = c || getCtx() || {};
+    if (cc.api_key) return 0;
+    return _keylessSiteFullSeat(name, cc) ? _keylessSiteFullCap() : 0;
+  } catch (_) { return 0; }
+}
 export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
+  const _siteDaily = name === 'analyze_site' ? _keylessSiteDailyFor(null, name) : 0;
   // B2 (owner 2026-10-03; merge on/after 2026-10-19): analyze_site's keyless
   // answer is a headline on every arm: the verdict band, the NAME of the
   // weakest factor and counts. No score, factor band, MW, distance or
@@ -10717,13 +10728,13 @@ export function _lpWallResult(name, headline = null) {
         + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
       : _wallCopy(`\`${name}\` is Land & Power. ` + _WALL_NEUTRAL_LINE + ' ',
         `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. `) + 'Without a key it '
-        + 'returns no data: no verdict, score or figure. ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn() }),
+        + 'returns no data: no verdict, score or figure. ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), dailyCap: _siteDaily }),
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
     content: [{ type: 'text', text: _wallCopy('🔒 **`' + name + '` is Land & Power.** ' + _WALL_NEUTRAL_LINE + ' ',
       '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** ') + 'No data without a key. '
-      + 'Get a paid DC Hub plan → ' + url + ' · ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), text: true }) }],
+      + 'Get a paid DC Hub plan → ' + url + ' · ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), text: true, dailyCap: _siteDaily }) }],
     isError: _wallIsError(),
     structuredContent: payload,
   };
@@ -24838,7 +24849,8 @@ function trackedTool(srv, name, description, schema, handler) {
             // this month" on a caller's first call; the stamp is a constant, not a counter.
             if (_ew) {
               const _ewKey = _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
-              return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey : _withKeylessWallQuota(_ewKey), _scWall);
+              return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey
+                : _withKeylessWallQuota(_ewKey, new Date(), { dailyCap: _keylessSiteDailyFor(c, name) }), _scWall);
             }
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);

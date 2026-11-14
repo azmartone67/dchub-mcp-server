@@ -44,7 +44,7 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
       for (const n of nums) expect(canonNums, `${k}: ${n} is not a canon figure`).toContain(n);
       expect(L[k], k).not.toMatch(/full free tier|calls to try|\d+-calls\/day|free calls are used up/);
     }
-    expect(L.ANALYZE_SITE_KEY_CLAUSE).toContain(ANALYZE_SITE_FREE_LINE);
+    expect(L.analyzeSiteKeyClause).toContain('a few free full site reports each month');
   });
   it('the unbound-key line states the email rung and the per-tool figure from the canon, no "used up"', () => {
     const t = U.unboundKeyLine(_rungNum('identified'));
@@ -57,11 +57,44 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     expect(EMAIL_ASK).toMatch(/^If your user would like the full answer, ask whether they want to share their email/);
     expect(EMAIL_ASK).toContain('`bind_email`');
   });
-  it('analyze_site: the keyless wall clause is the owner line with free runs on; other L&P tools keep the preview clause', () => {
-    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true })).toContain(ANALYZE_SITE_FREE_LINE);
+  // RATCHET on the keyless analyze_site wording (mcp#1419 OWNER DECISION 2, measured 2026-11-14): the wall states
+  // the allowance the code enforces. No key: the daily lane's cap per network per UTC day (the number comes from the
+  // caller, never written here). A free key: a few a month on top (owner decision 2: "a few"). An email: the same
+  // free key, no more site reports. Reverting to the monthly-only line, or to "a free key opens the preview",
+  // fails here.
+  const DAILY_2 = 'Without a key, the first 2 `analyze_site` calls each UTC day from a network return the full site '
+    + 'report; after that, no full report until UTC midnight.';
+  const DAILY_1 = 'Without a key, the first `analyze_site` call each UTC day from a network returns the full site '
+    + 'report; after that, no full report until UTC midnight.';
+  const KEY_EMAIL = 'A free key adds a few free full site reports each month: call `claim_free_key` (one call, no email); '
+    + 'adding an email (`bind_email`) gives the same free key, with no more site reports.';
+  const KEY_EMAIL_TEXT = 'or call `claim_free_key` (one call, no email) for a free key: it adds a few free full site '
+    + 'reports each month; adding an email (`bind_email`) gives the same free key, with no more site reports.';
+  it('analyze_site: the keyless wall clause states the daily keyless runs, the free key\'s monthly runs and what an email adds', () => {
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 2 })).toBe(DAILY_2 + ' ' + KEY_EMAIL);
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 1 })).toBe(DAILY_1 + ' ' + KEY_EMAIL);
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 2, text: true })).toBe(KEY_EMAIL_TEXT + ' ' + DAILY_2);
+    // the lane does not serve this caller (off, a bot, the ChatGPT profile): no daily promise
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 0 })).toBe(KEY_EMAIL);
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 0, text: true })).toBe(KEY_EMAIL_TEXT);
+    // no monthly runs: the daily sentence alone
+    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: false, dailyCap: 2 })).toBe(DAILY_2);
     expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: false })).toBe(U.LP_PREVIEW_CLAUSE);
-    expect(U.lpFreeKeyClause('compare_sites', { lpFreeRuns: true })).toBe(U.LP_PREVIEW_CLAUSE);
-    expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, text: true })).toMatch(/^or call `claim_free_key`/);
+    expect(U.lpFreeKeyClause('compare_sites', { lpFreeRuns: true, dailyCap: 2 })).toBe(U.LP_PREVIEW_CLAUSE);
+    // the false claims are gone: no key is not "no full answers", and the key line does not end in previews only
+    for (const d of [0, 1, 2]) {
+      const t = U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: d });
+      expect(t).not.toMatch(/A free key opens the preview|after that, previews|no full answers/);
+    }
+  });
+  it('the keyless wall quota basis states the daily runs when the lane serves the caller', async () => {
+    const { keylessWallQuota } = await import('../lib/keyless-wall.mjs');
+    const on = keylessWallQuota(new Date('2026-11-14T04:00:00Z'), { dailyCap: 2 });
+    expect(on.quota_basis).toContain(DAILY_2);
+    expect(on.quota_basis).not.toMatch(/keyless callers get no full answers/);
+    expect(on.remaining_this_month).toBe(0);
+    expect(on.resets_at).toBe('2026-12-01T00:00:00Z');
+    expect(keylessWallQuota(new Date(), { dailyCap: 0 }).quota_basis).toMatch(/^keyless callers get no full answers/);
   });
   it('the DCPI withheld basis quotes the clause it is handed and never says "no DCPI row"', () => {
     const b = U.DCPI_BAND_WITHHELD_BASIS('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
@@ -218,15 +251,27 @@ describe('5. /mcp e2e (real server.mjs, stub backend)', () => {
     expect(rows[0]._estimated_ttp_months_withheld).toBe(true);
   }, 60_000);
 
-  it('keyless analyze_site L&P wall (no headline arm): the free-key clause is the owner analyze_site line', () => {
+  it('keyless analyze_site L&P wall (no headline arm): the clause states the daily runs this caller gets, then a key, then an email', () => {
     // A keyless analyze_site with a headline gets the B2 arm; the no-headline arm (teaser unavailable) is where
     // the free-key clause lives, so the wall is built directly from server.mjs's export.
-    const w = H.S._lpWallResult('analyze_site');
+    // Built inside a keyless request context: the daily lane seats a caller with a real (non-loopback) IP.
+    const CALLER = { client_ip: '203.0.113.77', user_agent: 'Claude-User', tier: 'free' };
+    const w = H.S._runInCtxForTest(CALLER, () => H.S._lpWallResult('analyze_site'));
     const all = w.content[0].text + JSON.stringify(w.structuredContent);
     expect(w.structuredContent.next_tool, 'control: the L&P wall').toBe('claim_free_key');
-    expect(w.structuredContent.message).toContain(ANALYZE_SITE_FREE_LINE);
-    expect(w.content[0].text).toContain(ANALYZE_SITE_FREE_LINE);
+    const daily = H.S._keylessSiteDailyFor(CALLER);
+    expect(daily, 'control: the daily lane seats this caller at its default cap').toBe(2);
+    expect(w.structuredContent.message).toContain(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: daily }));
+    expect(w.structuredContent.message).toContain('the first 2 `analyze_site` calls each UTC day from a network return the full site report');
+    expect(w.content[0].text).toContain(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: daily, text: true }));
     expect(all).not.toMatch(/A free key opens the preview/);
+    // a caller the lane does not seat (a bot UA) is promised no daily run
+    expect(H.S._keylessSiteDailyFor({ ...CALLER, user_agent: 'uptimerobot/2.0' })).toBe(0);
+    expect(H.S._keylessSiteDailyFor({ ...CALLER, api_key: 'dch_live_x' }), 'a keyed caller is not on the keyless wall').toBe(0);
+    expect(H.S._keylessSiteDailyFor({ ...CALLER, client_ip: '' }), 'no caller IP: the lane cannot count it').toBe(0);
+    const noIp = H.S._runInCtxForTest({ ...CALLER, client_ip: '' }, () => H.S._lpWallResult('analyze_site'));
+    expect(noIp.structuredContent.message).not.toMatch(/each UTC day from a network/);
+    expect(noIp.structuredContent.message).toContain('A free key adds a few free full site reports each month');
     // other Land & Power tools keep the preview clause (their free key really is a preview)
     expect(H.S._lpWallResult('compare_sites').structuredContent.message).toContain(U.LP_PREVIEW_CLAUSE);
   });
