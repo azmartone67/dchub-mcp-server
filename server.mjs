@@ -132,6 +132,8 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
+// Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
+import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -2847,9 +2849,9 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   const human_message = _byoApplies
     ? _byoLead()
     : _isTrial
-    ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the credit pack above.*'
+    ? _unboundKeyLine(FREE_TIER.identified_calls_per_day)
     : (_platform === 'claude')
-      ? '*(Claude.ai web can\u2019t hold an API key \u2014 the credit-pack link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
+      ? _claudePlatformLine()
       : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + _freeKeyAllowanceText() + ') \u2014 the credit pack above adds API capacity.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
@@ -10715,15 +10717,13 @@ export function _lpWallResult(name, headline = null) {
         + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
       : _wallCopy(`\`${name}\` is Land & Power. ` + _WALL_NEUTRAL_LINE + ' ',
         `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. `) + 'Without a key it '
-        + 'returns no data: no verdict, score or figure. A free key opens the preview '
-        + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
+        + 'returns no data: no verdict, score or figure. ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn() }),
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
     content: [{ type: 'text', text: _wallCopy('🔒 **`' + name + '` is Land & Power.** ' + _WALL_NEUTRAL_LINE + ' ',
       '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** ') + 'No data without a key. '
-      + 'Get a paid DC Hub plan → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
-      + 'verdicts and bands, no scores or figures.' }],
+      + 'Get a paid DC Hub plan → ' + url + ' · ' + _lpFreeKeyClause(name, { lpFreeRuns: _lpFreeRunsOn(), text: true }) }],
     isError: _wallIsError(),
     structuredContent: payload,
   };
@@ -15908,7 +15908,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
                 // r86-reach: surface the NATIVE claim_free_key tool + persist on the MAIN anon path
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
                 // fires in the mint/upgrade branch). One in-protocol call an agent can actually follow.
-                'Call `claim_free_key` (no email) for the full free tier — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
+                _claimNudge() + ' — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
                 'Your human can pay in one click — ' + _rungsText(toolName, 'free', _ctaSid) + '.\n' +
                 _trialGapLine(parsed);
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
@@ -17699,6 +17699,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   // picks named fields and would silently drop related_intel.
   if (gi && !gi.error && Array.isArray(gi.related_intel) && gi.related_intel.length) {
     out.related_intel = gi.related_intel;
+  }
+  // Item 4 add-on (Grok live review 2026-11-13, item 3 "ERCOT has no DCPI score"): the ISO row IS there, the
+  // backend withheld its averages at this tier (/api/v1/dcpi/iso-comparison row locked: true, avg_constraint and
+  // avg_excess null). Say so with the usual marker, so the taste reads "withheld", not "no DCPI row".
+  // Kill switch DCHUB_UNLOCK_LINE_V1=0 (lib/unlock-line.mjs).
+  if (_unlockLineV1On() && row && row.locked === true) {
+    if (out.constraint_score == null) out._constraint_score_in_pro = true;
+    if (out.excess_power_score == null) out._excess_power_score_in_pro = true;
   }
   return out;
 }
@@ -25790,7 +25798,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   // to DC Hub" beside a link to the marketing page; it now
                   // points at the relay page, which is a page about THIS
                   // session's result, not a sign-in.
-                  note: 'Free preview — a sample is shown. Call claim_free_key (free, no email, one call) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.',
+                  note: _previewNote(true),
                   upgrade_url: _cleanPlatformUnlockUrl(name, ''),
                   // r-cite-toplevel (2026-08-12): was a bare STRING here while
                   // every other surface emitted an OBJECT — the exact "handle
@@ -26319,7 +26327,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
               trimmed._note = _sitingPreview ? _sitingPreviewUpgradeMarked(name, _sitingSeatNow, _sitingFr).message
-                : 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
+                : _previewNote(false);
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
                        // #836: the trimmed preview rides structuredContent too (what the
@@ -26346,7 +26354,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 ? _missedUp.text + (_missedUp.rung === 'free_key'
                   ? ' Call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.'
                   : ' Relay the link in human_url to your human.')
-                : 'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
+                : _anonMaskNote(),
               // r86-reach: the live anon _upgrade pointed only at redeem/Stripe (browser steps a
               // headless agent can't follow). Surface the NATIVE claim_free_key tool + persist as a
               // structured next_tool so an arriving agent has a one-call in-protocol path to a key it
@@ -32143,7 +32151,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
       a = _foldIsoArg(a);
-      const data = await callAPI('/api/v1/interconnection-queue/refined', a);
+      // Item 4 add-on (2026-11-13): a row field the backend nulled under `_locked_fields` (capacity_mw) carries
+      // its `_<f>_in_pro` marker (renamed `_<f>_withheld` on the way out), as project_name and queue_id do.
+      const data = _markLockedRowFields(await callAPI('/api/v1/interconnection-queue/refined', a), ['results']);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length && sc === data) {
