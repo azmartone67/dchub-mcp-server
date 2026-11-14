@@ -11,7 +11,7 @@
   "dependencies": {
     "mcp-remote": "^0.15.1"
   },
-  "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "power-grid", "fiber", "site-selection", "ai-agents", "dchub"],
+  "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "electricity", "electricity-prices", "power-grid", "grid-power", "orchestration", "interconnection", "interconnection-queue", "fiber", "site-selection", "colocation", "data-center-power-index", "ai-agents", "dchub"],
   "homepage": "https://dchub.cloud/connect",
   "repository": { "type": "git", "url": "git+https://github.com/azmartone67/dchub-mcp-server.git" },
   "bugs": { "url": "https://github.com/azmartone67/dchub-mcp-server/issues" },
