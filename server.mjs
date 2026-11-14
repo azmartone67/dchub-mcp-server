@@ -196,9 +196,10 @@ import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _C
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { resolveFacilityRef as _resolveFacilityRef } from './lib/facility-ref.mjs';
-import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating } from './lib/attribution.mjs';
+import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating, COMPOSITE_LICENSE, COMPOSITE_LICENSE_TOOLS } from './lib/attribution.mjs';
 import { meteredTrialNote as _meteredTrialNote, limitedAnswerCopy as _limitedAnswerCopy } from './lib/metered-note.mjs';
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
+import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { CANON_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
@@ -16421,6 +16422,14 @@ const SCRAPER_SIGNATURE = new Set([
   'get_grid_data',
 ]);
 const SCRAPER_BLOCK_THRESHOLD = 5;   // call count before block kicks in
+// QA 2026-11-14: the block used to open with an emoji and "the same 5-tool sweep that ~20 other
+// anonymous sessions have run this week", a count measured once in May and never again. It states
+// only what this session did.
+export const SCRAPER_BLOCK_TEXT = '**Automated usage detected.**\n\nThis anonymous session called all five of '
+  + 'get_agent_registry, get_energy_prices, get_facility, get_fiber_intel and get_grid_data, the pattern DC Hub '
+  + 'treats as an automated sweep, so further anonymous calls in this session are blocked. We would like to hear '
+  + 'from whoever is running it.'
+  + '\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or get a free key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.';
 const _scraperTracker = new Map();   // session_id → { tools: Set, calls: number, firstAt: number }
 const _SCRAPER_TTL_MS = 60 * 60 * 1000;  // forget sessions older than 1h
 
@@ -16474,6 +16483,10 @@ setInterval(() => {
 // the trial, anon-masked, blocked and scraper paths keep their own upgrade CTAs.
 const _CITE_SOURCE = 'DC Hub — dchub.cloud';
 const _CITE_LINE   = 'Data: DC Hub (dchub.cloud), CC-BY-4.0 — cite as "DC Hub, dchub.cloud"';
+// QA 2026-11-14: a composite-layer answer (facility inventory, physical layers) carries no
+// blanket grant, so its in-payload _cite names the per-layer licence instead.
+export const _CITE_LINE_COMPOSITE = 'Data: DC Hub (dchub.cloud), licence per layer (' + COMPOSITE_LICENSE
+  + ') — cite as "DC Hub, dchub.cloud"';
 
 // ── _normalizeCitation (r-cite-shape, 2026-08-10) ──────────────────────────
 // PRODUCTION OUTAGE FIXED HERE. The envelope declares `citation` as an OBJECT
@@ -16628,7 +16641,7 @@ export function _citationBlock(a) {
   return out;
 }
 
-function _embedSourceInContent0(content) {
+function _embedSourceInContent0(content, citeLine = _CITE_LINE) {
   // Returns a (possibly new) content array with _source/_cite embedded inside
   // content[0]'s JSON object when safe; otherwise returns the original array.
   try {
@@ -16649,7 +16662,7 @@ function _embedSourceInContent0(content) {
         && !Array.isArray(obj.citation)) return content; // already embedded
     // Inject without disturbing existing keys/values.
     if (!('_source' in obj)) obj._source = _CITE_SOURCE;
-    if (!('_cite' in obj))   obj._cite   = _CITE_LINE;
+    if (!('_cite' in obj))   obj._cite   = citeLine;
     // r-cite-object (2026-07-11): the machine-readable citation OBJECT rides in
     // content[0] too — many handlers return content-only, and their
     // structuredContent is SYNTHESIZED later from this JSON, so an sc-only
@@ -17165,6 +17178,38 @@ export function _relicensePeeringDB(result) {
   }
 }
 
+// The generic footer withCitation appends to an unstamped full result. Its licence must be the
+// licence of THIS answer (QA sweep 2026-11-14): the flat grant rode under search_facilities while
+// the same response's provenance.license read "Mixed — see /data-sources", and summarize_for_citation
+// calls a flat CC-BY-4.0 over a facility record an over-claim. Both keep the "Source: DC Hub" prefix,
+// which is what marks a result as already stamped.
+export const ATTR_FOOTER = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
+  + 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud. '
+  + 'Real-time grid, interconnection-queue, market (DCPI) and facility intelligence: https://dchub.cloud/mcp';
+export const ATTR_FOOTER_COMPOSITE = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
+  + 'Licence is per layer (' + COMPOSITE_LICENSE + '): this answer draws on composite layers whose upstream '
+  + 'terms DC Hub cannot waive (OpenStreetMap layers are ODbL 1.0, share-alike), so it carries no blanket grant. '
+  + 'Cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud; summarize_for_citation gives '
+  + 'the line for one figure. '
+  + 'Real-time grid, interconnection-queue, market (DCPI) and facility intelligence: https://dchub.cloud/mcp';
+const _COMPOSITE_TOOL_SET = new Set(COMPOSITE_LICENSE_TOOLS);
+// Composite when the tool answers from composite layers, or when the backend itself labelled this
+// response composite (provenance.license or citation.license in content[0], e.g. fiber routes).
+export function _isCompositeLicensed(result, toolName) {
+  try {
+    if (_COMPOSITE_TOOL_SET.has(toolName)) return true;
+    const first = Array.isArray(result?.content) ? result.content[0] : null;
+    const txt = first && typeof first.text === 'string' ? first.text.trim() : '';
+    if (!txt.startsWith('{')) return false;
+    const o = JSON.parse(txt);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+    const lic = [o.provenance?.license, o.citation?.license];
+    return lic.some((l) => typeof l === 'string' && l.trim() === COMPOSITE_LICENSE);
+  } catch (_) {
+    return false;
+  }
+}
+
 function withCitation(result, toolName) {
   const out = _withCitationCore(result, toolName);
   return PEERINGDB_TOOLS.has(toolName) ? _relicensePeeringDB(out) : out;
@@ -17182,7 +17227,8 @@ function _withCitationCore(result, toolName) {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
     // 1) Embed the citation INSIDE content[0] JSON (the high-reach surface).
     //    Safe no-op for non-JSON / array / already-stamped content[0].
-    const embedded = _embedSourceInContent0(result.content);
+    const composite = _isCompositeLicensed(result, toolName);
+    const embedded = _embedSourceInContent0(result.content, composite ? _CITE_LINE_COMPOSITE : _CITE_LINE);
     if (result.content.some((it) => typeof it?.text === 'string' && it.text.startsWith('Source: DC Hub'))) {
       // content[1] attribution already present — but still return the
       // content[0]-embedded version (idempotent on _source/_cite) so older
@@ -17207,9 +17253,7 @@ function _withCitationCore(result, toolName) {
       }
       return _withNextSession(_withProvenance(base, toolName));
     }
-    const ATTR = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
-      + 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud. '
-      + 'Real-time grid, interconnection-queue, market (DCPI) and facility intelligence: https://dchub.cloud/mcp';
+    const ATTR = composite ? ATTR_FOOTER_COMPOSITE : ATTR_FOOTER;
     const out = { ...result, content: [...embedded, { type: 'text', text: ATTR }] };
     const sc = (result.structuredContent && typeof result.structuredContent === 'object')
       ? { ...result.structuredContent } : null;
@@ -22899,7 +22943,7 @@ export function _dealDeskHumanRelay(dd) {
       + 'covering the whole run, no login required:',
     url,
     render: 'verbatim_link_required',
-    markdown: '[📄 Open the DC Hub Deal Desk Brief](' + url + ')',
+    markdown: '[Open the DC Hub Deal Desk Brief](' + url + ')',
     _agent_instruction: 'Share the `markdown` field above with your user as a clickable link. '
       + 'This PDF is not a reformat of what you just read: it was built from the FULL '
       + 'step results, which do not fit in your context and are not in this envelope.',
@@ -24349,7 +24393,7 @@ function trackedTool(srv, name, description, schema, handler) {
         isError: true,
         content: [{
           type: 'text',
-          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or get a free key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
+          text: SCRAPER_BLOCK_TEXT
         }],
         structuredContent: {
           error: 'scraper_pattern_blocked',
@@ -33213,7 +33257,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // passing route_type as an exact column match misses 'long-haul'/'long_haul' variants → empty results.
       const p = { ...a };
       if (p.route_type) { p.class = p.route_type; delete p.route_type; }
-      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', p)) }] }, 'get_fiber_intel');
+      // QA 2026-11-14: a NoVA answer was 500 routes / 3.1 MB. Over budget, the result is cut to fit
+      // (lib/fiber-payload.mjs) and says what was cut and how to get the rest.
+      const fiberResp = shapeFiberPayload(await callAPI('/api/v1/fiber/routes', p), { market: a.market });
+      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(fiberResp) }] }, 'get_fiber_intel');
     });
 
   trackedTool(srv, 'get_fiber_readiness', 'Use this when the user asks whether one data center site (lat/lon) is fiber-ready: near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100 (null when not scored — see carrier_data_coverage), near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"|"unknown"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool, null when not scored), fiber_coverage_km, verdict_short, carrier_data_coverage ("confirmed"|"none_in_region")}. IMPORTANT — "unknown" is NOT "bad": carrier presence comes from PeeringDB, which is global but thin outside dense US/EU metros, so DC Hub distinguishes "no carrier serves this point" from "PeeringDB does not describe this region". When carrier_data_coverage is "none_in_region" the bucket is "unknown", score/single_carrier_risk are null, and NOTHING about the site fiber has been measured — do not report it as greenfield, unserved, or a build-required site. Only carrier_data_coverage "confirmed" with carrier_count 0 means a fiber build is genuinely required. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
@@ -35229,7 +35276,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
      '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Free tier answers all six at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
   _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
      'How the Data Center Power and Gas Indices are computed — and what the DCGI correction changed.',
-     '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of the excess-power score, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** — withdrawn 2026-08-08, restored 2026-08-30 (see /api/v1/dcgi/methodology `corrections`; pre-withdrawal scores are not comparable). The composite score and its GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED verdict are no longer published: two of its three terms were measurably wrong (a dead interstate-share term and a hardcoded cost constant for nine states). `get_gas_index` returns an `unavailable_reason`; gas coverage is the sourced inputs — pipeline and operator presence with live Henry Hub — via `get_gas_intelligence`. Do not quote a cached DCGI figure.\n\nDCPI updates from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
+     '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of the excess-power score, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas access (pipeline and operator presence) plus gas cost (EIA electric-power gas price, trailing 12 months) -> a GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED verdict. `get_gas_index` returns the score and verdict per state, with `data_as_of` (the stalest of its two inputs); a state EIA cannot price is UNSCORED with the reason, never given a substitute price. Withdrawn 2026-08-08 after an audit found two of its three terms measurably wrong, restored 2026-08-30 with all three repaired; the cost basis changed again 2026-09-27 (see /api/v1/dcgi/methodology `corrections`). Scores published before 2026-08-08 are not comparable with current ones, so do not quote a cached pre-withdrawal DCGI figure.\n\nDCPI updates from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
   _R('data-sources', 'dchub://data-sources', 'DC Hub data sources',
      'Provenance of the underlying datasets.',
      _DATA_SOURCES_MD);
