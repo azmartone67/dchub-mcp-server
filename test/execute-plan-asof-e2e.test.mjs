@@ -35,7 +35,7 @@ describe('execute_plan "Texas 50 MW power", anonymous (real server.mjs on loopba
       expect(views.length).toBe(2);
       for (const o of views) {
         expect(o.intent_class).toBe('grid_headroom');
-        expect(o.planner_version).toBe('5.26');
+        expect(o.planner_version).toBe('5.27');
         const tools = o.executed.map((e) => e.tool);
         expect(tools).toContain('get_power_availability_timeline');
         expect(tools).not.toContain('search_facilities');

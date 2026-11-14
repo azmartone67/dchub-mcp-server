@@ -20052,6 +20052,63 @@ export function _gridHeadroomSequence(d) {
   ];
 }
 
+// ── 5.27 (live QA sweep 2026-11-14, execute_plan) ──────────────────────────────────────────────
+// Item 1: "Rank markets for a 200 MW AI campus" led with ai_capacity_index, whose order is market
+// DEPTH (Ashburn first), and the run's DCPI checks of its top two were both AVOID. A ranking by
+// suitability is rank_markets criteria=ai_ready (DCPI buildability: excess power, time to power,
+// verdict). ai_capacity_index stays the lead only for a stated deployment horizon.
+export const _PLAN_AI_HORIZON_RE = /\b(?:30|60|90)[-\s]?days?\b|\b30\s*\/\s*60\s*\/\s*90\b|\bdeploy(?:ment|able)?\s+(?:horizon|window)\b|\bcapacity\s+index\b/i;
+// Item 2: the relative window a text names, in the forms the tools take. get_changes since= takes
+// "<N>h"/"<N>d" (backend clamps at 30 days); get_news and list_transactions take date_from=YYYY-MM-DD.
+// "this week" planned get_changes since=24h. Last/past/this are one window each: a rolling span ending now.
+export function _planRelativeWindow(text, now = new Date()) {
+  try {
+    const t = String(text || '');
+    let days = null;
+    if (/\b(?:today|tonight|(?:in\s+)?the\s+(?:last|past)\s+(?:24\s*h(?:ours?|rs?)?|day)|(?:last|past)\s+24\s*h(?:ours?|rs?)?)\b/i.test(t)) days = 1;
+    else if (/\b(?:this|last|past)\s+(?:\d+\s+)?weeks?\b|\b(?:last|past)\s+7\s+days\b|\bweek\s+so\s+far\b/i.test(t)) {
+      const m = /\b(?:last|past)\s+(\d+)\s+weeks\b/i.exec(t);
+      days = m ? Math.min(30, Number(m[1]) * 7) : 7;
+    } else if (/\b(?:this|last|past)\s+month\b|\b(?:last|past)\s+30\s+days\b/i.test(t)) days = 30;
+    else {
+      const m = /\b(?:last|past)\s+(\d{1,2})\s+days\b/i.exec(t);
+      if (m && Number(m[1]) >= 1) days = Math.min(30, Number(m[1]));
+    }
+    if (!days) return null;
+    const from = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10);
+    return { days, since: days === 1 ? '24h' : `${days}d`, date_from: from,
+      phrase: days === 1 ? 'the last 24 hours' : `the last ${days} days` };
+  } catch (_e) { return null; }
+}
+// Item 2: what a changes/news ask is ABOUT, as a news query. get_changes takes no place, so a run
+// naming PJM or Dallas read the whole feed; get_news query= and get_facility_risk_delta market= do
+// take one. A named grid first, then a tracked market, then a US state's name.
+export function _planChangesPlace(d) {
+  if (!d || typeof d !== 'object') return null;
+  const isos = Array.isArray(d.isos) && d.isos.length ? d.isos : (d.isoFromText ? [d.isoFromText] : []);
+  if (isos.length) return { kind: 'iso', query: isos.join(' '), label: isos.join('/') };
+  const o = d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug ? d.__outlook : null;
+  if (o) return { kind: 'market', query: o.name || o.slug, label: o.name || o.slug, market: o.slug };
+  const st = d.state || d.stateFromPlace;
+  if (st) {
+    const code = String(st).toUpperCase();
+    const nm = _planStateNamesFor(code).sort((a, b) => b.length - a.length)[0];
+    return { kind: 'state', query: nm ? nm.replace(/\b[a-z]/g, (ch) => ch.toUpperCase()) : code, label: code };
+  }
+  return null;
+}
+// Item 3: where get_water_risk reads. It takes lat+lon, state, or location (a DC Hub market name or
+// slug, resolved to the market's published centroid). "water risk ... in Phoenix" planned
+// state='<2-letter state>' and lat='<site lat>', both unresolved.
+export function _planWaterWhere(d) {
+  if (d && d.coords) return { lat: d.coords.lat, lon: d.coords.lon };
+  const o = d && d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug ? d.__outlook : null;
+  if (o && _planUsMarketState(o)) return { location: o.slug };
+  const st = _planLeadState(d);
+  if (st) return { state: st };
+  return null;
+}
+
 export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
@@ -20079,6 +20136,8 @@ export const _PLAN_CLASSES = [
     // primary route for non-AI market questions.
     rationale: (d) => _planStateScope(d)
       ? 'The intent names a US state, so the ranking must be SCOPED to it. ai_capacity_index and rank_markets cannot express a state — ai_capacity_index takes only horizon/limit, and rank_markets\' region accepts only global/us/canada/eu/apac/americas — so leading with either silently answers a national question and returns out-of-state markets. site_selection_canvas is the one ranking path that takes a state code (region=' + _planStateScope(d) + '), and it carries the same AI-campus axis: DCPI verdict, excess-power headroom and time-to-power.'
+      : (d.ai && !d.__aiHorizon)
+      ? 'An AI-campus ranking is a ranking by buildability, not by installed depth: lead with rank_markets criteria=ai_ready (DCPI composite of excess power, constraint and time to power, with each market\'s BUILD/CAUTION/AVOID verdict), then reality-check each finalist on its DCPI card and grid headroom. ai_capacity_index orders markets by depth (the most built-out first), and those are often AVOID for new load, so it is the alternative for a stated deployment horizon, not the lead.'
       : d.ai
       ? 'AI campuses are power-availability and time-to-power bound, not installed-capacity bound — so lead with ai_capacity_index (ranks where AI load can LAND), then reality-check each finalist on the live DCPI verdict and grid headroom. rank_markets\' installed-build-out ranking is the alternative, not the lead, because the most-built-out markets are frequently AVOID for new load.'
       : 'Shortlist first so every deeper read is scoped to minted metro_slugs — then the per-finalist DCPI and grid reality-checks fan out from one cheap ranking call.',
@@ -20104,6 +20163,17 @@ export const _PLAN_CLASSES = [
         args_hint: { market_slug: '<slug from a step-1 finalist>' } },
       { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 2,
         why: 'Grid headroom + time-to-power for the finalists\' ISOs — an AI campus lives or dies on firm-power delivery date.',
+        args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
+    ] : (d.ai && !d.__aiHorizon) ? [
+      // 5.27 (live QA 2026-11-14): a ranking by suitability for an AI campus / GPU cluster.
+      { step: 1, tool: 'rank_markets', depends_on: [], estimated_calls: 1,
+        why: 'AI-campus buildability ranking: rank_markets criteria=ai_ready orders markets by the DCPI composite (excess power, constraint, time to power) and carries each market\'s BUILD/CAUTION/AVOID verdict, so the list leads with where new load can be built' + (d.mw ? ' (requested ' + Math.round(d.mw) + ' MW; min_capacity_mw is a market\'s EXISTING capacity, not the campus size, so it is not set)' : '') + '. Each row carries a slug for the steps below.',
+        args_hint: { criteria: 'ai_ready', limit: 10 } },
+      { step: 2, tool: 'get_market_dcpi_rank', depends_on: [1], estimated_calls: 5,
+        why: 'Full DCPI card (verdict, composite_score, time-to-power) for each step-1 finalist — one call per finalist, all parallel.',
+        args_hint: { market_slug: '<slug from a step-1 row>' } },
+      { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 3,
+        why: 'Grid headroom + time-to-power for the finalists\' ISOs — an AI campus lives or dies on firm-power delivery date' + (d.iso ? '.' : ' — one call per distinct finalist ISO (est. ~3), all parallel.'),
         args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
     ] : d.ai ? [
       { step: 1, tool: 'ai_capacity_index', depends_on: [], estimated_calls: 1,
@@ -20570,7 +20640,8 @@ export const _PLAN_CLASSES = [
     sequence: (d) => [
       { step: 1, tool: 'get_water_risk', depends_on: [], estimated_calls: 1,
         why: 'Water-availability read (U.S. Drought Monitor severity / WRI Aqueduct water stress) for the state, county, or point (recipe water_risk).',
-        args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { state: d.state || '<2-letter state>' } },
+        // 5.27: the bound place (a named DCPI market reads as location=<slug>, a city's state counts).
+        args_hint: _planWaterWhere(d) || { state: '<2-letter state>' } },
       { step: 2, tool: 'get_climate_intel', depends_on: [], estimated_calls: 1,
         why: 'USGS seismic (PGA / design category) + NOAA cooling degree-days & extreme temps for the site. Independent — run in parallel.',
         args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { lat: '<site lat>', lon: '<site lon>' } },
@@ -20822,14 +20893,37 @@ export const _PLAN_CLASSES = [
       [/\bthis\s+week\b/i, 1.5], [/\bwhile\s+i\s+was\b/i, 2],
     ],
     rationale: 'The global change feed and your saved-sites delta are independent reads — one parallel wave answers both "what moved" and "did MY sites move".',
-    sequence: () => [
-      { step: 1, tool: 'get_changes', depends_on: [], estimated_calls: 1,
-        why: 'Only the delta since your last pull: DCPI movers, new facilities, new pipeline, new deals (recipe whats_changed; free). Cache generated_at and pass it back as since= next time.',
-        args_hint: { since: '24h' } },
-      { step: 2, tool: 'list_saved_sites', depends_on: [], estimated_calls: 1,
-        why: 'Did YOUR saved sites move? Per-site verdict flips, excess-power deltas, alerts fired (keyed callers). Independent — run in parallel.',
-        args_hint: { since: '7d' } },
-    ],
+    // 5.27 (live QA 2026-11-14): "what changed in PJM this week" ran since=24h over the whole feed.
+    // The window the text names binds since= (this week 7d, this month 30d, today 24h), and a named
+    // grid, market or state is carried by the steps that take a place: get_news query= (and
+    // date_from=), and for a tracked market get_facility_risk_delta market=. get_changes itself takes
+    // no place, and its step says so.
+    sequence: (d) => {
+      const w = d.__window;
+      const place = _planChangesPlace(d);
+      const seq = [
+        { step: 1, tool: 'get_changes', depends_on: [], estimated_calls: 1,
+          why: 'Only the delta since your last pull: DCPI movers, new facilities, new pipeline, new deals (recipe whats_changed; free). Cache generated_at and pass it back as since= next time.'
+            + (w && !d.since ? ' Window: ' + w.phrase + ' (the intent named it).' : '')
+            + (place ? ' get_changes takes no place filter, so this is the whole feed; the ' + place.label + ' read is the step(s) below.' : ''),
+          args_hint: { since: d.since || (w ? w.since : '24h') } },
+        { step: 2, tool: 'list_saved_sites', depends_on: [], estimated_calls: 1,
+          why: 'Did YOUR saved sites move? Per-site verdict flips, excess-power deltas, alerts fired (keyed callers). Independent — run in parallel.',
+          args_hint: { since: w && w.days > 7 ? w.since : '7d' } },
+      ];
+      if (place || d.__newsAsk) {
+        seq.push({ step: seq.length + 1, tool: 'get_news', depends_on: [], estimated_calls: 1,
+          why: (place ? 'News about ' + place.label + ' (the place the intent named)' : 'Industry news')
+            + (w ? ' published in ' + w.phrase : '') + ' — the narrative half of "what changed". Independent — run in parallel.',
+          args_hint: { ...(place ? { query: place.query } : {}), ...(w ? { date_from: w.date_from } : {}), limit: 10 } });
+      }
+      if (place && place.kind === 'market') {
+        seq.push({ step: seq.length + 1, tool: 'get_facility_risk_delta', depends_on: [], estimated_calls: 1,
+          why: 'How ' + place.label + '\'s DCPI market health moved over the window (excess-power delta, direction) — the market-scoped change read. Independent — run in parallel.',
+          args_hint: { market: place.market, since: w ? (w.days === 1 ? '1d' : w.since) : '7d' } });
+      }
+      return seq;
+    },
     alternatives: [
       { tool: 'get_facility_risk_delta', when: 'The question is one facility/market\'s RISK trajectory over a window.',
         rejected_because: 'No single facility/market was named — the global feed catches all movers.' },
@@ -20863,7 +20957,9 @@ export const _PLAN_CLASSES = [
     ],
     rationale: 'Statutory incentive packages are state-keyed — read the state\'s data-center tax programs first, with the state\'s power-price context alongside: the tax package and the power rate are the two cost levers a siting model trades against each other.',
     sequence: (d) => {
-      const st = d.state || d.stateFromPlace;
+      // 5.27 (live QA 2026-11-14): a city's state counts ("... in Phoenix" -> AZ, _planLeadState);
+      // it read the text's own state only, so both steps ran with a '<2-letter US state>' placeholder.
+      const st = _planLeadState(d);
       return [
         { step: 1, tool: 'get_tax_incentives', depends_on: [], estimated_calls: 1,
           why: 'The state\'s data-center tax-incentive programs — type, value, MW/jobs eligibility floors, minimum investment, expiration and source statute for each.',
@@ -22122,8 +22218,14 @@ export function _planSignals(intent, context) {
   // dc_capacity filters the pipeline to construction when asked).
   const __queueAsk = /\b(?:queues?|queued|interconnect(?:ion)?)\b/i.test(text);
   const __constructionAsk = /\b(?:under\s+construction|being\s+built)\b/i.test(text);
+  // 5.27 (live QA sweep 2026-11-14): an AI ask is a deployment-HORIZON question ("where can 100 MW
+  // land in the next 90 days") only when it says so; otherwise it is a ranking by suitability
+  // (rank_markets criteria=ai_ready). And the relative window the text names ("this week").
+  const __aiHorizon = _PLAN_AI_HORIZON_RE.test(text);
+  const __window = _planRelativeWindow(text);
+  const __newsAsk = /\b(?:news|headlines?)\b/i.test(text);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened, states, isos, deadline, __queueAsk, __constructionAsk };
+    __outlook, radiusKm, placeScope, scopeWidened, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -22351,7 +22453,17 @@ export function _planWorkflowConfidence(seq, d) {
 //         pipeline asks route to dc_capacity (get_pipeline, search_facilities, source_capacity,
 //         power only as backup), and a one-town run cuts pipeline and facility rows to that
 //         town (submarket_scope).
-export const PLANNER_VERSION = '5.26';
+//  5.27 = QA SWEEP 2026-11-14 (live execute_plan): an AI-campus / GPU ranking leads with
+//         rank_markets criteria=ai_ready (ai_capacity_index only for a stated 30/60/90-day
+//         horizon), and a ranking's ranked_answer and answer_guide lead with the best buildable
+//         market, never an AVOID one; a relative window ("this week" 7d, "this month" 30d,
+//         "today" 24h) binds since= / date_from=, and a named grid, market or state reaches
+//         get_news query= (and get_facility_risk_delta market=); a city's state binds the
+//         incentives class (Phoenix -> AZ), a named water constraint is planned even when the
+//         water class only placed second, and water reads the bound place (location=<market>);
+//         the queue answer says the queue WAS filtered server-side when state= was applied, and
+//         one time-to-power value on every row reads as an ISO-wide estimate, not "32.6-32.6".
+export const PLANNER_VERSION = '5.27';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22717,7 +22829,10 @@ export function _execDroppedSentence(items) {
     + '. Say this plainly in the answer: those results are not cut to what was asked.';
 }
 
-export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
+// 5.27 (live QA 2026-11-14): `rankForBuild` (a market_ranking run) lists the verdicts BUILD, then
+// CAUTION, then AVOID, and says to lead with the best buildable market: a ranking for where to build
+// led with "ashburn-va: AVOID · northern-virginia: AVOID" because those were the first two read.
+export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null, rankForBuild = false) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
@@ -22729,7 +22844,7 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
       .map((x) => String(x).toUpperCase());
     const found = [];
     const scan = (o, depth) => {
-      if (!o || depth > 4 || found.length >= 3) return;
+      if (!o || depth > 4 || found.length >= (rankForBuild ? 8 : 3)) return;
       if (Array.isArray(o)) { for (const v of o.slice(0, 12)) scan(v, depth + 1); return; }
       if (typeof o !== 'object') return;
       const v = o.verdict, nm = o.market || o.name || o.slug || o.market_slug;
@@ -22753,6 +22868,17 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
       scan(e && e.result, 0);
     }
     if (!found.length) return BASE;
+    if (rankForBuild) {
+      const ord = { BUILD: 0, CAUTION: 1, AVOID: 2 };
+      found.sort((a, b) => ord[a.verdict] - ord[b.verdict]);   // stable: read order holds inside a verdict
+      const led = found.map((f) => `${f.subject ? f.subject + ': ' : ''}${f.verdict}`
+                                   + (f.score != null ? ` (${f.score})` : '')).join(' · ');
+      return found[0].verdict === 'AVOID'
+        ? `RANKING FOR WHERE TO BUILD — every market DCPI-checked in this run is AVOID: ${led}. Say that none `
+          + 'of them can be recommended from these reads, rather than presenting the first one as the pick. ' + BASE
+        : `RANKING FOR WHERE TO BUILD — DCPI verdicts in this run, best first: ${led}. Lead with the best `
+          + 'BUILD (or CAUTION) market; name any AVOID market as not recommended, never as the pick. ' + BASE;
+    }
     const led = found.map((f) => `${f.subject ? f.subject + ': ' : ''}${f.verdict}`
                                  + (f.score != null ? ` (${f.score})` : '')).join(' · ');
     // ★AVOID is the case that matters: a planner that buries it lets an agent
@@ -23031,11 +23157,14 @@ const _CONSTRAINT_NOUNS = [
     lead: (d) => (d.coords && !d.placeScope
       ? { tool: 'get_fiber_readiness', args_hint: { lat: d.coords.lat, lon: d.coords.lon } }
       : { tool: 'get_fiber_intel', args_hint: { market: d.market || '<metro slug named in the intent>' } }) },
-  { key: 'water',        re: /\b(water|drought|aquifer|cooling water)\b/i,
+  // 5.27 (live QA 2026-11-14): "water risk and tax incentives ... in Phoenix" planned no water step.
+  // water_climate placed second (4 vs 6), outside the 1-point margin, so its lead was only WEIGHED,
+  // and a weighed tool counted as covering the noun. plannedOnly: the water read must be planned.
+  // It reads the bound place (_planWaterWhere: point, else the DCPI market, else the state).
+  { key: 'water',        plannedOnly: true, re: /\b(water|drought|aquifer|cooling water)\b/i,
     tools: ['get_water_risk'],
-    lead: (d) => ({ tool: 'get_water_risk', args_hint: d.coords
-      ? { lat: d.coords.lat, lon: d.coords.lon }
-      : { lat: '<site lat>', lon: '<site lon>' } }) },
+    lead: (d) => ({ tool: 'get_water_risk', args_hint: _planWaterWhere(d)
+      || { lat: '<site lat>', lon: '<site lon>' } }) },
   { key: 'tax',          re: /\b(tax|incentive|abatement)\b/i,
     tools: ['get_tax_incentives'],
     lead: (d) => ({ tool: 'get_tax_incentives',
@@ -23468,6 +23597,29 @@ export function _planBindIntentArgs(seq, d) {
   } catch (_e) { /* routing must never throw */ }
   return seq;
 }
+// 5.27 (live QA 2026-11-14, item 2): the relative window the intent names ("this week", "this
+// month", "today") reaches every step that takes a date, when the class left it unset: news and
+// deal rows from that date on (date_from), the change feed since then (since). Lists what it set in
+// `intent_bound`, like _planBindIntentArgs.
+const _PLAN_WINDOW_ARGS = {
+  get_changes: 'since', get_news: 'date_from', list_transactions: 'date_from', get_facility_risk_delta: 'since',
+};
+export function _planBindWindowArgs(seq, d) {
+  try {
+    const w = d && d.__window;
+    if (!Array.isArray(seq) || !w) return seq;
+    for (const s of seq) {
+      const k = s && _PLAN_WINDOW_ARGS[s.tool];
+      if (!k) continue;
+      const args = { ...(s.args_hint || {}) };
+      if (args[k] != null) continue;
+      args[k] = k === 'date_from' ? w.date_from : (w.days === 1 ? (s.tool === 'get_changes' ? '24h' : '1d') : w.since);
+      s.args_hint = args;
+      s.intent_bound = [...(s.intent_bound || []), k];
+    }
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
 // 5.26 (item 1): a town DC Hub tracks as no market, named beside its state ("near Smalltown,
 // Ohio"), reads the state instead of skipping every market step. One find_sites step searches the
 // state (substation-anchored search areas, each naming its nearest DCPI market), and a step that
@@ -23519,7 +23671,9 @@ export function _constraintLeadSteps(text, d, considered, planned) {
       if (typeof n.lead !== 'function') continue;
       let step = null;
       try { step = n.lead(sig); } catch (_e) { step = null; }
-      if (!step || !step.tool || seen.has(step.tool) || inPlan.has(step.tool)) continue;
+      // 5.27: a plannedOnly row's lead is judged against the plan alone, like its coverage check above
+      // (the water lead IS the runner-up's weighed tool, so `seen` always held it).
+      if (!step || !step.tool || (!n.plannedOnly && seen.has(step.tool)) || inPlan.has(step.tool)) continue;
       seen.add(step.tool); inPlan.add(step.tool);
       out.push({ tool: step.tool, args_hint: step.args_hint || {}, estimated_calls: 1,
         constraint: n.key,
@@ -23928,6 +24082,8 @@ export function _planQuery(intent, context) {
   }
   // 5.26: the stated size and deadline reach every step that takes them (_planBindIntentArgs).
   _planBindIntentArgs(seq, d);
+  // 5.27: the window the intent names reaches the steps that take a date (_planBindWindowArgs).
+  _planBindWindowArgs(seq, d);
   // 2026-11-12: the Capacity Source step closes the plan (see _capacityProcurementStep).
   _capacityStepLast(seq);
   // intent_confidence: deterministic function of the winning score + margin.
@@ -30905,7 +31061,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
           + (_notes ? _notes + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
-                             new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
+                             new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)),
+                             sc.intent_class === 'market_ranking')
           + (_capReg ? ' ' + _capReg.sentence : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
         ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
