@@ -246,6 +246,8 @@ const row = (market, rank, score) => ({ market, rank, city: market, state: 'XX',
   deployable_mw: { value: 100 + rank }, ai_ready_mw: { value: 100 }, hyperscale_ready: true });
 let MARKETS = [row('ashburn-va', 1, 450), row('columbus-oh', 2, 300), row('dallas-tx', 3, 280)];
 let VERDICT = { 'ashburn-va': ['AVOID', 26.7], 'columbus-oh': ['BUILD', 71.2], 'dallas-tx': ['CAUTION', 55.1] };
+const RANK_ROWS = [{ rank: 1, market: 'Columbus', slug: 'columbus-oh', score: 71.2 },
+  { rank: 2, market: 'Dallas', slug: 'dallas-tx', score: 55.1 }, { rank: 3, market: 'Ashburn', slug: 'ashburn-va', score: 26.7 }];
 
 let H, fence;
 const sc = (res) => {
@@ -261,6 +263,9 @@ beforeAll(async () => {
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: (p) => {
     if (p === '/api/v1/ai-capacity-index') return { ok: true, index_name: 'AI Compute Capacity Index', as_of: '2026-11-08', markets: MARKETS };
+    // 5.27: the AI-campus ranking leads with rank_markets criteria=ai_ready. Its rows are fixed here
+    // (the figure that moves between runs is the DCPI card below, as before).
+    if (p === '/api/v1/mcp/tools/rank_markets') return { criteria: 'ai_ready', region: 'us', as_of: '2026-11-08', results: RANK_ROWS };
     const m = /^\/api\/v1\/dcpi\/scores\/([^/]+)$/.exec(p);
     if (m && VERDICT[m[1]]) return { ok: true, market_slug: m[1], iso: 'PJM', verdict: VERDICT[m[1]][0], composite_score: VERDICT[m[1]][1], as_of: '2026-11-09' };
     return undefined;

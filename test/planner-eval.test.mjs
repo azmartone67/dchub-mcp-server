@@ -18,7 +18,7 @@ import { _planQuery } from '../server.mjs';
 
 const CANONICAL = [
   { intent: 'rank the best data-center markets in the US',   cls: 'market_ranking',        tool: 'rank_markets' },
-  { intent: 'rank markets for a 200 MW AI campus',           cls: 'market_ranking',        tool: 'ai_capacity_index' },
+  { intent: 'rank markets for a 200 MW AI campus',           cls: 'market_ranking',        tool: 'rank_markets' },   // 5.27: criteria=ai_ready
   { intent: 'find 50 MW in Dallas',                          cls: 'capacity_search',       tool: 'get_retirement_headroom' },
   { intent: 'where can I get 100 MW near a substation',      cls: 'capacity_search',       tool: 'get_retirement_headroom' },
   { intent: 'compare Phoenix vs Columbus for hyperscale',    cls: 'market_comparison',     tool: 'get_market_dcpi_rank' },
