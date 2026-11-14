@@ -1,7 +1,7 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.49",
-  "description": "DC Hub is the live data layer for data-center site selection. Its Data Center Power Index (DCPI) is a daily score of where data centers can get grid power, across 300+ markets.",
+  "version": "2.12.50",
+  "description": "DC Hub is the orchestration layer for data center and energy intelligence. Start with execute_plan. It also publishes the Data Center Power Index (DCPI).",
   "author": "DC Hub (https://dchub.cloud)",
   "type": "module",
   "main": "server.mjs",
@@ -18,7 +18,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "express": "^4.22.3",
     "jose": "^6.2.14",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "engines": {
     "node": ">=18"

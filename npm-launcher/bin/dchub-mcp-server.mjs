@@ -18,11 +18,18 @@ try {
   process.exit(1);
 }
 
+// The key never goes on the child's command line, where `ps` would show it.
+// mcp-remote expands ${VAR} in a --header value from its own environment, so
+// argv carries only the placeholder and the key travels in env.
+const env = { ...process.env };
 const args = [proxy, url, "--transport", "http-only"];
-if (key) args.push("--header", `X-API-Key:${key}`);
+if (key) {
+  env.DCHUB_MCP_HEADER_KEY = key;
+  args.push("--header", "X-API-Key:${DCHUB_MCP_HEADER_KEY}");
+}
 args.push(...process.argv.slice(2));
 
-const child = spawn(process.execPath, args, { stdio: "inherit", env: process.env });
+const child = spawn(process.execPath, args, { stdio: "inherit", env });
 child.on("exit", (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 0);

@@ -21,10 +21,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-dependencies = ["requests>=2.25"]
+dependencies = ["requests>=2.34.2"]
 
 [project.optional-dependencies]
-langchain = ["langchain-core>=0.2", "pydantic>=2"]
+langchain = ["langchain-core>=0.2", "pydantic>=2.4.0"]
 agents = ["smolagents>=1.0"]
 test = ["pytest>=7"]
 

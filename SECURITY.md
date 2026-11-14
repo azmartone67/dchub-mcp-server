@@ -59,6 +59,23 @@ The server makes HTTP calls to a small, fixed set of places:
 The per-call telemetry above is first-party only: each tool call is recorded by the DC Hub backend (tool, parameters, client/platform, tier, session id, API key if sent, status, duration). There is no analytics, advertising or other third-party telemetry. `bind_email` stores an email you choose to provide, against your key, and is optional. The server does not run shell commands or load code
 from the network.
 
+## The npm package (`npx dchub-mcp-server`)
+
+The npm package is a small stdio launcher (`npm-launcher/`). It starts `mcp-remote`, which connects your MCP
+client to `https://dchub.cloud/mcp` (or `DCHUB_MCP_URL` if you set it). It runs no DC Hub code locally,
+and the launcher itself makes no network calls; `mcp-remote` connects only to that endpoint.
+
+* **API key.** `DCHUB_API_KEY` (or `X_API_KEY`) is optional. If set, it is passed to `mcp-remote` in its
+  environment and sent as the `X-API-Key` request header. It is never put on a command line, where other
+  users of the machine could read it with `ps`. `test/npm-launcher-key-not-in-argv.test.mjs` checks this.
+* **What reaches DC Hub.** The MCP requests your client makes: tool names and the arguments you pass, the
+  client name and version from the MCP handshake, and your key if you set one. DC Hub records each tool call
+  as described under "Outbound network calls" above. As with any web request, the hosting platform in front
+  of the server sees your IP address. Nothing else on your machine is read or sent: no files, no environment
+  variables other than the key, no system details.
+* **Email.** DC Hub stores an email only when you submit one, through `bind_email`, `claim_free_key` or
+  `recover_my_key`, or on the website. It is never inferred or collected in the background.
+
 ## Dependencies
 
 Dependency advisories are checked with `npm audit` and `pip-audit`; patched
