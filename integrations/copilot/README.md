@@ -37,7 +37,7 @@ DC Hub documentation and connection guides:
 
 ## 3. Tools Overview
 
-The MCP server exposes 10 tools:
+This guide uses a subset of 10 tools (`tools/list` on `/mcp` returns the full catalog):
 
 1. `search_facilities` — search facilities by country, region, provider, or query.
 2. `get_energy_prices` — energy pricing stats for a grid/market region.

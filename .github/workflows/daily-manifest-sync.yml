@@ -567,3 +567,22 @@ jobs:
           else
             echo "::warning::About edit failed — the PAT likely lacks repo 'Administration: write' / classic 'repo' scope. Grant it or add REPO_METADATA_TOKEN."
           fi
+
+  # ★2026-11-13 — does the PUBLISHED npm description state the count live /mcp
+  # serves? npm copy changes only on a launcher publish, so it can lag a correct
+  # tree for weeks ("(94 tools)" against a live 95). Its own job on purpose: a
+  # mismatch or a network blip turns THIS job red with a ::warning::, and can
+  # never stop the heal above. Schedule/dispatch only, so it cannot block a PR.
+  # No secrets: a public server card and the public npm registry.
+  npm-description-count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+      - name: npm description tool count vs live server card
+        run: node scripts/check-npm-tool-count.mjs
