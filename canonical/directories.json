@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-12T20:00:00Z",
+  "updated_at": "2026-11-14T05:15:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -49,7 +49,7 @@
       "logo_url": null,
       "verified_at": "2026-10-09",
       "added_at": "2026-10-09",
-      "note": "connector page also live: https://glama.ai/mcp/connectors/cloud.dchub/mcp-server"
+      "note": "Server page + claimed connector page https://glama.ai/mcp/connectors/cloud.dchub/mcp-server (edit in Glama Admin). Connector page still shows 94 tools and 'paid plans'."
     },
     {
       "id": "lobehub",
@@ -274,7 +274,7 @@
       "logo_url": null,
       "verified_at": "2026-10-14",
       "added_at": "2026-10-14",
-      "note": "Maintainer closed our PR #41 after landing DC Hub in their own commit; under Specialised / Vertical (README L324) confirmed 2026-10-14 16:20 PT"
+      "note": "PR #88 closed unmerged 2026-11-09; entry is maintainer-worded and mentions paid plans."
     },
     {
       "id": "ha2345567",
@@ -334,7 +334,7 @@
       "logo_url": null,
       "verified_at": "2026-11-06",
       "added_at": "2026-10-15",
-      "note": "MCP Harbor registry at ai.mcpharbor.dev (mirror of official registry entry cloud.dchub/mcp-server). Was flipped unverified 2026-11-03 when the whole site timed out; confirmed live again 2026-11-06 (page title DC Hub, cloud.dchub/mcp-server, v2.12.45, tools: 94 in HTML). No badge_url (badge path redirects to HTML homepage, not an image)."
+      "note": "MCP Harbor registry at ai.mcpharbor.dev (mirror of official registry entry cloud.dchub/mcp-server). Was flipped unverified 2026-11-03 when the whole site timed out; confirmed live again 2026-11-06 (page title DC Hub, cloud.dchub/mcp-server, v2.12.45, tools: 94 in HTML). No badge_url (badge path redirects to HTML homepage, not an image). Alternate https://mcpharbor.app/tools/npm-dchub-mcp-server/ (200, 94 tools, /mcp); ai.mcpharbor.dev timing out."
     },
     {
       "id": "mcp-tc",
@@ -383,18 +383,6 @@
       "verified_at": "2026-10-26",
       "added_at": "2026-10-26",
       "note": "README entry 'DC Hub' under Global APIs; PR #96 merged 2026-10-24, entry confirmed in README 2026-10-26"
-    },
-    {
-      "id": "twzrd-sol",
-      "name": "twzrd-sol awesome-mcp-servers",
-      "status": "unverified",
-      "listing_url": "https://github.com/twzrd-sol/awesome-mcp-servers#location-services",
-      "badge_url": null,
-      "badge_alt": null,
-      "logo_url": null,
-      "verified_at": "2026-10-20",
-      "added_at": "2026-10-15",
-      "note": "repo twzrd-sol/awesome-mcp-servers now returns 404 (deleted or private) as of 2026-10-20 10:23 MST; was live via PR #6 merged 2026-10-15"
     },
     {
       "id": "wagneragent",
@@ -664,14 +652,14 @@
     {
       "id": "abordage",
       "name": "abordage awesome-mcp",
-      "status": "unverified",
-      "listing_url": "https://github.com/abordage/awesome-mcp#data-apis",
+      "status": "live",
+      "listing_url": "https://github.com/abordage/awesome-mcp",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-19",
+      "verified_at": "2026-11-13",
       "added_at": "2026-10-14",
-      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README on main still does not show DC Hub as of 2026-10-19 10:25 MST; flip to live once DC Hub appears on the page"
+      "note": "repositories.yaml L1704-1705 lists DC Hub (confirmed 2026-11-13)."
     },
     {
       "id": "mcpservers-org",
@@ -1239,15 +1227,15 @@
     {
       "id": "trillionagent",
       "name": "TrillionAgent",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://trillionagent.com/agents/1300",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-13",
       "tracking_url": null,
       "added_at": "2026-11-05",
-      "note": "Registered 2026-10-27; public listing URL not yet confirmed (asked since 2026-10-24). Set listing_url and status live once the page is found."
+      "note": "Page 200; live since 2026-10-27."
     },
     {
       "id": "agentforge",
@@ -1278,28 +1266,28 @@
     {
       "id": "launch-mcp",
       "name": "Launch MCP",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://launchmcp.co/mcp/servers/azmartone67/dchub-mcp-server",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-13",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. Free community listing at https://launchmcp.co/submit, reviewed by hand; Featured is paid (not wanted). Found by Grok 2026-11-12. Owner submits."
+      "note": "Auto-indexed from GitHub (94 tools, updated 2026-10-28). Do not submit; update by re-submission."
     },
     {
       "id": "plug-and-ship",
       "name": "Plug and Ship",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://plugandship.dev/p/dc-hub-data-center-site-selection-colocation-electricity-power-grid-gas-fiber",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-13",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://plugandship.dev/submit; free queue opens 2026-11-18. Owner submits."
+      "note": "Auto-imported from the official registry; page shows endpoint /mcp/registry. Free submit queue next opens 2026-12-05 (not 11-18). Do not submit."
     },
     {
       "id": "agentndx",
@@ -1312,20 +1300,20 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://agentndx.ai/submit/ (the bare /submit path redirects there). Owner submits."
+      "note": "Submitted 2026-10-20 via free form (id 206); not yet indexed as of 2026-11-13. Do not resubmit."
     },
     {
       "id": "mcpnav",
       "name": "MCPNav",
-      "status": "pending",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://mcpnav.net/server/mcp-server-43/",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": null,
+      "verified_at": "2026-11-13",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted; submit page answered 200 on 2026-11-12 (Grok). Owner submits."
+      "note": "Auto-listed, v2.12.46. Duplicate slug https://mcpnav.net/server/datacenter-power-grid-fiber/ still live at v2.12.9. Do not submit."
     },
     {
       "id": "mcp-agents-market",
@@ -1338,7 +1326,7 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted. https://mcpagentsmarket.com/submit. Owner submits."
+      "note": "Not submitted. Paid listing fee; owner decides. https://mcpagentsmarket.com/submit."
     },
     {
       "id": "mcp-directory",
@@ -1351,7 +1339,7 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Not submitted; /servers/dchub-mcp-server is 404. https://mcp.directory/submit. Owner submits."
+      "note": "Submitted 2026-10-12 (form answered already submitted); /servers/dchub-mcp-server 404 on 2026-11-13. Do not resubmit."
     },
     {
       "id": "perplexity-connectors",
@@ -1364,7 +1352,295 @@
       "verified_at": null,
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Connector outreach sent by the owner 2026-11-12 (remote MCP https://dchub.cloud/mcp); no reply yet."
+      "note": "Proposal emailed 2026-10-10, follow-up 2026-10-27, owner outreach 2026-11-12; no reply."
+    },
+    {
+      "id": "findmcp",
+      "name": "findmcp.app",
+      "status": "live",
+      "listing_url": "https://findmcp.app/servers/dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-indexed; three stale entries including this one (also /servers/dchub-backend and /servers/dchub-cloud-mcp). Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "toolgrep",
+      "name": "toolgrep",
+      "status": "live",
+      "listing_url": "https://toolgrep.com/p/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Live 2026-10-21 via the public submit form. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "mcpstation",
+      "name": "MCP Station",
+      "status": "live",
+      "listing_url": "https://mcpstation.net/s/cloud.dchub--mcp-server.html",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-ingested from the official registry; 95 tools. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "qamcp",
+      "name": "QAmcp",
+      "status": "live",
+      "listing_url": "https://qamcp.dev/directory.json",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-listed from the official registry; no per-server page URL found as of 2026-11-13."
+    },
+    {
+      "id": "allagents",
+      "name": "allagents.app",
+      "status": "live",
+      "listing_url": "https://allagents.app/agent/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Live card at /agent/dc-hub. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "appside",
+      "name": "Appside",
+      "status": "live",
+      "listing_url": "https://appside.build/mcp-servers/dchub/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "aitoolscapital",
+      "name": "AIToolsCapital",
+      "status": "live",
+      "listing_url": "https://aitoolscapital.com/tools/dc-hub/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "plugmcp",
+      "name": "PlugMCP",
+      "status": "live",
+      "listing_url": "https://plugmcp.ai/mcp/dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-indexed; showed v2.12.48 as of the 2026-11-13 audit. Copy is stale."
+    },
+    {
+      "id": "allmcps",
+      "name": "allmcps.com",
+      "status": "live",
+      "listing_url": "https://allmcps.com/mcp/azmartone67-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Stale auto listing (tool count off). Do not resubmit. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "connector-zone",
+      "name": "ConnectorZone",
+      "status": "live",
+      "listing_url": "https://connector.zone/connectors/cloud-dchub-mcp-server/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Registry-synced aggregator; showed v2.11.1 as of the 2026-11-13 audit."
+    },
+    {
+      "id": "agent-ready-directory",
+      "name": "Agent-Ready Directory",
+      "status": "live",
+      "listing_url": "https://www.agent-ready-directory.com/server/cloud-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Registry-derived; showed v2.12.25 and non-canonical remotes as of the 2026-11-13 audit."
+    },
+    {
+      "id": "vaultplane",
+      "name": "VaultPlane",
+      "status": "live",
+      "listing_url": "https://www.vaultplane.com/server/cloud-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-imported from the official registry; copy is stale. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "awesome-mcp-tools",
+      "name": "awesome-mcp.tools",
+      "status": "live",
+      "listing_url": "https://awesome-mcp.tools/server/azmartone67-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Live; copy is stale. Confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "llmstxthub",
+      "name": "LLMs.txt Hub",
+      "status": "live",
+      "listing_url": "https://llmstxthub.com/websites/dc-hub-data-center-intelligence-llms-txt",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Two stale entries (also https://llmstxthub.com/websites/dc-hub-llms-txt). Refresh PR thedaviddias/llms-txt-hub#1984 opened 2026-10-13."
+    },
+    {
+      "id": "openforallofus",
+      "name": "openforallofus (Agora)",
+      "status": "live",
+      "listing_url": "https://openforallofus.com/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Index shows a stale v2.9.3 record and excludes it from search as of 2026-11-13."
+    },
+    {
+      "id": "metaone01-agent-forge",
+      "name": "metaone01 agent-forge mirror",
+      "status": "live",
+      "listing_url": "https://github.com/metaone01/agent-forge/tree/packages/sources/mcp/packages/cloud.dchub--mcp-server--0b363e8d5085",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Auto-mirror of the official registry; showed v2.12.24 as of the log. Do not hand-submit a competing record."
+    },
+    {
+      "id": "mcpdir",
+      "name": "mcpdir (eL1fe)",
+      "status": "live",
+      "listing_url": "https://github.com/eL1fe/mcpdir",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Listed in the mcpdir catalog; re-crawl request eL1fe/mcpdir#22 is open."
+    },
+    {
+      "id": "baditaflorin-awesome-live-mcp-servers",
+      "name": "baditaflorin awesome-live-mcp-servers",
+      "status": "live",
+      "listing_url": "https://github.com/baditaflorin/awesome-live-mcp-servers",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Listed in data/mcp-servers.json; issue #11 is open."
+    },
+    {
+      "id": "flow-steward-mcps",
+      "name": "Flow-Steward mcps",
+      "status": "live",
+      "listing_url": "https://github.com/Flow-Steward/mcps",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "PR #33 merged; servers/dchub/catalog.yaml is live."
+    },
+    {
+      "id": "sayitvid-awesome-mcp-servers",
+      "name": "sayitvid awesome-mcp-servers",
+      "status": "live",
+      "listing_url": "https://github.com/sayitvid/awesome-mcp-servers",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "GitHub list; confirmed 200 on 2026-11-13."
+    },
+    {
+      "id": "adventurewave-labs-awesome-agentic-devops",
+      "name": "adventurewave-labs awesome-agentic-devops",
+      "status": "live",
+      "listing_url": "https://github.com/adventurewave-labs/awesome-agentic-devops",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "PR #7 merged."
+    },
+    {
+      "id": "harxhithc-awesome-proptech",
+      "name": "harxhithc awesome-proptech",
+      "status": "live",
+      "listing_url": "https://github.com/harxhithc/awesome-proptech",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "PR #12 merged."
+    },
+    {
+      "id": "spidermanrobin-awesome-grokbots",
+      "name": "Spidermanrobin awesome-grokbots",
+      "status": "live",
+      "listing_url": "https://github.com/Spidermanrobin/awesome-grokbots",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "Listed via issue #1."
+    },
+    {
+      "id": "bai-2008-dsh-mcp-center",
+      "name": "Bai-2008 dsh-mcp-center",
+      "status": "live",
+      "listing_url": "https://github.com/Bai-2008/dsh-mcp-center",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-13",
+      "added_at": "2026-11-13",
+      "note": "registry/m/cloud.dchub__mcp-server.yaml is live."
     }
   ]
 }
