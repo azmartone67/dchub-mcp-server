@@ -128,7 +128,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
-import { leanResponseStep } from './lib/lean-response.mjs';
+import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
+import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
@@ -24068,6 +24069,18 @@ export function _previewFooterStep(result, name, c = getCtx()) {
     return walled ? withPreviewFooter(result) : result;
   } catch (_) { return result; }
 }
+// OWNER DECISION 6 (owner 2026-11-14): paid answers are exempt from the answer size budget
+// (lib/answer-shape.mjs). The budget applies only to a caller KNOWN to be free: c.tier ranks below Starter on
+// the same _tierRank ladder the other paid / unpaid splits here use (`_tierRank(c.tier) >= _tierRank('starter')`
+// is paid), and is not an unranked operator plan (_planIsProOrAbove: admin). Anything else, including an
+// unranked or missing tier and no request context at all, keeps every row: fail toward NOT cutting.
+export function _answerBudgetAppliesTo(c) {
+  if (!c || typeof c !== 'object') return false;
+  const t = String(c.tier || '').trim().toLowerCase();
+  if (!t || _planIsProOrAbove(t)) return false;
+  const r = _tierRank(t);
+  return r >= 0 && r < _tierRank('starter');
+}
 function _sourceLineCb(name, fn) {
   // QA B P1 (2026-10-19): the plan-free field names are the LAST rewrite of the result, outside
   // _flagUpstreamError (which stays the arrow's outermost call): lib/plan-free-fields.mjs.
@@ -24090,6 +24103,11 @@ function _sourceLineCb(name, fn) {
       _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
       _final = _previewFooterStep(_final, name, c);
+      // Item 5 (Grok live review 2026-11-13): data rows ahead of the relay / upsell keys, and a 30 KB budget per
+      // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
+      // The budget is for free / anonymous callers only; paid and unknown tiers keep every row (owner 11-14).
+      // c.tier is read here, after the handler, so a paid lift inside the call counts.
+      _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name), budget: _answerBudgetAppliesTo(c) });
       return _final;
     } finally { _finishWallRow(c, name, _final); }   // C3: the wall row reads what the agent receives
   };

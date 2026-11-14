@@ -31,6 +31,7 @@ test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
 test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
+test/answer-shape-data-first.test.mjs
 test/arcade-integration.test.mjs
 test/arg-aliases.test.mjs
 test/arg-error-is-not-a-metered-answer.test.mjs
