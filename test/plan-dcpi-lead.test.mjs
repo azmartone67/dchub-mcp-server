@@ -16,6 +16,9 @@ import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { CORE_PROFILE } from '../lib/core-profile.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // The lean step stays ON (production): it shrinks _upgrade to machine fields, so the ask the agent
 // receives is the plan's prose paragraph. mcp#1356 first shipped with lean off here and the live
 // answer carried no ask.
@@ -223,6 +226,20 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     // the verdict is the first key; the offer prose is not ahead of it inside block 0 either
     const at = blocks[0].indexOf(EMAIL_ASK);
     expect(at === -1 || at > blocks[0].indexOf('"dcpi_verdict"')).toBe(true);
+  });
+  it('keyless, the first full answer of the day (compact): the answer IS the verdict sentence, then as_of, then the verdict', async () => {
+    delete process.env.DCHUB_KEYLESS_FIRST_FULL;
+    try {
+      // in a session: over this harness's loopback socket a sessionless call reads as a plan step
+      const r = await callAs(null, 'execute_plan', ASK, 'claude-code');
+      const d = JSON.parse((r.result.content || [])[0].text);
+      expect(d.first_full_answer).toMatchObject({ used: 1, limit: 1 });
+      // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer
+      expect(Object.keys(d).filter((k) => k !== 'human_url').slice(0, 3)).toEqual(['answer', 'as_of', 'dcpi_verdict']);
+      expect(Object.keys(d).slice(0, 2)).toEqual(['answer', 'as_of']);
+      expect(d.answer).toBe(d.dcpi_verdict.text);
+      expect(d.answer).toMatch(/^Data Center Power Index \(DCPI\): Phoenix: CAUTION, composite 43\.5\/100\./);
+    } finally { process.env.DCHUB_KEYLESS_FIRST_FULL = '0'; }
   });
   it('a market the index does not track gets no verdict block (never a substitute)', async () => {
     const r = await callAs(null, 'execute_plan', { intent: 'Is Timbuktu a good place to build?' }, 'claude-code');

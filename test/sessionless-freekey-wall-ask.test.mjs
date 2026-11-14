@@ -18,6 +18,9 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { claimHandoffFreekeyText, EMAIL_ASK } from '../lib/claim-handoff.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 const FREE_NO_EMAIL = 'dch_live_sessionless_freekey_noemail_01';
 const AGENT_LINE = claimHandoffFreekeyText();

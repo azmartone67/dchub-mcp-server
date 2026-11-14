@@ -85,7 +85,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -24537,6 +24537,7 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
     // lib/handoff.mjs: every wall / relay step has run, so this is the final word: the execute_plan complement
     // never rides beside a human_url, a for_your_human relay or a wall.
     if (name === 'execute_plan') out = stripHandoffIfPointered(out, { isWall: (sc) => _isRelayWall(sc, c) });
+    if (name === 'execute_plan' && c._kffPlan === true && !c.loopback_step) out = _kffLeadWithAnswer(out);
     return out;
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
@@ -24916,7 +24917,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 tier_required: _q.quota_tier || 'paid', message_shown: 'monthly_quota',
               });
             } catch (_) {}
-            status = _limitHit(c, 'monthly_quota_blocked');
+            status = 'monthly_quota_blocked'; _limitHit(c, status);
             // Content IS the error channel on this path (an agent reads
             // content[0].text; isError makes clients surface it rather than
             // silently swallowing a 200 with a refusal inside).
@@ -24961,7 +24962,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 message_shown: 'daily_quota',
               });
             } catch (_) {}
-            status = _limitHit(c, 'daily_quota_preview');
+            status = 'daily_quota_preview'; _limitHit(c, status);
             c.daily_quota = _dq;
             // Served anonymously for THIS call only: the ctx is per request and
             // sessionMeta still holds the key, so the next call re-checks (30s
@@ -25034,7 +25035,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
       if (!c.api_key && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
-        status = _limitHit(c, 'anon_hard_wall');
+        status = 'anon_hard_wall'; _limitHit(c, status);
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
         if (_capLink) {
@@ -25251,7 +25252,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           if (_fr && _fr.allowed === false && _fr.limit > 0) {
             // The allowance is spent: a paywall encounter, so it writes the signal lp_wall writes.
-            status = _limitHit(c, 'lp_free_spent');
+            status = 'lp_free_spent'; _limitHit(c, status);
             signalPaywall({
               tool: name, args, signal_type: 'paid_tool_blocked',
               session_id: _wallSessionId(c),   // the request's own id, not the shared 'no-session' (#915 did lp_wall)
@@ -25384,7 +25385,7 @@ function trackedTool(srv, name, description, schema, handler) {
               usage_url:   _packCheckoutUrl(_sid),  // r-durable-key: was session-bound
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
             };
-            status = _limitHit(c, 'credits_depleted');
+            status = 'credits_depleted'; _limitHit(c, status);
             // r-fresh-zero (2026-07-01): this response surfaces top-up checkout
             // links — drop the cached zero balance so the post-payment call
             // re-checks credits immediately (not after a stale 2-min TTL).
@@ -25832,7 +25833,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
 
           if (!_trial.trial_used) {
-            status = _limitHit(c, 'trial_used');
+            status = 'trial_used'; _limitHit(c, status);
             // r-latency (2026-06-28): the data fetch, trial auto-mint, and
             // high-intent claim check are mutually independent backend hops —
             // none reads another's result. Kick them off concurrently so the
@@ -26586,7 +26587,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
-            status = _limitHit(c, 'anon_daily_cap');
+            status = 'anon_daily_cap'; _limitHit(c, status);
             const trimmed = _capTrim(await _freeFacilityRows(parsed, name, c), name);
             const _sidc = c.session_id || 'no-session';
             // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
@@ -26968,7 +26969,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           // link: the depth relay the wall steps attach as for_your_human / human_url. No pack, no
           // plan name, no price, no bind_email (this key already has an email). Same status and
           // signal as the trial cap below, so the existing wall counters see it.
-          status = _limitHit(c, 'trial_cap_exceeded');
+          status = 'trial_cap_exceeded'; _limitHit(c, status);
           let _capped = _freeDecisionTasteResult(name, result, c, args);
           if (_capped) {
             // The prose: one agent line (the allowance is spent, what this is, what to relay) and the
@@ -27041,7 +27042,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           //   separate DCHUB_ANON_DAILY_CAP soft cap, and collapsing two
           //   different walls onto one label would trade this blind spot for an
           //   ambiguous one.
-          status = _limitHit(c, 'trial_cap_exceeded');
+          status = 'trial_cap_exceeded'; _limitHit(c, status);
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
