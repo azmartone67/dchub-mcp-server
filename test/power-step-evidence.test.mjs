@@ -67,6 +67,39 @@ describe('_execPowerEvidence', () => {
   });
 });
 
+// Planner 5.24, live 11-13 20:55Z "Texas 50 MW power": the state-grain timeline step names its
+// grid in iso_context and its feeds in sources.<lane>.feed, and answer_guide called it "UNDATED".
+const TIMELINE = { step: 1, tool: 'get_power_availability_timeline', status: 'executed', args: { state: 'TX' },
+  result: { state: 'TX', as_of: '2026-11-13T20:55:35Z', iso_context: ['ERCOT'],
+            sources: { generator_retirements: { feed: 'EIA-860M planned retirements', vintage: '2026-08' },
+                       interconnect_queue: { feed: 'ERCOT GIS Report; MISO GI Queue API; SPP GI active requests (DC Hub interconnect_queue)' },
+                       planned_generators: { feed: 'EIA-860M monthly (planned + under-construction generators)', vintage: '2026-11-01' } },
+            provenance: { source: 'DC Hub', as_of: '2026-11-13T05:53:06.054Z' } } };
+
+describe('state-grain power step (get_power_availability_timeline, 5.24)', () => {
+  it('reads the grid from a one-ISO iso_context and the source from the named feeds', () => {
+    const [r] = _execPowerEvidence([TIMELINE]);
+    expect(r).toMatchObject({ tool: 'get_power_availability_timeline', iso: 'ERCOT', ok: true });
+    expect(r.source).toContain('EIA-860M planned retirements');
+    expect(r.source).toContain('ERCOT GIS Report');
+    expect(_execUndatedSentence([r])).toBe('');
+  });
+
+  it('names no grid for a multi-ISO state, but the feeds still source it', () => {
+    const multi = structuredClone(TIMELINE); multi.result.iso_context = ['PJM', 'MISO'];
+    const [r] = _execPowerEvidence([multi]);
+    expect(r.iso).toBe(null);
+    expect(r.ok).toBe(true);
+  });
+
+  it('is still flagged with no iso_context and no named feed', () => {
+    const bare = structuredClone(TIMELINE); delete bare.result.iso_context; bare.result.sources = { x: { feed: 'DC Hub' }, y: null };
+    expect(_execPowerEvidence([bare])[0]).toMatchObject({ ok: false, missing: ['iso_or_source'] });
+    const arr = structuredClone(TIMELINE); delete arr.result.iso_context; arr.result.sources = ['EIA-860M'];
+    expect(_execPowerEvidence([arr])[0]).toMatchObject({ ok: false, missing: ['iso_or_source'] });
+  });
+});
+
 describe('answer_guide on an undated power step', () => {
   it('names it first and does not lead with its verdict', () => {
     const run = [DCPI, RECO];

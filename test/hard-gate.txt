@@ -166,6 +166,7 @@ test/deals-tool-tied-copy-no-floor.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
 test/depth-wall-digest-ask.test.mjs
+test/depth-wall-trial.test.mjs
 test/deterministic-install.test.mjs
 test/directories-growth.test.mjs
 test/directories-page.test.mjs
@@ -196,6 +197,8 @@ test/evidence-content-block.test.mjs
 test/evidence-contract.test.mjs
 test/evidence-per-layer.test.mjs
 test/exec-step-budget.test.mjs
+test/execute-plan-alternatives-dropped-e2e.test.mjs
+test/execute-plan-asof-e2e.test.mjs
 test/execute-plan-cohort.test.mjs
 test/execute-plan-corridors-and-slim.test.mjs
 test/execute-plan-first.test.mjs
@@ -438,8 +441,10 @@ test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
 test/plan-rerun.test.mjs
+test/plan-short-power-asks.test.mjs
 test/plan-step-session-id.test.mjs
 test/plan-steps-caller-key.test.mjs
+test/planner-525-geo-alternatives-dropped.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
@@ -591,6 +596,7 @@ test/tool-guide-pointers.test.mjs
 test/tool-maturity-annotation.test.mjs
 test/tool-maturity-held-during-mcp-freeze.test.mjs
 test/tool-output-has-no-bare-conversion-link.test.mjs
+test/tools-list-keeps-do-not-use.test.mjs
 test/tools-list-one-lead.test.mjs
 test/toolspec-is-real.test.mjs
 test/top-metro-scores-definition.test.mjs

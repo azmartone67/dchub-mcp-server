@@ -263,6 +263,8 @@ import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKin
 import { keyMintVia } from './lib/via-tags.mjs';
 import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
          withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
+import { depthTrialEligible as _depthTrialEligible, depthTrialLine as _depthTrialLine, humanLinkOf as _humanLinkOf,
+         withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -2985,7 +2987,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
 // (That guard lived in regression.test.mjs until #267 moved it onto the hard
 // gate — it had been running in a continue-on-error step and could not fail.)
-const SERVER_VERSION = { version: '2.12.48' }.version;  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.12.49' }.version;  // 2.12.49 (2026-11-13): release so npm carries the orchestration-layer description (#1403, npm refuses a second 2.12.48 upload; owner 'bump to 2.12.49' 2026-11-13). Already on main and live, now under this version: planner 5.24 (#1408, #1409), crawler tools/list test (#1404), @hono/node-server 2.1.6 (#1398). Version only; tool count stays 95.  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5150,8 +5152,30 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
       out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
       _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
     }
-    return _oauthLead(out, name, c, { grok: false, depth });
+    return _depthTrial(_oauthLead(out, name, c, { grok: false, depth }), name, c, depth);
   } catch (_) { return result; }
+}
+// Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
+// "an account does not open ..." and "an email does not open ..." and nothing that does. One line names what does:
+// the 7-day trial on the page the wall's own human link opens, right below the block handing out that link.
+function _depthTrial(out, name, c, depth) {
+  try {
+    const link = _humanLinkOf(out);
+    const paid = _tierRank(String(c.tier || '')) >= _tierRank('starter');
+    if (!_depthTrialEligible({ tool: name, walled: true, depth, paid, link })) return out;
+    // Right below the block that hands out the link (the human line, or a repeat wall's pointer): the free offers
+    // and the digest line keep their places above it (the digest line stays directly above the human line). With
+    // no such prose block, ahead of the closing lines (Source / brand), after every offer.
+    const txt = (x) => (x && x.type === 'text' && typeof x.text === 'string') ? x.text : '';
+    const hl = out.content.findIndex((x, i) => i > 0 && !/^\s*[{[]/.test(txt(x))
+      && (txt(x).includes(link) || _hasHumanCta(txt(x))));
+    let before = hl > 0 ? hl + 1 : -1;
+    if (before < 1) {
+      before = out.content.length;
+      while (before > 1 && /^(?:Source:|DC Hub:)/.test(txt(out.content[before - 1]))) before -= 1;
+    }
+    return _withDepthTrialLine(out, _depthTrialLine(), { before });
+  } catch (_) { return out; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
 export function _flushQuotaWallHits(c, name) {
@@ -15622,10 +15646,14 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       // anonymous call (and marked them withheld), so the same inputs echoed differently keyless and keyed.
       // Withhold only DC Hub's data, never what the caller sent. Exact keys, this tool only.
       out[k] = v;
-    } else if (toolName === 'get_dchub_recommendation' && k === 'available_categories') {
+    } else if (toolName === 'get_dchub_recommendation' && (k === 'available_categories' || k === 'next_tools')) {
       // Grok 2026-10-07: the four category names are DC Hub's own description menu,
       // not product data. Trimming 4 -> 3 behind `_available_categories_total_in_pro`
       // hid `technical` and advertised a paywall on a list the caller needs to use the tool.
+      // Grok QA 2026-11-13: `next_tools` is the same kind of guidance (which tool to call
+      // next, with example arguments). The trim cut it 4 -> 3 (analyze_site behind
+      // `_next_tools_total_available`) and nulled the example's capacity_mw and max_months
+      // (`_max_months_withheld`), so the example call it hands the agent did not run.
       out[k] = v;
     } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = _keepProvenanceCredit(v, trimForTrial(v, toolName, _inRate));   // G-2: credit lists survive
@@ -19716,6 +19744,58 @@ export const _DISCOVERY_EXEMPT = {
 // route rather than be passed to a tool as an unrecognized region filter —
 // silently returning zero rows is a worse failure than answering nationally
 // and saying so. Pure, never throws.
+// 5.25: "Abilene, TX" / "Abilene TX" -> 'TX' (see _planSignals stateFromPlace). One distinct code
+// only: two different codes after place names ("Abilene TX vs Reno NV") bind nothing.
+const _PLAN_STATE_WORD_CODES = new Set(['OR', 'IN', 'ME', 'HI', 'OK']);
+export function _planStateAfterPlace(text) {
+  const t = String(text || '');
+  const found = new Set();
+  for (const m of t.matchAll(/\b[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*(,?)\s+([A-Z]{2})(?=$|[\s.,;:!?)])/g)) {
+    const code = m[2];
+    if (!_PLAN_STATE_CODES.has(code)) continue;
+    if (!m[1] && _PLAN_STATE_WORD_CODES.has(code)) continue;
+    found.add(code);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+// 5.25: the US state a constraint lead or the air-permit step should read. The text's own state
+// first, then the state of the one DCPI market the text bound ("Abilene TX" -> abilene, TX), then
+// the city table's slug suffix (_planStateScope). Was d.state || d.stateFromPlace only, so
+// "Abilene TX ... behind-the-meter gas" planned get_gas_index with a '<2-letter US state>'
+// placeholder and the step was skipped_unresolved (live 2026-11-13, planner 5.24).
+export function _planLeadState(d) {
+  if (!d || typeof d !== 'object') return null;
+  const direct = d.state || d.stateFromPlace;
+  if (direct) return String(direct).toUpperCase();
+  const fromMarket = _planUsMarketState(d.__outlook);
+  if (fromMarket) return fromMarket;
+  return _planStateScope(d);
+}
+// 5.25: a bound market's state is a US state only when the market is on a US grid. The index stores
+// a non-US market's country in the same field, and five collide with US codes (live 2026-11-13,
+// planner 5.24: "power outlook for Frankfurt" planned get_power_availability_timeline state=DE,
+// Delaware; Mumbai state=IN, Indiana; also ID Indonesia, CO Colombia, WA Perth). A US label not
+// listed here yields no state, which is the safe side.
+const _PLAN_US_GRID_LABELS = new Set(['ERCOT', 'PJM', 'NYISO', 'WECC', 'SOCO', 'MISO', 'AK', 'ISONE', 'ISO-NE',
+  'SERC', 'FRCC', 'TVA', 'CAISO', 'HECO', 'SPP', 'BPA']);
+export function _planUsMarketState(o) {
+  if (!o || typeof o.state !== 'string') return null;
+  const st = o.state.toUpperCase();
+  if (!_PLAN_STATE_CODES.has(st)) return null;
+  if (o.rto) return st;   // a US RTO
+  return _PLAN_US_GRID_LABELS.has(String(o.iso || '').toUpperCase()) ? st : null;
+}
+// 5.25: where get_air_permit_context reads, the same for the air_permits class and the
+// air-permit constraint lead: the point the text gave (or a corridor centroid), else the DCPI
+// market the text bound (`site` resolves through that published row; abilene, midland-tx), else
+// placeholders. The constraint lead used to take coordinates only, so a plan whose class was not
+// air_permits ran it with '<site lat>' even when the market was bound.
+export function _planAirPermitWhere(d) {
+  const mk = (d && d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug) ? d.__outlook : null;
+  if (d && d.coords) return { lat: d.coords.lat, lon: d.coords.lon, ...(d.radiusKm ? { radius_km: d.radiusKm } : {}) };
+  if (mk) return { site: mk.slug };
+  return { lat: '<site lat>', lon: '<site lon>' };
+}
 export function _planStateScope(d) {
   const st = d && (d.state || d.stateFromPlace);
   const up = st ? String(st).toUpperCase() : null;
@@ -20060,11 +20140,12 @@ export const _PLAN_CLASSES = [
         // retirements, queue context, the iso_context naming the serving grid). RTO markets keep the
         // grid step above and are unchanged; a place bound only from the city table has no state
         // and gets no step. Kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0.
-        (!(iso && _EXEC_RTOS.has(iso)) && o && o.state && _PLAN_STATE_CODES.has(String(o.state))   // US states only: a non-US market's 'state' is a country code
+        // 5.25: US states only, by the market's grid too (_planUsMarketState): Frankfurt's 'DE' is Germany.
+        (!(iso && _EXEC_RTOS.has(iso)) && _planUsMarketState(o)
           && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_OUTLOOK_STATE_TIMELINE || '')))
           ? { step: 3, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
-              why: `The market sits on no US RTO that has its own grid read, so the power side is read for its state, ${o.state}: dated new capacity by confidence class, scheduled retirements, queue context and the grid that serves it. State-level context: it does not score the market.`,
-              args_hint: { state: o.state } } : null,
+              why: `The market sits on no US RTO that has its own grid read, so the power side is read for its state, ${_planUsMarketState(o)}: dated new capacity by confidence class, scheduled retirements, queue context and the grid that serves it. State-level context: it does not score the market.`,
+              args_hint: { state: _planUsMarketState(o) } } : null,
       ];
     },
     alternatives: [
@@ -20083,6 +20164,14 @@ export const _PLAN_CLASSES = [
       [_PLAN_ISO_RE, 2.5], [/\btime[-\s]to[-\s]power\b/i, 2], [/\bfuel\s+mix\b/i, 2],
       [/\brenewable\s+share\b/i, 2], [/\bgreenest\b/i, 2], [/\bdemand\b/i, 1],
       [/\bisos?\b/i, 1.5], [/\bmw\s+availab/i, 2.5],
+      // 5.23 (Grok QA relay 2026-11-13, Gemini cold start): "Texas 50 MW power"
+      // matched no class and fell to the navigator. A MW figure next to the word
+      // "power" is a power-supply question. Weight 1 only, like the 11-11 Atlanta
+      // patterns: it routes a short ask nothing else matched, and ties lose to
+      // capacity_search by declaration order ("Georgia Power 200MW data center
+      // Atlanta GA" stays capacity_search). "power plant(s)" and "power
+      // purchase" are other questions and do not count.
+      [/\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b[^.?!]{0,30}\bpower\b(?!\s+(?:plants?|purchase))|\bpower\b(?!\s+(?:plants?|purchase))[^.?!]{0,30}\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b/i, 1],
     ],
     rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
     sequence: (d) => _gridHeadroomSequence(d),
@@ -20238,12 +20327,10 @@ export const _PLAN_CLASSES = [
       // The DCPI market the text named (5.17's binder): `site` resolves through
       // that same published row, so only a DCPI slug is passed, never the
       // city-table slug (abilene-tx is not a DCPI slug; abilene is).
-      const mk = (d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug) ? d.__outlook : null;
-      const slug = mk ? mk.slug : null;
-      const where = d.coords
-        ? { lat: d.coords.lat, lon: d.coords.lon, ...(d.radiusKm ? { radius_km: d.radiusKm } : {}) }
-        : slug ? { site: slug } : { lat: '<site lat>', lon: '<site lon>' };
-      const st = d.state || d.stateFromPlace || (mk && mk.state) || null;
+      // 5.25: one rule for this step and the air-permit constraint lead (_planAirPermitWhere), and
+      // the state from _planLeadState (text, then the bound market, then the city table).
+      const where = _planAirPermitWhere(d);
+      const st = _planLeadState(d);
       return [
         { step: 1, tool: 'get_air_permit_context', depends_on: [], estimated_calls: 1,
           why: 'EPA Green Book designations for the county the site is in (US-wide) plus TCEQ-listed gas-turbine air permits of 20 MW or more within the radius (Texas only), each dated and cited.',
@@ -20574,6 +20661,8 @@ export const _PLAN_CLASSES = [
       [/\bfacilit(?:y|ies)\b/i, 3], [/\bdata\s*cent(?:er|re)s?\s+in\b/i, 3],
       [/\bfind\s+(?:all\s+)?data\s*cent/i, 3], [/\bcolo(?:cation)?\b/i, 2],
       [/\boperators?\b/i, 1.5], [/\btenants?\b/i, 2], [/\bcampus(?:es)?\b/i, 1],
+      // 5.23: "who operates in Dallas" matched nothing (the line above needs the noun).
+      [/\bwho\s+operates\b/i, 1.5],
       [/\bequinix|digital\s+realty|ntt|vantage|qts|cyrusone|switch|stack\b/i, 2],
       [/\bunder\s+construction\b/i, 2], [/\boperational\b/i, 1.5],
     ],
@@ -21616,6 +21705,10 @@ export function _planSignals(intent, context) {
     for (const m of text.matchAll(/\b(?:in|for)\s+([A-Z]{2})(?![A-Za-z])/g)) {
       if (_PLAN_STATE_CODES.has(m[1])) code = m[1];
     }
+    // 5.25 (Grok QA 2026-11-13, Abilene): a code written after a place name, "Abilene, TX" or
+    // "Abilene TX", is the same evidence as "in TX". The comma form takes any code; the bare form
+    // skips the five codes that are also English words (OR, IN, ME, HI, OK) so "gas OR Power" is not Oregon.
+    if (!code) code = _planStateAfterPlace(text);
     return code || (corridor && corridor.state) || null;
   })();
   const candidateId = (typeof c.candidate_id === 'string' && c.candidate_id.trim())
@@ -21898,7 +21991,23 @@ export function _planWorkflowConfidence(seq, d) {
 //         "should we build in Dallas") routes to market_outlook, and a market
 //         check's answer leads with `dcpi_verdict` (the named market's DCPI
 //         verdict + its Source line) as the first key.
-export const PLANNER_VERSION = '5.22';
+//  5.23 = SHORT POWER ASKS (Grok QA relay 2026-11-13, Gemini cold start):
+//         "Texas 50 MW power" (a MW figure beside "power", no other class
+//         word) routes to grid_headroom instead of the navigator, and
+//         "who operates in Dallas" routes to facility_search.
+//  5.24 = STATE-GRAIN POWER STEP IS SOURCED (same relay, live re-test 11-13):
+//         get_power_availability_timeline names its grid in iso_context and
+//         its feeds in sources.<lane>.feed; power_evidence now reads both, so
+//         answer_guide no longer calls that step "UNDATED".
+//  5.25 = NAMED PLACES + ALTERNATIVES + WHAT WAS DROPPED (Grok QA 2026-11-13, v2.12.48):
+//         the air-permit constraint lead reads the bound DCPI market (site=<slug>) like the
+//         air_permits class; "Abilene, TX" / "Abilene TX" give the state; constraint leads take
+//         the bound market's US state (a non-US market's country code is never read as a US
+//         state: Frankfurt DE, Mumbai IN); a DCPI / time-to-power ask gets a step that reads one;
+//         an ask for alternatives gets a site_selection_canvas step (region=us, size, deadline);
+//         answer_guide names every filter a step did not apply, with the step's own reason
+//         (DROPPED —), and a one-ISO state queue read says the rest of the state is not in it.
+export const PLANNER_VERSION = '5.25';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22104,8 +22213,15 @@ export function _execPowerEvidence(executed, fullByEntry = null, derived = null)
       const collectedAt = (!asOf && _EXEC_COLLECTED_TOOLS.has(e.tool) && /^UNMEASURED\b/.test(String(p.as_of_basis || '')))
         ? dated(p.fetched_at) : null;
       const a = e.args || {};
-      const iso = [r.iso, r.region_id, a.iso, a.region_id].find((x) => typeof x === 'string' && x.trim()) || null;
-      const source = named(p.source) || named(r.source) || null;
+      // 5.24: a state-grain step (get_power_availability_timeline, live 11-13 "Texas 50 MW power")
+      // names its grid in iso_context and its feeds in sources.<lane>.feed, not in iso / source.
+      // One grid in iso_context is that step's grid; several (a multi-ISO state) name none.
+      const isoCtx = Array.isArray(r.iso_context) ? r.iso_context.filter((x) => typeof x === 'string' && x.trim()) : [];
+      const iso = [r.iso, r.region_id, a.iso, a.region_id, isoCtx.length === 1 ? isoCtx[0] : null]
+        .find((x) => typeof x === 'string' && x.trim()) || null;
+      const feeds = (r.sources && typeof r.sources === 'object' && !Array.isArray(r.sources))
+        ? Object.values(r.sources).map((s) => s && named(s.feed)).filter(Boolean) : [];
+      const source = named(p.source) || named(r.source) || (feeds.length ? feeds.join('; ') : null);
       const missing = [];
       if (!asOf && !collectedAt) missing.push('as_of');
       if (!iso && !source) missing.push('iso_or_source');
@@ -22172,6 +22288,91 @@ export function _planDcpiLead(ia) {
 // _CITY_ISO_META declares by reliability region (see its 'atlanta' and
 // 'nashville' notes). Read by the answer guide's ISO check only.
 const _EXEC_BA_REGION = { SOCO: 'SERC', TVA: 'SERC' };
+// 5.25 (Grok QA 2026-11-13, /mcp/chatgpt Reno 200 MW): a step that did not apply what the question
+// asked said so only inside its own result (get_retirement_headroom `_ignored_params.target_mw`: "a MW
+// threshold is a paid filter; this preview uses the default 50"; get_refined_queue
+// `filters_applied._min_mw_not_applied`), and the queue step for a state read one ISO's file without
+// saying the rest of that state is not in any queue DC Hub reads. An agent composing from
+// answer_guide never saw any of it. This lists each drop with the step's OWN reason, and
+// answer_guide names them. Reporting only: what a tier opens is unchanged.
+const _DROP_REASON_MAX = 200;
+function _dropReason(v) {
+  if (typeof v !== 'string' || !v.trim()) return null;
+  // The backend's own sentence often restates "<param>=<v> was asked and NOT applied:"; the list says that.
+  const s = v.replace(/\s+/g, ' ').trim().replace(/^[a-z0-9_]+(?:=\S+)? was (?:asked and )?NOT applied:\s*/i, '');
+  return s.length > _DROP_REASON_MAX ? s.slice(0, _DROP_REASON_MAX - 1) + '…' : s;
+}
+export function _execDroppedFilters(executed, fullByEntry) {
+  const out = [];
+  const seen = new Set();
+  const add = (e, param, reason, kind) => {
+    const k = `${e.step}|${e.tool}|${param}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const asked = e.args && e.args[param] != null && typeof e.args[param] !== 'object' ? e.args[param] : null;
+    out.push({ step: e.step, tool: e.tool, param, ...(asked != null ? { asked } : {}), kind, reason });
+  };
+  try {
+    for (const e of (Array.isArray(executed) ? executed : [])) {
+      if (!e || !e.tool || !(e.status === 'executed' || e.status === 'gated_preview')) continue;
+      const r = (fullByEntry && fullByEntry.get && fullByEntry.get(e)) || e.result;
+      if (!r || typeof r !== 'object') continue;
+      const ign = r._ignored_params;
+      if (ign && typeof ign === 'object' && !Array.isArray(ign)) {
+        for (const [p, why] of Object.entries(ign)) {
+          const reason = _dropReason(why);
+          if (reason) add(e, p, reason, 'not_applied');
+        }
+      }
+      const fa = r.filters_applied;
+      if (fa && typeof fa === 'object') {
+        for (const [k, why] of Object.entries(fa)) {
+          const m = /^_([a-z0-9_]+)_not_applied$/.exec(k);
+          if (!m) continue;
+          const reason = _dropReason(why);
+          if (reason) add(e, m[1], reason, 'not_applied');
+        }
+      }
+      // site_selection_canvas / rank_sites argument disposition: {<param>: {applied:false, reason, status}}.
+      // (The timeline tool's list-of-strings shape names no parameter, so it is not read here.)
+      const cc = r.constraint_coverage;
+      if (cc && typeof cc === 'object' && !Array.isArray(cc)) {
+        for (const [p, v] of Object.entries(cc)) {
+          if (!v || typeof v !== 'object' || v.applied !== false) continue;
+          if (!e.args || e.args[p] == null) continue;   // only what this step was asked to apply
+          const reason = _dropReason(v.reason);
+          if (reason) add(e, p, reason, v.status === 'locked' ? 'locked' : 'not_applied');
+        }
+      }
+      if (Array.isArray(r.unapplied_constraints)) {
+        for (const p of r.unapplied_constraints) {
+          if (typeof p !== 'string' || !p) continue;
+          add(e, p, _dropReason(r.unapplied_constraints_warning) || _dropReason(r.note)
+            || 'the layer this filter needs did not answer, so the rows are not cut by it', 'not_applied');
+        }
+      }
+      // A state-filtered queue read that came back from ONE ISO's file: the state's projects in any other
+      // queue (a utility outside the ISOs DC Hub reads, e.g. NV Energy outside CAISO) are not in it.
+      if (e.tool === 'get_refined_queue' && e.args && e.args.state && !e.args.iso
+          && r.freshness_by_iso && typeof r.freshness_by_iso === 'object') {
+        const isos = Object.keys(r.freshness_by_iso);
+        if (isos.length === 1) {
+          add(e, 'state', `queue rows for ${String(e.args.state).toUpperCase()} come only from ${isos[0]}'s queue; `
+            + `projects in a queue DC Hub does not read (a utility outside the ISOs it covers) are not in this answer`, 'coverage');
+        }
+      }
+    }
+  } catch (_e) { /* reporting never breaks the answer */ }
+  return out;
+}
+export function _execDroppedSentence(items) {
+  if (!Array.isArray(items) || !items.length) return '';
+  return 'DROPPED — ' + items.map((x) => `step ${x.step} ${x.tool}: `
+    + (x.kind === 'coverage' ? x.reason
+      : `${x.param}${x.asked != null ? '=' + x.asked : ''} was not applied (${x.reason})`)).join('; ')
+    + '. Say this plainly in the answer: those results are not cut to what was asked.';
+}
+
 export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
@@ -22494,24 +22695,23 @@ const _CONSTRAINT_NOUNS = [
   { key: 'tax',          re: /\b(tax|incentive|abatement)\b/i,
     tools: ['get_tax_incentives'],
     lead: (d) => ({ tool: 'get_tax_incentives',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   // 2026-11-11: "gas turbine(s)" is equipment, not a gas-price noun; in an
   // air-permit question it is covered by the air-permit read, not get_gas_index.
   { key: 'gas',          re: /\b(gas(?!\s+turbines?\b)|lng|pipeline gas|behind.the.meter|btm)\b/i,
     tools: ['get_gas_index', 'get_gas_economics', 'get_gas_intelligence'],
     lead: (d) => ({ tool: 'get_gas_index',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   // 2026-11-11: an AIR permit / nonattainment noun is covered by the air-permit
   // read; a bare "permit" is covered by either permitting tool.
   { key: 'air_permits',  re: /\b(air[-\s]?permits?|nonattainment|non-attainment)\b/i,
     tools: ['get_air_permit_context'],
-    lead: (d) => ({ tool: 'get_air_permit_context', args_hint: d.coords
-      ? { lat: d.coords.lat, lon: d.coords.lon }
-      : { lat: '<site lat>', lon: '<site lon>' } }) },
+    // 5.25: the same place rule as the air_permits class (a bound DCPI market reads as site=<slug>).
+    lead: (d) => ({ tool: 'get_air_permit_context', args_hint: _planAirPermitWhere(d) }) },
   { key: 'permitting',   re: /\b(permit|permitting|moratorium|zoning)\b/i,
     tools: ['get_permitting_intel', 'get_air_permit_context'],
     lead: (d) => ({ tool: 'get_permitting_intel',
-      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      args_hint: { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   { key: 'climate',      re: /\b(climate|heat|temperature)\b/i,
     tools: ['get_climate_intel'],
     lead: (d) => ({ tool: 'get_climate_intel', args_hint: d.coords
@@ -22527,7 +22727,7 @@ const _CONSTRAINT_NOUNS = [
     tools: ['get_renewable_energy'],
     lead: (d) => ({ tool: 'get_renewable_energy', args_hint: d.coords
       ? { lat: d.coords.lat, lon: d.coords.lon }
-      : { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
+      : { state: _planLeadState(d) || '<2-letter US state, e.g. VA>' } }) },
   { key: 'queue',        re: /\b(queue|interconnect|interconnection)\b/i,
     tools: ['get_interconnection_queue', 'get_refined_queue'],
     // No ISO placeholder: _EXEC_ISO_ARG injects the plan's constraint ISO into
@@ -22537,6 +22737,24 @@ const _CONSTRAINT_NOUNS = [
   { key: 'deals',        re: /\b(m&a|acquisition|acquire|deal flow|transaction)\b/i,
     tools: ['list_transactions', 'hyperscaler_deals', 'deal_autopsy'],
     lead: () => ({ tool: 'list_transactions', args_hint: { limit: 10 } }) },
+  // 5.25 (Grok QA 2026-11-13): "...air permit constraints, and what is the DCPI and time to power?" for
+  // Abilene ran the air-permit, permitting and gas steps and nothing that reads a verdict or a time to
+  // power. Covered by any tool that returns one; the lead reads the DCPI card of the market the text
+  // bound (verdict + time-to-power band), else the state's power timeline, else nothing (H4 names it).
+  // Last in the table, so it never takes a lead slot from the rows above. `plannedOnly`: a runner-up
+  // class that merely WEIGHED a verdict tool does not count as covering it (the Abilene plan's runner-up
+  // led with one, so the ask was "considered" and never run).
+  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b/i,
+    tools: ['get_market_dcpi_rank', 'get_power_availability_timeline', 'site_selection_canvas', 'rank_markets',
+      'ai_capacity_index', 'grid_transition_radar', 'get_grid_intelligence', 'get_market_context',
+      'get_iso_context', 'compare_isos', 'deal_autopsy', 'get_dchub_recommendation', 'simulate_scenario',
+      'predict_market_trajectory', 'analyze_site', 'get_composite_site_score', 'find_sites'],
+    lead: (d) => {
+      const o = d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug ? d.__outlook : null;
+      if (o) return { tool: 'get_market_dcpi_rank', args_hint: { market_slug: o.slug } };
+      const st = _planLeadState(d);
+      return st ? { tool: 'get_power_availability_timeline', args_hint: { state: st } } : null;
+    } },
 ];
 
 /**
@@ -22723,22 +22941,61 @@ export function _capacityRegisterOffer(executed, fullOf) {
  * Pure. Never throws — routing degrades to today's behaviour rather than
  * failing the user's question.
  */
-export function _constraintLeadSteps(text, d, considered) {
+// 5.25 (Grok QA 2026-11-13, /mcp/chatgpt): "I need 200 MW in Reno within 24 months. Can I get power
+// there in time, and what are faster alternatives?" planned retirement headroom, the NV queue and Reno's
+// DCPI card, all about Reno, and nothing that names another place. A question that asks for
+// alternatives gets one site_selection_canvas step: US markets ranked by DCPI verdict, headroom and time
+// to power, cut to the size and the deadline the text gave. region=us on purpose: the plan's state would
+// otherwise be injected (_execInjectGeo) and the alternatives would be Reno's own state again.
+// Not added when the plan already ranks or lists places, or for a facility look-alike question
+// (find_alternatives covers "alternatives to <facility>").
+const _ALTERNATIVES_RE = /\b(?:alternatives?|faster\s+(?:options?|markets?|sites?|places?|locations?|routes?)|other\s+(?:markets?|sites?|locations?|places?|options?)|elsewhere|somewhere\s+else)\b/i;
+const _ALTERNATIVES_COVERED = ['site_selection_canvas', 'find_sites', 'find_alternatives', 'rank_markets', 'ai_capacity_index',
+  'grid_transition_radar', 'rank_sites', 'compare_isos', 'get_dchub_recommendation'];
+export function _planDeadlineMonths(text) {
+  const t = String(text || '');
+  const m = t.match(/\b(?:within|in|under|less\s+than|inside(?:\s+of)?|by)\s+(\d{1,3})\s*(months?|mos?|years?|yrs?)\b/i);
+  if (!m) return null;
+  const n = Number(m[1]) * (/^y/i.test(m[2]) ? 12 : 1);
+  return Number.isInteger(n) && n >= 1 && n <= 120 ? n : null;
+}
+export function _alternativesStep(text, d, considered) {
+  try {
+    const t = String(text || '');
+    if (!_ALTERNATIVES_RE.test(t)) return null;
+    const seen = new Set(Array.isArray(considered) ? considered : []);
+    if (_ALTERNATIVES_COVERED.some((tool) => seen.has(tool))) return null;
+    const sig = (d && typeof d === 'object') ? d : {};
+    const months = _planDeadlineMonths(t);
+    const mw = (typeof sig.mw === 'number' && Number.isFinite(sig.mw) && sig.mw >= 1) ? Math.min(5000, Math.round(sig.mw)) : null;
+    return { tool: 'site_selection_canvas', estimated_calls: 1, depends_on: [], constraint: 'alternatives',
+      why: 'The intent asked for alternatives to the place it named. US markets ranked by DCPI verdict, '
+        + 'excess-power headroom and time to power'
+        + (mw ? `, for ${mw} MW` : '') + (months ? `, within ${months} months` : '')
+        + ': the places to compare against the named one.',
+      args_hint: { region: 'us', ...(mw ? { capacity_mw: mw } : {}), ...(months ? { max_months: months } : {}) } };
+  } catch (_e) { return null; }
+}
+
+export function _constraintLeadSteps(text, d, considered, planned) {
   const out = [];
   try {
     const t = String(text || '');
     if (!t) return out;
     const seen = new Set(Array.isArray(considered) ? considered : []);
+    // 5.25: the tools the plan RUNS (no runner-up), for rows marked plannedOnly; the steps this
+    // function appends join it, so one lead never repeats another's tool.
+    const inPlan = new Set(Array.isArray(planned) ? planned : (Array.isArray(considered) ? considered : []));
     const sig = (d && typeof d === 'object') ? d : {};
     for (const n of _CONSTRAINT_NOUNS) {
       if (out.length >= _CONSTRAINT_LEAD_CAP) break;
       if (!n.re.test(t)) continue;
-      if (n.tools.some((tool) => seen.has(tool))) continue;   // covered or weighed
+      if (n.tools.some((tool) => (n.plannedOnly ? inPlan : seen).has(tool))) continue;   // covered or weighed
       if (typeof n.lead !== 'function') continue;
       let step = null;
       try { step = n.lead(sig); } catch (_e) { step = null; }
-      if (!step || !step.tool || seen.has(step.tool)) continue;
-      seen.add(step.tool);
+      if (!step || !step.tool || seen.has(step.tool) || inPlan.has(step.tool)) continue;
+      seen.add(step.tool); inPlan.add(step.tool);
       out.push({ tool: step.tool, args_hint: step.args_hint || {}, estimated_calls: 1,
         constraint: n.key,
         why: `The intent NAMED "${n.key}" and no step in the routed plan covers it. `
@@ -23054,6 +23311,11 @@ export function _planQuery(intent, context) {
     const ls = top.cls.id === 'capacity_search' ? _landSiteStep(text, { ...d, state: _execIntentState(text, d) || d.state }, seq.map((x) => x.tool)) : null;
     if (ls) seq.push({ ...ls, step: seq.length + 1 });
   } catch (_e) { /* routing must never throw */ }
+  // 5.25: an intent that asks for alternatives gets the shortlist of other places (_alternativesStep).
+  try {
+    const alt = _alternativesStep(text, d, seq.map((x) => x.tool));
+    if (alt) seq.push({ ...alt, step: seq.length + 1 });
+  } catch (_e) { /* routing must never throw */ }
   // ★★★2026-08-19 [margin<1 => run both classes]. The router ALREADY detects a
   //  two-class question: when the top two scores are within 1 point it docks
   //  intent_confidence by 0.1 to say so (below). It then ran ONE class and
@@ -23096,7 +23358,7 @@ export function _planQuery(intent, context) {
         if (ru && ru.tool) consideredTools.push(ru.tool);
       } catch (_e) { /* an unbuildable runner-up simply is not considered */ }
     }
-    for (const cs of _constraintLeadSteps(text, d, consideredTools)) {
+    for (const cs of _constraintLeadSteps(text, d, consideredTools, seq.map((x) => x.tool))) {
       seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
     }
   } catch (_e) { /* routing must never throw */ }
@@ -29908,6 +30170,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         (_gridRank && _gridRank.evidence) ? new Map([[_gridRank.evidence.entry, _gridRank.evidence]]) : null);
       // 11-09: the lead names undated steps, then live-export queue steps labelled collected.
       const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
+      // 5.25: what a step did not apply, with its own reason (_execDroppedFilters); named after UNDATED.
+      const _dropped = _execDroppedFilters(executed, fullByEntry);
+      const _droppedLine = _execDroppedSentence(_dropped);
+      const _notes = [_undated, _droppedLine].filter(Boolean).join(' ');   // UNDATED, then DROPPED
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
@@ -29965,7 +30231,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // surface; the structured field follows the answer-block gate below.
         // 5.17: an undated power step is named next, and its verdict is not led with.
         answer_guide: (sc.unresolved ? 'UNRESOLVED — ' + sc.unresolved.note + ' ' : '')
-          + (_undated ? _undated + ' ' : '') + _gridLead
+          + (_notes ? _notes + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)))
           + (_capReg ? ' ' + _capReg.sentence : '')
@@ -29973,6 +30239,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
+        ...((_dropped.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { dropped_filters: _dropped } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         ...(_ho ? { handoff: _ho.field } : {}),
@@ -34321,7 +34588,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'request_capacity_intro',
-    'Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or wants first access to capacity matching a requirement as listings are onboarded (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). This registers a deal: DC Hub records the request in its lead register and sends the provider ONLY your human\'s company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider\'s identity, site details and contact with your human, and your human\'s name, role and email with the provider; on a decline nothing is shared. Requires an identified caller (claim_free_key, then bind_email with your human\'s address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and the next step. For a listing, source_capacity with its slug then shows the deal status in the disclosure block and, once the provider accepts, the provider\'s identity, site and contact. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Do NOT use to save or monitor a site (use save_site / set_site_alert).',
+    'Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or wants first access to capacity matching a requirement as listings are onboarded (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). This registers a deal: DC Hub records the request in its lead register and sends the provider ONLY your human\'s company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider\'s identity, site details and contact with your human, and your human\'s name, role and email with the provider; on a decline nothing is shared. Requires an identified caller (claim_free_key, then bind_email with your human\'s address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and the next step. For a listing, source_capacity with its slug shows the deal status in the disclosure block, and the provider\'s details once accepted. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Do NOT use to save or monitor a site (use save_site / set_site_alert).',
     { slug: ID.describe('The listing to register a deal for: its slug or id from source_capacity. Omit to register a standing requirement for upcoming listings instead'),
       name: S.describe("Your human's full name. Nothing is sent without it; use only what they gave you, never invent it"),
       company: S.describe("Your human's company. Nothing is sent without it"),
