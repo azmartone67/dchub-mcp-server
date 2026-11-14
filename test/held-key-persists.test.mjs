@@ -135,7 +135,8 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     // held-key contract below is unchanged, and the inbox tail is keyed-only.
     const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });', 'per-session createServer');
     const window = SRC.slice(Math.max(0, i - 1200), i);
-    expect(window).toContain('if (!apiKey) {');
+    // E4 (2026-11-14): and only under the restore switch (off by default: hosted callers share an egress IP).
+    expect(window).toContain('if (!apiKey && _heldKeyByIpOn()) {');
     expect(window).toContain('_instrTail = _INSTR_TAIL_HELD(_held.key)');
     expect(window).toContain('if (apiKey) _instrTail += _INSTR_TAIL_INBOX;');
     // The per-session tail is appended after the base instructions. Since

@@ -3898,10 +3898,16 @@ export const _VIA_TRANSPORT_TAGS = new Set([
   'mcp', 'mcp-generic-client', 'curl', 'node', 'python-requests', 'axios',
   'go-http-client', 'okhttp', 'wget', 'unknown', 'other',
 ]);
+// E6 (owner 2026-11-14): the platform axis tags the Copilot CLI 'copilot' like Copilot in VS Code, so the
+// connector URL it is handed would credit a CLI install to VS Code. Its MCP client names itself
+// (github-copilot-developer / copilot-cli), so that name wins here: via=copilot-cli, never folded together.
+export const _COPILOT_CLI_NAME = /copilot[- _]?cli|github[- _]?copilot[- _]?developer/i;
 export const _claimVia = () => {
   try {
-    const p = ((getCtx() || {}).platform || '').toLowerCase().trim();
+    const c = getCtx() || {};
+    const p = (c.platform || '').toLowerCase().trim();
     if (!p || _VIA_TRANSPORT_TAGS.has(p) || p.includes('dchub')) return '';
+    if (p === 'copilot' && _COPILOT_CLI_NAME.test(String(c.client_name_raw || ''))) return 'copilot-cli';
     return p.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
   } catch (_) { return ''; }
 };
@@ -6565,6 +6571,16 @@ export function _heldKeyFor(fp, now = Date.now()) {
   return e;
 }
 export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
+// E4 (owner 2026-11-14): the fingerprint is IP + client family and nothing else, so on a hosted client every
+// user behind the same egress (claude.ai, ChatGPT, Grok all call from their vendor's IPs) shares one, and the
+// held key was handed to strangers: in claim_free_key AND in-band in every keyless initialize. Off by default:
+// a caller gets its key back by PRESENTING it (X-API-Key / ?key=), from the backend's named-client dedupe, or by
+// recover_my_key. DCHUB_HELD_KEY_BY_IP=1 restores the IP-keyed hand-back (both consumers) with no deploy.
+// Per-IP free-tier counters are untouched: they never read this map.
+export const _heldKeyByIpOn = () => process.env.DCHUB_HELD_KEY_BY_IP === '1';
+// The repeat-caller line (E4): one sentence every reuse reply carries, same words as the backend's guidance.
+export const ALREADY_HAVE_KEY_GUIDANCE = 'You already have a DC Hub key: keep using it (send it as X-API-Key) and do not claim again. ' +
+  'If you lose it, call recover_my_key {email}: it re-sends the key to the email bound to it (bind_email binds one).';
 // 2026-11-09: a held key that now carries an email (bind_email ran after the
 // mint) belongs to that person. The fingerprint is only IP + client family, so
 // handing it to a caller without that same address would give one person behind
@@ -34720,6 +34736,25 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // One key per email (backend routes/one_key_per_email): an email that already has a DC Hub key
   // gets no second key, and the body never carries that key: it goes to the inbox. That is not a
   // failure, so it is said plainly, with the paste-ready line holding a placeholder for the key.
+  const _claimCappedReply = (r, hadEmail) => {
+    const detail = String((r && r.detail) || '').slice(0, 600);
+    return {
+      content: [{ type: 'text', text:
+        '⏸️ **No new key minted for this caller right now.** ' + (detail ? detail + '\n\n' : '\n\n') +
+        (hadEmail ? '' : 'Ask your human for their email and call `claim_free_key` again with {email}: that mints a key tied to it. ') +
+        ALREADY_HAVE_KEY_GUIDANCE }],
+      structuredContent: {
+        api_key:      null,
+        minted:       false,
+        reason:       'claim_rate_limited',
+        detail,
+        guidance:     ALREADY_HAVE_KEY_GUIDANCE,
+        recover_tool: 'recover_my_key',
+        next_tool:    hadEmail ? 'recover_my_key' : 'claim_free_key',
+        next_args:    { email: "<your human's email>" },
+      },
+    };
+  };
   const _emailHasKeyReply = (r, bind) => {
     const msg = String((r && r.message) || 'This email already has a DC Hub key, so no second key was made.').slice(0, 400);
     const sent = !!(r && r.key_sent);
@@ -34810,6 +34845,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 connect_url_withheld: _CONNECT_URL_WITHHELD,
               }),
               recover_tool:   'recover_my_key',
+              guidance:       ALREADY_HAVE_KEY_GUIDANCE,
               next_tool:      'unlock_more_data',
               note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; for paid depth, relay the human_url a gated answer returns.'
                 + (_heldOk ? ' If this session cannot hold a header, relay connect_url to your human — it is the same key carried in the connector URL.' : ''),
@@ -34823,7 +34859,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // sibling. Rationale + scope at _rememberHeldKey.
       let _fp = null;
       try {
-        _fp = _callerFingerprint(getCtx());
+        _fp = _heldKeyByIpOn() ? _callerFingerprint(getCtx()) : null;   // E4: off by default
         const _e = _heldKeyFor(_fp);
         if (_e) {
           let _v = null;
@@ -34885,6 +34921,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   connect_url_withheld: _CONNECT_URL_WITHHELD,
                 }),
                 recover_tool:            'recover_my_key',
+                guidance:                ALREADY_HAVE_KEY_GUIDANCE,
                 next_tool:               'bind_email',
                 note: 'claim_free_key is idempotent per caller: the key this client minted earlier is returned (already_held). Bind an email (bind_email) to make it recoverable; for paid depth, relay the human_url a gated answer returns.',
               },
@@ -34909,6 +34946,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
       if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
       if (!key && r && r.error === 'email_has_key') return _emailHasKeyReply(r, false);
+      // E4 (owner 2026-11-14): the backend no longer hands an email-less caller another caller's unused key. At its
+      // per-IP caps it answers 429 (unused_key_cap / mint_rate_limited); say what to do instead of "Could not mint".
+      if (!key && r && r.error === 'API 429') return _claimCappedReply(r, !!a.email);
       if (!key) {
         return { isError: true, content: [{ type: 'text',
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
@@ -35096,7 +35136,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         (_snipFirst ? _ownSnip
           : 'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' + _lastsLine) +
         (_backendReused
-          ? 'Calling claim_free_key again keeps returning this same key.' + (_snipFirst ? '' : ' Save it once with the step below so the next session starts with it.') + '\n\n'
+          ? 'Calling claim_free_key again keeps returning this same key.' + (_snipFirst ? '' : ' Save it once with the step below so the next session starts with it.') +
+            ' If you lose it, call `recover_my_key` {email}: it re-sends the key to the email bound to it.\n\n'
           : '') +
         (_snipFirst ? '' : _ownSnip) +
         _headerlessLead +
@@ -35130,6 +35171,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             already_held: true,
             held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap'
               : (r && r.one_key_per_email === true) ? 'one_key_per_email' : 'backend_claim_dedupe',
+            ...(r && r.reuse_basis ? { reuse_basis: String(r.reuse_basis).slice(0, 40) } : {}),
+            guidance:     ALREADY_HAVE_KEY_GUIDANCE,
+            recover_tool: 'recover_my_key',
           } : {}),
           ...(_keyLasts(key) ? { key_expires: false, key_lifetime: _KEY_LASTS } : {}),
           // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
@@ -37846,7 +37890,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // confirmed live when claim_free_key returns it. Never for a keyed session.
       let _instrTail = '';
       try {
-        if (!apiKey) {
+        if (!apiKey && _heldKeyByIpOn()) {   // E4: never hand an IP-keyed key to a stranger by default
           const _held = _heldKeyFor(_callerFingerprint({ client_ip: clientIp, platform }));
           if (_held) _instrTail = _INSTR_TAIL_HELD(_held.key);
         }

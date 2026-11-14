@@ -1,6 +1,6 @@
 // via-tags.test.mjs: directory and partner via tags for the key-mint channel (2026-11-12). Pure unit test.
 import { describe, it, expect } from 'vitest';
-import { DIRECTORY_VIA_TAGS, DIRECTORY_VIA_ALIASES, OTHER_VIA, directoryViaTag, keyMintVia } from '../lib/via-tags.mjs';
+import { DIRECTORY_VIA_TAGS, DIRECTORY_VIA_ALIASES, CLIENT_VIA_TAGS, OTHER_VIA, directoryViaTag, keyMintVia } from '../lib/via-tags.mjs';
 
 describe('directoryViaTag', () => {
   it('names every directory and partner the owner listed', () => {
@@ -29,9 +29,9 @@ describe('keyMintVia: bounded, sanitized, falls back to other', () => {
     expect(keyMintVia(null)).toBeNull();
     expect(keyMintVia(undefined)).toBeNull();
   });
-  it('the output set is closed: registered tags plus other, never free text', () => {
-    const allowed = new Set([...DIRECTORY_VIA_TAGS, OTHER_VIA]);
-    for (const v of ['a', 'x'.repeat(40), 'weird.name_1', 'glama.ai', 'mcp.so', 'unknown-partner']) {
+  it('the output set is closed: registered directory tags, client tags (E6, 2026-11-14) plus other, never free text', () => {
+    const allowed = new Set([...DIRECTORY_VIA_TAGS, ...CLIENT_VIA_TAGS, OTHER_VIA]);
+    for (const v of ['a', 'x'.repeat(40), 'weird.name_1', 'glama.ai', 'mcp.so', 'unknown-partner', 'devin', 'cursor', 'copilot-cli']) {
       expect(allowed.has(keyMintVia(v)), v).toBe(true);
     }
   });

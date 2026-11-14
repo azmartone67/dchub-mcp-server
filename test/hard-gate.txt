@@ -180,6 +180,7 @@ test/discovery-coverage.test.mjs
 test/discovery-never-walled.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs
 test/docker-catalog.test.mjs
+test/e4-e6-identity-via.test.mjs
 test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
