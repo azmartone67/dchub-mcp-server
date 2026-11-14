@@ -131,7 +131,7 @@ import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
-import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
+import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
 import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
@@ -12046,8 +12046,14 @@ export function _topMetroFullResult(result, name) {
   let out = parsed;
   if (CONTEXT_PACK_TOOLS.has(name)) out = _datePackSections(out);
   out = _maskBrokerRatesBelowPro(out);   // any tool: a market_pricing block is masked below paid
-  out = _openScoresDefinition(out);      // the open scores must not be called a paid field
-  out = { ...out, access: 'full', access_basis: TOP_METRO_ACCESS_BASIS };
+  // `full` only when the backend withheld nothing: its own gate can still run on these markets
+  // (be#8229), and then neither the stamp nor the scores definition may call the scores free.
+  if (_backendWithheld(out)) {
+    out = { ...out, access: 'partial', access_basis: TOP_METRO_PARTIAL_BASIS };
+  } else {
+    out = _openScoresDefinition(out);      // the open scores must not be called a paid field
+    out = { ...out, access: 'full', access_basis: TOP_METRO_ACCESS_BASIS };
+  }
   return { ...result, content: [{ type: 'text', text: JSON.stringify(out) }, ...(result.content || []).slice(1)],
            structuredContent: out };
 }
