@@ -1,0 +1,53 @@
+name: hol plugin release
+
+# HOL Plugin Release: on each GitHub Release, HOL's trusted reusable workflow
+# scans this repo with HOL Guard, checks it with the Plugin Kit, writes a
+# release-evidence JSON (+ CycloneDX SBOM when packages are declared), asks
+# GitHub to sign a provenance attestation over it, and records the attested
+# evidence on the HOL Plugins listing (dc-hub/dchub).
+# Docs: https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/plugin-release-attestation.md
+#
+# ★ HOW IT FIRES. Releases here are created by github-release.yml with
+# GITHUB_TOKEN, and GitHub suppresses `release: published` for those, so the
+# `release` trigger below only covers a release someone publishes by hand.
+# github-release.yml calls this file (workflow_call) right after it creates a
+# release. workflow_dispatch on a tag re-runs it for one release.
+#
+# WHAT IT CAN WRITE. No secrets: GitHub OIDC + github.token only.
+#   id-token: write          OIDC token HOL verifies (audience is bound to the evidence SHA-256)
+#   attestations: write      the GitHub-signed attestation over the evidence file
+#   artifact-metadata: write attestation storage metadata
+#   security-events: write   requested by HOL's job; only used for SARIF upload, which is OFF here
+#   contents: read           checkout only; it cannot tag, release, push or publish a package
+# Outside GitHub it sends one POST of the attested evidence to
+# https://hol.org/api/guard/plugins/releases/attestations. The evidence holds
+# repo/commit/ref/run id, scan score and counts, and per MCP server the
+# transport and host name only; no source, findings, env values or secrets.
+# The run keeps evidence + SBOM as a 90-day run artifact.
+#
+# offer_line: false drops HOL's one-line membership offer from the job summary.
+# Pinned by commit: hol-guard ab1c356b (2026-11-02, last change to
+# .github/workflows/plugin-release.yml; identical to hol-guard main on 2026-11-14).
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hol-plugin-release:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      security-events: write
+    uses: hashgraph-online/hol-guard/.github/workflows/plugin-release.yml@ab1c356b7cfd6ebbade6ca8987bac798ac835647
+    with:
+      plugin_dir: "."
+      upload_sarif: false
+      register_release: true
+      offer_line: false
