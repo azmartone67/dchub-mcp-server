@@ -49,6 +49,6 @@ describe('README agent documentation policy', () => {
     expect(schema.shape).toHaveProperty('location');
     expect(schema.shape).not.toHaveProperty('country');
     expect(schema.safeParse({ min_mw: Number(example[1]), location: example[2] }).success).toBe(true);
-    expect(Object.keys(tools)).toHaveLength(95);   // 94 -> 95 on 2026-11-11: get_air_permit_context
+    expect(Object.keys(tools)).toHaveLength(96);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services
   });
 });
