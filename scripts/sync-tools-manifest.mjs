@@ -1202,10 +1202,16 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // 2026-10-18: owner-approved lead sentence (Smithery copy) replaced "… query and cite".
   // 2026-10-19 (registry audit item 3): the official registry's search matches
   // the NAME only, and the registries that mirror this entry (PulseMCP, the
-  // GitHub MCP registry) show the description as the card text, so it now
-  // leads with the search terms and "query and cite" is back. Both are pinned.
-  if (!/^Data center energy, electricity (and|&) power grid data\b/.test(sjDesc) || !/query and cite/.test(sjDesc))
-    problems.push('server.json: description lost canonical positioning (must start "Data center energy, electricity & power grid data" and keep "query and cite")');
+  // GitHub MCP registry) show the description as the card text, so it then
+  // led with the search terms and "query and cite".
+  // 2026-11-13: owner approved replacing that official-registry card with the
+  // orchestration-layer wording (title "DC Hub"; description names the
+  // Data Center Power Index (DCPI) and "execute_plan first"), within the
+  // 100-character registry cap. The longer search-term title and the
+  // "query and cite" / "capacity to buy or lease" lead stay on surfaces
+  // that are not capped at 100 characters (mcp-server.json, smithery.yaml).
+  if (!/orchestration/i.test(sjDesc) || !/execute_plan first/.test(sjDesc) || !/Data Center Power Index \(DCPI\)/.test(sjDesc))
+    problems.push('server.json: description lost canonical positioning (must mention orchestration, "execute_plan first", and "Data Center Power Index (DCPI)")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans

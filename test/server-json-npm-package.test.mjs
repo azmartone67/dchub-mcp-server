@@ -46,14 +46,14 @@ describe('server.json packages: the npm launcher', () => {
     expect(bin).toContain('process.env.DCHUB_API_KEY');
   });
 
-  it('server.json title and description stay within 100 chars and lead with the search terms', () => {
+  it('server.json title and description stay within 100 chars and use the orchestration-layer wording', () => {
+    expect(SJ.title).toBe('DC Hub');
     expect(SJ.title.length).toBeLessThanOrEqual(100);
     expect(SJ.description.length).toBeLessThanOrEqual(100);
-    const d = SJ.description.toLowerCase();
-    for (const k of ['data center', 'energy', 'electricity', 'power grid', 'dcpi', 'query and cite', 'capacity to buy or lease']) expect(d, k).toContain(k);
-    for (const k of ['data center', 'energy', 'electricity', 'power grid', 'site selection']) expect(SJ.title.toLowerCase(), k).toContain(k);
-    expect(d.startsWith('data center')).toBe(true);
-    expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bplan\b/i);
+    expect(SJ.description).toMatch(/orchestration/i);
+    expect(SJ.description).toContain('execute_plan first');
+    expect(SJ.description).toContain('Data Center Power Index (DCPI)');
+    expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bplan\b|\bfree tier\b/i);
   });
 });
 

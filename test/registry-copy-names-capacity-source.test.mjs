@@ -108,15 +108,14 @@ describe('the manifests the registries ingest', () => {
     expect(MANIFEST.description).toContain('dchub.cloud/listings');
   });
 
-  it('server.json (the official-registry cascade source) still carries it', () => {
-    // #436 spent the 100-char schema cap on this; a later edit reclaiming
-    // those characters for something else would silently un-publish the
-    // capability from PulseMCP, Glama and mcp.so, which all mirror it.
+  it('server.json (the official-registry cascade source) stays within the 100-char cap and does not revive off-market wording', () => {
     // 2026-09-29 owner: "capacity to buy or lease" replaces "off-market" on
-    // every public surface until public listings exist.
-    expect(SERVER_JSON.description).toMatch(/capacity to buy or lease/i);
+    // every public surface until public listings exist. 2026-11-13 owner:
+    // the official-registry description (100-char cap) is now the
+    // orchestration-layer wording, so that phrase lives on mcp-server.json
+    // and smithery.yaml (asserted above / below), not in this 100-char field.
+    expect(SERVER_JSON.description.length).toBeLessThanOrEqual(100);
     expect(SERVER_JSON.description).not.toMatch(/off-market|not publicly marketed/i);
-    expect(SERVER_JSON.description).toMatch(/capacity/i);
   });
 
   it('no monthly price and no retired $299 on any published surface; the $10 pack is stated', () => {

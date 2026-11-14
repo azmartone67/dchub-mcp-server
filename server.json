@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub — Data Center Energy, Electricity & Power Grid Data: Site Selection, Colocation, Gas, Fiber",
-  "description": "Data center energy, electricity & power grid data: DCPI to query and cite, capacity to buy or lease.",
+  "title": "DC Hub",
+  "description": "Orchestration layer for the Data Center Power Index (DCPI). Call execute_plan first.",
   "websiteUrl": "https://dchub.cloud",
   "icons": [
     {
@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.50",
+  "version": "2.12.51",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -37,7 +37,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "dchub-mcp-server",
-      "version": "2.12.50",
+      "version": "2.12.51",
       "transport": {
         "type": "stdio"
       },
