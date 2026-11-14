@@ -236,6 +236,7 @@ test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
 test/free-with-email-is-not-a-paid-feature.test.mjs
 test/fresh-key-bearer-829.test.mjs
+test/front-desk.test.mjs
 test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
 test/full-cap-enforce.test.mjs

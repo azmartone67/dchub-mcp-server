@@ -61,7 +61,7 @@ should always honor:
 ---
 
 ## Partner outreach (honest — claim only what's live)
-> **DC Hub exposes 95 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
+> **DC Hub exposes 96 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
 > fiber, and M&A intelligence across a global data-center facility map in 170+ countries, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and

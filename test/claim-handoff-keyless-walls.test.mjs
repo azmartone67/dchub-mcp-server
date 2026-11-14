@@ -143,13 +143,13 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const seat = await open();
     const r = await post(seat.h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = r.json.result.tools.map((t) => t.name);
-    expect(names.length).toBe(95);   // 94 -> 95 on 2026-11-11: get_air_permit_context
+    expect(names.length).toBe(96);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services
     expect(names[0]).toBe('execute_plan');
     expect(names[1]).toBe('claim_free_key');
     expect(new Set(names).size).toBe(names.length);
     // registration order, from the one canonical catalog, minus the tool that moved
     const reg = Object.keys(S.createServer()._registeredTools);
-    expect(reg.length).toBe(95);
+    expect(reg.length).toBe(96);
     expect(reg.indexOf('claim_free_key'), 'the fixture is vacuous if it was already first').toBeGreaterThan(40);
     expect(names.slice(2)).toEqual(reg.filter((n) => n !== 'claim_free_key' && n !== 'execute_plan'));
   });
@@ -158,7 +158,7 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const r = await S._buildToolsListResult(null);
     expect(r.tools[0].name).toBe('execute_plan');
     expect(r.tools[1].name).toBe('claim_free_key');
-    expect(r.tools.length).toBe(95);
+    expect(r.tools.length).toBe(96);
   });
 
   it('a profile that does not list the tool is untouched, a pack keeps its declared order', async () => {
