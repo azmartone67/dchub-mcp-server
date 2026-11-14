@@ -27,6 +27,9 @@ import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { CORE_PROFILE } from '../lib/core-profile.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // The lean step stays ON (production): it shrinks _upgrade to machine fields, so the ask the agent
 // receives is the plan's prose paragraph. mcp#1356 first shipped with lean off here and the live
 // answer carried no ask.

@@ -24,6 +24,9 @@
 // restores the empty sid (C2), and the step switched off leaves no user_message (C4).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // This file pins the analyze_site wall / preview, which serves once a caller's daily full site runs
 // are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
 process.env.DCHUB_KEYLESS_SITE_FULL = '0';
