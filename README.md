@@ -95,7 +95,7 @@ Your AI assistant gets real-time, structured answers, dated and cited.
 - **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 - **Capacity Source** — data-center capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
 
-**95 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**96 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 Two of them are **partner tools**: `read_inbox` (the notes DC Hub leaves for a partner key; the same inbox as the `dchub://inbox` resource) and `report_finding` (files an observation about a DC Hub surface as a brain finding, detector `external_audit`). They are listed for every caller so the catalog is one stable list, and they answer only a key issued under a partner slug; any other key gets a clear "partner key required".
 
@@ -110,7 +110,7 @@ Two of them are **partner tools**: `read_inbox` (the notes DC Hub leaves for a p
 
 ## Guided prompts & resources
 
-Beyond the 95 tools, DC Hub ships **14 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
+Beyond the 96 tools, DC Hub ships **14 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
@@ -153,7 +153,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 | Endpoint | What it covers |
 |---|---|
-| `https://dchub.cloud/mcp/github` | everything — all 95 tools |
+| `https://dchub.cloud/mcp/github` | everything — all 96 tools |
 | `https://dchub.cloud/mcp/siting` | site selection end to end: find, analyze, score, compare, rank — plus Capacity Source |
 | `https://dchub.cloud/mcp/grid` | power availability: live ISO telemetry, interconnection queue, hosting + retirement headroom, prices |
 | `https://dchub.cloud/mcp/fiber` | routes, metro fiber, subsea cables, peering, lead-in planning, latency clustering |

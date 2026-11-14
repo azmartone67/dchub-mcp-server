@@ -47,6 +47,8 @@ registry:
         description: "Use this when the user asks to compare two to four power grids side by side — fuel mix, demand, renewable/gas share, and for the US ISOs interconnection-queue depth and time-to-power — in one call…"
       - name: "compare_sites"
         description: "Use this when the user has 2-4 candidate data center sites and asks which is best."
+      - name: "dchub_services"
+        description: "Use this when the user asks what DC Hub can do for them, which DC Hub service fits their need, or how to use DC Hub outside this chat: one-call cited answers (execute_plan), full-depth answers,…"
       - name: "deal_autopsy"
         description: "Use this when the user asks what a data-center deal means for power: deal flow with each market's DCPI verdict — \"what is the real play?\"."
       - name: "delete_standing_intent"
