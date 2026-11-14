@@ -29,6 +29,8 @@ const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this 
 const FREE_TIER_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
   + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day on the free tier\\.$');
 const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `claim_free_key` (one call, no email).';
+// The anonymous-cap walls reset with the daily per-IP count (platform review 2026-11-14).
+import { nextUtcDayStart } from '../lib/keyless-wall.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -151,7 +153,10 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(r.text.split('\n').find((l) => l.includes('claim_free_key')))
       .toBe('If the user prefers not to give an email, call `claim_free_key` (one call, no email).');
     expect(r.sc.remaining_this_month).toBe(0);
-    expect(r.sc.resets_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
+    // the hard wall is a DAILY per-IP count: resets_at is the next UTC midnight, never the month start
+    expect(r.sc.binding_limit).toBe('anon_ip_daily_hard');
+    expect(r.sc.resets_at).toBe(nextUtcDayStart());
+    expect(r.sc.monthly_reports_reset_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
     expect(new Date(r.sc.resets_at) > new Date()).toBe(true);
     expect(r.sc.credits_url).toBeUndefined();
     expect(copyViolations(r.res)).toEqual([]);
@@ -282,6 +287,10 @@ describe('A. anonymous soft cap: the preview stays, its nudge is email first', (
     expect(up.message.endsWith(NO_EMAIL_LINE)).toBe(true);
     expect(up.message.startsWith('Keep going free by email → ' + SHORT)).toBe(true);
     expect(up.remaining_this_month).toBe(0);
+    // the soft cap says today: its reset is the next UTC midnight, beside binding_limit anon_ip_daily
+    expect(up.binding_limit).toBe('anon_ip_daily');
+    expect(up.resets_at).toBe(nextUtcDayStart());
+    expect(up.monthly_reports_reset_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
     expect(r.sc.human_url).toBe(SHORT);
     // the stub's data rows plant a price and plan name on purpose (harness dataBody); the
     // copy this item writes is the nudge and the person's line
