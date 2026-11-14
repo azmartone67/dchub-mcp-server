@@ -263,6 +263,8 @@ import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKin
 import { keyMintVia } from './lib/via-tags.mjs';
 import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
          withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
+import { depthTrialEligible as _depthTrialEligible, depthTrialLine as _depthTrialLine, humanLinkOf as _humanLinkOf,
+         withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -5150,8 +5152,30 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
       out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
       _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
     }
-    return _oauthLead(out, name, c, { grok: false, depth });
+    return _depthTrial(_oauthLead(out, name, c, { grok: false, depth }), name, c, depth);
   } catch (_) { return result; }
+}
+// Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
+// "an account does not open ..." and "an email does not open ..." and nothing that does. One line names what does:
+// the 7-day trial on the page the wall's own human link opens, right below the block handing out that link.
+function _depthTrial(out, name, c, depth) {
+  try {
+    const link = _humanLinkOf(out);
+    const paid = _tierRank(String(c.tier || '')) >= _tierRank('starter');
+    if (!_depthTrialEligible({ tool: name, walled: true, depth, paid, link })) return out;
+    // Right below the block that hands out the link (the human line, or a repeat wall's pointer): the free offers
+    // and the digest line keep their places above it (the digest line stays directly above the human line). With
+    // no such prose block, ahead of the closing lines (Source / brand), after every offer.
+    const txt = (x) => (x && x.type === 'text' && typeof x.text === 'string') ? x.text : '';
+    const hl = out.content.findIndex((x, i) => i > 0 && !/^\s*[{[]/.test(txt(x))
+      && (txt(x).includes(link) || _hasHumanCta(txt(x))));
+    let before = hl > 0 ? hl + 1 : -1;
+    if (before < 1) {
+      before = out.content.length;
+      while (before > 1 && /^(?:Source:|DC Hub:)/.test(txt(out.content[before - 1]))) before -= 1;
+    }
+    return _withDepthTrialLine(out, _depthTrialLine(), { before });
+  } catch (_) { return out; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
 export function _flushQuotaWallHits(c, name) {
