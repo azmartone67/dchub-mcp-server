@@ -214,24 +214,19 @@ describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () 
   //   four mirroring registries and a per-registry tag would mis-credit them
   //   all. Derived from the map, so adding a cascade path keeps this honest and
   //   adding a per-registry one still fails.
-  it('server.json carries the shared cascade tag, never a per-registry one', () => {
+  // ★ 2026-11-14 (owner item D4): REVERSED AGAIN. server.json now lists ONE
+  //   remote, the canonical /mcp, so registry and mirror arrivals are no longer
+  //   tagged 'mcp-registry' (cost accepted by the owner). The half of the rule
+  //   that still holds: server.json never carries a PER-REGISTRY source path,
+  //   because one url feeds several mirroring registries.
+  it('server.json lists only the canonical /mcp and never a per-registry source path', () => {
     const sj = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
-    const url = sj.remotes[0].url;
-    const path = new URL(url).pathname;
-
+    const urls = sj.remotes.map((r) => r.url);
+    expect(urls).toEqual(['https://dchub.cloud/mcp']);
     // the listing url must be a path we actually serve, or every arrival 404s
-    expect(_PATHS).toContain(path);
-    // THE RULE: the tag is the shared cascade one
-    expect(_pathSource({ path })).toBe('mcp-registry');
-
-    const CASCADE = [...MCP_SOURCE_PATHS.entries()]
-      .filter(([, src]) => src === 'mcp-registry').map(([p]) => p);
-    expect(CASCADE, 'no cascade path declared').toContain(path);
-
-    // ★ the invariant the original assertion was really protecting
+    for (const u of urls) expect(_PATHS).toContain(new URL(u).pathname);
     for (const p of MCP_SOURCE_PATHS.keys()) {
-      if (CASCADE.includes(p)) continue;
-      expect(url, `server.json must not carry the per-registry path ${p}`).not.toContain(p);
+      for (const u of urls) expect(new URL(u).pathname, `server.json must not carry the source path ${p}`).not.toBe(p);
     }
   });
 

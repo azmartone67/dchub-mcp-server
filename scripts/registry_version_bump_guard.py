@@ -71,6 +71,40 @@ def _version_at(rev: str, cwd: str | None = None) -> str | None:
         return None
 
 
+PUBLISHER_META = "io.modelcontextprotocol.registry/publisher-provided"
+RELEASE_META_KEYS = ("toolCount",)
+
+
+def _release_view(obj: dict) -> dict:
+    """The Python spelling of scripts/server-json-baseline.mjs releaseView(): the
+    manifest minus `version`, minus packages[].version, and minus every `_meta`
+    key except publisher-provided toolCount (owner item D3, 2026-11-14: a
+    registry-metadata-only change is not a release)."""
+    out = {k: v for k, v in obj.items() if k not in ("version", "_meta", "packages")}
+    if isinstance(obj.get("packages"), list):
+        out["packages"] = [
+            {k: v for k, v in p.items() if k != "version"} if isinstance(p, dict) else p
+            for p in obj["packages"]
+        ]
+    meta = obj.get("_meta")
+    pp = meta.get(PUBLISHER_META) if isinstance(meta, dict) else None
+    if isinstance(pp, dict):
+        kept = {k: pp[k] for k in RELEASE_META_KEYS if k in pp}
+        if kept:
+            out["_release_meta"] = kept
+    return out
+
+
+def _release_key(text: str):
+    try:
+        obj = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    return json.dumps(_release_view(obj), sort_keys=True)
+
+
 def check(cwd: str | None = None) -> tuple[bool, str]:
     """(ok, message). ok=False ONLY for proven drift; every unknown is ok=True."""
     code, _ = _git("rev-parse", "--git-dir", cwd=cwd)
@@ -107,9 +141,16 @@ def check(cwd: str | None = None) -> tuple[bool, str]:
     if bump is None:
         return True, "could not locate the commit that set the current version — guard did not run"
 
-    code, _ = _git("diff", "--quiet", bump, "HEAD", "--", MANIFEST, cwd=cwd)
-    if code == 0:
-        return True, f"{MANIFEST} unchanged since version {head_ver} was set — publish is a correct no-op"
+    # 2026-11-14 (owner item D3): compare RELEASE content only (see _release_view);
+    # a registry-metadata-only change in _meta rides along with the next real bump.
+    _, then = _git("show", f"{bump}:{MANIFEST}", cwd=cwd)
+    _, now = _git("show", f"HEAD:{MANIFEST}", cwd=cwd)
+    k_then, k_now = _release_key(then), _release_key(now)
+    if k_then is None or k_now is None:
+        return True, f"{MANIFEST} did not parse on one side — guard did not run"
+    if k_then == k_now:
+        return True, (f"{MANIFEST} release content unchanged since version {head_ver} was set "
+                      f"— publish is a correct no-op")
 
     _, changed = _git("diff", "--numstat", bump, "HEAD", "--", MANIFEST, cwd=cwd)
     return False, (
@@ -198,6 +239,25 @@ def _self_test() -> int:
         write(tmp, "3.0.0"); commit(tmp, "a")
         write(tmp, "3.0.0", "x"); commit(tmp, "b")
     case("F: no version change anywhere in history -> green (fails open)", f, want_ok=True)
+
+    def write_meta(tmp: str, ver: str, meta: dict) -> None:
+        obj = {"name": "cloud.dchub/mcp-server", "version": ver,
+               "_meta": {PUBLISHER_META: meta}}
+        Path(tmp, MANIFEST).write_text(json.dumps(obj, indent=2), encoding="utf-8")
+
+    # G: owner item D3 — a registry-metadata-only change is not a release.
+    def g(tmp):
+        write_meta(tmp, "1.0.0", {"toolCount": 1, "freeTier": True}); commit(tmp, "v1")
+        write_meta(tmp, "1.1.0", {"toolCount": 1, "freeTier": True}); commit(tmp, "bump")
+        write_meta(tmp, "1.1.0", {"toolCount": 1}); commit(tmp, "drop freeTier, no bump")
+    case("G: _meta registry metadata changed, no bump -> green (rides the next release)", g, want_ok=True)
+
+    # H: toolCount is the one _meta key that IS a tool change.
+    def h(tmp):
+        write_meta(tmp, "1.0.0", {"toolCount": 1}); commit(tmp, "v1")
+        write_meta(tmp, "1.1.0", {"toolCount": 1}); commit(tmp, "bump")
+        write_meta(tmp, "1.1.0", {"toolCount": 2}); commit(tmp, "new tool, no bump")
+    case("H: _meta toolCount moved, no bump -> RED", h, want_ok=False)
 
     print(f"\nself-test: {ran} control(s), {failed} failed")
     return 1 if failed else 0

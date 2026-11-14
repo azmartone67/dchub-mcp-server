@@ -36,7 +36,10 @@ describe('server.json (the body GET /server.json publishes)', () => {
     // NOT release a remote URL — so publishing the short name at that URL would
     // still be refused. /mcp/registry is also this listing's original arrival-
     // attribution path, so reverting the name restores the attribution too.
-    expect(SERVER_JSON.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
+    // 2026-11-14 (owner item D4): the one remote is the canonical /mcp, which this
+    // name already held as its last remote (no other entry holds it), so the
+    // registry's one-server-per-remote rule does not refuse it.
+    expect(SERVER_JSON.remotes.map((r) => r.url)).toEqual(['https://dchub.cloud/mcp']);
     expect(SERVER_JSON.$schema).toMatch(/server\.schema\.json$/);
     expect(SERVER_JSON.version).toMatch(/^\d+\.\d+\.\d+/);
     // ── r-cascade-path (2026-09-04) ─────────────────────────────────────
