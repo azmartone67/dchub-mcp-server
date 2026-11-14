@@ -268,13 +268,12 @@ import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONT
 import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
          planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph,
          planDigestParagraph as _planDigestParagraph, planDigestTools as _planDigestTools } from './lib/plan-wall-sink.mjs';
-import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind, floorOfferLine as _floorOfferLine,
+import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind,
          hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
 import { keyMintVia } from './lib/via-tags.mjs';
-import { wallOauthLeadEligible as _wallOauthLeadEligible, wallOauthLeadLine as _wallOauthLeadLine,
-         withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
-import { depthTrialEligible as _depthTrialEligible, depthTrialLine as _depthTrialLine, humanLinkOf as _humanLinkOf,
-         withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
+import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
+import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
+import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -5046,23 +5045,28 @@ const _FLOOR_PREVIEW_TOOLS = new Set(['get_retirement_headroom', 'get_refined_qu
 const _floorPreviewOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_OFFER_FLOOR_PREVIEW || '').trim());
 // analyze_site: a keyless caller's email opens its email teaser (the siting seat); a key's free monthly runs
 // are per key, so once they are spent an email opens nothing more there.
-function _floorProOnly(name, c) {
+function _floorProOnly(name, ent) {
   const t = String(name || '');
-  if (t === 'analyze_site') return !!(c && c.api_key);
+  if (t === 'analyze_site') return !!(ent && ent.keyed);
   return PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t);
+}
+// What the caller HOLDS, not how this call is served (lib/wall-offers.mjs, owner 2026-11-14 E3): a key past its daily
+// allowance is served as an anonymous call, but it still holds its key and email, so no offer asks it for either.
+export function _wallEnt(c) {
+  return _wallEntitlementsOf(c, { paidTier: (t) => _tierRank(String(t || '')) >= _tierRank('starter') });
 }
 // The same rule the plan's own ask and the digest offer use (_planStepEmailOpens): depth = an email opens
 // nothing on this wall. A tool a free key gets in full (KEYED_FREE_BONUS, not preview-only: get_grid_data,
 // get_energy_prices, get_water_risk ...) is never depth here, whatever wall it hit (on the anonymous hard
 // wall _wallKindFor says capacity, and an email-bound key still opens the full answer).
-function _floorKindFor(name, sc, c) {
+function _floorKindFor(name, sc, c, ent = _wallEnt(c)) {
   let depth = false;
   try {
     const t = String(name || '');
     depth = !(KEYED_FREE_BONUS.has(t) && !_freePreviewOnlyTool(t)) && !_planStepEmailOpens(t, sc, c);
   } catch (_) { depth = true; }
-  const proOnly = _floorProOnly(name, c);
-  return { kind: _floorOfferKind({ proOnly, depth, bound: !!(c && c.email) }), depth: proOnly || depth };
+  const proOnly = _floorProOnly(name, ent);
+  return { kind: _floorOfferKind({ proOnly, depth, bound: ent.bound }), depth: proOnly || depth, rawDepth: depth, proOnly };
 }
 // The wall's standing under the floor (owner 2026-11-11, "Measure allowed only"): 'allowed', or why the floor
 // skips it by design. It leaves on the wall row as offer_floor (lib/keyless-wall.mjs OFFER_FLOOR_STANDINGS), so
@@ -5095,7 +5099,7 @@ function _planFloor(result, c) {
   });
   if (!uncovered.length) return result;
   uncovered.sort((a, b) => a.step - b.step);
-  const keyed = !!c.api_key;
+  const keyed = _wallEnt(c).keyed;
   let out = result;
   const emailSteps = uncovered.filter((w) => w.kind === 'email');
   const digestSteps = uncovered.filter((w) => w.kind === 'digest');
@@ -5110,14 +5114,24 @@ function _planFloor(result, c) {
   }
   return out;
 }
-// OAuth sign-in leads the wall (owner 2026-11-12; lib/wall-oauth-lead.mjs). One own text block right after block 0, ahead
-// of the floor / email / digest line, so the email ask and the digest stay as the secondary offers. Grok (contract G3) keeps
-// its wall copy byte for byte and gets one extra block after it naming /mcp/grok/oauth as its free key.
-function _oauthLead(out, name, c, { grok = false, depth = false } = {}) {
-  try {
-    if (!_wallOauthLeadEligible({ walled: true, workosEnabled: _workosEnabled(), signedIn: c.auth_oauth === true, bound: !!c.email })) return out;
-    return _withOauthLeadLine(out, _wallOauthLeadLine({ grok, depth }));
-  } catch (_) { return out; }
+// The offers on a walled answer come from ONE builder (lib/wall-offers.mjs wallOffers, owner 2026-11-14 E3), fed the
+// caller's entitlements (_wallEnt) and the facts this step already holds; this step only places them:
+//   lead        the OAuth sign-in (owner 2026-11-12; lib/wall-oauth-lead.mjs): own text block right after block 0, ahead
+//               of the floor / email / digest line, so those stay as the secondary offers. Grok (contract G3) keeps its
+//               wall copy byte for byte and gets only this block, naming /mcp/grok/oauth as its free key.
+//   floor       the free email / digest offer (lib/wall-offer-floor.mjs), only when the answer has no free offer yet;
+//               its email-ask tag is marked on the call (the wall row's email_ask; a later email_entered names it).
+//   below_link  the depth trial (owner 2026-11-13; lib/wall-depth-trial.mjs), right below the block handing out the link.
+function _placeWallOffers(out, offers, name, c) {
+  let r = out;
+  for (const o of offers) {
+    if (o.place !== 'floor') continue;
+    r = _withFloorLine(r, o.line);
+    if (o.ask) _markEmailAsk(c, o.ask);
+  }
+  for (const o of offers) if (o.place === 'lead') r = _withOauthLeadLine(r, o.line);
+  for (const o of offers) if (o.place === 'below_link') r = _depthTrial(r, o.line);
+  return r;
 }
 function _wallIsWalled(out, name, c) {
   let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
@@ -5139,40 +5153,44 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
     if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     c._offerFloor = _floorStanding(c, name);
+    const ent = _wallEnt(c);
+    const workosEnabled = _workosEnabled();
     if (c._offerFloor === 'grok') {
       if (!_wallIsWalled(result, name, c)) return result;
       const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
-      return _oauthLead(result, name, c, { grok: true, depth: _floorKindFor(name, sc, c).depth });
+      const f = _floorKindFor(name, sc, c, ent);
+      return _placeWallOffers(result, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
+        workosEnabled, grok: true }), name, c);
     }
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
     const walled = _wallIsWalled(out, name, c);
     const sc = (out.structuredContent && typeof out.structuredContent === 'object') ? out.structuredContent : {};
-    const { kind, depth } = _floorKindFor(name, sc, c);
+    const f = _floorKindFor(name, sc, c, ent);
     if (!walled) {
       // An execute_plan answer whose steps walled (the plan's own paragraphs above already name each step's ask) leads
       // with the sign-in too; the floor line itself is unchanged for it.
       let planWalled = false;
       try { const id = name === 'execute_plan' && c._planWallSinkId; planWalled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { planWalled = false; }
-      return planWalled ? _oauthLead(out, name, c, { grok: false, depth }) : out;
+      if (!planWalled) return out;
+      return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
+        workosEnabled, freeOfferShown: true }).filter((o) => o.place === 'lead'), name, c);
     }
     // The claim hand-off line asks for the email in prose and nothing marks it until _finishWallRow
     // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
-    if (!_hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })))) {
-      out = _withFloorLine(out, _floorOfferLine(kind, { keyed: !!c.api_key, bound: !!c.email, depth }));
-      _markEmailAsk(c, kind === 'email' ? 'line' : 'digest_line');
-    }
-    return _depthTrial(_oauthLead(out, name, c, { grok: false, depth }), name, c, depth);
+    const freeOfferShown = _hasFreeOffer(_offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out })));
+    return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
+      link: _humanLinkOf(out), workosEnabled, freeOfferShown }), name, c);
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
 // "an account does not open ..." and "an email does not open ..." and nothing that does. One line names what does:
-// the 7-day trial on the page the wall's own human link opens, right below the block handing out that link.
-function _depthTrial(out, name, c, depth) {
+// the 7-day trial on the page the wall's own human link opens, right below the block handing out that link. Whether
+// the line belongs on this wall is the builder's call (wallOffers); this only finds its slot.
+function _depthTrial(out, line) {
   try {
     const link = _humanLinkOf(out);
-    const paid = _tierRank(String(c.tier || '')) >= _tierRank('starter');
-    if (!_depthTrialEligible({ tool: name, walled: true, depth, paid, link })) return out;
+    if (!link) return out;
     // Right below the block that hands out the link (the human line, or a repeat wall's pointer): the free offers
     // and the digest line keep their places above it (the digest line stays directly above the human line). With
     // no such prose block, ahead of the closing lines (Source / brand), after every offer.
@@ -5184,7 +5202,7 @@ function _depthTrial(out, name, c, depth) {
       before = out.content.length;
       while (before > 1 && /^(?:Source:|DC Hub:)/.test(txt(out.content[before - 1]))) before -= 1;
     }
-    return _withDepthTrialLine(out, _depthTrialLine(), { before });
+    return _withDepthTrialLine(out, line, { before });
   } catch (_) { return out; }
 }
 export const _drainPlanWallSinkForTest = _drainPlanWallSink;   // test seam
