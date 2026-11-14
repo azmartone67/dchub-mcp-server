@@ -291,6 +291,8 @@ describe('F) the compact first plan answer', () => {
     expect(c.as_of).toBe('2026-11-14');
     expect(c.answer).toMatch(/^PJM: 373\.6 GW waiting in the interconnection queue; the 2027\/2028 capacity auction cleared at \$333\.44\/MW-day/);
     expect(c.answer).not.toMatch(/not measurable|withheld|tier/i);
+    expect(c.intent_answer.headline).toBe(c.answer);
+    expect(JSON.stringify(c)).not.toMatch(/not measurable|withheld at this tier/i);
     expect(c.intent_answer.not_established.join(' ')).toMatch(/month estimate of time to power for 100 MW in PJM \(ISO\) is not part of this answer/);
   });
   it('stays under the budget with every step present, and points at the full rows', () => {
@@ -306,6 +308,14 @@ describe('F) the compact first plan answer', () => {
       { tool: 'get_refined_queue', args: { iso: 'PJM', min_mw: 100 } }]);
     expect(c.more_detail.url).toBe('https://dchub.cloud/grid/pjm');
     expect(c.first_full_answer).toMatchObject({ used: 1, limit: 1 });
+  });
+  it('no queue total on the grid read: the queue step total stands in', () => {
+    const ex = [{ step: 1, tool: 'get_grid_intelligence', args: { iso: 'PJM' }, status: 'executed', result: {} },
+      { step: 2, tool: 'get_interconnection_queue', args: { iso: 'PJM' }, status: 'executed', result: {} }];
+    const fm = new Map([[ex[0], { iso: 'PJM', demand_mw: 94869, peak_mw: 102346, queue_depth_gw: null }],
+      [ex[1], { iso: 'PJM', queued_generation_gw: 373.6, project_count: 1242 }]]);
+    expect(F.compactFirstPlan({ ...out, executed: ex }, fm).answer)
+      .toBe('PJM: 373.6 GW waiting in the interconnection queue; demand is 94,869 MW against a 24-hour peak of 102,346 MW.');
   });
   it('a measurable headline leads as it is', () => {
     const ia = { ...out.intent_answer, headline: 'Siting read for 100 MW, PJM (ISO): DCPI CAUTION (ISO-level).' };
