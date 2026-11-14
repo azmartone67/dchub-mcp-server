@@ -1041,6 +1041,23 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`${CCP} version ${ccpm[2]} != ${VERSION}`);
     if (FIX) pend(CCP, ccp.replace(CCPRX, `$1${VERSION}$3`));
   }
+
+  // ★2026-11-13 — .codex-plugin/plugin.json is the Codex / HOL scanner manifest.
+  // It was missing from the tree (HOL still indexed a sparse generated copy).
+  // Same 2-space top-level version anchor as the Gemini and Claude manifests;
+  // a missing anchor is a PROBLEM, not a silent no-op.
+  const CODX = '.codex-plugin/plugin.json';
+  const codx = readCur(CODX);
+  const CODXRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
+  const codxm = CODXRX.exec(codx);
+  if (!codxm) {
+    problems.push(`${CODX}: top-level \`"version": "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a 2-space-indented, double-quoted "version" line. If the key moved or '
+      + 'changed shape, re-anchor it here: HOL and Codex read this manifest.');
+  } else if (codxm[2] !== VERSION) {
+    problems.push(`${CODX} version ${codxm[2]} != ${VERSION}`);
+    if (FIX) pend(CODX, codx.replace(CODXRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
@@ -1073,6 +1090,9 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  '.cursor-plugin/plugin.json',
                  // ★2026-10-31: the Claude Code plugin manifest says "N tools" too.
                  'plugins/dchub/.claude-plugin/plugin.json',
+                 // ★2026-11-13: the Codex / HOL scanner manifest. Its description
+                 // quotes the live tool count, so keep it on the heal list.
+                 '.codex-plugin/plugin.json',
                  // ★2026-11-13: shipped SDK / integration copy that said "94 tools"
                  // while /mcp served 95, because no list named them. Now count-free;
                  // listed so a count re-added later heals instead of rotting.
@@ -1278,6 +1298,9 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     '.cursor-plugin/plugin.json',
     // ★2026-10-31: Claude Code plugin manifest, same reason.
     'plugins/dchub/.claude-plugin/plugin.json',
+    // ★2026-11-13: Codex / HOL scanner manifest, same reason as the Cursor
+    // and Claude plugin manifests above.
+    '.codex-plugin/plugin.json',
   ];
   // ★2026-09-19. ASSET_QUANTITIES was applied to server.mjs ALONE, so every
   // registry-INGESTED file published the asset layers hand-typed and unwatched.
