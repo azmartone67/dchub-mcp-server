@@ -57,7 +57,7 @@ describe('short power asks route to grid_headroom (planner 5.23)', () => {
   });
 
   it('planner_version moved with the routing change', () => {
-    expect(PLANNER_VERSION).toBe('5.25');
+    expect(PLANNER_VERSION).toBe('5.26');
   });
 });
 

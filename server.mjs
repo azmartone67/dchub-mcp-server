@@ -243,6 +243,7 @@ import { PACK_PRICE, PACK_NAME, PRO_NAME, PRO_PRICE } from './lib/wall-upgrade-o
 import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
+import { cutRowsToSubmarket as _cutRowsToSubmarket } from './lib/submarket-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
@@ -19322,7 +19323,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     ..._ENVELOPE_SHAPE,
     ok: _oBool('true when the intent was routed'),
     intent: _oStr('The natural-language intent that was routed (echoed back)'),
-    intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | market_outlook | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | air_permits | power_timeline | changes_delta | facility_search | unknown)'),
+    intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | market_outlook | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | air_permits | power_timeline | changes_delta | facility_search | iso_comparison | dc_capacity | unknown)'),
     routing_hint: _oObj({
       problem: _oStr('The matched intent class — the SAME closed enum as intent_class, so it is branchable, not free text'),
       best_path: _oStr('Where to start: `execute_plan` for a multi-capability question, or the one tool name for a single-capability lookup'),
@@ -19814,6 +19815,122 @@ export function _planStateScope(d) {
     ? fromCity : null;
 }
 
+// ── 5.26 (Grok live agent reviews 2026-11-13: Claude, Grok, Mistral ran execute_plan) ──────────
+// Every US state the text names, in the order it names them: full names (a longer name wins its
+// span, so "West Virginia" is not also Virginia), "in TX" / "for TX", and a run of codes joined by
+// commas, "or", "and" or "/" ("TX, OH or GA"). The five codes that are English words (OR, IN, ME,
+// HI, OK) count only after "in"/"for". stateFromPlace held ONE of them: "Texas, Ohio or Georgia"
+// planned Georgia alone (the longest name) and the run answered for one state of three.
+export function _planNamedStates(text) {
+  try {
+    const t = String(text || '');
+    const hits = [];   // { code, i, end }
+    for (const nm of Object.keys(_PLAN_STATE_NAMES)) {
+      const re = new RegExp('\\b' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'ig');
+      for (const m of t.matchAll(re)) hits.push({ code: _PLAN_STATE_NAMES[nm], i: m.index, end: m.index + m[0].length });
+    }
+    for (const m of t.matchAll(/\b(?:in|for)\s+([A-Z]{2})(?![A-Za-z])/g)) {
+      if (_PLAN_STATE_CODES.has(m[1])) hits.push({ code: m[1], i: m.index + m[0].length - 2, end: m.index + m[0].length });
+    }
+    for (const run of t.matchAll(/\b[A-Z]{2}(?:\s*(?:,\s*(?:or|and)?|\/|or|and)\s*[A-Z]{2})+\b/g)) {
+      for (const m of run[0].matchAll(/\b[A-Z]{2}\b/g)) {
+        if (_PLAN_STATE_CODES.has(m[0]) && !_PLAN_STATE_WORD_CODES.has(m[0])) {
+          hits.push({ code: m[0], i: run.index + m.index, end: run.index + m.index + 2 });
+        }
+      }
+    }
+    hits.sort((a, b) => a.i - b.i || (b.end - b.i) - (a.end - a.i));
+    const out = [];
+    let prevEnd = -1;
+    for (const h of hits) {
+      if (h.i < prevEnd) continue;   // inside a longer name already counted
+      prevEnd = h.end;
+      if (!out.includes(h.code)) out.push(h.code);
+    }
+    return out;
+  } catch (_e) { return []; }
+}
+// 5.26: how many named states one plan fans out to. Each is a full set of the class's state-scoped
+// steps, run under the caller's own quota, and execute_plan runs 6 steps by default; three states
+// of a three-step class already use five. A fourth state named is listed as not planned, never
+// dropped silently (state_fanout.not_planned).
+export const _PLAN_STATE_FANOUT_CAP = 3;
+
+// 5.26: every grid the text names, in order, with the aliases agents use. isoFromText reads the
+// FIRST match of _PLAN_ISO_RE only, so "Compare ERCOT and PJM" carried one ISO, compare_isos
+// stayed an alternative "rejected" because the intent "named at most one ISO", and the plan read
+// two DCPI market cards for markets named "ercot" and "pjm". "Texas grid", "Southwest Power Pool",
+// "ISO New England" and "New York ISO" are the same grids by their other names.
+const _PLAN_ISO_ALIASES = [
+  [/\bercot\b|\btexas(?:'s)?\s+(?:power\s+|electric(?:ity)?\s+)?grid\b/ig, 'ERCOT'],
+  [/\bpjm\b/ig, 'PJM'],
+  [/\bmiso\b|\bmidcontinent\s+(?:iso|independent\s+system\s+operator)\b/ig, 'MISO'],
+  [/\bcaiso\b|\bcalifornia\s+(?:iso|independent\s+system\s+operator|grid)\b/ig, 'CAISO'],
+  [/\bspp\b|\bsouthwest\s+power\s+pool\b/ig, 'SPP'],
+  [/\bnyiso\b|\bnew\s+york\s+(?:iso|grid)\b/ig, 'NYISO'],
+  [/\biso[-\s]?ne\b|\bisone\b|\biso\s+new\s+england\b|\bnew\s+england\s+(?:iso|grid)\b/ig, 'ISONE'],
+];
+export function _planNamedIsos(text) {
+  try {
+    const t = String(text || '');
+    const hits = [];
+    for (const [re, iso] of _PLAN_ISO_ALIASES) {
+      for (const m of t.matchAll(re)) hits.push({ iso, i: m.index });
+    }
+    hits.sort((a, b) => a.i - b.i);
+    const out = [];
+    for (const h of hits) if (!out.includes(h.iso)) out.push(h.iso);
+    return out;
+  } catch (_e) { return []; }
+}
+
+// 5.26: a town the text names beside its state that DC Hub tracks as no market ("near Smalltown,
+// Ohio"). The plan had nothing to bind it to: the market steps kept their placeholders and were
+// skipped, so the run answered nothing about the place. Returns { phrase, state } when the text
+// gave exactly one state, no point, no tracked metro and no DCPI market, else null. Never an
+// argument by itself: the fallback reads the STATE (find_sites) and says which place it stands in for.
+const _PLAN_PLACE_NOT_TOWN = /^(?:north(?:ern)?|south(?:ern)?|east(?:ern)?|west(?:ern)?|central|upstate|downstate|rural|greater|the|a|an|in|near|for|by|at|of|data|center|campus|site|sites|land|power|grid|mw|gw|is|are|was|what|where|which|how|can|could|should|would|will|does|do|why|find|rank|compare|tell|show|build|need)$/i;
+export function _planUnmatchedPlace(text, d) {
+  try {
+    if (!d || typeof d !== 'object') return null;
+    const st = d.state || d.stateFromPlace;
+    if (!st || (Array.isArray(d.states) && d.states.length > 1)) return null;
+    if (d.coords || d.__citySlug || d.market) return null;
+    if (d.__outlook && d.__outlook.slug) return null;
+    const names = _planStateNamesFor(String(st).toUpperCase()).map((n) => n.replace(/\s+/g, '\\s+'));
+    const stAlt = [...names, String(st).toUpperCase()].join('|');
+    // Case-blind for the state name ("ohio"); the place itself must be capitalised (checked below).
+    const re = new RegExp('(?:^|\\b(?:near|in|around|outside|of|at|by|for)\\s+|\\s)([A-Za-z]+(?:[ -][A-Za-z]+){0,2}),?\\s+(?:' + stAlt + ')\\b', 'gi');
+    for (const m of String(text || '').matchAll(re)) {
+      // Leading question or verb words are not part of a place ("Is Okemah, Oklahoma" -> Okemah).
+      const words = m[1].trim().split(/[ -]+/);
+      while (words.length && _PLAN_PLACE_NOT_TOWN.test(words[0])) words.shift();
+      if (!words.length || words.some((w) => _PLAN_PLACE_NOT_TOWN.test(w) || !/^[A-Z][a-z]+$/.test(w))) continue;
+      const phrase = words.join(' ');
+      if (_PLAN_STATE_NAMES[phrase.toLowerCase()]) continue;
+      return { phrase, state: String(st).toUpperCase() };
+    }
+    return null;
+  } catch (_e) { return null; }
+}
+
+// 5.26: the city a submarket question names, for filters that take a city (search_facilities
+// city=) and for the post-call row cut (lib/submarket-scope.mjs): one corridor place that is a town
+// ("Ashburn, VA", "Manassas, VA", "Secaucus, NJ"), with its centroid and radius. A county, valley or
+// region ("Loudoun County", "Southern Nevada") is not one city, and a METRO from the city table
+// ("Dallas", "Phoenix") is the whole metro, not a submarket inside it: both yield null and no row is cut.
+export function _planSubmarket(d) {
+  try {
+    const ps = d && typeof d === 'object' ? d.placeScope : null;
+    if (!ps || !Array.isArray(ps.places) || ps.places.length !== 1) return null;
+    const city = String(ps.places[0]).replace(/,\s*[A-Z]{2}$/, '').trim();
+    if (!city || /\b(?:county|valley|nevada|park|center|centre|meadowlands)\b/i.test(city)) return null;
+    // A town entry carries a 10-12 km radius; Reno (20) and Las Vegas (30) are metros whose data
+    // centers sit outside the city proper (Tahoe Reno Industrial Center is ~30 km east of Reno).
+    if (!(Number(ps.radius_km) <= 12)) return null;
+    return { city, lat: ps.lat, lon: ps.lon, radius_km: ps.radius_km };
+  } catch (_e) { return null; }
+}
 
 // grid_headroom sequence. Only a real US RTO is a valid `iso` for the queue
 // tools and for a deep get_grid_intelligence ISO read. Phoenix and Las Vegas
@@ -19992,7 +20109,8 @@ export const _PLAN_CLASSES = [
     sequence: (d) => [
       { step: 1, tool: 'get_retirement_headroom', depends_on: [], estimated_calls: 1,
         why: `Retiring generators = ${d.mw ? '~' + Math.round(d.mw) + ' MW' : 'MW'} openings near existing substations inside your horizon (each with nearest-substation distance_km) — the fastest path to power, sidestepping the multi-year mega-queue.`,
-        args_hint: { target_mw: d.mw || 50, horizon_months: 24, ...(d.iso ? { region_iso: d.iso } : {}) } },
+        // 5.26: a stated deadline is the horizon ("by 2028"); 24 months when none is stated.
+        args_hint: { target_mw: d.mw || 50, horizon_months: (d.deadline && d.deadline.months) || 24, ...(d.iso ? { region_iso: d.iso } : {}) } },
       { step: 2, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
         why: 'De-duplicated interconnection-queue survivors at your size floor — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent of step 1 — run in parallel.',
         args_hint: { ...(d.mw ? { min_mw: d.mw } : {}), ...(d.iso ? { iso: d.iso } : {}), geocoded_only: true } },
@@ -20081,6 +20199,102 @@ export const _PLAN_CLASSES = [
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
     coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+  },
+  {
+    // 5.26 (Grok live agent reviews 2026-11-13): TWO OR MORE NAMED GRIDS. "Compare ERCOT and PJM
+    // for a 200 MW AI campus" planned two DCPI market cards for markets called "ercot" and "pjm";
+    // "PJM vs MISO interconnection queue" read PJM's queue alone. compare_isos answers a side-by-side
+    // of 2-4 grids in one call, and was only ever listed as an alternative the intent "named at most
+    // one ISO" for. The class scores only when the text names 2+ grids (_planNamedIsos, boost in
+    // _planQuery), so a one-grid question never reaches it.
+    id: 'iso_comparison', recipe: 'grid_and_queue',
+    patterns: [
+      [/\b(?:vs\.?|versus)\b/i, 2], [/\bcompar(?:e|ed|ing|ison)\b/i, 2], [/\bbetween\b/i, 1],
+      [/\bwhich\s+(?:grid|iso|one|is\s+better)\b/i, 1.5], [/\b(?:grids|isos|rtos)\b/i, 1.5],
+    ],
+    rationale: (d) => `The intent names ${(d.isos || []).length} grids (${(d.isos || []).join(', ')}). compare_isos reads them side by side in one call (fuel mix, demand, queue depth, time to power), then one deep read per grid gives each side the same evidence. No grid is read for the other.`
+      + ((d.isos || []).length > 4 ? ` compare_isos takes four grids, so ${d.isos.slice(4).join(', ')} ${d.isos.length === 5 ? 'is' : 'are'} not in this plan; ask again for ${d.isos.length === 5 ? 'it' : 'them'}.` : ''),
+    sequence: (d) => {
+      const isos = (d.isos || []).slice(0, 4);
+      const queue = !!d.__queueAsk;
+      return [
+        { step: 1, tool: 'compare_isos', depends_on: [], estimated_calls: 1,
+          why: 'Side-by-side of the named grids in one call: demand, fuel mix, renewable and gas share, queue depth and DCPI time to power per grid.',
+          args_hint: { isos: isos.map((x) => (x === 'ISONE' ? 'ISO-NE' : x)).join(',') } },
+        ...isos.map((iso, k) => (queue
+          ? { step: k + 2, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
+              why: `Queue depth for ${iso}, one of the grids compared. Every named grid gets the same read; independent of step 1, same wave.`,
+              args_hint: { iso } }
+          : { step: k + 2, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+              why: `Deep read for ${iso}, one of the grids compared: headroom, constraints, time to power. Every named grid gets the same read; independent of step 1, same wave.`,
+              args_hint: { iso } })),
+      ];
+    },
+    alternatives: [
+      { tool: 'get_grid_scoreboard', when: 'You want every tracked grid ranked, not the ones the question named.',
+        rejected_because: 'The intent named its grids; a full scoreboard answers a wider question than asked.' },
+      { tool: 'get_market_dcpi_rank', when: 'You are comparing MARKETS (metros), not grids.',
+        rejected_because: 'The names in the intent are grid operators, not DCPI markets.' },
+    ],
+    coverage_notes: 'compare_isos takes 2-4 grids; non-US grids carry null DCPI and queue fields (not tracked, not zero). iso for the deep reads must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE.',
+  },
+  {
+    // 5.26 (Grok live agent reviews 2026-11-13, item 2): DATA-CENTER CAPACITY, not power capacity.
+    // "How much data center capacity is coming online in Ashburn?" routed to power_timeline (a
+    // generation timeline for Virginia), "What data center capacity is under construction in
+    // Dallas?" to a facility directory search, and "available capacity in Phoenix" to the navigator.
+    // The question is about data-center supply: the construction pipeline (get_pipeline), the
+    // facilities already there (search_facilities) and capacity listed for sale or lease
+    // (source_capacity). Power is a backup read only, after those, when a state resolves.
+    id: 'dc_capacity', recipe: null,
+    patterns: [
+      [/\bdata\s*cent(?:er|re)\s+(?:capacity|supply|inventory|pipeline|construction)\b/i, 3],
+      [/\bavailable\s+(?:data\s*cent(?:er|re)\s+|colo(?:cation)?\s+|wholesale\s+)?capacity\b/i, 3],
+      [/\b(?:capacity|data\s*cent\w*|facilit\w*|campus\w*|projects?|supply|mw)\b[^.?!]{0,60}\bcom(?:ing|e)\s+online\b/i, 3],
+      [/\bunder\s+construction\b/i, 3], [/\bbeing\s+built\b/i, 2.5], [/\bunder\s+development\b/i, 2],
+      [/\b(?<!gas\s|power\s|generation\s|transmission\s)pipeline\b(?!\s+(?:gas|routes?|operators?))/i, 2],
+      [/\bnew\s+(?:data\s*cent\w*\s+)?supply\b/i, 2],
+    ],
+    rationale: (d) => {
+      const sm = _planSubmarket(d);
+      return 'A capacity question about data centers is answered from data-center supply: the construction pipeline, the facilities already built, and capacity listed for sale or lease. '
+        + (sm ? `Rows are held to ${sm.city}: a row from elsewhere in the wider market is cut, and the step says how many. ` : '')
+        + 'Grid and power reads describe generation, not data-center space, so the plan runs one only as backup context.';
+    },
+    sequence: (d) => {
+      const sm = _planSubmarket(d);
+      const st = _planStateScope(d);
+      const us = !!(st || sm || d.isoFromPlace || d.iso);
+      const construction = !!d.__constructionAsk;
+      const steps = [
+        { step: 1, tool: 'get_pipeline', depends_on: [], estimated_calls: 1,
+          why: 'Data centers announced, permitted and under construction, with expected commissioning dates: the capacity coming online. get_pipeline takes no market or city, so a place-named run cuts its rows to the place after the call.',
+          args_hint: { ...(us ? { country: 'US' } : {}), ...(construction ? { status: 'construction' } : {}), ...(sm ? { limit: 100 } : {}) } },
+        { step: 2, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
+          why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
+          args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } },
+      ];
+      if (capacityPointersEnabled()) {
+        steps.push({ step: 3, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
+          why: 'Capacity listed for sale or lease (powered land, powered shells, turnkey, colocation) in the same place, matched on what each listing can deliver. Runs last.',
+          args_hint: { ...(st ? { state: st } : (sm ? { market: sm.city } : {})), ...(d.mw ? { min_mw: d.mw } : {}) } });
+      }
+      if (st) {
+        steps.push({ step: steps.length + 1, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1, backup: true,
+          why: `Backup context only: dated new generation and retirements for ${st}. Power coming online is not data-center capacity; quote it as the grid backdrop, never as the answer.`,
+          args_hint: { state: st } });
+      }
+      return steps;
+    },
+    alternatives: [
+      { tool: 'get_power_pipeline', when: 'You want new POWER GENERATION coming online (EIA-860M planned generators), not data-center space.',
+        rejected_because: 'The intent asked about data-center capacity; generation is the backup read, not the answer.' },
+      { tool: 'get_market_intel', when: 'You want one market\'s brief: tracked MW, pipeline and providers in one read.',
+        rejected_because: 'The pipeline and facility reads answer the capacity question row by row, and can be held to a submarket.' },
+      { tool: 'get_retirement_headroom', when: 'The question is where GRID headroom opens for a new load.',
+        rejected_because: 'Grid headroom is power capacity, not data-center capacity.' },
+    ],
+    coverage_notes: 'get_pipeline has no market or city filter: a city-named run reads the US pipeline and keeps the rows it can place in that city (submarket_scope on the step says what was cut and why); a state-named run reads it uncut. source_capacity lists what providers have registered, which is not all the capacity in a market.',
   },
   {
     // ★2026-11-07 (Grok #118011, #117816/#117817): ONE NAMED METRO, read as itself.
@@ -20724,6 +20938,8 @@ export const _CLASS_WHY_LIVE = {
   incentives_tax: 'requires_current_statute_data',
   air_permits: 'requires_current_infrastructure_layers',
   facility_search: 'requires_facility_registry_data',
+  iso_comparison: 'requires_live_grid_telemetry',
+  dc_capacity: 'requires_facility_registry_data',
 };
 // Extract deterministic signals from intent + context (never throws).
 
@@ -21277,6 +21493,31 @@ export function _execScopeOut(tool, out, sig, intentText) {
   }
   return scope;
 }
+// 5.26 (Grok live agent reviews 2026-11-13, item 2): a submarket-named run ("coming online in
+// Ashburn") keeps the pipeline and facility rows it can place in that city (lib/submarket-scope.mjs);
+// Manassas rows came back and were read as Ashburn. Places the planner knows by name (corridor
+// labels, tracked metros) are what a row name is checked against. Same contract as _execScopeOut.
+let _SUBMARKET_PLACES = null;
+function _submarketPlaces() {
+  if (_SUBMARKET_PLACES) return _SUBMARKET_PLACES;
+  const set = new Set();
+  for (const m of Object.values(_PLAN_CORRIDOR_META)) set.add(String(m.label).replace(/,\s*[A-Z]{2}$/, '').replace(/\s+County$/, ''));
+  for (const [k, m] of Object.entries(_CITY_ISO_META)) if (!m.re) set.add(k.replace(/\b\w/g, (ch) => ch.toUpperCase()));
+  _SUBMARKET_PLACES = [...set];
+  return _SUBMARKET_PLACES;
+}
+export function _execSubmarketOut(tool, out, sig) {
+  const sub = _planSubmarket(sig);
+  if (!sub || !out || !(out.ok || out.gated)) return null;
+  let scope = null;
+  for (const k of ['result', 'full']) {
+    if (out[k] && typeof out[k] === 'object') {
+      const r = _cutRowsToSubmarket(tool, out[k], sub, _submarketPlaces());
+      if (r.scope) { out[k] = r.result; scope = scope || r.scope; }
+    }
+  }
+  return scope;
+}
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
   get_retirement_headroom: 'region_iso' };
@@ -21309,6 +21550,9 @@ export function _execConstraintIsoSet(intentText, userCtx, signals) {
     }
   }
   if (signals && signals.iso) push(signals.iso);
+  // 5.26: every grid the text names. Only the first was pushed, so "Compare ERCOT and PJM" held the
+  // run to ERCOT alone: ERCOT was injected into every iso-taking step and PJM mints were rejected.
+  if (signals && Array.isArray(signals.isos)) for (const v of signals.isos) push(v);
   const t = String(intentText || '').toLowerCase();
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
     if (_execCityHit(city, meta, t)) push(meta.iso);
@@ -21318,8 +21562,13 @@ export function _execConstraintIsoSet(intentText, userCtx, signals) {
   // ("Dallas, Texas" must stay ERCOT, not widen to all four Texas markets).
   if (!out.length) {
     const st = (signals && (signals.state || signals.stateFromPlace)) || null;
-    const isos = st ? _STATE_ISO_META[String(st).toUpperCase()] : null;
-    if (isos) for (const v of isos) push(v);
+    // 5.26: several named states constrain to the union of their grids (one per state is injected
+    // only when that union is a single RTO: "Ohio or Pennsylvania" is PJM either way).
+    const named = st ? [st] : ((signals && Array.isArray(signals.states) && signals.states.length > 1) ? signals.states : []);
+    for (const code of named) {
+      const isos = _STATE_ISO_META[String(code).toUpperCase()];
+      if (isos) for (const v of isos) push(v);
+    }
   }
   return out;
 }
@@ -21688,12 +21937,15 @@ export function _planSignals(intent, context) {
     return null;
   })();
   const state = (c.state && /^[A-Za-z]{2}$/.test(String(c.state).trim())) ? String(c.state).trim().toUpperCase() : null;
+  // 5.26: two or more states named ("Texas, Ohio or Georgia") bind NO single state: the plan runs
+  // one set of state-scoped steps per state instead (_planStateFanout). A typed context.state wins.
+  const states = state ? [] : _planNamedStates(text);
   // r-planner-v5.6 (2026-07-30): the state implied by the TEXT, args only.
   // Names first (longest wins, so "West Virginia" beats "Virginia"); then an
   // UPPERCASE 2-letter code anchored on "in "/"for " ("…in VA") — the anchor is
   // what keeps ISO-NE's "NE" and prose words out. Explicit context always wins.
   const stateFromPlace = (() => {
-    if (state) return null;
+    if (state || states.length > 1) return null;
     let best = null;
     for (const nm of Object.keys(_PLAN_STATE_NAMES)) {
       if (best && nm.length <= best.length) continue;
@@ -21744,6 +21996,9 @@ export function _planSignals(intent, context) {
     // back to the one constraint slug and Ashburn was read twice, Atlanta never.
     const tracked = _planComparedMarkets(text);
     if (tracked) return tracked;
+    // 5.26: two GRIDS named ("ERCOT vs PJM") are not two markets: the word pair below read them
+    // as market slugs 'ercot' and 'pjm', which no DCPI card answers. iso_comparison takes them.
+    if (_planNamedIsos(text).length >= 2) return null;
     const m = text.match(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:vs\.?|versus|against)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i)
       || text.match(/\bcompare\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:and|to|with)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i);
     if (!m) return null;
@@ -21789,8 +22044,16 @@ export function _planSignals(intent, context) {
   })();
   // 5.17: the one market a market_outlook plan reads (or why it cannot).
   const __outlook = _planOutlookMarket(text, { market, __citySlug, isoFromPlace });
+  // 5.26: every grid the text names (isoFromText keeps the first, for argument binding), and the
+  // deadline the text gives, in months and as a YYYY-MM month (_planDeadline).
+  const isos = _planNamedIsos(text);
+  const deadline = _planDeadline(text);
+  // Internal routing signals for the 5.26 classes (iso_comparison reads queues when asked;
+  // dc_capacity filters the pipeline to construction when asked).
+  const __queueAsk = /\b(?:queues?|queued|interconnect(?:ion)?)\b/i.test(text);
+  const __constructionAsk = /\b(?:under\s+construction|being\s+built)\b/i.test(text);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened };
+    __outlook, radiusKm, placeScope, scopeWidened, states, isos, deadline, __queueAsk, __constructionAsk };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -22007,7 +22270,18 @@ export function _planWorkflowConfidence(seq, d) {
 //         an ask for alternatives gets a site_selection_canvas step (region=us, size, deadline);
 //         answer_guide names every filter a step did not apply, with the step's own reason
 //         (DROPPED —), and a one-ISO state queue read says the rest of the state is not in it.
-export const PLANNER_VERSION = '5.25';
+//  5.26 = ONE PLAN PER NAMED PLACE, GRIDS SIDE BY SIDE, DATA-CENTER CAPACITY (Grok live agent
+//         reviews 2026-11-13: Claude, Grok and Mistral ran execute_plan): two or more named
+//         states run the state-scoped steps once per state (state_fanout), never one picked;
+//         two or more named grids ("ERCOT and PJM", "PJM vs MISO", "Texas grid") route to
+//         iso_comparison (compare_isos + the same read per grid); a town that is no tracked
+//         market reads its state through find_sites (place_fallback) instead of skipping; the
+//         stated MW and deadline ("100 MW by 2028", "by Q3 2028") reach every step that takes
+//         them (intent_bound); data-center capacity / coming online / under construction /
+//         pipeline asks route to dc_capacity (get_pipeline, search_facilities, source_capacity,
+//         power only as backup), and a one-town run cuts pipeline and facility rows to that
+//         town (submarket_scope).
+export const PLANNER_VERSION = '5.26';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22952,12 +23226,34 @@ export function _capacityRegisterOffer(executed, fullOf) {
 const _ALTERNATIVES_RE = /\b(?:alternatives?|faster\s+(?:options?|markets?|sites?|places?|locations?|routes?)|other\s+(?:markets?|sites?|locations?|places?|options?)|elsewhere|somewhere\s+else)\b/i;
 const _ALTERNATIVES_COVERED = ['site_selection_canvas', 'find_sites', 'find_alternatives', 'rank_markets', 'ai_capacity_index',
   'grid_transition_radar', 'rank_sites', 'compare_isos', 'get_dchub_recommendation'];
-export function _planDeadlineMonths(text) {
+// 5.26: a dated deadline counts too ("100 MW by 2028", "200MW in 2027", "by Q3 2028"), read by the
+// same parser the Capacity Source step uses for available_by (capacityAvailableBy) and counted in
+// calendar months from this month to the deadline month ("by 2028" read in 2026-11 is 2028-12, 25
+// months). A past date is no deadline (null). The relative forms above keep their meaning and win
+// when both are present. This is the one planner input that reads the clock.
+export function _planDeadlineMonths(text, now = new Date()) {
   const t = String(text || '');
   const m = t.match(/\b(?:within|in|under|less\s+than|inside(?:\s+of)?|by)\s+(\d{1,3})\s*(months?|mos?|years?|yrs?)\b/i);
-  if (!m) return null;
+  if (!m) {
+    const by = capacityAvailableBy(t, now);
+    const ym = by && /^(\d{4})-(\d{2})$/.exec(by);
+    if (!ym) return null;
+    const n = (Number(ym[1]) - now.getUTCFullYear()) * 12 + (Number(ym[2]) - (now.getUTCMonth() + 1));
+    return Number.isInteger(n) && n >= 1 && n <= 120 ? n : null;
+  }
   const n = Number(m[1]) * (/^y/i.test(m[2]) ? 12 : 1);
   return Number.isInteger(n) && n >= 1 && n <= 120 ? n : null;
+}
+// 5.26: the deadline as both forms the tools take: months (site_selection_canvas max_months,
+// get_retirement_headroom horizon_months, get_power_availability_timeline years) and a YYYY-MM month
+// (source_capacity available_by, get_pipeline expected_completion_before). null when none is stated.
+export function _planDeadline(text, now = new Date()) {
+  const months = _planDeadlineMonths(text, now);
+  if (!months) return null;
+  const stated = capacityAvailableBy(String(text || ''), now);
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, 1));
+  const by = stated || `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  return { months, by };
 }
 export function _alternativesStep(text, d, considered) {
   try {
@@ -22974,6 +23270,164 @@ export function _alternativesStep(text, d, considered) {
         + (mw ? `, for ${mw} MW` : '') + (months ? `, within ${months} months` : '')
         + ': the places to compare against the named one.',
       args_hint: { region: 'us', ...(mw ? { capacity_mw: mw } : {}), ...(months ? { max_months: months } : {}) } };
+  } catch (_e) { return null; }
+}
+
+// ── 5.26 (Grok live agent reviews 2026-11-13, item 1) ──────────────────────────────────────
+// ONE SET OF STEPS PER NAMED STATE. "Where should I build 100 MW: Texas, Ohio or Georgia?" planned
+// a Georgia canvas alone (stateFromPlace kept the longest name), so the answer covered one state of
+// three and read as a choice it never made. The class's own sequence is built once per state (up to
+// _PLAN_STATE_FANOUT_CAP) and merged: a step whose arguments are the same for every state runs once
+// (a hand-off read like '<slug from a step-1 finalist>', which then depends on every state's step),
+// and a step that takes a state runs once per state, its state bound in args_hint (the value
+// _execInjectGeo would have injected for a one-state plan) and named in `state_fanout`.
+// Returns { seq, scope, first } or null when fewer than two states were named. Pure; never throws.
+export function _planStateFanout(build, d) {
+  try {
+    const all = (d && Array.isArray(d.states)) ? d.states : [];
+    if (all.length < 2 || typeof build !== 'function') return null;
+    const states = all.slice(0, _PLAN_STATE_FANOUT_CAP);
+    const merged = [];
+    const byKey = new Map();
+    let first = null;
+    states.forEach((st, si) => {
+      const dk = { ...d, state: null, stateFromPlace: st, states: [st] };
+      if (!first) first = dk;
+      const seqK = (build(dk) || []).filter(Boolean);
+      const local = new Map();
+      seqK.forEach((s, pos) => {
+        const args = { ...(s.args_hint || {}) };
+        const spec = _EXEC_GEO_ARGS[s.tool];
+        const geoBound = ['state', 'region', 'lat', 'lon', 'latitude', 'longitude', 'iso'].some((k) => args[k] != null);
+        let perState = Object.values(args).some((v) => v === st);
+        if (spec && spec.state && !geoBound) { args[spec.state] = st; perState = true; }
+        const key = s.tool + '|' + JSON.stringify(args);
+        let m = byKey.get(key);
+        if (!m) {
+          m = { ...s, args_hint: args, ...(perState ? { state_fanout: st } : {}), __pos: pos, __si: perState ? si : -1, __deps: new Set() };
+          merged.push(m); byKey.set(key, m);
+        }
+        local.set(s.step, { m, deps: s.depends_on || [] });
+      });
+      for (const { m, deps } of local.values()) {
+        for (const dep of deps) { const t = local.get(dep); if (t && t.m !== m) m.__deps.add(t.m); }
+      }
+    });
+    merged.sort((a, b) => a.__pos - b.__pos || a.__si - b.__si);
+    merged.forEach((m, k) => { m.step = k + 1; });
+    for (const m of merged) {
+      m.depends_on = [...m.__deps].map((x) => x.step).sort((a, b) => a - b);
+      delete m.__pos; delete m.__si; delete m.__deps;
+    }
+    const notPlanned = all.slice(_PLAN_STATE_FANOUT_CAP);
+    const scope = { states, ...(notPlanned.length ? { not_planned: notPlanned } : {}),
+      note: `The intent names ${all.length} US states (${all.join(', ')}). The plan does not pick one: each state-scoped step runs once per state`
+        + (notPlanned.length ? ` for the first ${states.length}; ${notPlanned.join(', ')} ${notPlanned.length === 1 ? 'is' : 'are'} not planned (ask again naming ${notPlanned.length === 1 ? 'it' : 'them'})` : '')
+        + '. Compare the states from their own rows; no state was chosen for the user.' };
+    return { seq: merged, scope, first };
+  } catch (_e) { return null; }
+}
+// 5.26: a step appended after the class sequence (a constraint lead: tax, gas, permitting) carries a
+// '<2-letter US state ...>' placeholder when no single state was bound. With the states named, it
+// runs once per state instead of being skipped. In place; renumbers and remaps depends_on.
+export function _planFanStatePlaceholders(seq, states) {
+  try {
+    if (!Array.isArray(seq) || !Array.isArray(states) || states.length < 2) return seq;
+    const isPh = (v) => typeof v === 'string' && /^<2-letter US state\b/i.test(v.trim());
+    const out = [];
+    const firstOf = new Map();
+    for (const s of seq) {
+      const keys = Object.keys(s.args_hint || {}).filter((k) => isPh(s.args_hint[k]));
+      if (!keys.length) { out.push({ s, old: s.step }); continue; }
+      states.slice(0, _PLAN_STATE_FANOUT_CAP).forEach((st) => {
+        const args = { ...s.args_hint };
+        for (const k of keys) args[k] = st;
+        out.push({ s: { ...s, args_hint: args, state_fanout: st }, old: s.step });
+      });
+    }
+    const renum = new Map();
+    out.forEach((x, k) => { if (!firstOf.has(x.old)) { firstOf.set(x.old, k + 1); renum.set(x.old, k + 1); } });
+    const rebuilt = out.map((x, k) => ({ ...x.s, step: k + 1,
+      depends_on: (x.s.depends_on || []).map((n) => renum.get(n) || n) }));
+    seq.splice(0, seq.length, ...rebuilt);
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
+// 5.26: the size and the deadline the intent states reach every step that takes them ("100 MW by
+// 2028", "200MW in 2027", "by Q3 2028"). A step's own value always wins; this only fills what the
+// class left unset, and lists what it filled in `intent_bound`. get_refined_queue's max_ttp_months
+// is deliberately not filled: it is an ISO-average HARD cut (<=30 leaves only SPP), so a deadline
+// would silently drop whole grids. get_pipeline gets no size: a project's MW is not the requirement.
+const _PLAN_INTENT_ARGS = {
+  site_selection_canvas:           { mw: 'capacity_mw', months: 'max_months' },
+  get_retirement_headroom:         { mw: 'target_mw', months: 'horizon_months' },
+  get_power_availability_timeline: { mw: 'mw', years: 'years' },
+  get_refined_queue:               { mw: 'min_mw' },
+  source_capacity:                 { mw: 'min_mw', by: 'available_by' },
+  analyze_site:                    { mw: 'capacity_mw' },
+  get_pipeline:                    { before: 'expected_completion_before' },
+};
+export function _planBindIntentArgs(seq, d) {
+  try {
+    if (!Array.isArray(seq) || !d || typeof d !== 'object') return seq;
+    const mw = (typeof d.mw === 'number' && Number.isFinite(d.mw) && d.mw > 0) ? d.mw : null;
+    const dl = d.deadline && Number.isInteger(d.deadline.months) ? d.deadline : null;
+    if (!mw && !dl) return seq;
+    for (const s of seq) {
+      const spec = s && _PLAN_INTENT_ARGS[s.tool];
+      if (!spec) continue;
+      const args = { ...(s.args_hint || {}) };
+      const bound = [];
+      const put = (k, v) => { if (k && v != null && args[k] == null) { args[k] = v; bound.push(k); } };
+      if (mw) {
+        const whole = Math.min(5000, Math.max(1, Math.round(mw)));
+        if (!(s.tool === 'source_capacity' && args.min_kw != null)) put(spec.mw, spec.mw === 'min_mw' || spec.mw === 'target_mw' ? mw : whole);
+      }
+      if (dl) {
+        put(spec.months, Math.min(120, dl.months));
+        put(spec.years, Math.min(6, Math.max(1, Math.ceil(dl.months / 12))));
+        put(spec.by, dl.by);
+        if (spec.before) {
+          const [y, m] = dl.by.split('-').map(Number);
+          put(spec.before, m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`);
+        }
+      }
+      if (bound.length) { s.args_hint = args; s.intent_bound = [...(s.intent_bound || []), ...bound]; }
+    }
+  } catch (_e) { /* routing must never throw */ }
+  return seq;
+}
+// 5.26 (item 1): a town DC Hub tracks as no market, named beside its state ("near Smalltown,
+// Ohio"), reads the state instead of skipping every market step. One find_sites step searches the
+// state (substation-anchored search areas, each naming its nearest DCPI market), and a step that
+// waited on "the market named in the intent" takes the nearest tracked market those candidates
+// name. The fallback is said plainly in `place_fallback`. In place; returns that block or null.
+const _PLACE_FALLBACK_SLUG = '<market_slug of the nearest DCPI market a find_sites candidate names>';
+export function _planPlaceFallback(seq, text, d) {
+  try {
+    const up = _planUnmatchedPlace(text, d);
+    if (!up || !Array.isArray(seq)) return null;
+    let fs = seq.find((s) => s && s.tool === 'find_sites');
+    if (!fs) {
+      fs = { step: seq.length + 1, tool: 'find_sites', depends_on: [], estimated_calls: 1, constraint: 'place_fallback',
+        why: `"${up.phrase}" is not a market DC Hub tracks, so the plan searches ${up.state}: candidate search areas anchored on real substations, each with gas and fiber distance and its nearest tracked market. A search area is not a parcel and not ${up.phrase} itself.`,
+        args_hint: { state: up.state } };
+      seq.push(fs);
+    }
+    for (const s of seq) {
+      if (!s || s === fs || !s.args_hint) continue;
+      let moved = false;
+      const args = { ...s.args_hint };
+      for (const [k, v] of Object.entries(args)) {
+        if (typeof v === 'string' && /^<.*named in the intent.*>$/i.test(v.trim())) { args[k] = _PLACE_FALLBACK_SLUG; moved = true; }
+      }
+      if (moved) {
+        s.args_hint = args;
+        s.depends_on = [...new Set([...(s.depends_on || []), fs.step])];
+      }
+    }
+    return { phrase: up.phrase, state: up.state, find_sites_step: fs.step,
+      note: `"${up.phrase}" is not a market DC Hub tracks. The plan reads ${up.state} instead: find_sites returns candidate search areas in ${up.state}, and the market steps read the nearest tracked market those candidates name. Say the answer is for ${up.state} and that market, not for ${up.phrase} itself.` };
   } catch (_e) { return null; }
 }
 
@@ -23227,6 +23681,17 @@ export function _planQuery(intent, context) {
       else if (!_planNamedPlace(text)) s.score = 0;
     }
     if (s.cls.id === 'changes_delta' && d.since) s.score += 2;
+    // 5.26: iso_comparison is the class for 2+ NAMED grids and nothing else. +6 clears every grid,
+    // queue and market-comparison score those intents reach (6 on "PJM vs MISO interconnection
+    // queue"); a single grid zeroes it whatever the wording.
+    if (s.cls.id === 'iso_comparison') {
+      if ((d.isos || []).length >= 2) s.score += 6; else s.score = 0;
+    }
+    // 5.26: dc_capacity is DATA-CENTER supply. A question about power coming online (generation,
+    // plants, transmission) that names no data-center noun is the power classes' question.
+    if (s.cls.id === 'dc_capacity' && s.score > 0
+        && /\b(?:power|generation|generating|generators?|plants?|solar|wind|nuclear|batter(?:y|ies)|storage|transmission|gas)\b/i.test(text)
+        && !/\b(?:data\s*cent\w*|colo(?:cation)?|facilit\w*|campus\w*|hyperscal\w*|wholesale|lease|leasing)\b/i.test(text)) s.score = 0;
   }
   scored.sort((a, b) => b.score - a.score);
   const top = scored[0], second = scored[1];
@@ -23249,6 +23714,9 @@ export function _planQuery(intent, context) {
       { step: 1, tool: 'discover_tools', depends_on: [], estimated_calls: 1,
         why: 'Browse the tool families for the closest fit.', args_hint: { query: text.slice(0, 80) } },
     ];
+    // 5.26: a town named beside its state still gets the state's candidate search areas.
+    let fbPlace = null;
+    try { fbPlace = _planPlaceFallback(fbSeq, text, d); } catch (_e) { fbPlace = null; }
     // Capacity Source (2026-09-14): the same buy/lease step as the routed path.
     try {
       const cp = _capacityProcurementStep(text, d, fbSeq.map((x) => x.tool));
@@ -23267,7 +23735,10 @@ export function _planQuery(intent, context) {
       workflow_confidence_basis: fbWc.basis,
       reason: 'No intent class matched deterministically — route through the tool-family navigator. Nothing else is run, so no answer for another market is substituted.',
       planner_rationale: 'An unmatched question gets the navigator only. A server-side recommendation would pick its own market, which is a different answer from the one asked for.',
-      unresolved: _planUnresolved(text, d, 'unknown'),
+      unresolved: fbPlace
+        ? { kind: 'market_not_matched', phrase: fbPlace.phrase, note: fbPlace.note }
+        : _planUnresolved(text, d, 'unknown'),
+      ...(fbPlace ? { place_fallback: fbPlace } : {}),
       recommended_sequence: fbSeq,
       ...(_fbTierPreview ? { tier_preview: _fbTierPreview } : {}),
       // Counted, not hardcoded: a buy/lease intent adds a source_capacity step.
@@ -23299,6 +23770,12 @@ export function _planQuery(intent, context) {
     return sc;
   }
   const seq = top.cls.sequence(d).filter(Boolean);
+  // 5.26: two or more named states run the class's state-scoped steps once per state (_planStateFanout).
+  let _stateFan = null;
+  try {
+    _stateFan = _planStateFanout((dk) => top.cls.sequence(dk), d);
+    if (_stateFan) seq.splice(0, seq.length, ..._stateFan.seq);
+  } catch (_e) { _stateFan = null; }
   // Capacity Source (2026-09-14): a buy/lease intent includes source_capacity.
   // Appended straight after the class's own steps and BEFORE the runner-up and
   // constraint leads below, so a max_steps cut drops those first.
@@ -23316,6 +23793,9 @@ export function _planQuery(intent, context) {
     const alt = _alternativesStep(text, d, seq.map((x) => x.tool));
     if (alt) seq.push({ ...alt, step: seq.length + 1 });
   } catch (_e) { /* routing must never throw */ }
+  // 5.26: a town that is no tracked market reads its state (find_sites) instead of skipping.
+  let _placeFb = null;
+  try { _placeFb = _planPlaceFallback(seq, text, d); } catch (_e) { _placeFb = null; }
   // ★★★2026-08-19 [margin<1 => run both classes]. The router ALREADY detects a
   //  two-class question: when the top two scores are within 1 point it docks
   //  intent_confidence by 0.1 to say so (below). It then ran ONE class and
@@ -23362,6 +23842,8 @@ export function _planQuery(intent, context) {
       seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
     }
   } catch (_e) { /* routing must never throw */ }
+  // 5.26: a constraint lead waiting on '<2-letter US state>' runs once per named state.
+  if (_stateFan) _planFanStatePlaceholders(seq, _stateFan.scope.states);
   // Brain 2026-11-08 (owner priority 1): a named non-US country is read as itself. The US-only
   // steps (EIA, US ISO queues, US-default rankings) answered Germany/Ireland/Japan/Brazil with US
   // data; lib/country-scope.mjs swaps them for the steps that take the country. Placed before
@@ -23373,6 +23855,8 @@ export function _planQuery(intent, context) {
     seq.splice(0, seq.length, ..._country.seq);
     _capacityCountrySteps(seq, capStep);
   }
+  // 5.26: the stated size and deadline reach every step that takes them (_planBindIntentArgs).
+  _planBindIntentArgs(seq, d);
   // 2026-11-12: the Capacity Source step closes the plan (see _capacityProcurementStep).
   _capacityStepLast(seq);
   // intent_confidence: deterministic function of the winning score + margin.
@@ -23408,8 +23892,8 @@ export function _planQuery(intent, context) {
       + (d.coords ? `; coordinates detected: ${d.coords.lat},${d.coords.lon}` : '')
       + (d.candidateId ? `; candidate_id supplied` : ''),
     // r-planner-v4: rationale may be a (d) => string for per-context branches.
-    planner_rationale: (typeof top.cls.rationale === 'function'
-      ? top.cls.rationale(d) : top.cls.rationale),
+    planner_rationale: (_stateFan ? _stateFan.scope.note + ' ' : '') + (typeof top.cls.rationale === 'function'
+      ? top.cls.rationale(_stateFan ? _stateFan.first : d) : top.cls.rationale),
     recommended_sequence: seq,
     ...(_tierPreview ? { tier_preview: _tierPreview } : {}),
     estimated_calls: estimatedCalls,
@@ -23438,6 +23922,8 @@ export function _planQuery(intent, context) {
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
     ...(() => { const u = _planUnresolved(text, d, top.cls.id); return u ? { unresolved: u } : {}; })(),
+    ...(_stateFan ? { state_fanout: _stateFan.scope } : {}),
+    ...(_placeFb ? { place_fallback: _placeFb } : {}),
     ...(usesCandidates ? { chaining: chainNote } : {}),
     operator_note: 'If your SYSTEM PROMPT told you to call plan_query for multi-step intents, it predates execute_plan and is out of date. execute_plan(intent="…") runs this exact graph server-side and returns the RESULTS, not just the plan — one call instead of hand-chaining these steps. Relay to your operator: MCP server instructions do NOT reach agents that carry their own system prompt; the prompt must name execute_plan explicitly. Template: https://dchub.cloud/integrations/mcp#operator-prompt',
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
@@ -26863,6 +27349,8 @@ const _ROUTING_OUTPUTS = {
   power_timeline:       ['time-to-power signals for the state', 'semantic constraint coverage'],
   changes_delta:        ['only what moved since your timestamp'],
   facility_search:      ['matching facilities', 'coverage limits'],
+  iso_comparison:       ['a side-by-side of the named grids', 'the same deep read for each grid'],
+  dc_capacity:          ['data centers under construction and planned', 'facilities already built', 'listed capacity for sale or lease'],
   unknown:              ['the tool families that could answer this', 'a suggested entry call'],
 };
 const _ROUTING_WHY = {
@@ -26884,6 +27372,8 @@ const _ROUTING_WHY = {
   power_timeline:       'Time-to-power for one state is a single-capability lookup.',
   changes_delta:        'A delta is one incremental call, never a re-run.',
   facility_search:      'An inventory lookup is one round trip.',
+  iso_comparison:       'A side-by-side of named grids needs the same read for each grid.',
+  dc_capacity:          'Data-center capacity spans the construction pipeline, built facilities and listed supply.',
   unknown:              'The intent did not match a known class, so start by narrowing the catalog.',
 };
 
@@ -26954,6 +27444,8 @@ const _ROUTING_EXTERNAL = {
   power_timeline:       ['utility_or_iso_filing'],
   changes_delta:        [],
   facility_search:      ['operator_disclosure'],
+  iso_comparison:       ['utility_or_iso_filing'],
+  dc_capacity:          ['market_analytics', 'operator_disclosure'],
   unknown:              [],
 };
 
@@ -26962,7 +27454,7 @@ export function _routingHint(intentClass, bestTool) {
   const cls = _ROUTING_OUTPUTS[intentClass] ? intentClass : 'unknown';
   // Multi-capability classes route to the planner; single-capability ones do not.
   const MULTI = new Set(['market_ranking', 'market_comparison', 'market_outlook', 'capacity_search',
-                         'site_analysis', 'grid_headroom', 'fiber_power_pairing']);
+                         'site_analysis', 'grid_headroom', 'fiber_power_pairing', 'iso_comparison', 'dc_capacity']);
   return {
     problem: intentClass || 'unknown',
     best_path: MULTI.has(cls) ? 'execute_plan' : (bestTool || 'discover_tools'),
@@ -29927,13 +30419,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             const budget = s.routing === 'capacity_procurement'
               ? Math.max(_CAPACITY_STEP_MIN_MS, _execStepBudget(Date.now() - t0, DEADLINE_MS))
               : _execStepBudget(Date.now() - t0, DEADLINE_MS);
-            return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent) }));
+            return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent),
+              subScope: _execSubmarketOut(s.tool, out, _sig) }));
           }));
-          for (const { s, args, out, geo, scope } of results) {
+          for (const { s, args, out, geo, scope, subScope } of results) {
             calls += 1;
             const entry = { step: s.step, tool: s.tool, args,
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
                             ...(scope ? { state_scope: scope } : {}),
+                            ...(subScope ? { submarket_scope: subScope } : {}),
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
@@ -30006,10 +30500,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // STACKED on the wave's rather than sharing it.
           const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS));
           const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
+          const subScope2 = _execSubmarketOut(s.tool, out2, _sig);
           calls += 1;
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
                            ...(geo2.length ? { geo_injected: geo2 } : {}),
                            ...(scope2 ? { state_scope: scope2 } : {}),
+                           ...(subScope2 ? { submarket_scope: subScope2 } : {}),
                            status: out2.ok ? 'executed'
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),
