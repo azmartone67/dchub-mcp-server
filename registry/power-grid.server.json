@@ -44,7 +44,6 @@
       "version": "1.0.0",
       "toolCount": 15,
       "license": "DCPI verdicts + composite CC-BY-4.0 after 30 days (dchub.cloud/terms#dcpi-current-data); methodology + grid analysis CC-BY-4.0; other layers per https://dchub.cloud/data-sources",
-      "freeTier": true,
       "deploymentType": "origin",
       "canonicalRemote": "https://dchub.cloud/mcp",
       "gatewayNote": "Focused listing of the DC Hub origin: 11 power and grid tools plus the 4-tool shared spine (discover_tools, claim_free_key, unlock_more_data, summarize_for_citation). Same backend, keys and gates as cloud.dchub/mcp-server; this path is a listing scope, not an entitlement scope."
