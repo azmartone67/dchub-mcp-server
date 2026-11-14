@@ -5,7 +5,7 @@
 // still carried wall_link_th, the hash of the link the handler built before the filter ran, so the
 // analyze_site funnel's wall_links counted a link the caller never saw. Pinned, over the real app on
 // loopback against a stub backend:
-//   C1  /mcp/claude keyless analyze_site: the reply has no link, the /track row is status pro_wall,
+//   C1  /mcp/claude keyless analyze_site: the reply has the unlock link (since 2026-11-13), the /track row is status pro_wall,
 //       tagged source claude-directory, and carries NO wall_link_th;
 //   C2  control, /mcp keyless analyze_site with a session: the reply has a link and the row DOES carry
 //       wall_link_th (so C1 cannot pass because the field is never written).
@@ -45,9 +45,12 @@ beforeAll(async () => { fence = fenceNetwork(); H = await startHarness({}); }, 6
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('wall_link_th is written only for walls that handed out a link', () => {
-  it('C1 /mcp/claude: wall logged pro_wall, source claude-directory, no link in the reply, no wall_link_th', async () => {
+  // 2026-11-13 (owner decision a, claudeSiteUnlock): the Claude analyze_site wall now hands out its unlock
+  // link. Claude traffic stays excluded from the relay readout (_excludedFromRelayReadout), so the row
+  // still carries no wall_link_th: joining Claude walls to relay opens is a separate owner call.
+  it('C1 /mcp/claude: wall logged pro_wall, source claude-directory, the unlock link in the reply, no wall_link_th', async () => {
     const w = await wall('/mcp/claude', false);
-    expect(w.text).not.toMatch(/\/upgrade\/h\/|\/u\/[a-z0-9]+/i);
+    expect(w.text).toMatch(/Unlock the full site report free\]\(https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/)/);
     expect(w.tracks.length).toBe(1);
     expect(w.tracks[0].body.status).toBe('pro_wall');
     expect(w.tracks[0].body.source).toBe('claude-directory');

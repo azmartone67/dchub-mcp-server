@@ -20,6 +20,8 @@ import {
 
 const PATTERNS = claudeProbePatterns(CLAUDE_REMOVED);
 const DIR = '/mcp/claude';
+const SITE_WALLS = new Set(['analyze_site', 'compare_sites']);
+const SITE_LINK_ONLY = new Set(['/upgrade/h', 'upgrade/unlock wording', 'pricing link', 'relay keys']);
 let H, fence;
 
 beforeAll(async () => {
@@ -79,7 +81,9 @@ describe('/mcp/claude — every listed tool, keyless and keyed', () => {
     for (const name of Object.keys(CLAUDE_TOOLS)) {
       for (const args of [{}, GUESS_ARGS]) {
         const r = await H.call(DIR, name, args);
-        const hits = hitsOf(PATTERNS, r.raw);
+        // 2026-11-13 (owner decision a, lib/claude-directory.mjs claudeSiteUnlock): the two site walls
+        // carry their own unlock link; only the hits that link trips are allowed, and only on them.
+        const hits = hitsOf(PATTERNS, r.raw).filter((k) => !(SITE_WALLS.has(name) && SITE_LINK_ONLY.has(k)));
         if (hits.length) offenders.push(`${name} ${args === GUESS_ARGS ? '(args)' : '(no args)'}: ${hits.join(', ')}`);
         if (!r.msg || !r.msg.result) continue;
         answered += 1;
@@ -124,9 +128,12 @@ describe('/mcp/claude — every listed tool, keyless and keyed', () => {
 });
 
 describe('a keyed Pro caller gets full data, still scrubbed', () => {
-  it('analyze_site: keyless is the plans notice, ?api_key= (Pro) is the full result with no notice', async () => {
+  it('analyze_site: keyless is the unlock link then the plans notice, ?api_key= (Pro) is the full result with no notice', async () => {
     const anon = await H.call(DIR, 'analyze_site', { lat: 39.04, lon: -77.48 });
-    expect(anon.msg.result.content.map((c) => c.text)).toEqual([CLAUDE_PLANS_NOTICE]);
+    const t = anon.msg.result.content.map((c) => c.text);
+    expect(t).toHaveLength(2);
+    expect(t[0]).toMatch(/^The full site report .*\[Unlock the full site report free\]\(https:\/\/dchub\.cloud\//);
+    expect(t[1]).toBe(CLAUDE_PLANS_NOTICE);
     const pro = await H.call(`${DIR}?api_key=${PRO_KEY}`, 'analyze_site', { lat: 39.04, lon: -77.48 });
     expect(pro.msg.result.isError).toBeUndefined();
     const body = JSON.parse(pro.msg.result.content[0].text);

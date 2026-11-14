@@ -84,7 +84,11 @@ describe('?api_key= on /mcp/claude authenticates exactly like the header', () =>
     process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
     try {
       const anon = await H.call(DIR, 'analyze_site', args);
-      expect(anon.msg.result.content.map((c) => c.text)).toEqual([CLAUDE_PLANS_NOTICE]);
+      // 2026-11-13 (owner decision a): the unlock link block, then the notice (claudeSiteUnlock).
+      const t = anon.msg.result.content.map((c) => c.text);
+      expect(t).toHaveLength(2);
+      expect(t[0]).toContain('[Unlock the full site report free](https://dchub.cloud/');
+      expect(t[1]).toBe(CLAUDE_PLANS_NOTICE);
     } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
     // Lazy auth is opt-in since 2026-11-06: only with DCHUB_CLAUDE_LAZY_AUTH=1 is the preview a 401.
     process.env.DCHUB_CLAUDE_LAZY_AUTH = '1';
