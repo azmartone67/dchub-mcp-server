@@ -34380,6 +34380,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     return { for_your_client: { client: clientKey, ...own }, ...rest, clients: { [clientKey]: own },
              other_clients: 'https://dchub.cloud/connect' };
   };
+  // 2026-11-13 (owner, "MCP as front desk"): the claim reply hands back a LASTING key with the ONE
+  // ready-to-paste snippet for the calling client directly under the key, and says the key does not
+  // expire. True of a dch_live_ key: nothing expires it; dchub-backend routes/privacy_retention.py
+  // retires a free key only after 24 months unused (/privacy 13.8, the same sentence as the backend's
+  // claim_persist.DURABLE_NOTE). Never said of any other key shape (a dch_trial_ key does expire).
+  // Kill switch DCHUB_CLAIM_CLIENT_SNIPPET=0 restores the previous reply text, read per call.
+  const _clientSnippetOn = () => !/^(0|off|false|no)$/i.test(String(process.env.DCHUB_CLAIM_CLIENT_SNIPPET || '').trim());
+  const _KEY_LASTS = 'This key does not expire: it keeps working as long as it is used (only a key left unused for 24 months is retired). Save it once and reuse it; do not mint another.';
+  const _keyLasts = (key) => _clientSnippetOn() && /^dch_live_/.test(String(key || ''));
+  const _ownSnippetBlock = (key, via, clientKey) => {
+    const cfg = clientKey ? (_persistConfig(key, via).clients || {})[clientKey] : null;
+    if (!cfg) return '';
+    return '**Paste this into ' + cfg.label + '**' + (cfg.file ? ' (`' + cfg.file + '`)' : '') + ', key already filled in:\n```\n' + cfg.snippet + '\n```\n'
+      + 'Show your human this and ask them to save it once: the key is then sent on every future session. '
+      + (_keyLasts(key) ? _KEY_LASTS + ' ' : '') + 'Other clients: https://dchub.cloud/connect\n\n';
+  };
   // 2026-11-11 (owner funnel item 4): the paste-ready line, one wording with the backend's
   // persist.paste_line (routes/claim_persist.paste_line): server URL + the X-API-Key header.
   // Spaced exactly as Python's json.dumps prints it, so both servers give the same line.
@@ -34432,7 +34448,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // there: the next call is another session, keyed only if the URL is saved.
       const _perCallSession = _GROK_RELAY_PLATFORMS.has(_via);
       const _ownClientKey = (() => {
-        try { const c = getCtx() || {}; return _clientKeyFromNames(c.client_name_raw, c.platform, a && a.client_name); }
+        try { const c = getCtx() || {}; return _clientKeyFromNames(c.client_name_raw, c.platform, a && a.client_name, c.client_ua || c.user_agent); }
         catch (_) { return null; }
       })();
       // r-claim-idempotent (2026-08-08, audit P0#3 key persistence): a caller
@@ -34530,8 +34546,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 'A previous session from the same client minted it; re-minting would orphan its usage history ' +
                 'and restart the daily allowance from zero.\n\n' +
                 '**Your key:** `' + _e.key + '`' + (_bound ? ' *(applied to this session — no reconnect)*' : '') + '\n\n' +
+                (_ok && _clientSnippetOn() ? _ownSnippetBlock(_e.key, _via, _ownClientKey) : '') +
                 _heldKeyUrlLine(_ok, _connectUrl(_e.key, _via)) +
-                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' }],
+                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' +
+                (_ok && _keyLasts(_e.key) && !_ownClientKey ? ' ' + _KEY_LASTS : '') }],
               structuredContent: {
                 api_key:                 _e.key,
                 tier:                    (_v && _v.tier) || 'free',
@@ -34546,6 +34564,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   connect_url:    _connectUrl(_e.key, _via),
                   for_your_human: _connectRelay(_e.key, _via),
                   persist_config: _persistConfigFor(_e.key, _via, _ownClientKey),
+                  ...(_keyLasts(_e.key) ? { key_expires: false, key_lifetime: _KEY_LASTS } : {}),
                 } : {
                   connect_url_withheld: _CONNECT_URL_WITHHELD,
                 }),
@@ -34741,10 +34760,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // Item 7: a caller whose client we recognise gets the key, then THE snippet for that client,
       // then a short save line, instead of the long every-client save block.
       const _ownCfg = _ownClientKey ? _persistConfig(key, _via).clients[_ownClientKey] : null;
-      const _ownSnip = _ownCfg
+      // 2026-11-13: with the client snippet on, a recognised client's snippet sits directly under the
+      // key in place of the generic paste line, and every live key is said to last (_KEY_LASTS).
+      const _snipFirst = _clientSnippetOn() && !!_ownCfg;
+      const _ownSnip = _snipFirst ? _ownSnippetBlock(key, _via, _ownClientKey) : _ownCfg
         ? '**Save it for ' + _ownCfg.label + '**' + (_ownCfg.file ? ' (`' + _ownCfg.file + '`)' : '') + ':\n```\n' + _ownCfg.snippet + '\n```\n'
           + 'Show your human this snippet and ask them to save it: the key is then sent on every future session. Do not re-mint each session. Other clients: https://dchub.cloud/connect\n\n'
         : '';
+      const _lastsLine = (!_snipFirst && _keyLasts(key)) ? _KEY_LASTS + '\n\n' : '';
       const text = _emailRejectLine +
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         (_backendReused
@@ -34754,11 +34777,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
-        'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' +
+        (_snipFirst ? _ownSnip
+          : 'Paste-ready (Cursor, Windsurf, Claude Code and other clients with a header field): `' + _pasteLine(key) + '`\n\n' + _lastsLine) +
         (_backendReused
-          ? 'Calling claim_free_key again keeps returning this same key. Save it once with the step below so the next session starts with it.\n\n'
+          ? 'Calling claim_free_key again keeps returning this same key.' + (_snipFirst ? '' : ' Save it once with the step below so the next session starts with it.') + '\n\n'
           : '') +
-        _ownSnip +
+        (_snipFirst ? '' : _ownSnip) +
         _headerlessLead +
         (_ownSnip ? '' : _saveLine) +
         _tierLine +
@@ -34788,8 +34812,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           reused:                  _backendReused,
           ...(_backendReused ? {
             already_held: true,
-            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap' : 'backend_claim_dedupe',
+            held_by:      (r && r.gate === 'unused_key_cap') ? 'unused_key_cap'
+              : (r && r.one_key_per_email === true) ? 'one_key_per_email' : 'backend_claim_dedupe',
           } : {}),
+          ...(_keyLasts(key) ? { key_expires: false, key_lifetime: _KEY_LASTS } : {}),
           // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
           // a free key is N calls TO TRY in total, then a per-day rung once an
           // email is bound. daily_limit used to echo the backend's claim figure
