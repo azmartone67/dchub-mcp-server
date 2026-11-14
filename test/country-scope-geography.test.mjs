@@ -98,7 +98,7 @@ describe('planner: a named non-US country is planned as itself', () => {
 
   it('the measured defects: the US-only steps that ran before are named as dropped', () => {
     const dropped = (q) => P._planQuery(q, {}).geography_scope.steps_dropped;
-    expect(dropped(CASES[0].intent)).toContain('ai_capacity_index');
+    expect(dropped(CASES[0].intent)).toContain('rank_markets');   // 5.27: the US AI ranking (was ai_capacity_index)
     expect(dropped(CASES[1].intent)).toEqual(expect.arrayContaining(['get_retirement_headroom', 'get_refined_queue']));
     expect(dropped(CASES[2].intent)).toContain('get_grid_scoreboard');
     expect(dropped(CASES[3].intent)).toContain('rank_markets');

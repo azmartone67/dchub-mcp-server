@@ -13,25 +13,28 @@ describe('plan_query router (pure)', () => {
     expect(a).toEqual(b);
   });
 
-  it('r-planner-v4: AI-campus intent leads with ai_capacity_index, demotes rank_markets', () => {
-    // The partner grading panel (Grok/Sonar/Mistral) flagged that an AI-campus
-    // intent was ranked by installed build-out (rank_markets) — which surfaces
-    // saturated AVOID markets. AI campuses are deployability-bound, so lead with
-    // ai_capacity_index and keep rank_markets as the explained alternative.
+  it('5.27: AI-campus intent leads with rank_markets criteria=ai_ready, ai_capacity_index is the horizon alternative', () => {
+    // r-planner-v4 led with ai_capacity_index (deployability). Live QA 2026-11-14: its order is
+    // market depth, and the run's DCPI checks of its top two were AVOID. A ranking by suitability
+    // is rank_markets criteria=ai_ready (DCPI buildability); the index stays the alternative, and
+    // the lead for a stated 30/60/90-day horizon.
     const p = _planQuery('rank markets for a 200 MW AI campus', {});
     expect(p.intent_class).toBe('market_ranking');
-    expect(p.best_tool).toBe('ai_capacity_index');
-    expect(p.recommended_sequence[0].tool).toBe('ai_capacity_index');
+    expect(p.best_tool).toBe('rank_markets');
+    expect(p.recommended_sequence[0].tool).toBe('rank_markets');
+    expect(p.recommended_sequence[0].args_hint.criteria).toBe('ai_ready');
     const altTools = p.alternatives.map((a) => a.tool);
-    expect(altTools).toContain('rank_markets');        // demoted, not dropped
-    expect(altTools).not.toContain('ai_capacity_index'); // never its own alternative
+    expect(altTools).toContain('ai_capacity_index');   // the horizon read, not dropped
+    expect(altTools).not.toContain('rank_markets');    // never its own alternative
     expect(p.reason).toMatch(/AI-workload signal/i);
     // GPU / hyperscale market phrasings hit the same branch (the AI branch is
     // scoped to market_ranking — a specific-SITE GPU intent still routes to
     // site_analysis, which is correct).
-    expect(_planQuery('best markets for a GPU training buildout').best_tool).toBe('ai_capacity_index');
+    expect(_planQuery('best markets for a GPU training buildout').recommended_sequence[0].args_hint.criteria).toBe('ai_ready');
     // explicit context.workload_type also triggers it
-    expect(_planQuery('rank the best markets', { workload_type: 'ai' }).best_tool).toBe('ai_capacity_index');
+    expect(_planQuery('rank the best markets', { workload_type: 'ai' }).recommended_sequence[0].args_hint.criteria).toBe('ai_ready');
+    // a stated deployment horizon keeps the capacity index
+    expect(_planQuery('rank markets where 100 MW of AI can land in 90 days').best_tool).toBe('ai_capacity_index');
     // a PLAIN market ranking is unaffected
     expect(_planQuery('rank the best data-center markets in the US').best_tool).toBe('rank_markets');
   });
@@ -92,7 +95,7 @@ describe('plan_query router (pure)', () => {
     // schema_version stays 1. Exactly the split this assertion exists to prove.
     // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
     // 5.17: market_outlook binds every tracked DCPI market (owner priority 1, 2026-11-08).
-    expect(r.planner_version).toBe('5.26');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.27');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
