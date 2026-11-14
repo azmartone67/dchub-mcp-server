@@ -148,7 +148,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 ## Task-scoped endpoints
 
-`https://dchub.cloud/mcp` serves the full catalog. A client that only needs one job can bind to a narrower surface instead — same server, same key, a much smaller tool list in the context window. Every pack except `/mcp/deepresearch` carries `discover_tools`, `claim_free_key`, `unlock_more_data` and `summarize_for_citation`, so a pack is never a dead end; `/mcp/deepresearch` is deliberately exactly the two tools the Deep Research connector contract expects.
+`https://dchub.cloud/mcp` serves the full catalog to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`. A client that only needs one job can bind to a narrower surface instead — same server, same key, a much smaller tool list in the context window. Every pack except `/mcp/deepresearch` carries `discover_tools`, `claim_free_key`, `unlock_more_data` and `summarize_for_citation`, so a pack is never a dead end; `/mcp/deepresearch` is deliberately exactly the two tools the Deep Research connector contract expects.
 
 | Endpoint | What it covers |
 |---|---|
