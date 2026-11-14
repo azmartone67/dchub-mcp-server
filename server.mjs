@@ -85,6 +85,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -813,9 +814,43 @@ export function _boundaryPhrase(tool) {
 // "Your AI assistant hit DC Hub's free-tier limit on execute_plan", which reads as "the plan did not run".
 // execute_plan never hits a limit of its own: its steps run, some at preview depth (executed[].depth).
 // The plan's line says that, with the counts when the envelope is at hand. Every other tool keeps its line.
+// Owner 2026-11-14 (Grok to Brain, item 3): "free-tier limit" only when a limit was actually hit: a cap, a
+// quota or a spent allowance (LIMIT_HIT_STATUSES, the call's own status, kept on the ctx by _limitHit). Any
+// other free wall is a preview at the caller's access level, and says so. Either way the line says what an
+// email gets, in plain terms and canon numbers, with no plan name. A paid boundary is unchanged.
+export const LIMIT_HIT_STATUSES = Object.freeze(new Set([
+  'anon_daily_cap', 'anon_hard_wall', 'trial_used', 'trial_cap_exceeded', 'daily_quota_preview',
+  'monthly_quota_blocked', 'credits_depleted', 'lp_free_spent',
+]));
+export function _limitHit(c, status) {
+  try { if (c && typeof c === 'object') c._limitHit = status; } catch (_) { /* a frozen ctx keeps the old line */ }
+  return status;
+}
+function _relayLimitHit(sc) {
+  try {
+    const c = getCtx() || {};
+    if (LIMIT_HIT_STATUSES.has(c._limitHit) || LIMIT_HIT_STATUSES.has(c._wallStatus)) return true;
+    const t = sc && sc._upgrade && typeof sc._upgrade === 'object' ? String(sc._upgrade.tier || '') : '';
+    return LIMIT_HIT_STATUSES.has(t) || !!(sc && sc._upgrade && sc._upgrade.binding_limit);
+  } catch (_) { return true; }   // unreadable: keep the line it had
+}
+function _relayEmailGets(tool, limitHit) {
+  try {
+    const c = getCtx() || {};
+    if (c.email || _boundaryPhrase(tool) !== 'free-tier limit') return '';
+    if (limitHit && !c.api_key) return '; an email gets a free key with ' + FREE_TIER.identified_calls_per_day + ' calls a day';
+    if (_emailFullDecisionTool(tool, c)) return '; with an email it gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day on this tool, free';
+    if (_emailOpensTool(tool)) return '; with an email it gets the full answer, free';
+    return '';
+  } catch (_) { return ''; }
+}
 export function _relayLead(tool, sc) {
   if (tool !== 'execute_plan') {
-    return 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(tool) + (tool ? ' on ' + tool : '');
+    const limitHit = _relayLimitHit(sc);
+    if (tool && !limitHit && _boundaryPhrase(tool) === 'free-tier limit') {
+      return 'Your AI assistant got a preview of ' + tool + ' from DC Hub' + _relayEmailGets(tool, false);
+    }
+    return 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(tool) + (tool ? ' on ' + tool : '') + _relayEmailGets(tool, limitHit);
   }
   const ex = sc && Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : null;
   if (!ex) return 'Your AI assistant ran DC Hub lookups for your question; some returned previews at your access level';
@@ -9544,6 +9579,60 @@ export async function _keylessFullTrialCharge(c, tool, cap) {
     _fullCapConsume(id, tool, cap);
     return true;
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// ── The first full answer of the day (owner 2026-11-14, lib/keyless-first-full.mjs) ───────────
+// A keyless caller's first call per UTC day to execute_plan, get_grid_intelligence,
+// get_interconnection_queue, get_grid_data and get_energy_prices is served the email-bound free key's
+// answer. 'charge' and 'observe' as the trial; 'step' = a loopback step of a plan that was its caller's
+// first full answer (covered by the plan's charge). null = today's path.
+export function _keylessFirstFullSeat(name, c, env = process.env) {
+  const deps = {
+    env, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
+    isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
+    isBot: isBotOrInternalCtx, lpTools: LP_TOOLS,
+  };
+  return _kffPlanStepSeatFor(name, c, deps) || _kffSeatFor(name, c, deps);
+}
+// Charged on the trial's store (in-process map, durable floor and mirror) under its own identity.
+export async function _keylessFirstFullCharge(c, tool, cap) {
+  try {
+    if (!(cap > 0)) return false;
+    const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
+    const key = `${id}:${tool}:${new Date().toISOString().slice(0, 10)}`;
+    const hydrating = _hydrateOnce(key, key, id, tool, cap);
+    if (FULL_CAP_PEEK_MS > 0) await hydrating;
+    const n = _trialDayCounts.get(key) || 0;
+    if (n >= cap) return false;
+    _trialDayCounts.set(key, n + 1);
+    if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
+    _fullCapConsume(id, tool, cap);
+    return true;
+  } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// The email-bound free key's gate for this tool, when it is a plain answer this lane can serve:
+// allowed, not a paid taste, not capped by FREE_TIER_LIMITS. null otherwise.
+export function _keylessFirstFullGate(name, args) {
+  const g = applyTierGate(name, args, 'free', true, false, undefined, _emailFullDecisionTool(name));
+  return (g.allowed && !g.paid_taste && !g.capped) ? g : null;
+}
+// The first full answer says so on itself (JSON block 0 and structuredContent), with no plan name.
+export function _withFirstFullBlock(result, name) {
+  try {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const blk = _firstFullBlock(name, _keylessFirstFullCap(),
+      _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0);
+    const t0 = result.content[0] && result.content[0].type === 'text' ? result.content[0].text : null;
+    let p = null;
+    try { p = t0 ? JSON.parse(t0) : null; } catch (_) { p = null; }
+    if (p && typeof p === 'object' && !Array.isArray(p) && !p.first_full_answer) {
+      result.content[0] = { ...result.content[0], text: JSON.stringify({ ...p, first_full_answer: blk }) };
+    }
+    const sc = result.structuredContent;
+    if (sc && typeof sc === 'object' && !Array.isArray(sc) && !sc.first_full_answer) {
+      result.structuredContent = { ...sc, first_full_answer: blk };
+    }
+  } catch (_) { /* the note is additive; the answer is not */ }
+  return result;
 }
 // ── The daily site lane (owner 2026-11-01, lib/keyless-full-trial.mjs keylessSiteFullSeat) ──
 // The FULL analyze_site answer DCHUB_KEYLESS_SITE_FULL_CAP times per IP per UTC day: keyless from
@@ -24827,7 +24916,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 tier_required: _q.quota_tier || 'paid', message_shown: 'monthly_quota',
               });
             } catch (_) {}
-            status = 'monthly_quota_blocked';
+            status = _limitHit(c, 'monthly_quota_blocked');
             // Content IS the error channel on this path (an agent reads
             // content[0].text; isError makes clients surface it rather than
             // silently swallowing a 200 with a refusal inside).
@@ -24872,7 +24961,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 message_shown: 'daily_quota',
               });
             } catch (_) {}
-            status = 'daily_quota_preview';
+            status = _limitHit(c, 'daily_quota_preview');
             c.daily_quota = _dq;
             // Served anonymously for THIS call only: the ctx is per request and
             // sessionMeta still holds the key, so the next call re-checks (30s
@@ -24945,7 +25034,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
       if (!c.api_key && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
-        status = 'anon_hard_wall';
+        status = _limitHit(c, 'anon_hard_wall');
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
         if (_capLink) {
@@ -25162,7 +25251,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           if (_fr && _fr.allowed === false && _fr.limit > 0) {
             // The allowance is spent: a paywall encounter, so it writes the signal lp_wall writes.
-            status = 'lp_free_spent';
+            status = _limitHit(c, 'lp_free_spent');
             signalPaywall({
               tool: name, args, signal_type: 'paid_tool_blocked',
               session_id: _wallSessionId(c),   // the request's own id, not the shared 'no-session' (#915 did lp_wall)
@@ -25295,7 +25384,7 @@ function trackedTool(srv, name, description, schema, handler) {
               usage_url:   _packCheckoutUrl(_sid),  // r-durable-key: was session-bound
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
             };
-            status = 'credits_depleted';
+            status = _limitHit(c, 'credits_depleted');
             // r-fresh-zero (2026-07-01): this response surfaces top-up checkout
             // links — drop the cached zero balance so the post-payment call
             // re-checks credits immediately (not after a stale 2-min TTL).
@@ -25550,7 +25639,23 @@ function trackedTool(srv, name, description, schema, handler) {
       // Only where that gate is a plain answer (not a taste, a cap or a preview of its own), only
       // under the anonymous daily cap, and only while the (IP, tool, day) budget has room; anything
       // else falls through to today's path untouched. Off, nothing here runs.
-      if (_gateTier === 'free' && !c.api_key && !gate.trial_taste) {
+      // The first full answer of the day (owner 2026-11-14, lib/keyless-first-full.mjs): a keyless caller's
+      // first call per UTC day to each of the five energy tools takes the EMAIL-BOUND free key's gate, so the
+      // answer is that key's, with its masks below; the anonymous cap does not wall it (it is the one full
+      // answer). A plan that is served this way promotes its own steps ('step', no charge of their own).
+      // Charged once per (IP, tool, day); after that, today's path and caps. Off: nothing here runs.
+      if (_gateTier === 'free' && !c.api_key) {
+        const _kffSeat = _keylessFirstFullSeat(name, c);
+        const _kffGate = _kffSeat ? _keylessFirstFullGate(name, gate.params || args) : null;
+        if (_kffGate && (_kffSeat !== 'charge' || await _keylessFirstFullCharge(c, name, _keylessFirstFullCap()))) {
+          // keyless_full_trial: every check below that lets the trial's promoted call through (the
+          // anonymous cap wall, the keyless trim, the free facility projection) lets this one through too.
+          gate = { ..._kffGate, keyless_full_trial: true, keyless_first_full: true,
+                   keyless_first_full_charged: _kffSeat === 'charge' };
+          if (name === 'execute_plan') c._kffPlan = true;   // its steps carry the plan's token
+        }
+      }
+      if (_gateTier === 'free' && !c.api_key && !gate.trial_taste && gate.keyless_first_full !== true) {
         const _kftSeat = _keylessFullTrialSeat(name, c);
         if (_kftSeat) {
           const _kftGate = applyTierGate(name, args, 'free', true, false, undefined, false);
@@ -25727,7 +25832,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
 
           if (!_trial.trial_used) {
-            status = 'trial_used';
+            status = _limitHit(c, 'trial_used');
             // r-latency (2026-06-28): the data fetch, trial auto-mint, and
             // high-intent claim check are mutually independent backend hops —
             // none reads another's result. Kick them off concurrently so the
@@ -26407,6 +26512,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // Keyless full-answer trial: the funnel tag (mcp_call_log.status / mcp_tool_calls.gate_status),
       // on a charged answer only. A QA observer is tagged nothing.
       if (gate.keyless_full_trial_charged === true) status = KEYLESS_FULL_TRIAL_STATUS;
+      // The first full answer of the day: its own funnel tag (a QA observer and a plan step are tagged
+      // nothing), and the block that says what it is. A plan's compact answer carries its own block.
+      if (gate.keyless_first_full_charged === true) status = KEYLESS_FIRST_FULL_STATUS;
+      if (gate.keyless_first_full === true && c.loopback_step !== true && name !== 'execute_plan') _withFirstFullBlock(result, name);
       // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; each step was gated by its own
       // loopback call), so the keyed caller's bind_email / human-link line is stamped here. Steps
       // under the caller's key (owner 2026-11-11): the line names the steps that came back walled
@@ -26477,7 +26586,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
-            status = 'anon_daily_cap';
+            status = _limitHit(c, 'anon_daily_cap');
             const trimmed = _capTrim(await _freeFacilityRows(parsed, name, c), name);
             const _sidc = c.session_id || 'no-session';
             // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
@@ -26747,7 +26856,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           result.content = [{ type: 'text', text: JSON.stringify({ ok: false, error: 'temporarily_unavailable', retry: true }) }];
         }
       }
-      if (gate.trial_taste && gate.chatgpt_first !== true && !_resultIsArgError(result)) {
+      // The first full answer of the day was charged on its own counter (and a plan step on its plan's), so it
+      // takes no taste meter, no taste cap and no "N of 10" annotation here.
+      if (gate.trial_taste && gate.chatgpt_first !== true && gate.keyless_first_full !== true && !_resultIsArgError(result)) {
         // r-bind-ladder (2026-06-27): bound (email-captured) callers get the higher
         // IDENTIFIED cap; unbound free keys stay at the base cap — so binding an
         // email buys a real, visible benefit (more full flagship answers/day).
@@ -26857,7 +26968,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           // link: the depth relay the wall steps attach as for_your_human / human_url. No pack, no
           // plan name, no price, no bind_email (this key already has an email). Same status and
           // signal as the trial cap below, so the existing wall counters see it.
-          status = 'trial_cap_exceeded';
+          status = _limitHit(c, 'trial_cap_exceeded');
           let _capped = _freeDecisionTasteResult(name, result, c, args);
           if (_capped) {
             // The prose: one agent line (the allowance is spent, what this is, what to relay) and the
@@ -26930,7 +27041,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           //   separate DCHUB_ANON_DAILY_CAP soft cap, and collapsing two
           //   different walls onto one label would trade this blind spot for an
           //   ambiguous one.
-          status = 'trial_cap_exceeded';
+          status = _limitHit(c, 'trial_cap_exceeded');
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
@@ -27345,6 +27456,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ...(_isQaCaller(c) ? { is_qa: true } : {}),
         // Keyless full-answer trial: the served full answer, beside its status (an older backend ignores it).
         ...(status === KEYLESS_FULL_TRIAL_STATUS ? { keyless_full_trial: true } : {}),
+        // The first full answer of the day (lib/keyless-first-full.mjs), beside its status.
+        ...(status === KEYLESS_FIRST_FULL_STATUS ? { keyless_first_full_answer: true } : {}),
         // Onboarding item 1 (2026-10-20): which channel the credential came on (see
         // _trackAuthChannel). An older backend ignores the key.
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
@@ -31141,12 +31254,23 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const _fdTrimmed = executed.some((e) => e && e.result && typeof e.result === 'object' && e.result.truncated === true);
         if (c) c._frontDeskPlan = _frontDeskPlanFor({ intent: a && a.intent, intentClass: sc.intent_class, args: a, c, trimmed: _fdTrimmed }) || undefined;
       } catch (_e) { /* the line is optional; the answer is not */ }
+      // The caller's first full plan answer of the day (lib/keyless-first-full.mjs): the direct answer and its
+      // as_of lead, each step keeps its key figures and first rows, and more_detail points at the full rows.
+      let _final = out;
+      if (c && c._kffPlan === true && c.loopback_step !== true) {
+        try {
+          _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap() });
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff']) {
+            if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
+          }
+        } catch (_e) { _final = out; }   // never lose the answer to its own shortening
+      }
       // r-endburst (2026-08-15): the planner's final assembly IS the
       // end-of-burst moment — append the ONE return-hook line.
-      const _content = [{ type: 'text', text: JSON.stringify(out) }];
+      const _content = [{ type: 'text', text: JSON.stringify(_final) }];
       const _ddLine = _dealDeskHumanLine(_dealDesk);
       if (_ddLine) _content.push({ type: 'text', text: _ddLine });
-      return withEndOfBurstHook({ content: _content, structuredContent: out }, 'execute_plan', c);
+      return withEndOfBurstHook({ content: _content, structuredContent: _final }, 'execute_plan', c);
     });
 
   trackedTool(srv, 'search_facilities', 'Use this when the user asks which data centers exist, or who operates in a city, state or country; filters: country, state, city, operator, MW range, tier or text. Returns name, operator, location, market, status and MW where disclosed; each row is flagged verified or unverified_directory_listing. Free: names and locations; MW and specs need a paid key. Ex: "Equinix sites in Virginia over 10 MW."',
@@ -33026,6 +33150,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
+      // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
+      if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken();
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -36970,6 +37096,10 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planWallSinkTok = req.headers[PLAN_WALL_SINK_HEADER];
     delete req.headers[PLAN_WALL_SINK_HEADER];
     const _planWallSinkId = _isLoopbackPeer(req) ? _planWallSink.consumeStepToken(_planWallSinkTok) : null;
+    // And whether the plan is its caller's first full answer of the day (lib/keyless-first-full.mjs), the same way.
+    const _planFirstFullTok = req.headers[KEYLESS_FIRST_FULL_PLAN_HEADER];
+    delete req.headers[KEYLESS_FIRST_FULL_PLAN_HEADER];
+    const _planFirstFull = _isLoopbackPeer(req) && consumePlanFirstFullToken(_planFirstFullTok);
     const sessionId = req.headers['mcp-session-id'];
     // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
     // 400 on every in-session request. Negotiate down instead: drop the header, and the request
@@ -38062,6 +38192,7 @@ app.post(MCP_PATHS, async (req, res) => {
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
+        ...(_planFirstFull ? { plan_first_full: true } : {}),   // a step of a first-full plan (lib/keyless-first-full.mjs)
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
