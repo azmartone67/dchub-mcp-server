@@ -11,6 +11,8 @@
 //      a tool outside the five, CAP=0.
 //   E) the plan step seat and its single-use token; F) the compact plan answer; G) the relay line;
 //   H) execute_plan end to end: the plan is the first full answer, charged once, and its steps carry the token.
+//   I) a step holding the plan's token runs at full depth (owner 2026-11-15, Grok note G): no preview, the
+//      backend hears the full-depth caller tier, the telemetry row keeps the caller's tier; without it, a preview.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
@@ -35,18 +37,43 @@ const QUEUE = {
 };
 const ENERGY = { success: true, avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null },
   retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } };
+const FACILITIES = { success: true, total_matching: 9, count: 9, data: Array.from({ length: 9 }, (_, i) => ({
+  id: 100 + i, name: `DFW ${i}`, slug: `dfw-${i}`, city: 'Dallas', state: 'TX', country: 'US', provider: `Op ${i}`,
+  power_mw: 40 + i, capacity_mw: 40 + i, latitude: 32.7 + i / 100, longitude: -96.8, status: 'operational', tier: 3 })) };
+const PIPELINE = { success: true, total: 4, projects: Array.from({ length: 4 }, (_, i) => ({
+  name: `P${i}`, mw: 200 + i, state: 'TX', status: 'construction', operator: `Op ${i}` })), as_of: '2026-11-14' };
 const ARGS = {
   get_grid_intelligence: { iso: 'PJM' },
   get_interconnection_queue: { iso: 'PJM' },
   get_grid_data: { iso: 'PJM' },
   get_energy_prices: { iso: 'CAISO' },
   get_market_intel: { market: 'phoenix' },
+  search_facilities: { state: 'TX' },
+  get_pipeline: { country: 'US' },
 };
 const DIRECT = ['get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices'];
 
-const writes = { track: [], consume: [], peek: [], loopback: [] };
+const writes = { track: [], consume: [], peek: [], loopback: [], backend: [] };
+// J) the edge of a loopback step, in process: the step ctx the /mcp handler builds (loopback_step, and
+// plan_first_full only when the plan's token is live), the step's tool handler, a JSON-RPC answer.
+const loopback = { emulate: false, ip: null };
+async function runStep(init) {
+  const h = (init && init.headers) || {};
+  const body = JSON.parse(init.body);
+  const { name, arguments: a } = body.params;
+  const T = TOOLS[name];
+  if (!T) return json({ jsonrpc: '2.0', id: body.id, error: { code: -32601, message: 'unknown tool' } });
+  const pf = F.consumePlanFirstFullToken(h[F.KEYLESS_FIRST_FULL_PLAN_HEADER]);
+  const ctx = { tier: 'free', platform: 'cursor', client_name_raw: 'cursor', user_agent: 'cursor/1.0',
+    client_ip: loopback.ip, session_id: null, loopback_step: true, ...(pf ? { plan_first_full: true } : {}) };
+  const parsed = await T.inputSchema.safeParseAsync(a || {});
+  const result = parsed.success
+    ? await S._ctxALS.run(ctx, () => T.handler(parsed.data, { signal: new AbortController().signal }))
+    : { isError: true, content: [{ type: 'text', text: 'invalid args' }] };
+  return json({ jsonrpc: '2.0', id: body.id, result });
+}
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
-let S, TOOLS, realFetch, prevBase, prevInternal;
+let S, TOOLS, realFetch, prevBase, prevInternal, prevAnonCap;
 
 beforeAll(async () => {
   prevInternal = process.env.DCHUB_INTERNAL_KEY; process.env.DCHUB_INTERNAL_KEY = SECRET;
@@ -56,8 +83,10 @@ beforeAll(async () => {
     let u = null; try { u = new URL(url); } catch { /* not a URL */ }
     // A plan step's loopback call: keep its headers (H), then fence it like any other off-BASE URL.
     if (url.startsWith('http://127.0.0.1:')) writes.loopback.push({ ...((init && init.headers) || {}) });
+    if (url.startsWith('http://127.0.0.1:') && loopback.emulate) return runStep(init);
     if (!url.startsWith(BASE)) throw new Error('network fence: ' + url);
     const p = u.pathname;
+    writes.backend.push({ path: p, headers: { ...((init && init.headers) || {}) } });
     let body = {}; try { body = JSON.parse((init && init.body) || '{}'); } catch { body = {}; }
     if (p === '/api/v1/mcp/track') { writes.track.push(body); return json({ ok: true }); }
     if (p === '/api/v1/mcp/full-cap/consume') { writes.consume.push(body); return json({ ok: false }); }
@@ -67,9 +96,13 @@ beforeAll(async () => {
     if (p.startsWith('/api/v1/grid/intelligence/')) return json(structuredClone(GI));
     if (p.startsWith('/api/v1/interconnection-queue/')) return json(structuredClone(QUEUE));
     if (p.startsWith('/api/v1/energy/')) return json(structuredClone(ENERGY));
+    if (p === '/api/v1/facilities') return json(structuredClone(FACILITIES));
+    if (p === '/api/v1/pipeline') return json(structuredClone(PIPELINE));
     return json({});
   };
   prevBase = process.env.DCHUB_API_BASE; process.env.DCHUB_API_BASE = BASE;
+  // The anonymous daily cap is on (I): an IP's count is 0 unless a test seeds _anonUsageCounts.
+  prevAnonCap = process.env.DCHUB_ANON_DAILY_CAP; process.env.DCHUB_ANON_DAILY_CAP = '20';
   S = await import('../server.mjs');
   TOOLS = S.createServer()._registeredTools;
 }, 60_000);
@@ -77,6 +110,7 @@ afterAll(() => {
   globalThis.fetch = realFetch;
   if (prevBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevBase;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
+  if (prevAnonCap === undefined) delete process.env.DCHUB_ANON_DAILY_CAP; else process.env.DCHUB_ANON_DAILY_CAP = prevAnonCap;
 });
 const FLAG_VARS = ['DCHUB_KEYLESS_FIRST_FULL', 'DCHUB_KEYLESS_FIRST_FULL_CAP'];
 afterEach(() => { for (const k of FLAG_VARS) delete process.env[k]; });
@@ -123,7 +157,7 @@ const isPreview = (r) => {
 const kffId = (ip) => F.KEYLESS_FIRST_FULL_ID_PREFIX + 'ip-' + createHash('sha256').update(ip).digest('hex');
 const kffConsumes = (ip) => writes.consume.filter((w) => w.identity === kffId(ip));
 const kffTracks = () => writes.track.filter((w) => w.status === F.KEYLESS_FIRST_FULL_STATUS || w.keyless_first_full_answer === true);
-const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; writes.loopback.length = 0; };
+const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; writes.loopback.length = 0; writes.backend.length = 0; };
 const settle = () => new Promise((r) => setTimeout(r, 25));
 
 describe('A) DCHUB_KEYLESS_FIRST_FULL=0: today\'s preview, nothing charged or tagged', () => {
@@ -404,5 +438,136 @@ describe('H) execute_plan end to end: the plan is the first full answer', () => 
     await settle();
     expect(kffConsumes(ip)).toEqual([]);
     expect(kffTracks()).toEqual([]);
+  }, 60_000);
+});
+
+describe('I) a first-full plan step runs at full depth (owner 2026-11-15)', () => {
+  const STEP_TOOLS = ['get_grid_intelligence', 'get_interconnection_queue'];
+  // Two of the steps Grok's 2.12.57 re-test got at preview: the email key's depth is a preview on both.
+  for (const [tool, rows] of [['search_facilities', (h) => h && h.data], ['get_pipeline', (h) => h && h.projects]]) {
+    it(`${tool}: the full-depth step answers every row with its figures; without the token it does not`, async () => {
+      resetWrites();
+      const full = await call(tool, seat({ loopback_step: true, plan_first_full: true }));
+      const fh = head(full);
+      expect(full.isError).not.toBe(true);
+      expect(rows(fh), JSON.stringify(fh).slice(0, 300)).toHaveLength(tool === 'search_facilities' ? 9 : 4);
+      expect(JSON.stringify(full)).not.toMatch(/partial_preview|_withheld/);
+      if (tool === 'search_facilities') expect(rows(fh).every((r) => typeof r.power_mw === 'number')).toBe(true);
+      resetWrites();
+      const s = seat({ loopback_step: true });
+      const prev = await call(tool, s);
+      expect(JSON.stringify(prev)).not.toEqual(JSON.stringify(full));
+      expect(isPreview(prev) || S._execStepPreview(head(prev) || {}, s) || prev.isError === true
+        || (rows(head(prev)) || []).length < (rows(fh) || []).length, 'a preview without the token').toBe(true);
+    }, 60_000);
+  }
+  const tierHeard = (path) => writes.backend.filter((w) => w.path.startsWith(path)).map((w) => w.headers['X-DCHub-Caller-Tier']);
+  const stepRows = (tool) => writes.track.filter((w) => w.tool === tool);
+
+  for (const tool of STEP_TOOLS) {
+    const path = tool === 'get_grid_intelligence' ? '/api/v1/grid/intelligence/' : '/api/v1/interconnection-queue/';
+
+    it(`${tool}: with the plan's token the step is full, the backend hears '${F.KEYLESS_FIRST_FULL_STEP_TIER}', the row logs 'free'`, async () => {
+      resetWrites();
+      const s = seat({ loopback_step: true, plan_first_full: true });
+      const r = await call(tool, s);
+      expect(r.isError).not.toBe(true);
+      expect(isPreview(r), 'not a preview').toBe(false);
+      expect(S._execStepPreview(head(r), s), 'the plan would not label it preview').toBe(false);
+      expect(JSON.stringify(r)).not.toMatch(/partial_preview/);
+      expect(tierHeard(path).length).toBeGreaterThan(0);
+      expect(new Set(tierHeard(path))).toEqual(new Set([F.KEYLESS_FIRST_FULL_STEP_TIER]));
+      await settle();
+      const rows = stepRows(tool);
+      expect(rows.length).toBe(1);
+      expect(rows[0].tier, 'telemetry keeps the caller tier').toBe('free');
+      expect(kffConsumes(s.client_ip), 'a step charges nothing of its own').toEqual([]);
+    }, 60_000);
+
+    it(`${tool}: the same step without the token is today's preview and the backend hears 'anonymous'`, async () => {
+      resetWrites();
+      const s = seat({ loopback_step: true });
+      const r = await call(tool, s);
+      expect(S._execStepPreview(head(r), s) || isPreview(r), 'preview').toBe(true);
+      expect(new Set(tierHeard(path))).toEqual(new Set(['anonymous']));
+    }, 60_000);
+  }
+
+  it('the full-depth tier is the step\'s only: a direct keyless call keeps email-key depth on the backend header', async () => {
+    resetWrites();
+    const s = seat();
+    await call('get_grid_intelligence', s);
+    expect(new Set(tierHeard('/api/v1/grid/intelligence/'))).toEqual(new Set(['anonymous']));
+    expect(s.kff_full_depth).toBeUndefined();
+  }, 60_000);
+
+  it('an IP past the anonymous cap, and past the hard wall, still gets the full step (the plan was its full answer)', async () => {
+    for (const count of [25, 1000]) {
+      resetWrites();
+      const s = seat({ loopback_step: true, plan_first_full: true });
+      S._anonUsageCounts.set(s.client_ip, { at: Date.now(), count });
+      const r = await call('get_grid_intelligence', s);
+      expect(r.isError, `count ${count}`).not.toBe(true);
+      expect(isPreview(r) || S._execStepPreview(head(r), s), `count ${count}`).toBe(false);
+      const without = seat({ loopback_step: true });
+      S._anonUsageCounts.set(without.client_ip, { at: Date.now(), count });
+      const w = await call('get_grid_intelligence', without);
+      expect(JSON.stringify(w), `count ${count}: without the token the cap holds`).not.toEqual(JSON.stringify(r));
+      expect(isPreview(w) || S._execStepPreview(head(w), without) || w.isError === true, `count ${count}`).toBe(true);
+    }
+  }, 60_000);
+
+  it('lane off: a step holding the token is today\'s preview', async () => {
+    resetWrites();
+    process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
+    const s = seat({ loopback_step: true, plan_first_full: true });
+    const r = await call('get_grid_intelligence', s);
+    expect(S._execStepPreview(head(r), s) || isPreview(r)).toBe(true);
+    expect(new Set(tierHeard('/api/v1/grid/intelligence/'))).toEqual(new Set(['anonymous']));
+  }, 60_000);
+});
+
+describe('J) execute_plan end to end with its steps run: call 1 is full depth with a real answer, call 2 a preview', () => {
+  const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
+  afterEach(() => { loopback.emulate = false; loopback.ip = null; });
+  const executed = (r) => (r.structuredContent && r.structuredContent.executed) || (head(r) || {}).executed || [];
+
+  it('call 1: every step that ran is full depth, none is a preview, and the answer is a real sentence', async () => {
+    resetWrites();
+    const ip = '198.18.60.10';
+    loopback.emulate = true; loopback.ip = ip;
+    const r1 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    const h1 = head(r1);
+    expect(h1.first_full_answer).toMatchObject({ used: 1, limit: 1 });
+    const ran = executed(r1).filter((e) => e.status === 'executed' || e.status === 'gated_preview');
+    expect(ran.length, JSON.stringify(executed(r1).map((e) => [e.tool, e.status]))).toBeGreaterThan(0);
+    expect(ran.filter((e) => e.status === 'gated_preview' || e.depth === 'preview').map((e) => e.tool)).toEqual([]);
+    expect(JSON.stringify(r1)).not.toMatch(/partial_preview/);
+    expect(typeof h1.answer).toBe('string');
+    expect(h1.answer, 'the answer is not the steps fallback').not.toMatch(/^DC Hub ran \d+ reads?/);
+    expect(h1.answer).not.toMatch(/\(preview\)/);
+    // the backend heard the full-depth tier on every step read
+    const stepReads = writes.backend.filter((w) => w.path.startsWith('/api/v1/grid/') || w.path.startsWith('/api/v1/interconnection-queue/'));
+    expect(stepReads.length).toBeGreaterThan(0);
+    expect(new Set(stepReads.map((w) => w.headers['X-DCHub-Caller-Tier']))).toEqual(new Set([F.KEYLESS_FIRST_FULL_STEP_TIER]));
+    await settle();
+    expect(kffConsumes(ip).map((w) => w.tool), 'one charge, the plan').toEqual(['execute_plan']);
+  }, 60_000);
+
+  it('call 2 from the same IP: no first full answer, its steps are previews again', async () => {
+    resetWrites();
+    const ip = '198.18.60.11';
+    loopback.emulate = true; loopback.ip = ip;
+    await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    await settle();
+    resetWrites();
+    const r2 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    expect(head(r2).first_full_answer).toBeUndefined();
+    const prev = executed(r2).filter((e) => e.status === 'gated_preview' || e.depth === 'preview');
+    expect(prev.length, JSON.stringify(executed(r2).map((e) => [e.tool, e.status, e.depth]))).toBeGreaterThan(0);
+    const stepReads = writes.backend.filter((w) => w.path.startsWith('/api/v1/grid/') || w.path.startsWith('/api/v1/interconnection-queue/'));
+    expect(stepReads.map((w) => w.headers['X-DCHub-Caller-Tier'])).not.toContain(F.KEYLESS_FIRST_FULL_STEP_TIER);
+    await settle();
+    expect(kffConsumes(ip), 'no second charge').toEqual([]);
   }, 60_000);
 });

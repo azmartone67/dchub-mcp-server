@@ -85,7 +85,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -7442,6 +7442,7 @@ export { signalPaywall as _signalPaywallForTest, trackPaidHit as _trackPaidHitFo
 // old rule.
 export const CALLER_TIER_HEADER = 'X-DCHub-Caller-Tier';
 export function _callerTierFor(c) {
+  if (c && typeof c === 'object' && c.kff_full_depth === true) return KEYLESS_FIRST_FULL_STEP_TIER;   // a first-full plan's step
   if (!c || typeof c !== 'object' || !c.api_key) return 'anonymous';
   const t = String(c.tier || 'free').trim().toLowerCase();
   return /^[a-z_]{1,32}$/.test(t) ? t : 'free';
@@ -24966,6 +24967,16 @@ function trackedTool(srv, name, description, schema, handler) {
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
+    // Owner 2026-11-15 (Grok note G): a step of a plan served as its caller's first full answer runs at
+    // full depth (KEYLESS_FIRST_FULL_STEP_TIER), decision layer included, so the one full answer is a real
+    // one. c.tier carries it to the gate, the masks and the backend's caller-tier header; the telemetry row
+    // keeps the caller's own tier (_trackTier). The plan's one charge still covers it.
+    const _trackTier = tier;
+    if (_keylessFirstFullSeat(name, c) === 'step') {
+      c.kff_full_depth = true;
+      c.tier = KEYLESS_FIRST_FULL_STEP_TIER;
+      tier = c.tier;
+    }
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
     // Returns isError=true with a friendly identification CTA. Counts the
     // call for telemetry but skips the tool handler entirely.
@@ -25282,7 +25293,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
-      if (!c.api_key && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+      if (!c.api_key && c.kff_full_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall'; _limitHit(c, status);
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
@@ -25548,7 +25559,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
       // short-circuit is untouched).
       const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
-        ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+        ? (c.kff_full_depth === true || await _paidKeyIsProOrAbove(c.api_key)) : undefined;
       // Capacity and facility-tier filters on search_facilities are applied only for a caller
       // whose answer carries those fields (lib/readable-filters.mjs). The backend answers this
       // server's own credential at full depth, so a filter the caller supplies would otherwise
@@ -26832,7 +26843,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // write tools ...) skip it. Measured at count 25 of 20: discover_tools walled as a plan step, and the
       // wall rewrote the terms link in request_capacity_intro / accept_capacity_terms and the licence link in
       // summarize_for_citation to the wall's own link.
-      if (!c.api_key && gate.keyless_full_trial !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
+      if (!c.api_key && gate.keyless_full_trial !== true && c.kff_full_depth !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -27684,7 +27695,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         platform:    c.platform || 'unknown',
         client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     c.api_key || null,
-        tier,
+        tier:        c.kff_full_depth === true ? _trackTier : tier,   // a first-full plan step logs its caller's tier
         session_id:  c.session_id || null,
         status,
         duration_ms: Date.now() - t0,
