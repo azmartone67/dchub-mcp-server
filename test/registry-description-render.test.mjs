@@ -51,17 +51,21 @@ describe('the committed descriptions ARE the render', () => {
       expect(t).not.toMatch(/\d[\d,]*\+?\s+(?:global\s+)?(?:data[- ]center\s+)?facilit/i);
     }
   });
-  it('both long descriptions carry the same free-tier, price and tool-count facts', () => {
+  it('both long descriptions carry the same key and tool-count facts, and no plan or price', () => {
     const r = renderAll(ctx);
     expect(r.smithery_yaml).toContain(`${count} tools.`);
     for (const t of [r.smithery_yaml, r.mcp_server_json]) {
-      expect(t).toContain('paid plans: dchub.cloud/pricing');
+      // 2026-11-14 (owner): no plan, free-tier or pricing language; the key is optional.
+      expect(t).not.toMatch(/paid plans|dchub\.cloud\/pricing|free tier|free to start/i);
+      expect(t).toContain('the API key (DCHUB_API_KEY) is optional');
+      expect(t).toContain('Data Center Power Index (DCPI)');
       expect(t).not.toMatch(/\$10\b/);
       // ★2026-10-15 (G-1014-33): the map, no number, no "pending" caveat.
       expect(t).toContain('a global data-center facility map');
       expect(t).not.toMatch(/corroborated count pending/i);
     }
-    expect(r.mcp_server_json).toContain(ctx.tier.freeTierRule);
+    expect(r.mcp_server_json).not.toContain(ctx.tier.freeTierRule);
+    expect(r.smithery_yaml.startsWith('DC Hub is the neutral orchestration layer')).toBe(true);
   });
 });
 

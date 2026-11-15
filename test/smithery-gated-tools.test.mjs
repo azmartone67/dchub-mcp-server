@@ -48,13 +48,12 @@ describe('smithery.yaml gated_tools', () => {
     expect(gatedFromSmithery()).toEqual(proOnlyFromServer());
   });
 
-  it('the pricing block names the Pro-only set by pointing at gated_tools, never by a typed count', () => {
-    const block = read('smithery.yaml').match(/^pricing:\n((?:[ \t]+.*\n)+)/m);
-    expect(block, 'smithery.yaml has no pricing: block - this guard would check nothing').toBeTruthy();
-    const lines = block[1].split('\n');
-    const dev = lines.find((l) => /^\s+developer:/.test(l)) || '';
-    expect(dev).toMatch(/gated_tools/);
-    expect(statesToolCount(block[1])).toBe(false);
+  // 2026-11-14 (owner, MCP Ecosystem PR review): smithery.yaml carries no plan rows, so nothing
+  // there can state a Pro-tool count. gated_tools stays the one list.
+  it('smithery.yaml has no pricing block and states no Pro-tool count anywhere', () => {
+    const y = read('smithery.yaml');
+    expect(y).not.toMatch(/^pricing:/m);
+    expect(statesToolCount(y)).toBe(false);
   });
   it('controls: the retired wording is caught, the current wording is not', () => {
     expect(statesToolCount('developer: "full results on all tools except 7 Pro tools (10 full grid/fiber answers/day)"')).toBe(true);

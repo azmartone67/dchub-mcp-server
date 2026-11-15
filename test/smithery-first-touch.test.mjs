@@ -31,7 +31,8 @@ describe('smithery.yaml install config', () => {
     // Add an email: 50 calls/day (up to 10 full answers per tool per day)."
     // The retired "5 calls/day anonymous, 10/day with a free key" must not
     // come back.
-    expect(YAML).toMatch(/anonymous tier: previews, no key\s+needed/);
+    // 2026-11-14 (owner): no "tier" word on the key field; the key is optional.
+    expect(YAML).toMatch(/Optional\. Blank = no key: previews, no key\s+needed/);
     expect(YAML).toMatch(/previews plus 2 full answers per tool per day/);
     // ★2026-10-04 (owner): the top-level description now carries the B1
     // free-key wording too; "10 calls to try" must not return anywhere.

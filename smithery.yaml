@@ -11,8 +11,8 @@
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
-displayName: "DC Hub — Power, Energy & Data Center Intelligence"
-description: "Data Center Power Index (DCPI): a daily score of where data centers can get grid power, across 300+ markets. Live electricity, power-grid and energy intelligence for AI agents — and the data centers drawing on it. Real-time utility and grid telemetry from 7 independent feeds: every US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) plus 40+ EIA balancing authorities, Great Britain, 30 European ENTSO-E bidding zones, Taiwan, Japan, South Korea, Brazil and Australia — fuel mix, renewable share and demand, right now. Plus 182,000 global power generating units across every status (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), 14,000 US power plants, 134,000+ substations, 94,000 transmission lines, 32,000 gas pipeline segments, electricity and natural-gas price feeds, renewable-generation data, and live ISO interconnection-queue snapshots with queue depth and per-ISO BUILD/CAUTION/AVOID verdicts. On the demand side: a global data-center facility map across 170+ countries, 300+ markets scored daily with DCPI, 58,000 fiber routes, tax incentives, water risk, per-facility tenants and 1,900+ tracked M&A deals. 96 tools. Every figure is citable and carries an as_of timestamp, and the ingest layer publishes its own freshness at /api/v1/ops/deadman — the only electricity, grid-interconnection and data-center intelligence source an LLM can both query and cite. Free to start (no key: previews; a free key: previews plus 2 full answers per tool per day; with an email: 50/day) — then paid plans: dchub.cloud/pricing."
+displayName: "DC Hub"
+description: "DC Hub is the neutral orchestration layer for data center and energy intelligence: call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer. Data Center Power Index (DCPI): a daily score of where data centers can get grid power, across 300+ markets. Live electricity, power-grid and energy intelligence for AI agents — and the data centers drawing on it. Real-time utility and grid telemetry from 7 independent feeds: every US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) plus 40+ EIA balancing authorities, Great Britain, 30 European ENTSO-E bidding zones, Taiwan, Japan, South Korea, Brazil and Australia — fuel mix, renewable share and demand, right now. Plus 182,000 global power generating units across every status (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), 14,000 US power plants, 134,000+ substations, 94,000 transmission lines, 32,000 gas pipeline segments, electricity and natural-gas price feeds, renewable-generation data, and live ISO interconnection-queue snapshots with queue depth and per-ISO BUILD/CAUTION/AVOID verdicts. On the demand side: a global data-center facility map across 170+ countries, 300+ markets scored daily with DCPI, 58,000 fiber routes, tax incentives, water risk, per-facility tenants and 1,900+ tracked M&A deals. 96 tools. Every figure is citable and carries an as_of timestamp, and the ingest layer publishes its own freshness at /api/v1/ops/deadman — the only electricity, grid-interconnection and data-center intelligence source an LLM can both query and cite. No key needed to start; the API key (DCHUB_API_KEY) is optional and raises limits."
 homepage: "https://dchub.cloud"
 version: "2.12.55"
 keywords:
@@ -83,11 +83,11 @@ remote:
   type: streamable-http
   url: "https://dchub.cloud/mcp"
 
-# Optional API key. DC Hub is keyless-first — with NO key you still get the
-# free tier (previews, no key needed, live grid scoreboard). Paste a
+# Optional API key. DC Hub is keyless-first — with NO key you still get
+# previews (no key needed, live grid scoreboard). Paste a
 # key here to raise limits + unlock full results, and Smithery reuses it across sessions so
 # you never re-mint. Get a free key by calling the `claim_free_key` tool once
-# (no email), or use a paid key. Left blank → the header renders empty and the
+# (no email). Left blank → the header renders empty and the
 # server treats it exactly like no key (anonymous tier), so this never breaks
 # keyless use.
 configSchema:
@@ -98,14 +98,13 @@ configSchema:
       type: string
       title: "DC Hub API key — paste one to raise your limits"
       description: >-
-        Recommended. Blank = anonymous tier: previews, no key
+        Optional. Blank = no key: previews, no key
         needed. A FREE key gives previews plus 2 full answers per tool per day, no email, no card:
         connect once and call `claim_free_key`, then paste the key here so
         every future session starts identified. Add an email with
         `bind_email` for 50 calls/day (up to 10 full answers per tool per day).
         Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.
         Saved sites and alerts need a key at all (they are per-account).
-        A paid key raises limits further.
       format: password
 
 # Smithery injects the configured apiKey as the X-API-Key header the server
@@ -212,15 +211,6 @@ tools:
   - unlock_more_data
   - read_inbox
   - report_finding
-
-# Free-tier vs paid-tier breakdown so Smithery users know what to expect.
-pricing:
-  anonymous: "Previews, no key or signup needed"
-  free: "Free key (call claim_free_key — no email) — previews plus 2 full answers per tool per day; every tool callable, most as previews; grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each; analyze_site: a free key gets a few free full site reports each month; after that, previews"
-  identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
-  developer: "500 calls/day; full results on every tool except the tools in gated_tools — see https://dchub.cloud/pricing"
-  pro: "2,000 calls/day + Pro tools (site analysis, comparison, recommendations), PDF reports and GeoJSON export — see https://dchub.cloud/pricing"
-  enterprise: "100,000 calls/day, REST API up to 999,999 records/day, team seats, branded site reports — see https://dchub.cloud/pricing"
 
 # The Pro-only tools: PRO_ONLY_TOOLS in server.mjs (test/smithery-gated-tools.test.mjs keeps them equal).
 gated_tools:

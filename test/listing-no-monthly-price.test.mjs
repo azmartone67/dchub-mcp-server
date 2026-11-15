@@ -19,17 +19,12 @@ import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const MONTHLY = /\$\s?\d[\d,]*(?:\.\d+)?\s*(?:\/\s*(?:mo|month)\b|per month|a month)/gi;
 
-const smitheryPricing = () => {
-  const m = read('smithery.yaml').match(/^pricing:\n((?:[ \t]+.*\n)+)/m);
-  if (!m) throw new Error('smithery.yaml: no pricing: block — this guard would check nothing');
-  return m[1];
-};
-
 const SURFACES = {
   'README.md': () => read('README.md'),
   'server.json (description)': () => JSON.parse(read('server.json')).description,
   'mcp-server.json (top-level description)': () => JSON.parse(read('mcp-server.json')).description,
-  'smithery.yaml (pricing block)': smitheryPricing,
+  // 2026-11-14 (owner): the pricing block is gone, so the whole file is swept.
+  'smithery.yaml': () => read('smithery.yaml'),
   'llms-install.md': () => read('llms-install.md'),
 };
 
