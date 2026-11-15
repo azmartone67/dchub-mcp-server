@@ -25,7 +25,7 @@ describe('canonical/directories.json', () => {
     for (const d of rows) {
       expect(d.id, JSON.stringify(d)).toMatch(/^[a-z0-9-]+$/);
       expect(typeof d.name).toBe('string');
-      expect(['live', 'pending', 'unverified', 'offline']).toContain(d.status);
+      expect(['live', 'pending', 'unverified', 'offline', 'stale']).toContain(d.status);
     }
   });
 
@@ -46,6 +46,25 @@ describe('canonical/directories.json', () => {
     const by = Object.fromEntries(DATA.directories.map((d) => [d.id, d]));
     expect(by['cursor-marketplace'].status_text).toBe('Submitted; Cursor deferred 2026-10-28');
     expect(by['mcp-world'].status).toBe('offline');
+  });
+
+  // 2026-11-15 (owner): Bytewax's list is unmaintained (stale, not live); MCP Toplist is a
+  // registry-derived live listing; MCP Server Finder was submitted by email and is pending.
+  it('2026-11-15 rows: Bytewax stale, MCP Toplist live, MCP Server Finder pending', () => {
+    const by = Object.fromEntries(DATA.directories.map((d) => [d.id, d]));
+    expect(by['bytewax-real-time-datasets'].status).toBe('stale');
+    expect(by['bytewax-real-time-datasets'].status_text).toMatch(/no longer maintained/);
+    expect(by['mcp-toplist'].status).toBe('live');
+    expect(by['mcp-toplist'].listing_url).toBe('https://mcptoplist.com/server/cloud.dchub%2Fmcp-server');
+    expect(by['mcp-server-finder'].status).toBe('pending');
+    expect(by['mcp-server-finder'].listing_url).toBe(null);
+  });
+
+  it('stale rows are hidden on /mcp/directories even when they carry a listing URL', () => {
+    const out = renderDirectoriesPage({ directories: [
+      { id: 's', name: 'Stale Dir', status: 'stale', listing_url: 'https://example.com/s' },
+    ] }, { tools: 1 });
+    expect(out).not.toContain('Stale Dir');
   });
 
   it('every live row has an https listing URL (a live row without one would silently vanish)', () => {
