@@ -62,7 +62,7 @@ describe('Land & Power descriptions match the keyless wall', () => {
       expect(keyless).toBe('wall');
       expect(d).not.toContain('Keyless returns no site data');
       expect(d).toContain("Keyless returns each site's verdict band and power band, with the other factors named");
-      expect(d).toMatch(/scores and figures need a paid DC Hub plan/);   // v14: no plan name
+      expect(d).toMatch(/scores and figures need a full-access key/);   // v14: no plan name; 2026-11-14: no plan wording
       expect(d).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     });
   }
@@ -84,7 +84,7 @@ describe('approved wording (spec A3)', () => {
   it('get_market_dcpi_rank: verdict and composite free, sub-scores and narrative Pro (owner 2026-10-31; no plan name, no price)', () => {
     expect(descOf('get_market_dcpi_rank')).not.toMatch(/paid plans|credit pack|\b(Pro|Developer|Starter)\b|\$\s?\d/);
     expect(descOf('get_market_dcpi_rank')).toContain(
-      'Verdict and composite score are free; numeric sub-scores and the narrative come with the DC Hub plan that includes every tool.');
+      'Verdict and composite score are free; numeric sub-scores and the narrative come with a full-access key.');   // owner listing rule 2026-11-14
   });
   it('no new copy carries a price or an em dash', () => {
     for (const n of ['compare_sites', 'get_grid_intelligence', 'get_market_dcpi_rank']) {

@@ -114,11 +114,17 @@ describe('instructions', () => {
 describe('repo docs', () => {
   const read = (p) => readFileSync(join(ROOT, p), 'utf8');
   it('each free-tier summary carries it right after the decision-tools clause', () => {
-    const docs = ['README.md', 'REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md',
-      'npm-launcher/README.md'];
+    // 2026-11-15 (owner, MCP Ecosystem PR review): the npm README names no tier, so it no longer quotes it.
+    const docs = ['README.md', 'REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md'];
     for (const p of docs) expect(read(p), p).toContain(CLAUSE + '. ' + OWNER_LINE);
   });
   // 2026-11-14 (owner, MCP Ecosystem PR review): the publish surfaces (smithery.yaml, mcp-server.json, dxt, npm README) name no plan, free tier or pricing page.
+  it('the npm README states no free-key quota', () => {
+    const t = read('npm-launcher/README.md');
+    expect(t).not.toContain(OWNER_LINE);
+    expect(t).not.toMatch(/full answers|calls\/day|free[- ]tier|paid plans|dchub\.cloud\/pricing/i);
+    expect(t).toContain('`DCHUB_API_KEY` is optional');
+  });
   it('mcp-server.json carries neither the tier rule nor the plans pointer', () => {
     const d = JSON.parse(read('mcp-server.json')).description;
     expect(d).not.toContain(TC._freeTierRuleText());

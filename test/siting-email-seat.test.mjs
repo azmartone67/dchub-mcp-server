@@ -303,15 +303,18 @@ describe('B) an email-bound key', () => {
 });
 
 describe('E) the published clause', () => {
-  it('is built from the enforced number, rides the handshake and the claim/bind siblings, names no plan or price', () => {
+  it('is built from the enforced number, rides the claim/bind siblings (not the handshake), names no plan or price', () => {
     // execute_plan left the clause with DCHUB_PLAN_STEPS_CALLER_KEY on (its steps are each tool's own answer).
     const clause = L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH, { planCallerKey: true });
     expect(clause).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas a month');
     expect(L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH)).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas and execute_plan each a month');
     expect(L.sitingFreeClause(2)).toContain('2 full site_selection_canvas');
     expect(clause).not.toMatch(PLAN_OR_PRICE);
-    expect(S._INSTRUCTIONS_LEAN).toContain(clause);
-    expect(S._INSTRUCTIONS).toContain(clause);
+    // Owner decision 2026-11-15: the handshake and the full text carry the two free offers, not this clause;
+    // it still rides on the claim/bind siblings (free_tier_siting_tools).
+    expect(S._INSTRUCTIONS_LEAN).not.toContain(clause);
+    expect(S._INSTRUCTIONS).not.toContain(clause);
+    expect(S._INSTRUCTIONS_LEAN).toContain('1 free Land & Power map search a month');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('need a paid DC Hub plan');
     expect(S._sitingFreeClause({ DCHUB_NOEMAIL_PREVIEW_ONLY: '0' })).toBe('');
   });

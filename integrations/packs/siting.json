@@ -1,7 +1,7 @@
 {
   "pack": "siting",
   "endpoint": "https://dchub.cloud/mcp/siting",
-  "version": "2.12.55",
+  "version": "2.12.57",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
@@ -24,11 +24,11 @@
     },
     {
       "name": "analyze_site",
-      "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a free key adds factor bands, substation distance bands and a few free full site reports each month; other scores and figures need a paid DC Hub plan. Ex: \"Score 33.45,-112.07 for 100 MW.\" For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a free key adds factor bands, substation distance bands and a few free full site reports each month; other scores and figures need a full-access key. Ex: \"Score 33.45,-112.07 for 100 MW.\" For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "compare_sites",
-      "description": "Use this when the user has 2-4 candidate data center sites and asks which is best. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Keyless returns each site's verdict band and power band, with the other factors named; a free key adds names and counts without figures; scores and figures need a paid DC Hub plan, as does the pick. Ex: \"Phoenix vs Ashburn for 50 MW?\" For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user has 2-4 candidate data center sites and asks which is best. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Keyless returns each site's verdict band and power band, with the other factors named; a free key adds names and counts without figures; scores and figures need a full-access key, as does the pick. Ex: \"Phoenix vs Ashburn for 50 MW?\" For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "rank_sites",
@@ -44,7 +44,7 @@
     },
     {
       "name": "site_selection_canvas",
-      "description": "Use this when the user wants guided data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the Data Center Power Index. Answers \"where should I build 100 MW in Texas by 2028\". Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user wants guided data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a full-access key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the Data Center Power Index. Answers \"where should I build 100 MW in Texas by 2028\". Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "get_market_intel",
@@ -56,7 +56,7 @@
     },
     {
       "name": "get_water_risk",
-      "description": "Use this when the user asks about water stress or cooling-water risk at a data center site (execute_plan covers a multi-factor site verdict). Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: \"Is this Phoenix parcel water-constrained for a 100MW build?\" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location=\"phoenix\"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market's PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks about water stress or cooling-water risk at a data center site (execute_plan covers a multi-factor site verdict). Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: \"Is this Phoenix parcel water-constrained for a 100MW build?\" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location=\"phoenix\"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market's PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Works with no key. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "get_disaster_risk",
@@ -92,7 +92,7 @@
     },
     {
       "name": "unlock_more_data",
-      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Paid plans: on the page behind the human_url link. Want the FREE tier instead (no payment, previews plus 2 full answers per tool per day, 50/day with an email)? Call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. Want a free key instead (no payment, previews plus 2 full answers per tool per day, 50/day with an email)? Call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "summarize_for_citation",

@@ -342,7 +342,7 @@ describe('G) the relay line says "free-tier limit" only when a limit was hit', (
       const c = seat();
       S._limitHit(c, st);
       const line = S._ctxALS.run(c, () => S._relayLead('get_grid_data', {}));
-      expect(line).toMatch(/^Your AI assistant hit DC Hub’s free-tier limit on get_grid_data; an email gets a free key with \d+ calls a day$/);
+      expect(line).toMatch(/^Your AI assistant hit DC Hub’s limit on get_grid_data; free: 50 MCP calls\/day with an email$/);   // owner 2026-11-15
     });
   }
   it('a caller with an email on file is not told to add one; a paid boundary is unchanged', () => {

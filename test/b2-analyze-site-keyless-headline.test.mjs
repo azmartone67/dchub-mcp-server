@@ -291,7 +291,7 @@ describe('B2 description matches behaviour (flips A3)', () => {
   // 2026-10-11 (owner): states what keyless really gets (the verdict and power bands) and the free monthly runs.
   const DESC_B2 = 'Keyless returns the verdict band, the power band, the weakest factor and counts; '
     + 'a free key adds factor bands, substation distance bands and a few free full site reports each month; '
-    + 'other scores and figures need a paid DC Hub plan.';   // no plan name
+    + 'other scores and figures need a full-access key.';   // no plan name, no plan wording (owner listing rule 2026-11-14)
   it('analyze_site says keyless gets the headline, and keyless does', async () => {
     const d = TOOLS.analyze_site.description;
     expect(d).toContain(DESC_B2);

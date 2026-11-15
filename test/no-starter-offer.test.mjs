@@ -273,8 +273,9 @@ describe('what every client reads before it calls anything', () => {
     const tool = (JSON.parse(json).result?.tools || []).find((t) => t.name === 'unlock_more_data');
     expect(tool, 'tools/list has no unlock_more_data').toBeTruthy();
     // ★2026-10-02: the description names no plan price any more (owner rule
-    // 09-27); the non-vacuity anchor is the plans line it points at instead.
-    expect(tool.description).toContain('Paid plans: on the page behind the human_url link');
+    // 09-27); the non-vacuity anchor is the options line it points at instead.
+    // 2026-11-15 (owner listing rule 2026-11-14): that line names no plan either.
+    expect(tool.description).toContain('Full-access options: on the page behind the human_url link');
     expect(starterOffers(tool)).toEqual([]);
   });
 });

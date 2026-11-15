@@ -1,7 +1,7 @@
 {
   "pack": "fiber",
   "endpoint": "https://dchub.cloud/mcp/fiber",
-  "version": "2.12.55",
+  "version": "2.12.57",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
@@ -16,7 +16,7 @@
   "tools": [
     {
       "name": "get_fiber_intel",
-      "description": "Use this when the user asks about fiber routes, carriers or connectivity for a market: long-haul, metro, dark or IX routes. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a paid key. Ex: \"Zayo long-haul routes via Dallas.\" For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks about fiber routes, carriers or connectivity for a market: long-haul, metro, dark or IX routes. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a full-access key. Ex: \"Zayo long-haul routes via Dallas.\" For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "get_metro_fiber",
@@ -52,7 +52,7 @@
     },
     {
       "name": "unlock_more_data",
-      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Paid plans: on the page behind the human_url link. Want the FREE tier instead (no payment, previews plus 2 full answers per tool per day, 50/day with an email)? Call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. Want a free key instead (no payment, previews plus 2 full answers per tool per day, 50/day with an email)? Call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "summarize_for_citation",

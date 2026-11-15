@@ -32,7 +32,7 @@ const payload = (pricing) => ({
 const masked = (b) => {
   const o = { ...b };
   for (const k of ['asking_rate', 'asking_rate_range', 'vacancy_percent', 'deal_size', 'unit']) if (k in o) o[k] = null;
-  return { ...o, rates_withheld: true, rates_note: 'Broker lease rates (CBRE/JLL): available on paid plans' };
+  return { ...o, rates_withheld: true, rates_note: 'Broker lease rates (CBRE/JLL): withheld from this answer' };   // owner 2026-11-15: no "paid plans"
 };
 
 describe('market_pricing survives the free-tier trims, masked', () => {
@@ -66,6 +66,7 @@ describe('market_pricing survives the free-tier trims, masked', () => {
     expect(text).toContain('"market_pricing"');
     expect(text).not.toContain('"asking_rate":215');
     expect(text).not.toContain('"vacancy_percent":2');
-    expect(text).toContain('available on paid plans');
+    expect(text).toContain('Broker lease rates (CBRE/JLL): withheld from this answer');
+    expect(text).not.toContain('paid plan');
   });
 });

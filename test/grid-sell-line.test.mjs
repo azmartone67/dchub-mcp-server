@@ -162,7 +162,8 @@ describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])
       expect(t).not.toContain('30-day grid emergencies. The full');
       // Owner 2026-10-08: the grid brief has no free allowance any more; v1's header is the
       // missed-upgrade prompt naming Developer (test/free-decision-tools-preview-only).
-      if (!pc) { expect(t).toMatch(/This answer hid /); expect(t).toMatch(/a paid DC Hub plan/); expect(t).not.toMatch(/Free full answers left today/); }
+      // Owner 2026-11-15: the hid-line says the fields are withheld, with no plan wording.
+      if (!pc) { expect(t).toMatch(/This answer hid /); expect(t).toMatch(/those fields are withheld from this answer/); expect(t).not.toMatch(/Free full answers left today/); }
       else expect(t).toMatch(/^Tell the user: "This answer hid /);            // v2's own missed-lead copy
     } finally { off(); restore(); }
   });

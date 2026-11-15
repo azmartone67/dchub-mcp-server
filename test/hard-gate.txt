@@ -325,6 +325,7 @@ test/invalid-param-hint.test.mjs
 test/item1-wall-neutral-line.test.mjs
 test/key-never-worse-than-anon.test.mjs
 test/keyed-budget-per-key-826.test.mjs
+test/keyless-first-full-gating.test.mjs
 test/keyless-first-full.test.mjs
 test/keyless-full-trial-http.test.mjs
 test/keyless-full-trial.test.mjs
@@ -607,10 +608,12 @@ test/time-to-power-one-name.test.mjs
 test/tool-aliases-resolve.test.mjs
 test/tool-count-drift.test.mjs
 test/tool-description-honesty.test.mjs
+test/tool-descriptions-no-plan-or-price.test.mjs
 test/tool-guide-pointers.test.mjs
 test/tool-maturity-annotation.test.mjs
 test/tool-maturity-held-during-mcp-freeze.test.mjs
 test/tool-output-has-no-bare-conversion-link.test.mjs
+test/tool-results-no-plan-or-price.test.mjs
 test/tools-list-keeps-do-not-use.test.mjs
 test/tools-list-one-lead.test.mjs
 test/toolspec-is-real.test.mjs
