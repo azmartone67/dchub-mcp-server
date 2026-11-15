@@ -130,6 +130,7 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
+import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
@@ -5395,6 +5396,18 @@ export function isBotOrInternalCtxForSiteLane(c) {
 // Without a session there is nothing to count, so neither helper calls the backend.
 function _isRealSession(sessionId) {
   return !!sessionId && sessionId !== 'no-session';
+}
+// B9 (owner 2026-11-14): a session id is a TOKEN (the SDK mints UUIDs; ChatGPT's is 'oai-<hex>'). A stateless
+// tools/call used to take the raw Mcp-Session-Id header as the call's session, so a client that sent a header
+// LIST there ("Content-Type, Mcp-Session-Id, ...", or two joined copies) put that list into every URL built
+// from the session: execute_plan's rank_markets step answered redeem_url
+// "https://dchub.cloud/api/v1/redeem/Content-Type, Mcp-Session-Id, X-API-Key", and X-MCP-Session carried it to
+// the backend. Anything that is not one token is no session at all.
+const _SESSION_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._~:-]{0,199}$/;
+export function _sessionIdToken(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  return _SESSION_TOKEN_RE.test(s) ? s : null;
 }
 
 async function trackPaidHit(sessionId, toolName) {
@@ -19991,15 +20004,25 @@ export function _planUnmatchedPlace(text, d) {
     if (!st || (Array.isArray(d.states) && d.states.length > 1)) return null;
     if (d.coords || d.__citySlug || d.market) return null;
     if (d.__outlook && d.__outlook.slug) return null;
+    // A name the index tracks in ANOTHER state ("Springfield, IL": tracked only as Springfield, MA) stays
+    // unresolved (_outlookUnresolvedNote): no fallback market and no geocoded point stand in for it.
+    if (d.__outlook && d.__outlook.unresolved) return null;
     const names = _planStateNamesFor(String(st).toUpperCase()).map((n) => n.replace(/\s+/g, '\\s+'));
     const stAlt = [...names, String(st).toUpperCase()].join('|');
     // Case-blind for the state name ("ohio"); the place itself must be capitalised (checked below).
     const re = new RegExp('(?:^|\\b(?:near|in|around|outside|of|at|by|for)\\s+|\\s)([A-Za-z]+(?:[ -][A-Za-z]+){0,2}),?\\s+(?:' + stAlt + ')\\b', 'gi');
     for (const m of String(text || '').matchAll(re)) {
       // Leading question or verb words are not part of a place ("Is Okemah, Oklahoma" -> Okemah).
-      const words = m[1].trim().split(/[ -]+/);
-      while (words.length && _PLAN_PLACE_NOT_TOWN.test(words[0])) words.shift();
-      if (!words.length || words.some((w) => _PLAN_PLACE_NOT_TOWN.test(w) || !/^[A-Z][a-z]+$/.test(w))) continue;
+      // B1 (2026-11-14): the place is the run of capitalised words that ENDS at the state. The regex
+      // takes up to three words, so "gas near Sweetwater TX" captured "gas near Sweetwater" and was
+      // rejected whole, and matchAll never retried "Sweetwater" (the span was consumed).
+      const all = m[1].trim().split(/[ -]+/);
+      const words = [];
+      for (let i = all.length - 1; i >= 0; i--) {
+        if (_PLAN_PLACE_NOT_TOWN.test(all[i]) || !/^[A-Z][a-z]+$/.test(all[i])) break;
+        words.unshift(all[i]);
+      }
+      if (!words.length) continue;
       const phrase = words.join(' ');
       if (_PLAN_STATE_NAMES[phrase.toLowerCase()]) continue;
       return { phrase, state: String(st).toUpperCase() };
@@ -20710,6 +20733,15 @@ export const _PLAN_CLASSES = [
       // the state from _planLeadState (text, then the bound market, then the city table).
       const where = _planAirPermitWhere(d);
       const st = _planLeadState(d);
+      // B1 (owner 2026-11-14): an air-permit question is a siting question for on-site generation, so the
+      // plan also reads power: the bound DCPI market's card (verdict + time-to-power band), else the
+      // state's power-availability timeline. Neither bound: no step (the place is unresolved).
+      const mk = d && d.__outlook && typeof d.__outlook.slug === 'string' && d.__outlook.slug ? d.__outlook.slug : null;
+      const power = mk
+        ? { tool: 'get_market_dcpi_rank', args_hint: { market_slug: mk },
+            why: 'The Data Center Power Index card for the market the site is in: BUILD/CAUTION/AVOID verdict and its time-to-power band, so the permit read comes with the grid side of the same decision.' }
+        : (st ? { tool: 'get_power_availability_timeline', args_hint: { state: st },
+            why: 'Time to power for the state the site is in (dated, per lane), so the permit read comes with the grid side of the same decision.' } : null);
       return [
         { step: 1, tool: 'get_air_permit_context', depends_on: [], estimated_calls: 1,
           why: 'EPA Green Book designations for the county the site is in (US-wide) plus TCEQ-listed gas-turbine air permits of 20 MW or more within the radius (Texas only), each dated and cited.',
@@ -20717,6 +20749,8 @@ export const _PLAN_CLASSES = [
         { step: 2, tool: 'get_permitting_intel', depends_on: [], estimated_calls: 1,
           why: 'Local moratoriums and zoning restrictions: the other permitting axis. Independent, runs in parallel.',
           args_hint: { state: st || '<2-letter US state, e.g. TX>' } },
+        ...(power ? [{ step: 3, tool: power.tool, depends_on: [], estimated_calls: 1,
+          why: power.why, args_hint: power.args_hint }] : []),
       ];
     },
     alternatives: [
@@ -22487,7 +22521,15 @@ export function _planWorkflowConfidence(seq, d) {
 //         water class only placed second, and water reads the bound place (location=<market>);
 //         the queue answer says the queue WAS filtered server-side when state= was applied, and
 //         one time-to-power value on every row reads as an ISO-wide estimate, not "32.6-32.6".
-export const PLANNER_VERSION = '5.27';
+//  5.28 = NAMED TOWNS, POWER BESIDE PERMITS, ONE PROVENANCE (owner wave 2, 2026-11-14): a town named
+//         beside its state that DC Hub tracks as no market ("near Sweetwater TX") is geocoded once per run
+//         (GET /api/v1/geocode) and fills the steps that wait on a point, instead of skipping them with
+//         "missing lon"; the air_permits class reads power too (the bound market's DCPI card, else the
+//         state's power timeline); "how fast / how soon can I get power" is a time-to-power ask; a
+//         one-ISO state queue read names the market's own grid when the queue is not it (Reno: WECC, the
+//         NV rows are CAISO's); get_grid_scoreboard gets 5 s inside a plan; and the plan's answer carries
+//         provenance once (each step keeps its as_of, completeness and cite_as).
+export const PLANNER_VERSION = '5.28';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22619,6 +22661,16 @@ const _EXEC_STEP_TIMEOUT_MS = 20000;
  */
 // The floor a Capacity Source step gets when it runs after a slow plan (see capReserve in execute_plan).
 export const _CAPACITY_STEP_MIN_MS = 6000;
+// D1 (owner 2026-11-14): inside a plan, get_grid_scoreboard gets 5 s. It fans out to every grid feed it
+// ranks, so it is the step that sets a grid plan's wall time, and a plan waits for its slowest step. Past
+// 5 s the step reads timed_out (answer_guide says to call it directly; it is not reported as no data) and the
+// plan answers from its other steps. DCHUB_PLAN_SCOREBOARD_MS overrides (1000-20000).
+export const _EXEC_SCOREBOARD_MS_DEFAULT = 5000;
+export function _execStepCapMs(tool, env = process.env) {
+  if (tool !== 'get_grid_scoreboard') return _EXEC_STEP_TIMEOUT_MS;
+  const v = parseInt(String((env && env.DCHUB_PLAN_SCOREBOARD_MS) || ''), 10);
+  return Number.isFinite(v) && v >= 1000 && v <= _EXEC_STEP_TIMEOUT_MS ? v : _EXEC_SCOREBOARD_MS_DEFAULT;
+}
 export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEOUT_MS) {
   return Math.max(0, Math.min(stepMs, deadlineMs - elapsedMs));
 }
@@ -22782,7 +22834,11 @@ function _dropReason(v) {
   const s = v.replace(/\s+/g, ' ').trim().replace(/^[a-z0-9_]+(?:=\S+)? was (?:asked and )?NOT applied:\s*/i, '');
   return s.length > _DROP_REASON_MAX ? s.slice(0, _DROP_REASON_MAX - 1) + '…' : s;
 }
-export function _execDroppedFilters(executed, fullByEntry) {
+// B2 (owner 2026-11-14): the utility that runs the grid in a non-ISO state's tracked markets, named when a
+// state queue read came back from an ISO that is not it (Reno: NV Energy, WECC; the NV rows are CAISO's).
+const _NON_ISO_UTILITY = Object.freeze({ NV: 'NV Energy', AZ: 'APS, SRP or TEP' });
+// `place` (optional): the market the plan bound, {name, state, iso} (_planSignals __outlook).
+export function _execDroppedFilters(executed, fullByEntry, place = null) {
   const out = [];
   const seen = new Set();
   const add = (e, param, reason, kind) => {
@@ -22837,7 +22893,15 @@ export function _execDroppedFilters(executed, fullByEntry) {
           && r.freshness_by_iso && typeof r.freshness_by_iso === 'object') {
         const isos = Object.keys(r.freshness_by_iso);
         if (isos.length === 1) {
-          add(e, 'state', `queue rows for ${String(e.args.state).toUpperCase()} come only from ${isos[0]}'s queue; `
+          const st = String(e.args.state).toUpperCase();
+          const pIso = place && typeof place.iso === 'string' ? place.iso.toUpperCase() : '';
+          const own = place && place.name && String(place.state || '').toUpperCase() === st && pIso
+            && pIso.replace(/[^A-Z]/g, '') !== String(isos[0]).toUpperCase().replace(/[^A-Z]/g, '')
+            ? `${place.name} is on ${_NON_ISO_UTILITY[st] ? _NON_ISO_UTILITY[st] + "'s grid (" + pIso + ')' : pIso}, not ${isos[0]}, `
+              + `so none of these rows is ${place.name}'s own interconnection queue, and DC Hub does not read `
+              + `${_NON_ISO_UTILITY[st] ? _NON_ISO_UTILITY[st] + "'s" : 'that utility\'s'} queue; `
+            : '';
+          add(e, 'state', `queue rows for ${st} come only from ${isos[0]}'s queue; ` + own
             + `projects in a queue DC Hub does not read (a utility outside the ISOs it covers) are not in this answer`, 'coverage');
         }
       }
@@ -23241,7 +23305,8 @@ const _CONSTRAINT_NOUNS = [
   // Last in the table, so it never takes a lead slot from the rows above. `plannedOnly`: a runner-up
   // class that merely WEIGHED a verdict tool does not count as covering it (the Abilene plan's runner-up
   // led with one, so the ask was "considered" and never run).
-  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b/i,
+  // B1 (2026-11-14): "how fast / how soon / how quickly can I get N MW of power" is the same ask in words.
+  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b|\bhow\s+(?:fast|soon|quickly)\b[^.?!]{0,60}\b(?:power|energi[sz]e|interconnect\w*)\b/i,
     tools: ['get_market_dcpi_rank', 'get_power_availability_timeline', 'site_selection_canvas', 'rank_markets',
       'ai_capacity_index', 'grid_transition_radar', 'get_grid_intelligence', 'get_market_context',
       'get_iso_context', 'compare_isos', 'deal_autopsy', 'get_dchub_recommendation', 'simulate_scenario',
@@ -23678,6 +23743,77 @@ export function _planPlaceFallback(seq, text, d) {
   } catch (_e) { return null; }
 }
 
+// B1 (owner 2026-11-14): "behind-the-meter gas near Sweetwater TX: air permits" planned
+// get_air_permit_context with '<site lat>' / '<site lon>', and execute_plan skipped it ("missing lon"):
+// a town DC Hub tracks as no market has no point in the planner's tables. The planner stays offline and
+// deterministic, so it only NAMES the place on each step that waits on a point (`geocode: "Sweetwater, TX"`);
+// execute_plan resolves it once per run through the backend geocoder (GET /api/v1/geocode, the one the
+// fiber route planner uses) and fills the step's lat/lon. Two kinds of place: a town named beside its
+// state (_planUnmatchedPlace), and a DCPI market the text named (_planSignals __outlook: "How fast can a
+// 300 MW data center near Abilene TX get power?" planned analyze_site with '<site lat>' and skipped it).
+// A bare town name ("near Lubbock") is not geocoded: it could be in any state.
+const _PLAN_POINT_PLACEHOLDER = /^<[^>]*\b(?:lat|lon|latitude|longitude)\b[^>]*>$/i;
+export function _planGeocodeTargets(seq, text, d) {
+  try {
+    if (!Array.isArray(seq) || !d || d.coords) return null;
+    const up = _planUnmatchedPlace(text, d);
+    const o = d.__outlook;
+    const mk = !up && o && typeof o.name === 'string' && o.name && typeof o.state === 'string' && /^[A-Z]{2}$/.test(o.state)
+      ? { phrase: o.name, state: o.state, basis: 'market' } : null;
+    const place = up ? { ...up, basis: 'town' } : mk;
+    if (!place) return null;
+    const query = place.phrase + ', ' + place.state;
+    let n = 0;
+    for (const s of seq) {
+      const h = s && s.args_hint;
+      if (!h || typeof h !== 'object') continue;
+      const ph = (v) => typeof v === 'string' && _PLAN_POINT_PLACEHOLDER.test(v.trim());
+      if (ph(h.lat) && ph(h.lon)) { s.geocode = query; if (place.basis === 'market') s.geocode_basis = 'market'; n += 1; }
+    }
+    return n ? { query, phrase: place.phrase, state: place.state, basis: place.basis, steps: n } : null;
+  } catch (_e) { return null; }
+}
+// execute_plan: one geocoder read per distinct `geocode` query in the plan, then each waiting step's
+// lat/lon placeholders are replaced in a COPY of its args_hint. A miss, an error or a point outside the
+// named state leaves the placeholders, and the step is skipped as before (and `geocoded` says why).
+// fetchPoint(query) -> {lat, lng, label, source} | null; injectable for tests.
+export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
+  const queries = [...new Set((Array.isArray(seq) ? seq : []).map((s) => s && s.geocode).filter((q) => typeof q === 'string' && q))];
+  if (!queries.length) return null;
+  const out = [];
+  for (const q of queries) {
+    let pt = null; let why = null;
+    try {
+      pt = await Promise.race([fetchPoint(q), new Promise((r) => { const t = setTimeout(() => r('__timeout'), timeoutMs); if (t && t.unref) t.unref(); })]);
+      if (pt === '__timeout') { pt = null; why = 'the geocoder did not answer within ' + timeoutMs + ' ms'; }
+    } catch (_e) { pt = null; why = 'the geocoder call failed'; }
+    const lat = pt && Number(pt.lat), lon = pt && Number(pt.lng != null ? pt.lng : pt.lon);
+    const ok = pt && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+    // The label must carry the state the text named, so "Springfield, MO" never lands in Illinois.
+    const st = q.split(',').pop().trim().toUpperCase();
+    const label = ok && typeof pt.label === 'string' ? pt.label : '';
+    const stateOk = ok && (!label || new RegExp('\\b(?:' + [st, ..._planStateNamesFor(st)].map((x) => x.replace(/\s+/g, '\\s+')).join('|') + ')\\b', 'i').test(label));
+    if (ok && stateOk) {
+      const p = { lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5 };
+      let steps = 0;
+      for (const s of seq) {
+        if (!s || s.geocode !== q || !s.args_hint) continue;
+        s.args_hint = { ...s.args_hint, lat: p.lat, lon: p.lon };
+        steps += 1;
+      }
+      const basis = seq.some((s) => s && s.geocode === q && s.geocode_basis === 'market') ? 'market' : 'town';
+      out.push({ query: q, lat: p.lat, lon: p.lon, ...(label ? { label } : {}), ...(pt.source ? { source: String(pt.source) } : {}),
+        basis, steps, note: basis === 'market'
+          ? `The point for "${q}" came from a geocoder and stands for the market's town centre, not a parcel.`
+          : `"${q}" is not a market DC Hub tracks; its point came from a geocoder and stands for the town, not a parcel.` });
+    } else {
+      out.push({ query: q, resolved: false,
+        note: why || (ok ? `the geocoder placed "${q}" outside ${st} (${label}), so it was not used` : `the geocoder found no point for "${q}"`) });
+    }
+  }
+  return out;
+}
+
 export function _constraintLeadSteps(text, d, considered, planned) {
   const out = [];
   try {
@@ -24108,6 +24244,8 @@ export function _planQuery(intent, context) {
   _planBindIntentArgs(seq, d);
   // 5.27: the window the intent names reaches the steps that take a date (_planBindWindowArgs).
   _planBindWindowArgs(seq, d);
+  // B1 (2026-11-14): a step waiting on a point names the town to geocode (execute_plan resolves it).
+  _planGeocodeTargets(seq, text, d);
   // 2026-11-12: the Capacity Source step closes the plan (see _capacityProcurementStep).
   _capacityStepLast(seq);
   // intent_confidence: deterministic function of the winning score + margin.
@@ -24412,6 +24550,9 @@ function _sourceLineCb(name, fn) {
       _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
       _final = _previewFooterStep(_final, name, c);
+      // D1 (owner 2026-11-14): execute_plan carries provenance once, in the plan's own block; each step keeps a
+      // pointer with its as_of and completeness (lib/plan-provenance-once.mjs). After every stamp, before the budget.
+      if (name === 'execute_plan') _final = _planProvenanceOnceStep(_final, { skip: !!c.loopback_step });
       // Item 5 (Grok live review 2026-11-13): data rows ahead of the relay / upsell keys, and a 30 KB budget per
       // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
       // The budget is for free / anonymous callers only; paid and unknown tiers keep every row (owner 11-14).
@@ -30716,6 +30857,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // and constraint leads; it still does: one step is held for it, so a cut drops those first, and it
       // gets at least _CAPACITY_STEP_MIN_MS even when the earlier waves used the budget.
       const capReserve = (maxSteps > 1 && seq.some((x) => x && x.routing === 'capacity_procurement')) ? 1 : 0;
+      // B1 (2026-11-14): a step that waits on a point for a named town gets it from the geocoder (_execGeocodePlan).
+      let _geocoded = null;
+      try {
+        _geocoded = await _execGeocodePlan(seq, async (q) => {
+          const g = await callAPI('/api/v1/geocode', { address: q }, { timeout: 4000 });
+          return g && !g.error && g.lat != null ? g : null;
+        });
+      } catch (_e) { _geocoded = null; }
       for (const wave of waves) {
         const doable = [];
         const deferred = [];
@@ -30777,7 +30926,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             const geo = _execInjectGeo(s.tool, args, _sig);
             const budget = s.routing === 'capacity_procurement'
               ? Math.max(_CAPACITY_STEP_MIN_MS, _execStepBudget(Date.now() - t0, DEADLINE_MS))
-              : _execStepBudget(Date.now() - t0, DEADLINE_MS);
+              : _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool));
             return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent),
               subScope: _execSubmarketOut(s.tool, out, _sig) }));
           }));
@@ -30857,7 +31006,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // [#210] was a hardcoded 15000 — it escaped _EXEC_STEP_TIMEOUT_MS entirely,
           // and because this retry is sequential AFTER the parallel wave, its budget
           // STACKED on the wave's rather than sharing it.
-          const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS));
+          const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool)));
           const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
           const subScope2 = _execSubmarketOut(s.tool, out2, _sig);
           calls += 1;
@@ -31026,9 +31175,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 11-09: the lead names undated steps, then live-export queue steps labelled collected.
       const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
       // 5.25: what a step did not apply, with its own reason (_execDroppedFilters); named after UNDATED.
-      const _dropped = _execDroppedFilters(executed, fullByEntry);
+      const _dropped = _execDroppedFilters(executed, fullByEntry, _sig && _sig.__outlook ? _sig.__outlook : null);
       const _droppedLine = _execDroppedSentence(_dropped);
-      const _notes = [_undated, _droppedLine].filter(Boolean).join(' ');   // UNDATED, then DROPPED
+      // B1: a geocoded town is said as one (a town point, not a parcel), and a failed geocode says why.
+      const _geoLine = Array.isArray(_geocoded) && _geocoded.length
+        ? 'PLACE — ' + _geocoded.map((g) => (g.resolved === false
+          ? `"${g.query}" could not be placed (${g.note}); the steps that need a point did not run`
+          : g.basis === 'market'
+            ? `the point-based steps read the geocoded town point of "${g.query}" (${g.lat}, ${g.lon}); say the figures are for the town centre, not a specific parcel`
+            : `"${g.query}" is not a market DC Hub tracks, so the point-based steps read its geocoded town point (${g.lat}, ${g.lon}); say the figures are for that town, not a specific parcel`)).join('; ') + '.'
+        : '';
+      const _notes = [_undated, _droppedLine, _geoLine].filter(Boolean).join(' ');   // UNDATED, then DROPPED, then PLACE
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
@@ -31096,6 +31253,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...((_dropped.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { dropped_filters: _dropped } : {}),
+        ...((Array.isArray(_geocoded) && _geocoded.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { geocoded: _geocoded } : {}),
         ...((_gridRank && _gridRank.block && !_isCleanPlatform() && _answerBlocksAllowed()) ? { grid_ranking: _gridRank.block } : {}),
         ...(_rb ? { route_back: _rb.entries } : {}),
         ...(_ho ? { handoff: _ho.field } : {}),
@@ -38082,7 +38240,7 @@ app.post(MCP_PATHS, async (req, res) => {
         developer_id: validation.developer_id || null,
         email: validation.email || null,
         // stale id → still the backend funnel key; none → ChatGPT's conversation id (r-oai-session-sid)
-        session_id: sessionId || _planLoopbackSid || _openaiSessionSid(body) || null,
+        session_id: _sessionIdToken(sessionId) || _planLoopbackSid || _openaiSessionSid(body) || null,
         // ★ Recovered raw clientInfo.name — without this the telemetry row's
         // client_name falls back to the generic platform and the identity view
         // classifies the call as 'mcp'.
