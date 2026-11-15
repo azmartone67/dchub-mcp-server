@@ -40,12 +40,28 @@ const STUB_WALLS = ['list_transactions', 'compare_isos', 'get_pipeline', 'hypers
 const ROWS = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: 'Row ' + i, market: 'dallas', capacity_mw: 100 + i, score: 50 + i }));
 let H, fence, tools, anonCount = 0;
 const events = [];
-const CLIENT_PORTS = new Set();
+// The local ports of this file's OPEN client sockets. The server sees those sockets as an outside peer;
+// every other socket on the harness port (execute_plan's own loopback steps) stays 127.0.0.1, which is how
+// the server knows a call is a plan step (_isLoopbackPeer: the step's caller-IP and wall-sink tokens are
+// honoured from loopback only). Until 11-14 a port stayed in the set after its socket closed, and the OS
+// reuses freed ports (Linux reuses a TIME_WAIT port for loopback connects, tcp_tw_reuse=2). When the
+// server's pooled loopback socket for plan steps got such a port, every step on it read as an outside
+// caller at 203.0.113.7: counted against that shared IP (still cached at the soft cap's count 25 for up to
+// 60 s into the trial pass, _anonUsageCounts), not parked in the plan's wall sink, so the plan answer never
+// named it. That is the smoke flake "execute_plan ... prose names no email step [rows
+// site_selection_canvas/anon_daily_cap/line] [prose Cite as: ...]" (runs 43606608447, 43608315461,
+// 43610041178, 43610410951, 11-14): all five calls at once, because one pooled socket carries every step.
+// Reproduced exactly by making every socket on the port read as outside. A port now leaves on close.
+// PORT_REUSES counts server-side sockets whose peer port one of this file's closed sockets once held (each
+// one would have read as outside before the fix), printed in afterAll as evidence.
+const CLIENT_PORTS = new Set(), USED_PORTS = new Set(), _reused = new WeakSet(), PORT_REUSES = [];
 const _peer = net.Socket.prototype._getpeername;
 net.Socket.prototype._getpeername = function _getpeername() {
   const p = _peer.call(this);
-  return H && this.server && this.localPort === H.PORT && p && p.address && CLIENT_PORTS.has(p.port)
-    ? { ...p, address: '203.0.113.7' } : p;
+  if (!(H && this.server && this.localPort === H.PORT && p && p.address)) return p;
+  if (CLIENT_PORTS.has(p.port)) return { ...p, address: '203.0.113.7' };
+  if (USED_PORTS.has(p.port) && !_reused.has(this)) { _reused.add(this); PORT_REUSES.push(p.port); }
+  return p;
 };
 
 beforeAll(async () => {
@@ -65,6 +81,7 @@ beforeAll(async () => {
   tools = list.msg.result.tools.map((t) => t.name);
 }, 60_000);
 afterAll(async () => {
+  console.warn(`every-wall: ${PORT_REUSES.length} loopback socket(s) on a port a closed client socket had held (${USED_PORTS.size} client ports used)`, PORT_REUSES.slice(0, 20));
   if (STRAYS.length) console.warn(`every-wall: ${STRAYS.length} row(s) arrived during another call:`, STRAYS.slice(0, 20));
   net.Socket.prototype._getpeername = _peer;
   if (H) await H.stop(); if (fence) fence.restore();
@@ -86,7 +103,13 @@ function rpc(headers, body) {
         resolve({ msg, headers: res.headers });
       });
     });
-    req.on('socket', (sock) => { const note = () => CLIENT_PORTS.add(sock.localPort); if (sock.localPort) note(); else sock.once('connect', note); });
+    // The port leaves the set when this socket closes: the OS hands a freed port to the next connect, and
+    // execute_plan's own loopback steps (server -> 127.0.0.1) reading as this outside peer broke the plan
+    // (CLIENT_PORTS above).
+    req.on('socket', (sock) => {
+      const note = () => { const lp = sock.localPort; CLIENT_PORTS.add(lp); USED_PORTS.add(lp); sock.once('close', () => CLIENT_PORTS.delete(lp)); };
+      if (sock.localPort) note(); else sock.once('connect', note);
+    });
     req.on('error', reject);
     req.end(data);
   });

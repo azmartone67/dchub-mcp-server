@@ -84,7 +84,13 @@ function rpc(headers, body) {
         resolve({ msg, headers: res.headers });
       });
     });
-    req.on('socket', (sock) => { const note = () => CLIENT_PORTS.add(sock.localPort); if (sock.localPort) note(); else sock.once('connect', note); });
+    // The port leaves the set when this socket closes: the OS hands a freed port to the next connect, and
+    // execute_plan's own loopback steps (server -> 127.0.0.1) reading as this outside peer broke the plan
+    // (see test/every-wall-carries-an-offer.test.mjs, CLIENT_PORTS).
+    req.on('socket', (sock) => {
+      const note = () => { const lp = sock.localPort; CLIENT_PORTS.add(lp); sock.once('close', () => CLIENT_PORTS.delete(lp)); };
+      if (sock.localPort) note(); else sock.once('connect', note);
+    });
     req.on('error', reject);
     req.end(data);
   });
