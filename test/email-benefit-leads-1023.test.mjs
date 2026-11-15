@@ -14,7 +14,7 @@ const bindDesc = between("trackedTool(srv, 'bind_email',", '{ email: Sreq');
 describe('the email benefit sentence', () => {
   const t = _emailBenefitText();
   it('states the bound allowance, the decision-tool allowance and recovery', () => {
-    expect(t).toMatch(/^WHAT AN EMAIL GETS \(free, no card\): \d+ calls\/day \(up to \d+ full answers per tool per day\)/);
+    expect(t).toMatch(/^WHAT AN EMAIL GETS \(no card\): \d+ calls\/day \(up to \d+ full answers per tool per day\)/);
     expect(t).toMatch(/full answers a day each on the grid, queue and market-intel tools/);
     expect(t).toMatch(/recover_my_key/);
   });
