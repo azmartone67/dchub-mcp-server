@@ -282,7 +282,9 @@ describe('6) helpers and the published clause', () => {
     expect(on).not.toContain('execute_plan');
     expect(on).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas a month');
     expect(S._sitingFreeClause({ DCHUB_PLAN_STEPS_CALLER_KEY: '0' })).toContain('site_selection_canvas and execute_plan each a month');
-    expect(S._INSTRUCTIONS_LEAN).toContain(on);
+    // Owner decision 2026-11-15: the handshake carries the two free offers, not the siting clause; the clause
+    // still rides on claim_free_key / bind_email (free_tier_siting_tools).
+    expect(S._INSTRUCTIONS_LEAN).not.toContain(on);
     expect(on).not.toMatch(PLAN_OR_PRICE);
   });
   it('no off-loopback connection was attempted', () => {

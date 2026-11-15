@@ -31,7 +31,9 @@ describe('_boundaryPhrase', () => {
     expect(hits.length).toBe(1);                                  // the helper's own return
     // Grok QA 2026-11-12: the wall line lives once in _relayLead (execute_plan has its own line there);
     // the relay builder and both relay steps call it.
-    expect((code.match(/hit DC Hub\\u2019s ' \+ _boundaryPhrase\(tool\)/g) || []).length).toBe(1);
+    // Owner 2026-11-15: the person reads no tier label, so the internal 'free-tier limit' token is shown as "limit";
+    // the line still reads the helper exactly once.
+    expect((code.match(/const _bp = _boundaryPhrase\(tool\);\n\s*return 'Your AI assistant hit DC Hub\\u2019s ' \+ \(_bp === 'free-tier limit' \? 'limit' : _bp\)/g) || []).length).toBe(1);
     expect(code).toMatch(/message: _relayLead\(toolName\) \+/);
     expect((code.match(/= _relayLead\(name, sc0\) \+ '\. Open '/g) || []).length).toBe(2);
   });

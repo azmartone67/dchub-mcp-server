@@ -75,7 +75,8 @@ afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 describe('the output line', () => {
   it('points at the human_url link (never a pricing page) and states no monthly price', () => {
     // r-relay-contract (2026-10-06): no gate output names a pricing page; the unlock is human_url.
-    expect(_paidPlansOutputLine()).toBe('Paid plans: on the page behind the human_url link');
+    // owner 2026-11-15: no "paid plans" wording; the pointer the unlock_more_data description states.
+    expect(_paidPlansOutputLine()).toBe('Full-access options: on the page behind the human_url link');
     expect(_paidPlansOutputLine()).not.toMatch(/pricing|plans\//i);
     expect(PRICING_URL).toBe('https://dchub.cloud/pricing');
     expect(_paidPlansOutputLine()).not.toMatch(MONTHLY);
@@ -141,7 +142,7 @@ describe('tool OUTPUT on the auto-mint path', () => {
         const found = JSON.stringify(sc).match(/"upgrade_instructions":"((?:[^"\\]|\\.)*)"/);
         expect(found, `${tool}: no upgrade_instructions — the path under test did not run`).toBeTruthy();
         const text = JSON.parse('"' + found[1] + '"');
-        expect(text).toContain('Paid plans: on the page behind the human_url link');
+        expect(text).toContain('Full-access options: on the page behind the human_url link');   // owner 2026-11-15
         expect(text).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
         expect(text).not.toMatch(/\$49\/mo|\$99\/mo/);
         expect(text).not.toMatch(MONTHLY);
@@ -252,7 +253,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
       params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
     expect(instr).toContain('a one-time pack of 1,000 API credits');   // v14: no amount either; owner GO 2026-10-20: no card emoji
     expect(instr).not.toMatch(/\$\d/);
-    expect(instr).toContain('; Paid plans: on the page behind the human_url link) to relay to your human');
+    expect(instr).toContain('; Full-access options: on the page behind the human_url link) to relay to your human');   // owner 2026-11-15
     expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
   });
 });

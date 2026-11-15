@@ -244,9 +244,11 @@ describe('initialize instructions name no plan for the paid tools', () => {
     }
   });
 
-  it('/mcp carries the FREE TIER clause without a plan name', () => {
-    // Item 3 (owner draft 2026-10-16): the clause states the email allowance on grid/queue.
-    expect(served['/mcp']).toContain('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
+  it('/mcp carries the two free offers without a plan name or tier label', () => {
+    // Owner decision 2026-11-15: the labelled free-tier paragraph (and its grid/queue clause, item 3 of
+    // 2026-10-16) is replaced by the two offers in plain words.
+    expect(served['/mcp']).toContain('50 MCP calls/day with an email. 1 free Land & Power map search a month.');
+    expect(served['/mcp']).not.toMatch(/FREE TIER|previews on free/);
   });
 
   // Owner 2026-10-10: no plan name (Pro, Developer, Starter) in the served instructions; URLs and

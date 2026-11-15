@@ -619,17 +619,20 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
       expect(c).not.toMatch(/\$\d/);
     }
   });
-  it('initialize instructions (full, lean) and the FREE TIER block carry the rule AND the clause', () => {
-    expect(S._INSTR_FREE_TIER).toContain('Free key: previews plus 2 full answers per tool per day.');
-    expect(S._INSTR_FREE_TIER).toContain(CLAUSE);
-    expect(S._INSTRUCTIONS).toContain(CLAUSE);
-    expect(S._INSTRUCTIONS_LEAN).toContain(CLAUSE);
-    // the clause sits inside the FREE TIER block, before the closing line the lean text appends
-    // (item 1, owner 2026-10-16: "Past that, previews." replaced the PAID line)
+  it('initialize instructions (full, lean) carry the two free offers, not the labelled rule or the clause', () => {
+    // Owner decision 2026-11-15: the initialize block is the two offers in plain words, no tier label. The
+    // decision-tools clause still rides beside the rule on claim_free_key / bind_email (below).
+    const OFFERS = '50 MCP calls/day with an email. 1 free Land & Power map search a month.';
+    expect(S._INSTR_FREE_TIER.trim()).toBe(OFFERS);
+    for (const t of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
+      expect(t).toContain(OFFERS);
+      expect(t).not.toContain(CLAUSE);
+      expect(t).not.toContain('FREE TIER');
+    }
+    // the offers sit before the closing line the lean text appends (item 1, owner 2026-10-16)
     const lean = S._INSTRUCTIONS_LEAN;
-    expect(lean.indexOf('FREE TIER (quote verbatim):')).toBeLessThan(lean.indexOf(CLAUSE));
     expect(lean.indexOf('Past that, previews. ')).toBeGreaterThan(-1);
-    expect(lean.indexOf(CLAUSE)).toBeLessThan(lean.indexOf('Past that, previews. '));
+    expect(lean.indexOf(OFFERS)).toBeLessThan(lean.indexOf('Past that, previews. '));
   });
   it('claim_free_key: free_tier_rule is the pinned B1 sentence, byte for byte, and the clause rides beside it', async () => {
     const r = await callAs({}, 'claim_free_key', {});

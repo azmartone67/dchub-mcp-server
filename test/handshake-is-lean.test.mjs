@@ -64,7 +64,9 @@ describe('initialize instructions', () => {
     // Item 9 (owner 2026-11-11): the TOOL CHOICE line is folded into the canon sentence that opens the text.
     expect(instructions.startsWith(CANON_SENTENCE + ' ')).toBe(true);
     expect(instructions).not.toContain('TOOL CHOICE');
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
+    // Owner decision 2026-11-15: the free offers in plain words replace the labelled "FREE TIER" block.
+    expect(instructions).not.toContain('FREE TIER');
+    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', '50 MCP calls/day with an email', '1 free Land & Power map search a month', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
