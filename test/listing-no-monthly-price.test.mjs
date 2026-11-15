@@ -44,10 +44,13 @@ describe('listing surfaces carry no monthly price', () => {
     expect('$10 one-time pack of 1,000 API credits'.match(MONTHLY)).toBeNull();
   });
 
-  it('README states no pack price and points at /pricing', () => {
+  it('README states no pack price and carries no /pricing link', () => {
     const r = read('README.md');
-    // 2026-10-09: listing copy names no price (mcp#861); plans and prices live at /pricing.
+    // 2026-10-09: listing copy names no price (mcp#861). 2026-11-14 (owner listing rule): no /pricing link
+    // and no plan wording either; DCHUB_API_KEY is described as optional.
     expect(r).not.toContain('$10 one-time pack');
-    expect(r).toContain('https://dchub.cloud/pricing');
+    expect(r).not.toContain('https://dchub.cloud/pricing');
+    expect(r).not.toMatch(/free[- ]tier|paid plans?\b/i);
+    expect(r).toMatch(/`DCHUB_API_KEY` is optional/);
   });
 });

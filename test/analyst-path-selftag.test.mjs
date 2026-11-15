@@ -245,7 +245,11 @@ describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () 
 // value or an `mcp add` command) must carry the README's own tag. A snippet
 // quietly reverted to bare /mcp would make the channel invisible again with
 // every test still green, which is what this pins.
-describe('README install snippets carry the github-readme tag', () => {
+// 2026-11-15 (owner listing rule 2026-11-14): the only endpoint a public listing surface advertises is
+// https://dchub.cloud/mcp, so the README's pasteable URLs are the bare canonical endpoint. /mcp/github still
+// routes and still tags github-readme (the _pathSource test above); the README just no longer hands it out,
+// which trades the README channel's per-path attribution for one advertised endpoint.
+describe('README install snippets advertise the one canonical endpoint', () => {
   const README = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   const PASTE = [
     ...README.matchAll(/"(?:url|httpUrl|serverUrl)":\s*"(https:\/\/dchub\.cloud\/mcp[^"]*)"/g),
@@ -258,14 +262,16 @@ describe('README install snippets carry the github-readme tag', () => {
     expect(PASTE.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('every pasteable URL resolves to github-readme', () => {
-    for (const url of PASTE) {
-      expect(_pathSource({ path: new URL(url).pathname }), url).toBe('github-readme');
-    }
+  it('every pasteable URL is https://dchub.cloud/mcp', () => {
+    for (const url of PASTE) expect(url).toBe('https://dchub.cloud/mcp');
   });
 
-  it('the headline MCP link is tagged too', () => {
-    // 2026-10-06: no longer a clickable link (it returns raw JSON to a person); the tagged endpoint is still named.
-    expect(README).toContain('MCP endpoint `https://dchub.cloud/mcp/github`');
+  it('no task-path or profile endpoint is advertised (/mcp/github, /mcp/chatgpt, /mcp/core)', () => {
+    expect(README).not.toMatch(/https:\/\/dchub\.cloud\/mcp\/(github|chatgpt|core)\b/);
+  });
+
+  it('the headline MCP endpoint is the canonical one', () => {
+    // 2026-10-06: no longer a clickable link (it returns raw JSON to a person); the endpoint is still named.
+    expect(README).toContain('MCP endpoint `https://dchub.cloud/mcp`');
   });
 });
