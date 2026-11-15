@@ -21,6 +21,9 @@ import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.m
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 const UA = 'Claude-User/1.0 (+https://claude.ai)';
 const SHORT_ALPHA = '23456789abcdefghjkmnpqrstuvwxyz';
