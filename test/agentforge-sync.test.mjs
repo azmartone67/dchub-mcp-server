@@ -115,6 +115,20 @@ describe('planWrite', () => {
     expect(planWrite({ remote: remoteOf(), drift: [...tools, 'tags differ from TAGS in agentforge-sync.mjs'], hasKey: false }).why)
       .toBe('would PUT: tags differ from TAGS in agentforge-sync.mjs. AGENTFORGE_API_KEY is not set');
   });
+  // The dispatch input `recreate` is the only way to fix a stale tool list: DELETE, then POST.
+  it('recreate deletes and re-POSTs only a keyed listing whose tool list is stale', () => {
+    const tools = listingDrift(remoteOf({ tools: [{ name: 'get_grid_data' }] }), want);
+    expect(planWrite({ remote: remoteOf(), drift: tools, hasKey: true, recreate: true }))
+      .toMatchObject({ action: 'recreate', why: `delete ${remoteOf().id} and POST it again: ${tools[0]}` });
+    // requested, but nothing it would fix: the normal plan
+    expect(planWrite({ remote: remoteOf(), drift: ['tags differ from TAGS in agentforge-sync.mjs'], hasKey: true, recreate: true }).action).toBe('put');
+    expect(planWrite({ remote: remoteOf(), drift: [], hasKey: true, recreate: true }).action).toBe('none');
+    // no key, no listing to delete, or not requested: never a DELETE
+    expect(planWrite({ remote: remoteOf(), drift: tools, hasKey: false, recreate: true }).action).toBe('none');
+    expect(planWrite({ remote: null, drift: ['not listed'], hasKey: true, recreate: true }).action).toBe('post');
+    expect(planWrite({ remote: remoteOf({ id: undefined }), drift: tools, hasKey: true, recreate: true }).action).not.toBe('recreate');
+    expect(planWrite({ remote: remoteOf(), drift: tools, hasKey: true }).action).toBe('none');
+  });
   it('isToolDrift names only tool-list lines', () => {
     for (const d of ['not listed', 'short description differs from listing-copy.json',
       'long description differs from listing-copy.json', 'tags differ from TAGS in agentforge-sync.mjs',

@@ -22,6 +22,11 @@ on:
       - 'scripts/agentforge-sync.mjs'
       - '.github/workflows/agentforge-sync.yml'
   workflow_dispatch:
+    inputs:
+      recreate:
+        description: 'Delete the listing and POST it again (only when its tool list is stale). Then set AGENTFORGE_SERVER_ID to the new id.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,4 +50,5 @@ jobs:
         env:
           AGENTFORGE_API_KEY: ${{ secrets.AGENTFORGE_API_KEY }}
           AGENTFORGE_SERVER_ID: ${{ vars.AGENTFORGE_SERVER_ID }}
+          AGENTFORGE_RECREATE: ${{ inputs.recreate && '1' || '' }}
         run: node scripts/agentforge-sync.mjs
