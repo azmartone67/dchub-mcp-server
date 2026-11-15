@@ -11,7 +11,7 @@
 //    through to the backend.
 //
 // Drives the real /mcp tools/call path against a stub backend.
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 
 const KEY = 'dch_live_' + 'b0a7cafe'.repeat(4);
@@ -103,6 +103,9 @@ describe('a key the backend reused is announced as the same key', () => {
 });
 
 describe('an email-bound held key is never handed out on an IP + client match', () => {
+  // E4 (2026-11-14): the IP + client hand-back is off by default; these pin its behaviour under the restore switch.
+  beforeEach(() => { process.env.DCHUB_HELD_KEY_BY_IP = '1'; });
+  afterEach(() => { delete process.env.DCHUB_HELD_KEY_BY_IP; });
   it('unbound held key: the second claim gets it back without a backend mint', async () => {
     await claim();
     expect(claimBodies).toHaveLength(1);
