@@ -49,8 +49,9 @@ describe('the Smithery listing body', () => {
   it('states the canon endpoints and the $10 pack, and no retired price wording', () => {
     // the count is healed daily by sync-tools-manifest, so match it as \d+
     expect(SMITHERY).toMatch(/\b\d+ MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1\b/);
-    // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page.
-    expect(SMITHERY).toMatch(/paid plans: dchub\.cloud\/pricing/);
+    // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): no plan, free tier or pricing page either.
+    expect(SMITHERY).toContain('No key needed to start.');
+    expect(SMITHERY).not.toMatch(/free[- ]tier|paid plans|dchub\.cloud\/pricing/i);
     expect(SMITHERY).not.toMatch(/\$\d/);
     expect(SMITHERY).not.toMatch(/REST API at https:\/\/dchub\.cloud\/mcp/);
     expect(SMITHERY).not.toMatch(/unlocks full answers|for full answers/i);

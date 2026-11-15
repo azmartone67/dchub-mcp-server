@@ -4,7 +4,7 @@ Live data center, power, grid, fiber and deal data for AI agents and site select
 
 DC Hub is the orchestration layer for data center and energy intelligence.
 The `dchub` MCP server connects to the remote server at https://dchub.cloud/mcp.
-The free tier needs no key.
+No key needed to start.
 
 ## Front door
 

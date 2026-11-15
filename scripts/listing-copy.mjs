@@ -20,7 +20,6 @@
 //               it got `short` (no URL), plus the backend Capacity Source line
 //               (118) on the submitter path. TIGHT_MAX leaves room for that line.
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
-//   price_line  exactly PRICE_LINE
 //   endpoints   exactly endpointsLine(tool_count)
 //   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
 //               price-free, and it names source_capacity and dchub.cloud/listings
@@ -56,11 +55,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const LISTING_COPY_PATH = 'canonical/listing-copy.json';
 export const GLAMA_MAX = 400;
 export const TIGHT_MAX = 160;
-export const PRICE_LINE = 'Paid plans: dchub.cloud/pricing';  // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page
+// 2026-11-15: the price_line field is retired. Listings name no plan, no free tier and no pricing
+// page (owner, MCP Ecosystem PR review 2026-11-14); test/listing-copy.test.mjs holds every text field to it.
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live', 'updated_at'];
-export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'price_line', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live'];
 
 /** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
