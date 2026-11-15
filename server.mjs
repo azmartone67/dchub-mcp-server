@@ -31435,7 +31435,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
-                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): free-preview depth' : 'anonymous — steps returned free-preview depth; claim_free_key raises it') },
+                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth' : 'no key — steps returned preview depth; claim_free_key raises it') },
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
