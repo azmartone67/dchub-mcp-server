@@ -12,6 +12,9 @@
 // /plans or /signup. These tests drive the real handlers (backend stubbed, no network).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
 // are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
 process.env.DCHUB_KEYLESS_SITE_FULL = '0';
@@ -453,7 +456,10 @@ describe('execute_plan relay line says the lookups ran (Grok QA 2026-11-12)', ()
   });
   it('a plan line without the envelope stays honest; other tools keep the wall line', () => {
     expect(S._relayLead('execute_plan')).not.toMatch(/limit/);
-    expect(S._relayLead('get_gas_index')).toBe('Your AI assistant hit DC Hub’s free-tier limit on get_gas_index');
+    // Owner 2026-11-14: "free-tier limit" only when a limit was hit; a depth preview says it is a preview.
+    expect(S._relayLead('get_gas_index')).toBe('Your AI assistant got a preview of get_gas_index from DC Hub');
+    expect(S._relayLead('get_gas_index', { _upgrade: { tier: 'anon_daily_cap' } }))
+      .toMatch(/^Your AI assistant hit DC Hub’s free-tier limit on get_gas_index; an email gets a free key with \d+ calls a day$/);
     expect(S._relayLead('execute_plan', { executed: [{ status: 'executed' }] })).toBe('Your AI assistant ran 1 DC Hub lookup for your question');
   });
 });

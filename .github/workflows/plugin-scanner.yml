@@ -30,5 +30,10 @@ jobs:
           mode: scan
           min_score: 80
           fail_on_severity: high
+          # .plugin-scanner.toml scopes ignore_paths to test files only (synthetic
+          # keys). The action ignores repo config unless trusted; a PR able to edit
+          # that file can already edit the thresholds above, so this adds no surface.
+          config: .plugin-scanner.toml
+          trust_repository_policy: true
           report_to_hol: true
           submission_enabled: false
