@@ -9648,18 +9648,29 @@ function _keylessFirstFullDayKey(c, tool) {
   const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
   return { id, key: `${id}:${tool}:${new Date().toISOString().slice(0, 10)}` };
 }
-// Charged on the trial's store (in-process map, durable floor and mirror) under its own identity.
+// The same (tool, day) budget on the MCP session (2026-11-15, Grok's re-test): an agent whose egress moved
+// to another address between two calls of one session met a fresh IP bucket and got a second full answer.
+// null without a real session id (each such call is its own session; the IP bucket still holds).
+function _keylessFirstFullSessionDayKey(c, tool) {
+  const sid = _sessionIdentity(c && c.session_id);
+  if (!sid) return null;
+  const id = KEYLESS_FIRST_FULL_ID_PREFIX + sid;
+  return { id, key: `${id}:${tool}:${new Date().toISOString().slice(0, 10)}` };
+}
+// Charged on the trial's store (in-process map, durable floor and mirror) under its own identity: the
+// IP bucket and, when there is one, the session bucket. Either one spent = today's preview.
 export async function _keylessFirstFullCharge(c, tool, cap) {
   try {
     if (!(cap > 0)) return false;
-    const { id, key } = _keylessFirstFullDayKey(c, tool);
-    const hydrating = _hydrateOnce(key, key, id, tool, cap);
+    const buckets = [_keylessFirstFullDayKey(c, tool), _keylessFirstFullSessionDayKey(c, tool)].filter(Boolean);
+    const hydrating = Promise.all(buckets.map(({ id, key }) => _hydrateOnce(key, key, id, tool, cap)));
     if (FULL_CAP_PEEK_MS > 0) await hydrating;
-    const n = _trialDayCounts.get(key) || 0;
-    if (n >= cap) return false;
-    _trialDayCounts.set(key, n + 1);
+    if (buckets.some(({ key }) => (_trialDayCounts.get(key) || 0) >= cap)) return false;
+    for (const { id, key } of buckets) {
+      _trialDayCounts.set(key, (_trialDayCounts.get(key) || 0) + 1);
+      _fullCapConsume(id, tool, cap);
+    }
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
-    _fullCapConsume(id, tool, cap);
     return true;
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
 }
@@ -17081,17 +17092,20 @@ function _keylessFirstFullQuota(c, toolName) {
     const cap = _keylessFirstFullCap();
     const email = ' A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day.';
     const per = cap + ' full `' + toolName + '` answer' + (cap === 1 ? '' : 's')
-      + ' per caller network (IP) per UTC day without a key';
+      + ' per caller network (IP) and per session, per UTC day, without a key';
     const served = c._kffServed && c._kffServed.tool === toolName;
     // A QA observe call is served and never charged; otherwise read the bucket the charge wrote.
+    // The fuller of the IP and session buckets: either one spent makes the next call the preview.
+    const sk = _keylessFirstFullSessionDayKey(c, toolName);
     const used = (served && c._kffServed.charged !== true) ? 0
-      : (_trialDayCounts.get(_keylessFirstFullDayKey(c, toolName).key) || 0);
+      : Math.max(_trialDayCounts.get(_keylessFirstFullDayKey(c, toolName).key) || 0,
+                 sk ? (_trialDayCounts.get(sk.key) || 0) : 0);
     const remaining = Math.max(0, cap - used);
     const out = { full_answers_cap_today: cap, full_answers_remaining_today: remaining,
       full_answers_basis: per + '; resets next 00:00 UTC.' + email };
     if (served) return out;
     out.full_answers_unavailable_reason = remaining === 0
-      ? 'USED: today\u2019s full `' + toolName + '` answer without a key on this network (IP) was used, so this call '
+      ? 'USED: today\u2019s full `' + toolName + '` answer without a key on this network (IP) or in this session was used, so this call '
         + 'is the preview. The next one is after 00:00 UTC.' + email
       : 'This call is the preview.' + email;
     return out;
@@ -20432,6 +20446,13 @@ export const _PLAN_CLASSES = [
       // already scores 2 above): "Georgia Power 200MW data center Atlanta GA".
       [/\bhow\s+soon\b[^.?!]{0,60}\bget\s+power\b/i, 1],
       [/\b\d+(?:\.\d+)?\s*(?:mw|gw)\s+data\s*cent(?:er|re)\b(?!\s+(?:in|near|around|within|for)\b)/i, 1],
+      // 2026-11-15 (Grok's #1438 re-test): "50 MW data center in Dallas, TX" scored capacity_search 2
+      // vs facility_search 3 ("data center in") and ran an inventory lookup plus get_facility('dallas-tx').
+      // ONE "<N> MW data center in/near <place>" is a build being sited; the plural ("50 MW data centers
+      // in Texas") is still the inventory ask and does not match (no s after center). Not when the same
+      // sentence asks WHEN it gets power or compares markets: those stay power_timeline / grid_headroom /
+      // market_comparison ("How fast can a 300 MW data center near Abilene TX get power?").
+      [/^(?![\s\S]*\b(?:how\s+(?:fast|soon|long)|when|get\s+power|compared|comparison|vs\.?|versus)\b)[\s\S]*?\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\s+(?:[a-z-]+\s+)?data\s*cent(?:er|re)\s+(?:in|near|around)\b/i, 1.5],
     ],
     rationale: (d) => `A capacity search is ${d.hc && d.hc.answers_load ? 'four' : 'three'} INDEPENDENT reads that fan out in one wave: where ${d.mw ? Math.round(d.mw) + ' MW' : 'MW'} is OPENING (retiring generators near substations), what's in the interconnection QUEUE at that size, and whether the target market can even energize it (DCPI verdict + time-to-power)`
       + (d.hc && d.hc.answers_load

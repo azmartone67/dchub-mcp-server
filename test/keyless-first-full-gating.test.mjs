@@ -9,6 +9,10 @@
 //      'dchub' is one of our own markers. Intended; proven here through the platform resolver itself.
 //   K) the quota stamp on get_grid_intelligence / get_interconnection_queue no longer says "no daily
 //      full-answer budget is charged here" to a keyless seat the lane charges.
+//   L) one MCP session gets one first full answer per tool per day even when its egress IP changes
+//      (Grok's re-test: a repeat call 8 s later came from another address and was served full again).
+//   M) "<N> MW data center in <place>" is planned as a capacity search, not an inventory lookup, and the
+//      compact first plan never leads with answer_guide's instruction to the agent.
 //
 // Seats are built the way the /mcp handler builds them: platform from _resolvePlatform(body, UA, …).
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -184,13 +188,13 @@ describe('K) the quota stamp says what the lane does', () => {
       const q1 = quotaOf(r1);
       expect(q1).toMatchObject({ tier: 'anonymous', full_answers_cap_today: 1, full_answers_remaining_today: 0 });
       expect(q1.full_answers_unavailable_reason).toBeUndefined();
-      expect(q1.full_answers_basis).toMatch(/^1 full `[a-z_]+` answer per caller network \(IP\) per UTC day without a key; resets next 00:00 UTC\. A key with a bound email gets 10 full answers a day\.$/);
+      expect(q1.full_answers_basis).toMatch(/^1 full `[a-z_]+` answer per caller network \(IP\) and per session, per UTC day, without a key; resets next 00:00 UTC\. A key with a bound email gets 10 full answers a day\.$/);
       const r2 = await call(tool, seat({ name: 'cursor', ua: 'cursor/1.0', ip }));
       expect(isFirstFull(r2)).toBe(false);
       const q2 = quotaOf(r2);
       expect(q2.full_answers_remaining_today).toBe(0);
       expect(q2.full_answers_unavailable_reason).toBe('USED: today’s full `' + tool + '` answer without a key on this '
-        + 'network (IP) was used, so this call is the preview. The next one is after 00:00 UTC. A key with a bound '
+        + 'network (IP) or in this session was used, so this call is the preview. The next one is after 00:00 UTC. A key with a bound '
         + 'email gets 10 full answers a day.');
       for (const q of [q1, q2]) {
         expect(JSON.stringify(q)).not.toMatch(/NOT APPLICABLE|no daily full-answer budget/);
@@ -215,5 +219,62 @@ describe('K) the quota stamp says what the lane does', () => {
     const q = quotaOf(await call('get_grid_intelligence',
       seat({ name: 'sweep-check-1114', ua: 'Mozilla/5.0 (Macintosh) sweep-check-1114/1.0', ip: '198.18.63.103' })));
     expect(q.full_answers_unavailable_reason).toBe(OLD_REASON('get_grid_intelligence'));
+  });
+});
+
+describe('L) the session bucket: rotating egress inside one session does not re-qualify', () => {
+  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0.0.0 Safari/537.36';
+  const sessId = (sid) => F.KEYLESS_FIRST_FULL_ID_PREFIX + 'sk-' + createHash('sha256').update(sid).digest('hex');
+  it('same session, second call from another IP: the preview, and only the first call is charged', async () => {
+    const s1 = seat({ name: 'grok', ua: UA, ip: '198.18.64.1' });
+    const r1 = await call('get_energy_prices', s1);
+    expect(isFirstFull(r1)).toBe(true);
+    const r2 = await call('get_energy_prices', { ...seat({ name: 'grok', ua: UA, ip: '198.18.64.2' }), session_id: s1.session_id });
+    expect(isFirstFull(r2), 'the session bucket is spent').toBe(false);
+    await settle();
+    expect(writes.consume.filter((w) => w.identity === sessId(s1.session_id)).map((w) => w.tool)).toEqual(['get_energy_prices']);
+    expect(kffConsumes('198.18.64.2'), 'the refused call charged its IP nothing').toEqual([]);
+  });
+  it('the used line names the session too, on the stamp of the refused call', async () => {
+    const s1 = seat({ name: 'grok', ua: UA, ip: '198.18.64.11' });
+    expect(isFirstFull(await call('get_grid_intelligence', s1))).toBe(true);
+    const q = quotaOf(await call('get_grid_intelligence', { ...seat({ name: 'grok', ua: UA, ip: '198.18.64.12' }), session_id: s1.session_id }));
+    expect(q.full_answers_remaining_today).toBe(0);
+    expect(q.full_answers_unavailable_reason).toMatch(/^USED: .* or in this session was used/);
+  });
+  it('a new session from a new IP still gets its first full answer (the budget is per caller, not global)', async () => {
+    expect(isFirstFull(await call('get_energy_prices', seat({ name: 'grok', ua: UA, ip: '198.18.64.21' })))).toBe(true);
+    expect(isFirstFull(await call('get_energy_prices', seat({ name: 'grok', ua: UA, ip: '198.18.64.22' })))).toBe(true);
+  });
+  it('no session id: the IP bucket alone decides, as before', async () => {
+    const ip = '198.18.64.31';
+    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: '' }))).toBe(true);
+    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: 'no-session' }))).toBe(false);
+    await settle();
+    expect(writes.consume.filter((w) => w.identity === sessId('no-session'))).toEqual([]);
+  });
+});
+
+describe('M) a sited build is planned as a capacity search; the first plan leads with prose, not an instruction', () => {
+  it('"50 MW data center in Dallas, TX" is a capacity search; inventory asks stay facility_search', () => {
+    for (const q of ['50 MW data center in Dallas, TX', 'a 100 MW AI data center near Columbus']) {
+      const p = S._planQuery(q, {});
+      expect(p.intent_class, q).toBe('capacity_search');
+      expect(p.recommended_sequence.map((x) => x.tool), q).not.toContain('get_facility');
+    }
+    for (const q of ['50 MW data centers in Texas', 'data centers in Dallas', 'who operates a 50 MW data center in Ashburn']) {
+      expect(S._planQuery(q, {}).intent_class, q).toBe('facility_search');
+    }
+  });
+  it('answer_guide\'s "Compose the answer ..." never becomes the answer; the reads that ran do', () => {
+    const out = { ok: true, intent: 'x', intent_class: 'facility_search', answer_guide: 'Compose the answer from executed[].result (each already tier-honest). More.',
+      executed: [{ step: 1, tool: 'search_facilities', status: 'executed', depth: 'preview', result: { total: 3 } },
+                 { step: 2, tool: 'get_facility', status: 'failed', result: { error: 'API 404' } }] };
+    const c = F.compactFirstPlan(out, new Map(), { cap: 1 });
+    expect(c.answer).not.toMatch(/^Compose/);
+    expect(c.answer).toBe('DC Hub ran 1 read for this question: search_facilities (preview). Each one’s key figures are in executed[].');
+    // A guide sentence that is prose still leads, as before.
+    expect(F.compactFirstPlan({ ...out, answer_guide: 'Dallas has 40 tracked facilities. More.' }, new Map(), { cap: 1 }).answer)
+      .toBe('Dallas has 40 tracked facilities.');
   });
 });
