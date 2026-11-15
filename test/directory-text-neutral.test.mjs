@@ -53,7 +53,9 @@ describe('README: the paragraph under the DCPI opener describes, it does not ins
     expect(paras[0].startsWith('**[DCPI')).toBe(true);
     expect(second).toContain('`cite_as`');
     expect(second).toContain('https://dchub.cloud/mcp');
-    expect(second).toContain('https://dchub.cloud/pricing');
+    // owner listing rule 2026-11-14: no /pricing link; the key is described as optional
+    expect(second).not.toContain('https://dchub.cloud/pricing');
+    expect(second).toContain('`DCHUB_API_KEY`) is optional');
   });
 
   it('it addresses no one and gives no order', () => {
@@ -179,7 +181,7 @@ describe('README: no section gives an AI agent orders (owner 2026-10-14)', () =>
     for (const url of ['https://dchub.cloud/api/v1/canon/phrases', 'https://dchub.cloud/api/v1/stats`',
       'https://dchub.cloud/api/v1/stats/canonical', 'https://dchub.cloud/api/v1/dcpi/scores?limit=500',
       'https://dchub.cloud/llms.txt', 'https://dchub.cloud/llms-full.txt', 'https://dchub.cloud/ai-agents',
-      'https://dchub.cloud/AGENTS.md', 'https://dchub.cloud/mcp/github', 'https://dchub.cloud/connect']) {
+      'https://dchub.cloud/AGENTS.md', 'https://dchub.cloud/mcp`', 'https://dchub.cloud/connect']) {
       expect(sec, url).toContain(url);
     }
     expect(sec).toContain('```\nSource: DC Hub (dchub.cloud) — live data-center & energy intelligence\n'
