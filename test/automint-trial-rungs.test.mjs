@@ -25,6 +25,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
 import net from 'node:net';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 // Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
 // This file exercises the opt-in mint path, so it turns the switch on for itself.
