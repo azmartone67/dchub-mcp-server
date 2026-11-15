@@ -58,7 +58,7 @@ registry:
       - name: "execute_plan"
         description: "Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and…"
       - name: "export_dataset"
-        description: "Use this when the user wants to export their saved data center sites for offline analysis, a spreadsheet, or ingestion into another tool (paid plan)."
+        description: "Use this when the user wants to export their saved data center sites for offline analysis, a spreadsheet, or ingestion into another tool (needs a full-access key)."
       - name: "fetch"
         description: "Use this when you have an id from `search` and need that data center facility record (search/fetch format)."
       - name: "find_alternatives"
