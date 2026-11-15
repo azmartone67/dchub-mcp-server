@@ -56,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     # Tag the commit main actually holds — never a branch.
     if: github.ref == 'refs/heads/main'
+    outputs:
+      created: ${{ steps.create.outputs.created }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -107,6 +109,7 @@ jobs:
           fi
 
       - name: Create the release
+        id: create
         if: steps.exists.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -127,6 +130,7 @@ jobs:
             --notes "$NOTES" \
             --generate-notes \
             --latest
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
       - name: Fail if dchub.dxt was withheld
         if: steps.exists.outputs.skip == 'false' && steps.dxt.outputs.attach != 'true'
@@ -147,3 +151,20 @@ jobs:
             echo "### Created GitHub Release v$VERSION" >> "$GITHUB_STEP_SUMMARY"
             echo "https://github.com/${GITHUB_REPOSITORY}/releases/tag/v$VERSION" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # A GITHUB_TOKEN-created release fires no `release: published`, so
+  # hol-plugin-release.yml would never see these releases on its own. Call it
+  # here, only for a release this run actually created (and even when the
+  # dchub.dxt guard above failed the job, since the release still exists).
+  # Its permissions and what it sends are listed in that file.
+  hol-plugin-release:
+    name: HOL Plugin Release (scan + attest)
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.created == 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      security-events: write
+    uses: ./.github/workflows/hol-plugin-release.yml

@@ -3,13 +3,14 @@
 // server.mjs app on loopback (stub backend, no network): a keyed free caller gets it; keyless, a
 // paid key, a pack buyer, /mcp/claude and a clean platform (ChatGPT) do not.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { withNewsFooter, NEWS_FOOTER_LINE } from '../lib/news-footer.mjs';
+import { withNewsFooter, NEWS_FOOTER_LINE, NEWS_SITE_REPORT_LINE, NEWS_SITE_REPORT_URL } from '../lib/news-footer.mjs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 const J = (o) => JSON.stringify(o);
 const res = (sc, extra = []) => ({ content: [{ type: 'text', text: J(sc) }, ...extra], structuredContent: sc });
 const lines = (r) => r.content.filter((b) => b && b.type === 'text').map((b) => b.text);
 const footers = (r) => lines(r).filter((t) => t === NEWS_FOOTER_LINE);
+const siteReport = (r) => lines(r).filter((t) => t === NEWS_SITE_REPORT_LINE);
 
 describe('withNewsFooter: one trailing text item, nothing else touched', () => {
   const sc = { articles: [{ title: 'x' }], total: 1 };
@@ -45,9 +46,34 @@ describe('withNewsFooter: one trailing text item, nothing else touched', () => {
   });
 });
 
+// E9 (owner 2026-11-14): the email-bound line points at the website's free monthly site report.
+describe('the site-report line (email-bound free key)', () => {
+  const sc = { articles: [{ title: 'x' }], total: 1 };
+
+  it('is one line: the run, the map entry ?welcome=free_run, no plan name, price, key or email', () => {
+    expect(NEWS_SITE_REPORT_LINE).toBe('Watching a site? Your email also gets one free full site report a month on the '
+      + 'Land & Power map (sign in with it): ' + NEWS_SITE_REPORT_URL);
+    const u = new URL(NEWS_SITE_REPORT_URL);
+    expect(u.origin + u.pathname).toBe('https://dchub.cloud/land-power-map');
+    expect(u.searchParams.get('welcome')).toBe('free_run');
+    expect([...u.searchParams.keys()].sort()).toEqual(['utm_campaign', 'utm_medium', 'utm_source', 'welcome']);
+    expect(NEWS_SITE_REPORT_LINE).not.toMatch(/\n|\$\s?\d|\b(Pro|Developer|Starter|Enterprise|Founding|plan|trial)\b|@|api_key|key=/);
+  });
+
+  it('withNewsFooter(result, line) appends that line once; an unknown line falls back to the key line', () => {
+    const out = withNewsFooter(res(sc), NEWS_SITE_REPORT_LINE);
+    expect(out.content).toHaveLength(2);
+    expect(out.content[1]).toEqual({ type: 'text', text: NEWS_SITE_REPORT_LINE });
+    expect(withNewsFooter(out, NEWS_SITE_REPORT_LINE)).toBe(out);
+    expect(withNewsFooter(out)).toBe(out);                      // never a second footer of the other kind
+    expect(withNewsFooter(res(sc), 'anything else').content[1].text).toBe(NEWS_FOOTER_LINE);
+  });
+});
+
 // ── Wiring: the real handler chain ─────────────────────────────────────────
 const FREE_KEY = 'dch_trial_NEWSFOOT0123456789abcdef';
 const PACK_KEY = 'dch_trial_NEWSPACK0123456789abcdef';
+const EMAIL_KEY = 'dch_trial_NEWSMAIL0123456789abcdef';
 const NEWS = { articles: [{ title: 'Grid operator files', source: 'DCD', published_at: '2026-10-29' }], total: 1,
   provenance: { source: 'DC Hub', as_of: '2026-10-29T09:00:00+00:00' } };
 let H, fence;
@@ -58,6 +84,10 @@ beforeAll(async () => {
     extraRoutes: (p, req, body) => {
       if (p === '/api/v1/keys/validate' && body && (body.api_key === FREE_KEY || body.api_key === PACK_KEY)) {
         return { valid: true, tier: 'free', developer_id: null, email: null, tier_detail: { users_plan: null } };
+      }
+      if (p === '/api/v1/keys/validate' && body && body.api_key === EMAIL_KEY) {
+        return { valid: true, tier: 'identified', developer_id: 'd_newsmail', email: 'reader@example.com',
+          tier_detail: { users_plan: null } };
       }
       if (p === '/api/v1/mcp/credits/balance') {
         return { credits: ((req && req.url) || '').includes(PACK_KEY) || (body && body.key === PACK_KEY) ? 5 : 0, had_pack: false };
@@ -89,16 +119,36 @@ describe('wiring: only a keyed free caller sees the line, and the Source line st
     expect(JSON.stringify(r.structuredContent || {})).not.toContain('Watching a site');
   });
 
+  it('an email-bound free key: the site-report line instead, once, just above the Source line', async () => {
+    const r = await news('/mcp', { key: EMAIL_KEY });
+    expect(r, 'answered').toBeTruthy();
+    expect(r.content[0].text, 'the answer is the news payload').toContain('Grid operator files');
+    const t = lines(r);
+    expect(siteReport(r)).toHaveLength(1);
+    expect(footers(r), 'not both lines').toHaveLength(0);
+    expect(t[t.length - 2]).toBe(NEWS_SITE_REPORT_LINE);
+    expect(t[t.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud\/news\)/);
+    expect(JSON.stringify(r.structuredContent || {})).not.toContain('welcome=free_run');
+  });
+
+  it('a free key with no email keeps the key line, not the site-report line', async () => {
+    const r = await news('/mcp', { key: FREE_KEY });
+    expect(siteReport(r)).toHaveLength(0);
+    expect(footers(r)).toHaveLength(1);
+  });
+
   it('keyless gets no footer', async () => {
     const r = await news('/mcp');
     expect(r, 'answered').toBeTruthy();
     expect(footers(r)).toHaveLength(0);
+    expect(siteReport(r)).toHaveLength(0);
   });
 
   it('a paid key gets no footer', async () => {
     const r = await news('/mcp', { key: PRO_KEY });
     expect(r, 'answered').toBeTruthy();
     expect(footers(r)).toHaveLength(0);
+    expect(siteReport(r)).toHaveLength(0);
   });
 
   it('a pack buyer (credit balance above zero) gets no footer', async () => {
