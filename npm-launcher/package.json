@@ -1,6 +1,6 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.57",
+  "version": "2.12.58",
   "description": "DC Hub is the orchestration layer for data center and energy intelligence. Start with execute_plan. It also publishes the Data Center Power Index (DCPI). This package is a stdio launcher that connects MCP clients to https://dchub.cloud/mcp.",
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
   "dependencies": {
     "mcp-remote": "^0.15.1"
   },
-  "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "electricity", "electricity-prices", "power-grid", "grid-power", "orchestration", "interconnection", "interconnection-queue", "fiber", "site-selection", "colocation", "data-center-power-index", "ai-agents", "dchub"],
+  "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "electricity", "electricity-prices", "power-grid", "grid-power", "orchestration", "interconnection", "interconnection-queue", "fiber", "site-selection", "colocation", "data-center-power-index", "ai-agents", "dchub", "agentnode-ownership-DCnJE2aHh0gvHyYdg_0eA8iP4NBaHdi1"],
   "homepage": "https://dchub.cloud/connect",
   "repository": { "type": "git", "url": "git+https://github.com/azmartone67/dchub-mcp-server.git" },
   "bugs": { "url": "https://github.com/azmartone67/dchub-mcp-server/issues" },
