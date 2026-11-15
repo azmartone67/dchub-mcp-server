@@ -9,7 +9,8 @@
 //   C) never above email-key depth: the first answer's data equals the email-bound key's.
 //   D) who is not in it: a key, /mcp/chatgpt, a QA caller, a bot, a plan step without its plan's token,
 //      a tool outside the five, CAP=0.
-//   E) the plan step seat and its single-use token; F) the compact plan answer; G) the relay line.
+//   E) the plan step seat and its single-use token; F) the compact plan answer; G) the relay line;
+//   H) execute_plan end to end: the plan is the first full answer, charged once, and its steps carry the token.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
@@ -43,7 +44,7 @@ const ARGS = {
 };
 const DIRECT = ['get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices'];
 
-const writes = { track: [], consume: [], peek: [] };
+const writes = { track: [], consume: [], peek: [], loopback: [] };
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
 let S, TOOLS, realFetch, prevBase, prevInternal;
 
@@ -53,6 +54,8 @@ beforeAll(async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input && input.url ? input.url : input);
     let u = null; try { u = new URL(url); } catch { /* not a URL */ }
+    // A plan step's loopback call: keep its headers (H), then fence it like any other off-BASE URL.
+    if (url.startsWith('http://127.0.0.1:')) writes.loopback.push({ ...((init && init.headers) || {}) });
     if (!url.startsWith(BASE)) throw new Error('network fence: ' + url);
     const p = u.pathname;
     let body = {}; try { body = JSON.parse((init && init.body) || '{}'); } catch { body = {}; }
@@ -120,7 +123,7 @@ const isPreview = (r) => {
 const kffId = (ip) => F.KEYLESS_FIRST_FULL_ID_PREFIX + 'ip-' + createHash('sha256').update(ip).digest('hex');
 const kffConsumes = (ip) => writes.consume.filter((w) => w.identity === kffId(ip));
 const kffTracks = () => writes.track.filter((w) => w.status === F.KEYLESS_FIRST_FULL_STATUS || w.keyless_first_full_answer === true);
-const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; };
+const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; writes.loopback.length = 0; };
 const settle = () => new Promise((r) => setTimeout(r, 25));
 
 describe('A) DCHUB_KEYLESS_FIRST_FULL=0: today\'s preview, nothing charged or tagged', () => {
@@ -347,4 +350,59 @@ describe('G) the relay line says "free-tier limit" only when a limit was hit', (
       .toBe('Your AI assistant got a preview of get_grid_intelligence from DC Hub');
     expect(S._ctxALS.run(seat(), () => S._relayLead('analyze_site', {}))).toBe('Your AI assistant hit DC Hub’s paid data boundary on analyze_site');
   });
+});
+
+describe('H) execute_plan end to end: the plan is the first full answer', () => {
+  const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
+  const planTok = () => writes.loopback.filter((h) => typeof h[F.KEYLESS_FIRST_FULL_PLAN_HEADER] === 'string');
+
+  it('call 1 is full and says so, leads with the answer, is charged once; its steps carry the plan token', async () => {
+    resetWrites();
+    const ip = '198.18.50.10';
+    const r1 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    expect(r1.isError).not.toBe(true);
+    const h1 = head(r1);
+    expect(h1.first_full_answer).toMatchObject({ used: 1, limit: 1, resets: '00:00 UTC' });
+    expect(r1.structuredContent?.first_full_answer).toMatchObject({ used: 1, limit: 1 });
+    expect(h1.first_full_answer.note).toMatch(/execute_plan|plan answer/);
+    expect(h1.first_full_answer.note).not.toMatch(/\b(Developer|Pro|Starter|Enterprise|Founding)\b|\$\s?\d/);
+    expect(Object.keys(h1).slice(0, 2), 'the compact first plan answer leads with the answer and its as_of').toEqual(['answer', 'as_of']);
+    expect(writes.loopback.length, 'the plan ran its steps').toBeGreaterThan(0);
+    expect(planTok().length, 'every step carries the plan token').toBe(writes.loopback.length);
+    await settle();
+    expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['execute_plan']);
+    const rows = kffTracks().filter((w) => w.tool === 'execute_plan');
+    expect(rows.length).toBe(1);
+    expect(rows[0]).toMatchObject({ status: F.KEYLESS_FIRST_FULL_STATUS, keyless_first_full_answer: true });
+  }, 60_000);
+
+  it('call 2 from the same IP is the preview: no block, no token, no second charge', async () => {
+    resetWrites();
+    const ip = '198.18.50.11';
+    await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    await settle();
+    writes.loopback.length = 0;
+    const r2 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    const h2 = head(r2);
+    expect(h2.first_full_answer).toBeUndefined();
+    expect(r2.structuredContent?.first_full_answer).toBeUndefined();
+    expect(Object.keys(h2)[0]).not.toBe('answer');
+    expect(writes.loopback.length, 'the plan ran its steps').toBeGreaterThan(0);
+    expect(planTok()).toEqual([]);
+    await settle();
+    expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['execute_plan']);
+  }, 60_000);
+
+  it('lane off: no block, no token, nothing charged', async () => {
+    resetWrites();
+    process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
+    const ip = '198.18.50.12';
+    const r = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    expect(head(r).first_full_answer).toBeUndefined();
+    expect(writes.loopback.length).toBeGreaterThan(0);
+    expect(planTok()).toEqual([]);
+    await settle();
+    expect(kffConsumes(ip)).toEqual([]);
+    expect(kffTracks()).toEqual([]);
+  }, 60_000);
 });
