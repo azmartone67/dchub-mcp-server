@@ -20,6 +20,14 @@
 //   3. no listing -> POST; listing differs -> PUT; same -> nothing
 //   4. re-reads the public listing and fails unless it now matches
 //
+// TOOLS ARE SET ONCE (2026-11-15). AgentForge takes `tools` only on POST
+// /servers; its docs (GET /api/v1/docs) give PUT no body, and every PUT since
+// the 2026-10-24 POST left the tool list as it was. When the live server went
+// from 94 to 96 tools (2026-11-12) every run PUT, read back 94 and failed, a
+// red no run could clear. So a tool-list difference is reported as a warning
+// with the owner step (delete the listing and let this job POST it again, or
+// ask AgentForge to re-read the tools); only drift a PUT can write fails the job.
+//
 // SAFE BY DEFAULT: without AGENTFORGE_API_KEY it is a dry run. It prints the
 // body it would send and what the public listing says, and writes nothing.
 // The key is a dashboard user key (af_<64 hex>), created by the owner and
@@ -109,6 +117,9 @@ export function listingDrift(remote, want) {
   return out;
 }
 
+/** Drift a PUT cannot write: AgentForge sets tools only on POST. */
+export const isToolDrift = (line) => /^(tools: |total_tools |lists no tools$)/.test(String(line));
+
 /** Our listing among discover results: same endpoint, never a name guess. */
 export function pickOurs(servers) {
   return (Array.isArray(servers) ? servers : []).find((s) => norm(s?.endpoint_url).replace(/\/+$/, '') === MCP_URL) || null;
@@ -117,9 +128,11 @@ export function pickOurs(servers) {
 /** POST, PUT or nothing. The key is required for either write. */
 export function planWrite({ remote, drift, hasKey }) {
   if (!drift.length) return { action: 'none', why: 'AgentForge listing matches the live server and listing-copy.json' };
-  if (!hasKey) return { action: 'dry-run', why: `would ${remote ? 'PUT' : 'POST'}: ${drift.join('; ')}. AGENTFORGE_API_KEY is not set` };
+  const writable = remote?.id ? drift.filter((d) => !isToolDrift(d)) : drift;
+  if (!writable.length) return { action: 'none', why: 'only the tool list differs, and a PUT does not change it' };
+  if (!hasKey) return { action: 'dry-run', why: `would ${remote ? 'PUT' : 'POST'}: ${writable.join('; ')}. AGENTFORGE_API_KEY is not set` };
   return remote?.id
-    ? { action: 'put', why: drift.join('; ') }
+    ? { action: 'put', why: writable.join('; ') }
     : { action: 'post', why: drift.join('; ') };
 }
 
@@ -230,8 +243,17 @@ async function main() {
     `- listing: ${remote ? `${remote.slug || remote.id} (found via ${via})` : 'none'}`,
     `- drift: ${drift.length ? drift.join('; ') : 'none'}`,
     `- action: **${plan.action}**. ${plan.why}`];
+  const toolsStale = (listing) => {
+    const t = listing ? listingDrift(listing, want).filter(isToolDrift) : [];
+    if (!t.length) return;
+    const msg = `AgentForge tool list is stale (${t.join('; ')}). PUT does not update tools; `
+      + 'owner step: delete the listing and run this job to POST it again, or ask AgentForge to re-read the tools';
+    out.push(`- tools: ${msg}`);
+    if (process.env.GITHUB_ACTIONS) console.log(`::warning title=agentforge tools::${msg}`);
+  };
 
   if (plan.action === 'dry-run' || plan.action === 'none') {
+    toolsStale(remote);
     if (plan.action === 'dry-run' && process.env.AGENTFORGE_PRINT_BODY === '1') {
       out.push('', '```json', JSON.stringify({ ...want, tools: `${want.tools.length} tools` }, null, 2), '```');
     }
@@ -250,8 +272,10 @@ async function main() {
 
   // Read back from the public side: a 200 on the write is not a listing.
   const after = id ? await readPublic(id) : (await findOurs(key)).remote;
-  const left = listingDrift(after, want);
+  // A POST sets tools, so after one every difference counts; after a PUT only what a PUT writes.
+  const left = listingDrift(after, want).filter((d) => plan.action === 'post' || !isToolDrift(d));
   out.push(`- read-back: ${left.length ? `STILL DIFFERENT: ${left.join('; ')}` : 'public listing matches'}`);
+  if (plan.action === 'put') toolsStale(after);
   summary(out);
   if (left.length) process.exitCode = 1;
 }

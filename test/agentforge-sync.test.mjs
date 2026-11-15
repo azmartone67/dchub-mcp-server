@@ -2,7 +2,7 @@
 // current and what to write. No network. Each block carries its False branch.
 import { describe, it, expect } from 'vitest';
 import {
-  buildListing, listingDrift, pickOurs, planWrite, unwrap, CATEGORY, LISTING_NAME,
+  buildListing, listingDrift, pickOurs, planWrite, unwrap, isToolDrift, CATEGORY, LISTING_NAME,
 } from '../scripts/agentforge-sync.mjs';
 import { loadListingCopy, copyRuleViolations, MCP_URL } from '../scripts/listing-copy.mjs';
 
@@ -97,6 +97,28 @@ describe('planWrite', () => {
   it('POSTs a missing listing and PUTs one that drifted', () => {
     expect(planWrite({ remote: null, drift: ['not listed'], hasKey: true }).action).toBe('post');
     expect(planWrite({ remote: remoteOf(), drift: ['x'], hasKey: true }).action).toBe('put');
+  });
+  // 2026-11-15: AgentForge takes tools only on POST, so every run since the live server went
+  // 94 -> 96 tools PUT, read back 94 and failed. Tool drift alone is no reason to PUT.
+  it('tool drift alone is not a PUT; mixed drift PUTs the writable part; a missing listing still POSTs', () => {
+    const tools = listingDrift(remoteOf({ tools: [{ name: 'get_grid_data' }] }), want);
+    expect(tools).toEqual(['tools: 1 listed, 2 live; missing search_facilities']);
+    expect(tools.every(isToolDrift)).toBe(true);
+    expect(planWrite({ remote: remoteOf(), drift: tools, hasKey: true })).toMatchObject({ action: 'none' });
+    expect(planWrite({ remote: remoteOf(), drift: ['total_tools 1 (live 2)'], hasKey: true }).action).toBe('none');
+    expect(planWrite({ remote: remoteOf(), drift: ['lists no tools'], hasKey: true }).action).toBe('none');
+    const mixed = planWrite({ remote: remoteOf(), drift: [...tools, 'short description differs from listing-copy.json'], hasKey: true });
+    expect(mixed).toMatchObject({ action: 'put', why: 'short description differs from listing-copy.json' });
+    expect(planWrite({ remote: null, drift: ['not listed'], hasKey: true }).action).toBe('post');
+    // the keyless preview says the same: no PUT for tools alone
+    expect(planWrite({ remote: remoteOf(), drift: tools, hasKey: false }).action).toBe('none');
+    expect(planWrite({ remote: remoteOf(), drift: [...tools, 'tags differ from TAGS in agentforge-sync.mjs'], hasKey: false }).why)
+      .toBe('would PUT: tags differ from TAGS in agentforge-sync.mjs. AGENTFORGE_API_KEY is not set');
+  });
+  it('isToolDrift names only tool-list lines', () => {
+    for (const d of ['not listed', 'short description differs from listing-copy.json',
+      'long description differs from listing-copy.json', 'tags differ from TAGS in agentforge-sync.mjs',
+      'endpoint none (want https://dchub.cloud/mcp)']) expect(isToolDrift(d), d).toBe(false);
   });
 });
 
