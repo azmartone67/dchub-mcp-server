@@ -281,3 +281,97 @@ describe('directory crawlers get the full /mcp list; Copilot CLI gets the light 
     expect(paged.json.result.nextCursor).toBeUndefined();
   });
 });
+
+// ── Owner item D2 (2026-11-14): multi-server IDE hosts get the light list on bare /mcp ─────────────────────────────
+// The full /mcp tools/list measured 220,410 bytes live on 2026-11-14 for a Cursor identity (96 tools). An IDE agent
+// loads every connected server's list into one context and caps the total tool count, so Cursor, VS Code, Windsurf
+// and Cline now get the ten-tool light list, like the coding CLIs. Any caller can still ask for the full catalog.
+describe('multi-server IDE hosts: light list on /mcp, full catalog on request (D2)', () => {
+  // PINNED: what a multi-server host may be handed on bare /mcp.
+  const MULTI_SERVER_LIST_MAX_BYTES = 100_000;
+  const HOSTS = [
+    { 'user-agent': 'node', 'x-mcp-client': 'cursor-vscode' },
+    { 'user-agent': 'Visual Studio Code/1.106.0' },
+    { 'user-agent': 'node', 'x-mcp-client': 'Visual Studio Code - Insiders' },
+    { 'user-agent': 'node', 'x-mcp-client': 'windsurf-client' },
+    { 'user-agent': 'node', 'x-mcp-client': 'Windsurf' },
+    { 'user-agent': 'node', 'x-mcp-client': 'cline-vscode' },
+    { 'user-agent': 'node', 'x-mcp-client': 'Cline' },
+  ];
+  const CLI = { 'user-agent': 'copilot-cli/1.0.34' };
+  const prev = { cli: process.env.DCHUB_LIGHT_FOR_CLI, hosts: process.env.DCHUB_LIGHT_FOR_HOSTS };
+  const restore = (k, v) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+  afterAll(() => { restore('DCHUB_LIGHT_FOR_CLI', prev.cli); restore('DCHUB_LIGHT_FOR_HOSTS', prev.hosts); });
+  afterEach(() => { delete process.env.DCHUB_LIGHT_FOR_CLI; delete process.env.DCHUB_LIGHT_FOR_HOSTS; });
+
+  it(`default on: every IDE host gets the light list on /mcp, under ${MULTI_SERVER_LIST_MAX_BYTES} bytes`, async () => {
+    for (const h of [...HOSTS, CLI]) {
+      const r = await post('/mcp', LIST, h);
+      const label = JSON.stringify(h);
+      expect(r.status, label).toBe(200);
+      expect(r.json.result.tools.map((t) => t.name), label).toEqual(EXPECTED_TOOLS);
+      expect(Buffer.byteLength(r.raw), label).toBeLessThan(MULTI_SERVER_LIST_MAX_BYTES);
+    }
+  });
+
+  it('CONTROL: the full catalog a host gets without this is over the pin (the size check can fail)', async () => {
+    const r = await post('/mcp', LIST, { 'user-agent': 'node' });
+    expect(r.json.result.tools.length).toBeGreaterThan(80);
+    expect(Buffer.byteLength(r.raw)).toBeGreaterThan(MULTI_SERVER_LIST_MAX_BYTES);
+  });
+
+  it('initialize from Cursor (clientInfo only, generic UA) says the list is light and where the full one is', async () => {
+    const r = await post('/mcp', { ...INIT, params: { ...INIT.params, clientInfo: { name: 'cursor-vscode', version: '1.0' } } },
+      { 'user-agent': 'node' });
+    expect(r.status).toBe(200);
+    const ins = r.json.result.instructions || '';
+    expect(ins).toMatch(/ENDPOINT SCOPE: this client's \/mcp list shows 10 DC Hub tools/);
+    expect(ins).toContain('the full list is at https://dchub.cloud/mcp?catalog=full');
+  });
+
+  it('?catalog=full or X-DCHUB-Catalog: full gives the full catalog to an IDE host and to a coding CLI', async () => {
+    for (const h of [HOSTS[0], HOSTS[1], CLI]) {
+      const q = await post('/mcp?catalog=full', LIST, h);
+      expect(q.json.result.tools.length, JSON.stringify(h)).toBeGreaterThan(80);
+      const hd = await post('/mcp', LIST, { ...h, 'x-dchub-catalog': 'full' });
+      expect(hd.json.result.tools.length, JSON.stringify(h)).toBeGreaterThan(80);
+    }
+    // anything else in the param is not an ask
+    const other = await post('/mcp?catalog=all', LIST, HOSTS[0]);
+    expect(other.json.result.tools.map((t) => t.name)).toEqual(EXPECTED_TOOLS);
+  });
+
+  it('kill switch DCHUB_LIGHT_FOR_HOSTS=0 gives IDE hosts the full list and leaves the CLIs light', async () => {
+    process.env.DCHUB_LIGHT_FOR_HOSTS = '0';
+    for (const h of HOSTS) {
+      const r = await post('/mcp', LIST, h);
+      expect(r.json.result.tools.length, JSON.stringify(h)).toBeGreaterThan(80);
+    }
+    const c = await post('/mcp', LIST, CLI);
+    expect(c.json.result.tools.map((t) => t.name)).toEqual(EXPECTED_TOOLS);
+  });
+
+  it('only bare /mcp is client-aware, and Claude.ai and directory crawlers still get the full list', async () => {
+    const g = await post('/mcp/grok', LIST, HOSTS[0]);
+    expect(g.json.result.tools.length).toBe(11);
+    for (const ua of ['claude-ai/1.0', 'Smithery/1.0 (+https://smithery.ai)', 'Mozilla/5.0 (compatible; Glama/1.0; +https://glama.ai/mcp)']) {
+      expect(G.isLightHostIdentity({ userAgent: ua, clientName: ua }), ua).toBe(false);
+      const r = await post('/mcp', LIST, { 'user-agent': ua });
+      expect(r.json.result.tools.length, ua).toBeGreaterThan(80);
+    }
+  });
+
+  it('lightForRequest: hosts by name or UA, the full-catalog ask wins, never throws', () => {
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'cursor-vscode', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'Visual Studio Code/1.106.0', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'cursor-vscode', fullCatalog: true, env: {} })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', fullCatalog: true, env: {} })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp', clientName: 'cursor-vscode', env: { DCHUB_LIGHT_FOR_HOSTS: 'off' } })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp/core', clientName: 'cursor-vscode', env: {} })).toBe(false);
+    expect(G.isLightHostIdentity({ clientName: 'cursorish' })).toBe(false);
+    expect(G.wantsFullCatalog({ query: { catalog: 'FULL' } })).toBe(true);
+    expect(G.wantsFullCatalog({ headers: { 'x-dchub-catalog': 'full' } })).toBe(true);
+    expect(G.wantsFullCatalog({ query: { catalog: 'core' } })).toBe(false);
+    expect(G.wantsFullCatalog(null)).toBe(false);
+  });
+});

@@ -24,6 +24,9 @@ import { fileURLToPath } from 'node:url';
 import * as T from '../lib/free-decision-taste.mjs';
 import { leanResponseStep } from '../lib/lean-response.mjs';
 import { EMAIL_ASK, ANSWER_FIRST_LEAD, ANSWER_FIRST_SKIP } from '../lib/claim-handoff.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.

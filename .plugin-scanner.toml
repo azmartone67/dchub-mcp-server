@@ -1,0 +1,17 @@
+# HOL plugin-scanner config, auto-discovered from the repo root by
+# .github/workflows/plugin-scanner.yml (the action passes no --config).
+#
+# ignore_paths drops findings whose file matches; it does not change the
+# fail threshold (min_score 80, fail_on_severity high stay in the workflow).
+# Every entry below matches test files only. They hold synthetic keys such as
+# 'dch_live_x' and 'test-internal-key-not-a-real-secret', and the scanner's
+# HARDCODED_SECRET rule reports the first one per file. On 2026-11-14 the
+# unsuppressed scan (v3.59.0) found HARDCODED_SECRET and nothing else in
+# these paths. Shipped code, workflows, integrations and docs stay scanned.
+[scanner]
+ignore_paths = [
+  "test/*.test.mjs",
+  "test/helpers/*.mjs",
+  "sdk/ai-sdk/test/*.test.mjs",
+  "integrations/langchain-dchub/tests/unit_tests/test_*.py",
+]
