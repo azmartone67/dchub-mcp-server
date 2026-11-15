@@ -27,7 +27,7 @@ import { describe, it, expect } from 'vitest';
 import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
 import { readFileSync } from 'node:fs';
 import {
-  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, TIGHT_MAX, MCP_URL, PRICE_LINE, endpointsLine,
+  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, TIGHT_MAX, MCP_URL, endpointsLine,
   copyRuleViolations, loadListingCopy, copyFingerprints, showsCurrentCopy,
   TAGLINE, TAGLINE_SUPERLATIVE, FINGERPRINT_CHARS,
 } from '../scripts/listing-copy.mjs';
@@ -108,14 +108,19 @@ describe('copy rules', () => {
     expect(COPY.tight).not.toMatch(/\btools?\b/);
   });
 
-  it('price_line is exactly the approved line', () => {
-    expect(COPY.price_line).toBe('Paid plans: dchub.cloud/pricing');
-    expect(COPY.price_line).toBe(PRICE_LINE);
+  // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): listing copy names no plan, no free tier
+  // and no pricing page. The price_line field is retired; long and glama_400 say "No key needed to start."
+  it('names no plan, no free tier and no pricing page; price_line is retired', () => {
+    expect(COPY).not.toHaveProperty('price_line');
+    expect(FIELDS).not.toContain('price_line');
+    const PLAN = /\bfree[- ]tiers?\b|\bpaid (?:plans?|tiers?|keys?)\b|\/pricing\b|\bpricing page\b/i;
+    for (const k of TEXT_FIELDS) expect(COPY[k], k).not.toMatch(PLAN);
+    expect(SMITHERY_DESC).not.toMatch(PLAN);
+    expect(COPY.long).toContain('No key needed to start.');
+    expect(COPY.glama_400).toContain('No key needed to start.');
   });
 
-  it('glama_400 and long carry the price line and name no price (no dollar sign anywhere)', () => {
-    expect(COPY.glama_400).toContain('paid plans: dchub.cloud/pricing');
-    expect(COPY.long).toContain('paid plans: dchub.cloud/pricing');
+  it('no field names a price (no dollar sign anywhere)', () => {
     for (const k of TEXT_FIELDS) expect(COPY[k], k).not.toMatch(/\$/);
     expect(read('canonical/github_description.txt')).not.toMatch(/\$/);
     expect(SERVER_JSON.description).not.toMatch(/\$/);
