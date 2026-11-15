@@ -177,6 +177,10 @@ describe('the existing key comes back by IP plus client, and says so', () => {
     expect(sc).toMatchObject({ reused: true, held_by: 'one_key_per_email' });
   });
   it('same IP + same client: the held key is returned with the snippet, no second backend claim', async () => {
+    // E4 (2026-11-14): the IP-keyed hand-back is off by default (strangers share hosted egress); this pins it under
+    // its restore switch. test/e4-e6-identity-via.test.mjs pins the default (no hand-back).
+    process.env.DCHUB_HELD_KEY_BY_IP = '1';
+    try {
     await claim({ clientInfo: 'Cursor', ip: '203.0.113.50' });
     const again = await claim({ clientInfo: 'Cursor', ip: '203.0.113.50' });
     expect(claims).toHaveLength(1);
@@ -184,6 +188,7 @@ describe('the existing key comes back by IP plus client, and says so', () => {
     expect(again.text).toContain('returning THAT key, not a new one');
     expect(again.text.indexOf('**Paste this into Cursor')).toBeGreaterThan(again.text.indexOf('**Your key:**'));
     expect(again.text).toContain('This key does not expire');
+    } finally { delete process.env.DCHUB_HELD_KEY_BY_IP; }
   });
   it('same client from ANOTHER IP is not handed the held key', async () => {
     await claim({ clientInfo: 'Cursor', ip: '203.0.113.60' });
