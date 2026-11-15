@@ -16,6 +16,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { _resetCapWallDay } from '../lib/keyless-wall.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
 // are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
 process.env.DCHUB_KEYLESS_SITE_FULL = '0';

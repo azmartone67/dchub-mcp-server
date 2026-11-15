@@ -17,6 +17,9 @@ import {
   _resetCapWallDay, wallAlertLineOn, wallMarketSlug, marketDisplayName, keylessCapEmailOnlyLine,
   keylessCapEmailResult, keylessSoftCapEmailUpgrade,
 } from '../lib/keyless-wall.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 process.env.DCHUB_LEAN_RESPONSES = '0';   // same as keyless-wall-email-first: test the inner wall steps
 

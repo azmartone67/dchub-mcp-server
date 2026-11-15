@@ -10,7 +10,7 @@ DC Hub (dchub.cloud) is the orchestration layer for data center and energy quest
 MCP server: https://dchub.cloud/mcp  
 Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub) [![HOL Plugins trust score](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Ddc-hub%252Fdchub%26metric%3Dtrust%26style%3Dflat)](https://hol.org/registry/plugins/dc-hub%2Fdchub?utm_source=hol_marketplace&utm_medium=plugins_badge&utm_campaign=listed_link&utm_content=dc-hub%2Fdchub)
 
 ### Live Production Telemetry / Verifiable Proof
 
@@ -245,6 +245,10 @@ Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Conn
 ### LobeHub
 
 DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp/github`. If the card looks stale, re-sync from the claimed listing while signed in.
+
+### HOL Plugins
+
+Listed on HOL Plugins as `dc-hub/dchub`. [DC Hub - the orchestration layer for data center and energy intelligence on HOL Plugins](https://hol.org/registry/plugins/dc-hub%2Fdchub?utm_source=hol_marketplace&utm_medium=plugins_badge&utm_campaign=listed_link&utm_content=dc-hub%2Fdchub) shows the latest scan, trust score and release evidence for this plugin. Connect any MCP client to `https://dchub.cloud/mcp`.
 
 ### Cline / Continue.dev
 

@@ -52,3 +52,32 @@ describe('the open top-metro answer', () => {
     expect(out.structuredContent.siting.dcpi.definition).not.toContain('paid field');
   });
 });
+
+// Since be#8229 (2026-11-03) the backend can gate a top-20 answer itself. Keyless
+// get_market_dcpi_rank dallas then came back `access: "full"` with "detailed scores ... is free"
+// beside its own `_gated: true`, `locked: true` and every sub-score null (2026-11-14).
+describe('a top-metro answer the backend gated', () => {
+  const gated = () => ({
+    market_slug: 'dallas', verdict: 'CAUTION', composite_score: 42,
+    excess_power_score: null, constraint_score: null, time_to_power_months: null,
+    locked: true, _gated: true, _locked_fields: ['constraint_score', 'excess_power_score'],
+    siting: { dcpi: { definition: DEF } },
+  });
+  it('is labelled partial, says the sub-scores are withheld, and keeps "a paid field"', () => {
+    const out = S._topMetroFullResult({ content: [{ type: 'text', text: JSON.stringify(gated()) }] }, 'get_market_dcpi_rank');
+    const parsed = JSON.parse(out.content[0].text);
+    expect(parsed.access).toBe('partial');
+    expect(out.structuredContent.access).toBe('partial');
+    expect(parsed.access_basis).toMatch(/withheld/);
+    expect(parsed.access_basis).not.toMatch(/scores\) is free|\bPro\b|Developer|\$\d/);
+    expect(parsed.siting.dcpi.definition).toContain(PAID);
+  });
+  it('backendWithheld reads only the gate envelope', async () => {
+    const { backendWithheld } = await import('../lib/top-metros.mjs');
+    expect(backendWithheld(gated())).toBe(true);
+    expect(backendWithheld({ _locked_fields: ['x'] })).toBe(true);
+    expect(backendWithheld({ _locked_fields: [] })).toBe(false);
+    expect(backendWithheld(body())).toBe(false);
+    expect(backendWithheld(null)).toBe(false);
+  });
+});

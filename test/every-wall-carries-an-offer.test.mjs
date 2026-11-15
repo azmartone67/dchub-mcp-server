@@ -20,6 +20,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork, GUESS_ARGS } from './helpers/claude-directory-harness.mjs';
+// These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
+// (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
+process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 const OFFER_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field', 'digest_line']);
 // Measured 2026-11-11: the anonymous hard wall does not apply to these (key, account and write
