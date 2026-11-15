@@ -9636,16 +9636,23 @@ export function _keylessFirstFullSeat(name, c, env = process.env) {
   const deps = {
     env, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
     isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
-    isBot: isBotOrInternalCtx, lpTools: LP_TOOLS,
+    // The daily site lane's rule (2026-11-15): an agent calling through curl / python-requests / a
+    // plain HTTP client is a keyless caller like any other, so those library tokens do not refuse it;
+    // our own ('dchub', the dchub-internal self-tag), monitor, scanner and crawler markers still do.
+    isBot: isBotOrInternalCtxForSiteLane, lpTools: LP_TOOLS,
   };
   return _kffPlanStepSeatFor(name, c, deps) || _kffSeatFor(name, c, deps);
+}
+// The (IP, tool, UTC day) bucket of the first full answer: the charge below and the quota stamp read it.
+function _keylessFirstFullDayKey(c, tool) {
+  const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
+  return { id, key: `${id}:${tool}:${new Date().toISOString().slice(0, 10)}` };
 }
 // Charged on the trial's store (in-process map, durable floor and mirror) under its own identity.
 export async function _keylessFirstFullCharge(c, tool, cap) {
   try {
     if (!(cap > 0)) return false;
-    const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
-    const key = `${id}:${tool}:${new Date().toISOString().slice(0, 10)}`;
+    const { id, key } = _keylessFirstFullDayKey(c, tool);
     const hydrating = _hydrateOnce(key, key, id, tool, cap);
     if (FULL_CAP_PEEK_MS > 0) await hydrating;
     const n = _trialDayCounts.get(key) || 0;
@@ -17061,6 +17068,36 @@ export function _servedTierCtx(c) {
   } catch (_) { return c; }
 }
 
+// The first full answer of the day (lib/keyless-first-full.mjs) on the quota stamp of a keyless seat the
+// lane serves. The 'NOT APPLICABLE ... no daily full-answer budget is charged here' line was false there:
+// that seat IS charged one full answer per tool per IP per UTC day. null = the lane does not apply to
+// this seat (off, CAP=0, a key, a bot, /mcp/chatgpt, a plan step), so the caller's line is unchanged.
+// No plan name and no price; the email line stays.
+function _keylessFirstFullQuota(c, toolName) {
+  try {
+    if (!c || c.api_key) return null;
+    const seat = _keylessFirstFullSeat(toolName, c);
+    if (seat !== 'charge' && seat !== 'observe') return null;
+    const cap = _keylessFirstFullCap();
+    const email = ' A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day.';
+    const per = cap + ' full `' + toolName + '` answer' + (cap === 1 ? '' : 's')
+      + ' per caller network (IP) per UTC day without a key';
+    const served = c._kffServed && c._kffServed.tool === toolName;
+    // A QA observe call is served and never charged; otherwise read the bucket the charge wrote.
+    const used = (served && c._kffServed.charged !== true) ? 0
+      : (_trialDayCounts.get(_keylessFirstFullDayKey(c, toolName).key) || 0);
+    const remaining = Math.max(0, cap - used);
+    const out = { full_answers_cap_today: cap, full_answers_remaining_today: remaining,
+      full_answers_basis: per + '; resets next 00:00 UTC.' + email };
+    if (served) return out;
+    out.full_answers_unavailable_reason = remaining === 0
+      ? 'USED: today\u2019s full `' + toolName + '` answer without a key on this network (IP) was used, so this call '
+        + 'is the preview. The next one is after 00:00 UTC.' + email
+      : 'This call is the preview.' + email;
+    return out;
+  } catch (_) { return null; }
+}
+
 function _buildQuotaHint(toolName) {
   try {
     const c = getCtx();
@@ -17099,7 +17136,9 @@ function _buildQuotaHint(toolName) {
       // the frozen-meter defect the block below was written against.
       q.full_answers_cap_today = null;
       q.full_answers_remaining_today = null;
-      q.full_answers_unavailable_reason = _emailFullDecisionTool(toolName)
+      const _kff = _emailFullDecisionTool(toolName) ? _keylessFirstFullQuota(c, toolName) : null;
+      if (_kff) Object.assign(q, _kff);
+      else q.full_answers_unavailable_reason = _emailFullDecisionTool(toolName)
         // Item 3: this seat has no email bound, so nothing is charged; say what a bound email opens.
         ? 'NOT APPLICABLE: `' + toolName + '` is a preview for anonymous callers and keys without a bound '
           + 'email; no daily full-answer budget is charged here. A key with a bound email gets '
@@ -25837,6 +25876,8 @@ function trackedTool(srv, name, description, schema, handler) {
           // anonymous cap wall, the keyless trim, the free facility projection) lets this one through too.
           gate = { ..._kffGate, keyless_full_trial: true, keyless_first_full: true,
                    keyless_first_full_charged: _kffSeat === 'charge' };
+          // The quota stamp (_buildQuotaHint) says this call IS the day's first full answer.
+          if (_kffSeat !== 'step') c._kffServed = { tool: name, charged: _kffSeat === 'charge' };
           if (name === 'execute_plan') c._kffPlan = true;   // its steps carry the plan's token
         }
       }
