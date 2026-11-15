@@ -26,6 +26,16 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with: { node-version: '22' }
       - run: node scripts/sync-tools-manifest.mjs
+      # Owner item D3 (2026-11-14): bump the version only when tools, descriptions or
+      # install config change, because every bump publishes (npm, GitHub release, MCP
+      # registry). A tool inputSchema change is the one release this check cannot see:
+      # label the PR release-ok and re-run.
+      - name: A version bump carries a tool, description or install-config change
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RELEASE_OK: ${{ contains(github.event.pull_request.labels.*.name, 'release-ok') }}
+        run: node scripts/version-bump-justified.mjs --base "$BASE_SHA"
       # Registry descriptions are rendered from canonical/registry-description-template.json
       # (Grok A6). The step above is the offline, blocking check. This one compares the
       # committed render INPUTS to live GET /api/v1/canon and only WARNS: a live-canon move

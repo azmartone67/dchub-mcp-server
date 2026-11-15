@@ -113,16 +113,15 @@ describe('instructions', () => {
 
 describe('repo docs', () => {
   const read = (p) => readFileSync(join(ROOT, p), 'utf8');
-  // smithery.yaml's pricing row is one ;-separated string, so the sentence sits there without its period.
-  const LINE = OWNER_LINE.slice(0, -1);
   it('each free-tier summary carries it right after the decision-tools clause', () => {
     const docs = ['README.md', 'REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md',
       'npm-launcher/README.md'];
     for (const p of docs) expect(read(p), p).toContain(CLAUSE + '. ' + OWNER_LINE);
-    expect(read('smithery.yaml')).toContain(CLAUSE + '; ' + LINE + '"');
   });
-  it('mcp-server.json carries it right after the rule', () => {
+  // 2026-11-14 (owner, MCP Ecosystem PR review): the publish surfaces (smithery.yaml, mcp-server.json, dxt, npm README) name no plan, free tier or pricing page.
+  it('mcp-server.json carries neither the tier rule nor the plans pointer', () => {
     const d = JSON.parse(read('mcp-server.json')).description;
-    expect(d).toContain(TC._freeTierRuleText() + ' ' + OWNER_LINE);
+    expect(d).not.toContain(TC._freeTierRuleText());
+    expect(d).not.toMatch(/paid plans|dchub\.cloud\/pricing/i);
   });
 });

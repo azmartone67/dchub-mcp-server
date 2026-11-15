@@ -128,9 +128,10 @@ describe('the manifests the registries ingest', () => {
     }
     // ★2026-09-28 owner rule (09-27): the only price stated is the $10 pack.
     expect(MANIFEST.description).not.toMatch(/\$\d[\d,]*\s*\/\s*(?:mo|month|yr)\b/);
-    // Grok DCPI rollout 2026-10-09: no price at all on the manifests, only the pricing page.
+    // Grok DCPI rollout 2026-10-09: no price at all on the manifests.
     expect(MANIFEST.description).not.toMatch(/\$10\b/);
-    expect(MANIFEST.description).toContain('paid plans: dchub.cloud/pricing');
+    // 2026-11-14 (owner): and no plans pointer either.
+    expect(MANIFEST.description).not.toMatch(/paid plans|dchub\.cloud\/pricing/i);
   });
 });
 

@@ -25,8 +25,27 @@ describe('canonical/directories.json', () => {
     for (const d of rows) {
       expect(d.id, JSON.stringify(d)).toMatch(/^[a-z0-9-]+$/);
       expect(typeof d.name).toBe('string');
-      expect(['live', 'pending', 'unverified']).toContain(d.status);
+      expect(['live', 'pending', 'unverified', 'offline']).toContain(d.status);
     }
+  });
+
+  // 2026-11-14 (owner item F3): status_text is the short public line /mcp-standing shows
+  // beside a non-live row (note stays internal). A live row's state comes from the scan.
+  it('status_text, when present, is a short public line on a non-live row', () => {
+    const withText = DATA.directories.filter((d) => 'status_text' in d);
+    expect(withText.length).toBeGreaterThan(0);
+    for (const d of withText) {
+      expect(d.status, d.id).not.toBe('live');
+      expect(typeof d.status_text, d.id).toBe('string');
+      expect(d.status_text.length, d.id).toBeGreaterThan(0);
+      expect(d.status_text.length, d.id).toBeLessThanOrEqual(80);
+    }
+  });
+
+  it('F3 rows: Cursor Marketplace reads as deferred, MCP World (Baidu) is offline', () => {
+    const by = Object.fromEntries(DATA.directories.map((d) => [d.id, d]));
+    expect(by['cursor-marketplace'].status_text).toBe('Submitted; Cursor deferred 2026-10-28');
+    expect(by['mcp-world'].status).toBe('offline');
   });
 
   it('every live row has an https listing URL (a live row without one would silently vanish)', () => {
@@ -75,6 +94,13 @@ describe('renderDirectoriesPage', () => {
     expect(row.listing_url).toMatch(/^https:\/\/registry\.modelcontextprotocol\.io\/v0\//);
     expect(viewUrl(row.listing_url)).toBe(REGISTRY_HUMAN_URL);
     expect(viewUrl(null)).toBe(null);
+  });
+
+  it('offline rows are hidden even when they carry a listing URL', () => {
+    const out = renderDirectoriesPage({ directories: [
+      { id: 'y', name: 'Offline Dir', status: 'offline', listing_url: 'https://example.com/y' },
+    ] }, { tools: 1 });
+    expect(out).not.toContain('Offline Dir');
   });
 
   it('pending rows are hidden even when they carry a listing URL', () => {

@@ -191,6 +191,14 @@ field for the endpoint (its `glama.json` schema's only property is
 the distinction that was actually blocking a decision: all four registries
 report zero today, and nothing separated *zero* from *unmeasured*.
 
+★ **2026-11-14 (owner item D4, v2.12.55): `remotes` is ONE entry, `https://dchub.cloud/mcp`.**
+The six-remote list below (`/mcp/registry` first, then `/mcp/claude`, `/mcp/grok`,
+`/mcp/oauth`, `/mcp/core`, `/mcp`) is retired, and `_meta.remoteProfiles` with it.
+PulseMCP and Glama, which mirror `remotes[0]`, now show the same address as every
+other listing. The accepted cost: registry and mirror arrivals are no longer tagged
+`mcp-registry`; they count as direct `/mcp` traffic. Every path still serves. The
+notes below are history.
+
 ★ **2026-11-09 (owner move 2): `https://dchub.cloud/mcp/core` joins `remotes`, second
 to last** (`lib/registry-remotes.mjs`, before the bare `/mcp`). It is the ten-tool core
 profile for hosts that load DC Hub beside other servers (tools/list 16.6 KB against

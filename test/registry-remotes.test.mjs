@@ -34,30 +34,25 @@ describe('server.json remotes', () => {
     expect(SJ.remotes).toEqual(registryRemotes());
   });
 
-  it('the allowlist is registry + claude + grok + oauth + core + bare /mcp, cascade path first, /mcp last', () => {
-    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp/registry', '/mcp/claude', '/mcp/grok', '/mcp/oauth', '/mcp/core', '/mcp']);
-    expect(SJ.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
-    // PulseMCP and Glama mirror remotes[0]; the bare path must never displace it.
-    expect(SJ.remotes[SJ.remotes.length - 1].url).toBe('https://dchub.cloud/mcp');
-    // the bare remote IS the declared canonical one; both must read the same
+  // Owner item D4 (2026-11-14): ONE remote, the canonical /mcp. It was six, /mcp/registry
+  // first; the mirrors that copy remotes[0] (PulseMCP, Glama) showed that path instead of
+  // the address every other listing gives.
+  it('the allowlist is the bare /mcp alone, and it is the declared canonical remote', () => {
+    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp']);
+    expect(SJ.remotes).toEqual([{ type: 'streamable-http', url: 'https://dchub.cloud/mcp' }]);
     const canon = SJ._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.canonicalRemote;
-    expect(canon).toBe('https://dchub.cloud/mcp');
+    expect(canon).toBe(SJ.remotes[0].url);
   });
 
-  // Owner move 2 (2026-11-09): /mcp/core is listed as a LABELLED alternate. The
-  // label lives in _meta (a remote is type + url only); canonicalRemote stays /mcp.
-  it('/mcp/core is listed, labelled in _meta.remoteProfiles, and is not the canonical remote', () => {
+  // /mcp/core is no longer listed (D4), so no alternate label rides in _meta. The restated
+  // path/count in lib/registry-remotes.mjs still equal the profile's own.
+  it('lists no alternate remote, so _meta carries no remoteProfiles', () => {
     const meta = SJ._meta?.['io.modelcontextprotocol.registry/publisher-provided'];
-    const coreUrl = `https://dchub.cloud${CORE_PATH}`;
-    expect(SJ.remotes.map((r) => r.url)).toContain(coreUrl);
-    expect(meta.remoteProfiles).toEqual(remoteProfiles());
-    expect(meta.remoteProfiles[coreUrl]).toBe(`core profile: ${CORE_TOOL_NAMES.length} tools for multi-server hosts`);
-    // the restated path/count in lib/registry-remotes.mjs equal the profile's own
+    expect(remoteProfiles()).toEqual({});
+    expect(meta).not.toHaveProperty('remoteProfiles');
+    expect(SJ.remotes.map((r) => r.url)).not.toContain(`https://dchub.cloud${CORE_PATH}`);
     expect(CORE_REMOTE_PATH).toBe(CORE_PATH);
     expect(CORE_REMOTE_TOOL_COUNT).toBe(CORE_TOOL_NAMES.length);
-    expect(meta.canonicalRemote).not.toBe(coreUrl);
-    // every labelled profile is a listed remote (a label for an unlisted URL is a dead pointer)
-    for (const u of Object.keys(meta.remoteProfiles)) expect(SJ.remotes.map((r) => r.url)).toContain(u);
   });
 
   it('never advertises /mcp/chatgpt (OpenAI review)', () => {

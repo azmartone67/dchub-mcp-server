@@ -59,7 +59,8 @@ function versionAt(rev, cwd) {
 }
 
 /**
- * The manifest MINUS `version`, in a form two files can be compared by.
+ * The manifest's RELEASE content (releaseView: minus `version`, minus the
+ * registry-metadata part of `_meta`), in a form two files can be compared by.
  *
  * ★ Key order is normalised recursively. A re-indent or a reordered key is not
  * a content change worth burning a version on — the registry stores the parsed
@@ -77,8 +78,37 @@ export function contentKey(text) {
         ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])]))
         : v
   );
-  const { version: _drop, ...rest } = obj;
-  return JSON.stringify(canon(rest));
+  return JSON.stringify(canon(releaseView(obj)));
+}
+
+// ★ 2026-11-14 (owner item D3): "bump the version only when tools, descriptions or
+// install config change." server.json's `_meta` is registry metadata (licence text,
+// gateway note, deployment type); a change there alone is NOT a release, so it no
+// longer forces a bump — it rides along with the next real one. The one `_meta` key
+// that IS a tool change is toolCount, so it stays in. `packages[].version` mirrors
+// `version` and goes with it. scripts/registry_version_bump_guard.py (_release_view)
+// is the Python spelling of this projection; test/registry-version-bump-write-time
+// pins that the two agree.
+export const PUBLISHER_META = 'io.modelcontextprotocol.registry/publisher-provided';
+export const RELEASE_META_KEYS = Object.freeze(['toolCount']);
+
+export function releaseView(obj) {
+  const { version: _v, _meta, packages, ...rest } = obj;
+  const out = { ...rest };
+  if (Array.isArray(packages)) {
+    out.packages = packages.map((p) => {
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return p;
+      const { version: _pv, ...q } = p;
+      return q;
+    });
+  }
+  const pp = _meta && typeof _meta === 'object' ? _meta[PUBLISHER_META] : null;
+  if (pp && typeof pp === 'object') {
+    const kept = {};
+    for (const k of RELEASE_META_KEYS) if (k in pp) kept[k] = pp[k];
+    if (Object.keys(kept).length) out._release_meta = kept;
+  }
+  return out;
 }
 
 /** '2.12.9' -> '2.12.10'. null for anything that is not a bare x.y.z. */

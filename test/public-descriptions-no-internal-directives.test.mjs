@@ -187,7 +187,8 @@ describe('the corpus is real (non-vacuity)', () => {
   it('the YAML read returns the committed description, not a fragment', () => {
     const y = CORPUS.find((c) => c.source === 'smithery.yaml#description');
     expect(y.text.length).toBeGreaterThan(400);
-    expect(y.text).toMatch(/^Data Center Power Index \(DCPI\)/);
+    // 2026-11-14 (owner): the Smithery description leads with execute_plan.
+    expect(y.text).toMatch(/^DC Hub is the neutral orchestration layer\b.*execute_plan/);
   });
 });
 

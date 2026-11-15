@@ -720,7 +720,13 @@ const names = new Set(tools.map((t) => t.name));
     // for multi-server hosts") rides in _meta publisher-provided `remoteProfiles`,
     // generated from the same module and healed the same way.
     const wantProfiles = remoteProfiles();
-    if (meta && JSON.stringify(meta.remoteProfiles) !== JSON.stringify(wantProfiles)) {
+    // 2026-11-14 (D4): no alternate remote is listed, so no label rides in _meta at all.
+    if (meta && !Object.keys(wantProfiles).length) {
+      if ('remoteProfiles' in meta) {
+        problems.push(`${SJ} _meta.remoteProfiles is set but lib/registry-remotes.mjs lists no alternate remote`);
+        delete meta.remoteProfiles;
+      }
+    } else if (meta && JSON.stringify(meta.remoteProfiles) !== JSON.stringify(wantProfiles)) {
       problems.push(`${SJ} _meta.remoteProfiles ${JSON.stringify(meta.remoteProfiles)} `
         + `!= lib/registry-remotes.mjs ${JSON.stringify(wantProfiles)}`);
       meta.remoteProfiles = wantProfiles;

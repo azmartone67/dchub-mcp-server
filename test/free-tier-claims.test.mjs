@@ -110,7 +110,8 @@ describe("published calls/day claims", () => {
   it("surfaces quote the published rule verbatim (and the exemption is not vacuous)", () => {
     const quoted = claims().filter((c) => c.inRule);
     expect(new Set(quoted.map((c) => c.file))).toEqual(
-      new Set(["llms-install.md", "integrations/README.md", "mcp-server.json"]));
+      // 2026-11-14 (owner): mcp-server.json no longer quotes the rule (publish surfaces name no tier).
+      new Set(["llms-install.md", "integrations/README.md"]));
     expect(quoted.every((c) => c.n === 50)).toBe(true);
   });
 
@@ -118,7 +119,8 @@ describe("published calls/day claims", () => {
     // Anonymous has no call count under the free-tier rule.
     expect(CANON.anonymous).toBeUndefined();
     expect(SNAP.allowance.anonymous.calls).toBeNull();
-    expect(claims().length).toBeGreaterThan(10);
+    // 2026-11-14: 9 after smithery.yaml dropped its pricing block and mcp-server.json the rule.
+    expect(claims().length).toBeGreaterThan(5);
   });
 
   it("the retired anonymous 5/day survives only where it is pinned as residue", () => {
@@ -246,7 +248,12 @@ describe("published full-answers claims", () => {
 // configSchema said a FREE key is 10/day and canon says free=10 /
 // identified=50. A pricing block is the one place a claim carries its tier
 // LABEL, so it is checked label-by-label against canon, not by membership.
+// 2026-11-14 (owner, MCP Ecosystem PR review): smithery.yaml carries no pricing block at all now.
+// If one comes back it is checked label-by-label below; this first test fails until then.
 describe("smithery.yaml pricing block matches the ladder label-by-label", () => {
+  it("smithery.yaml has no pricing block (owner 2026-11-14)", () => {
+    expect(read("smithery.yaml")).not.toMatch(/^pricing:/m);
+  });
   const yaml = read("smithery.yaml");
   const at = yaml.indexOf("\npricing:");
   const tail = yaml.slice(at + 1);
@@ -254,7 +261,7 @@ describe("smithery.yaml pricing block matches the ladder label-by-label", () => 
   const block = end === -1 ? tail : tail.slice(0, end);
   const rows = [...block.matchAll(/^  (\w+):\s*"([^"]*)"/gm)].map((m) => ({ tier: m[1], text: m[2] }));
 
-  it("finds the pricing rows (not a vacuous pass)", () => {
+  it.skipIf(at === -1)("finds the pricing rows (not a vacuous pass)", () => {
     expect(at).toBeGreaterThan(-1);
     expect(rows.map((r) => r.tier)).toEqual(
       // ★2026-09-22: no Starter row. The owner rule (2026-09-21, mcp#497) is that

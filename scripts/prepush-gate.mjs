@@ -48,6 +48,10 @@ export function selectTests(gateList, changed, readText) {
   return { picked: [...inDiff, ...named].slice(0, MAX_TEST_FILES), over: Math.max(0, inDiff.length + named.length - MAX_TEST_FILES) };
 }
 
+export function withoutGitEnv(env) {
+  return Object.fromEntries(Object.entries(env || {}).filter(([k]) => !/^GIT_/.test(k)));
+}
+
 function stageTests(files) {
   // ★ Only files listed in test/hard-gate.txt: that is what CI runs (`npm test` is invoked by no
   // workflow), and `vitest related` would sweep in live-prod suites that fail offline.
@@ -55,7 +59,12 @@ function stageTests(files) {
   if (!existsSync('test/hard-gate.txt')) return { status: 'WARN', detail: 'test/hard-gate.txt not found' };
   const { picked, over } = selectTests(readFileSync('test/hard-gate.txt', 'utf8'), files, (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null));
   if (!picked.length) return { status: 'SKIP', detail: 'no hard-gate test names a changed file' };
-  const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + ' ' : ''}--require ${process.cwd()}/test/helpers/no-network-preload.cjs` };
+  // ★ 2026-11-14: drop every GIT_* variable. git runs this hook with GIT_DIR (and friends) pointing at
+  // the pushing repo, and tests that build a scratch repo (`git init` / `git config` in a temp dir,
+  // e.g. registry-version-bump-write-time) inherited it: their `git init` re-initialised the REAL
+  // repo instead and wrote core.bare=true plus a fake user into the shared .git/config, which broke
+  // every worktree of this clone. Measured on a push from a worktree, 2026-11-14.
+  const env = { ...withoutGitEnv(process.env), NODE_OPTIONS: `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + ' ' : ''}--require ${process.cwd()}/test/helpers/no-network-preload.cjs` };
   const r = spawnSync('node_modules/.bin/vitest', ['run', ...picked], { encoding: 'utf8', timeout: TESTS_TIMEOUT_MS, env });
   const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').slice(-25).join('\n');
   const note = `${picked.length} hard-gate file(s)${over ? `, +${over} not run locally` : ''}`;
@@ -73,6 +82,8 @@ function selfTest() {
   ok(sel.picked.length === 1 && sel.picked[0] === 'test/a.test.mjs', 'selects only the gate file naming the change');
   ok(selectTests('test/b.test.mjs', ['test/b.test.mjs'], rd).picked[0] === 'test/b.test.mjs', 'a changed gate test selects itself');
   ok(selectTests('test/a.test.mjs', ['README.md'], rd).picked.length === 0, 'unrelated change selects nothing');
+  const clean = withoutGitEnv({ GIT_DIR: '/r/.git', GIT_INDEX_FILE: 'i', GIT_WORK_TREE: '/r', PATH: '/bin', HOME: '/h' });
+  ok(!Object.keys(clean).some((k) => k.startsWith('GIT_')) && clean.PATH === '/bin' && clean.HOME === '/h', 'tests run with no GIT_* env (a scratch git init must not hit the real repo)');
   console.log('self-test ok');
 }
 

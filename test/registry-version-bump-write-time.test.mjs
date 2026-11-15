@@ -54,6 +54,10 @@ const manifest = (version, extra) => JSON.stringify(
   null, 2) + '\n';
 
 const writeManifest = (repo, version, extra) => repo.write('server.json', manifest(version, extra));
+// 2026-11-14 (owner item D3): a manifest whose only moving part is _meta.
+const PPK = 'io.modelcontextprotocol.registry/publisher-provided';
+const writeMeta = (repo, version, meta) => repo.write('server.json',
+  JSON.stringify({ name: 'cloud.dchub/mcp-server', version, _meta: { [PPK]: meta } }, null, 2) + '\n');
 const commit = (repo, msg) => repo.commit(msg, 'server.json');
 
 const diskText = (repo) => fs.readFileSync(path.join(repo.root, 'server.json'), 'utf8');
@@ -96,10 +100,23 @@ const SHAPES = {
     writeManifest(d, '2.1.0', 'one'); commit(d, 'drift 1');
     writeManifest(d, '2.1.0', 'two'); commit(d, 'drift 2');
   },
+  // Owner item D3 (2026-11-14): registry metadata alone is not a release; it rides along.
+  '_meta registry metadata moved, no bump': (d) => {
+    writeMeta(d, '1.0.0', { toolCount: 1, freeTier: true }); commit(d, 'v1');
+    writeMeta(d, '1.1.0', { toolCount: 1, freeTier: true }); commit(d, 'bump');
+    writeMeta(d, '1.1.0', { toolCount: 1 }); commit(d, 'drop freeTier, no bump');
+  },
+  // …but toolCount IS a tool change.
+  '_meta toolCount moved, no bump': (d) => {
+    writeMeta(d, '1.0.0', { toolCount: 1 }); commit(d, 'v1');
+    writeMeta(d, '1.1.0', { toolCount: 1 }); commit(d, 'bump');
+    writeMeta(d, '1.1.0', { toolCount: 2 }); commit(d, 'new tool, no bump');
+  },
 };
 const DRIFTED = new Set([
   'content moved after the bump, version stood still',
   'drift accumulated over several commits',
+  '_meta toolCount moved, no bump',
 ]);
 
 describe('server.json version fence — the predicate', () => {
