@@ -17,7 +17,9 @@ describe('unlock_more_data description is price-free', () => {
       const d = desc(f);
       expect(d).not.toMatch(/\$\d/);
       expect(d).not.toMatch(/1,000 API credits/);
-      expect(d).toContain('Paid plans:');
+      // 2026-11-15 (owner listing rule 2026-11-14): no plan wording either.
+      expect(d).toContain('Full-access options:');
+      expect(d).not.toMatch(/paid plans?|free tier/i);
     });
   }
   it('the response still sells the pack', () => {
