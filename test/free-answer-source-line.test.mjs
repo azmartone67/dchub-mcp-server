@@ -137,7 +137,7 @@ describe('path selection: the most specific public page', () => {
   it('an hourly grid read: the Source line names the hour the citation names (MISO)', () => {
     const miso = { iso: 'MISO', as_of: '2026-10-17T03:00:00Z',
       provenance: { as_of: '2026-10-16T04:00:00.000Z' },
-      citation: { cite_as: 'DC Hub, dchub.cloud \u2014 PARTIAL preview (tier-gated; not the full dataset) (as of 2026-10-17T03:00Z)', as_of: '2026-10-17T03:00:00Z' } };
+      citation: { cite_as: 'DC Hub, dchub.cloud \u2014 PARTIAL preview (not the full dataset) (as of 2026-10-17T03:00Z)', as_of: '2026-10-17T03:00:00Z' } };
     expect(dataAsOfHour(miso)).toBe('2026-10-17T03:00Z');
     expect(sourceLine(miso, 'get_grid_intelligence', { iso: 'MISO' })).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17T03:00Z');
     // a day-only citation stays day-only; UNMEASURED and retrieval-dated stay undated

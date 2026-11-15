@@ -70,7 +70,7 @@ describe('cite_as says which part is gated', () => {
     const payload = { shortlist: ROWS, synthesis: { locked: true, message: 'Unlock the decision layer' } };
     expect(detectGating(payload).scope).toBe('decision_layer');
     const c = buildCitation(payload, { tier: 'free' });
-    expect(c.cite_as).toMatch(/PARTIAL: every row shown; the decision layer is tier-gated/);
+    expect(c.cite_as).toMatch(/PARTIAL: every row shown; the decision layer is not in this preview/);
     expect(c.cite_as).not.toMatch(/not the full dataset/);
     expect(c.completeness).toBe('partial_preview');
   });
@@ -79,7 +79,7 @@ describe('cite_as says which part is gated', () => {
     const payload = { shortlist: ROWS.map((r) => ({ ...r, excess_power_score: null, _excess_power_score_in_pro: true })),
       synthesis: { locked: true } };
     expect(buildCitation(payload, { tier: 'free' }).cite_as)
-      .toMatch(/every row shown; some row fields and the decision layer are tier-gated/);
+      .toMatch(/every row shown; some row fields and the decision layer are not in this preview/);
   });
 
   it('a real shown-of-total gap keeps its own wording', () => {
@@ -90,6 +90,22 @@ describe('cite_as says which part is gated', () => {
   it('a structural preview flag keeps the generic wording', () => {
     const payload = { rows: ROWS, preview_is_partial: true, synthesis: { locked: true } };
     expect(buildCitation(payload, { tier: 'free' }).cite_as).toMatch(/not the full dataset/);
+  });
+
+  // Owner 2026-11-15 (Grok note G, item 3): a cite_as an agent quotes names no tier or plan.
+  it('no PARTIAL wording names a tier', () => {
+    const payloads = [
+      { shortlist: ROWS, synthesis: { locked: true } },
+      { shortlist: ROWS.map((r) => ({ ...r, excess_power_score: null, _excess_power_score_in_pro: true })), synthesis: { locked: true } },
+      { shortlist: ROWS.map((r) => ({ ...r, excess_power_score: null, _excess_power_score_in_pro: true })) },
+      { rows: ROWS, preview_is_partial: true, synthesis: { locked: true } },
+    ];
+    const cites = payloads.map((p) => buildCitation(p, { tier: 'free' }).cite_as);
+    for (const c of cites) {
+      expect(c).toMatch(/PARTIAL/);
+      expect(c).not.toMatch(/tier|\bfree\b|\bpaid\b|\bpro\b|plan\b/i);
+    }
+    expect(new Set(cites).size, 'four distinct wordings').toBe(4);
   });
 
   it('a paid response with nothing locked stays unrestricted', () => {
