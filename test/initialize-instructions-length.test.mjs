@@ -93,10 +93,9 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
     // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
     ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
-    ['free tier block', /FREE TIER \(quote verbatim\): Anonymous: previews, no key needed\./],
-    // Item 1 (owner 2026-10-16): the "PAID: <tools> need a paid DC Hub plan" line is gone; the
-    // siting clause and one neutral line state where the free answers stop.
-    ['siting clause + past that', /Siting: no email, previews; [^.]*a month\. Past that, previews\./],
+    // Owner decision 2026-11-15: the labelled free-tier block (with its siting clause) is the two free offers in
+    // plain words, no tier label; one neutral line states where the free answers stop (item 1, 2026-10-16).
+    ['free offers + past that', /50 MCP calls\/day with an email\. 1 free Land & Power map search a month\. Past that, previews\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['reference', /Reference: resource `dchub:\/\/instructions`/],
     ['served count', /\b\d+ tools \(a curated subset of \d+\)/],

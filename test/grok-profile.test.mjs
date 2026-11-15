@@ -130,10 +130,10 @@ describe('G1: /mcp/grok lists a Grok-sized catalog', () => {
       expect(t.inputSchema).toEqual(c.inputSchema);
       expect(t.annotations.access).toBe(c.annotations.access);
     }
-    // A paid tool says so in its description, from its own annotation.
+    // A paid tool says so in its description, from its own annotation (no plan wording: owner listing rule 2026-11-14).
     const gi = json.result.tools.find((t) => t.name === 'get_grid_intelligence');
     expect(canon.get('get_grid_intelligence').annotations.access).toBe('paid');
-    expect(gi.description).toMatch(/paid DC Hub key/);
+    expect(gi.description).toMatch(/full-access DC Hub key/);
   });
 
   it('/mcp is unchanged: the full catalog, outputSchema included', async () => {

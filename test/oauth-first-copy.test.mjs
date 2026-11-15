@@ -85,8 +85,9 @@ describe('the keyless free tier is preserved, not traded away', () => {
     expect(claim).toMatch(/keyless/i);
   });
 
-  it('the server instructions still advertise keyless free-tier depth', () => {
-    expect(src).toMatch(/Works KEYLESS at free-tier depth/);
+  it('the server instructions still advertise keyless depth', () => {
+    // owner 2026-11-15: no "free tier" label in the instructions; the keyless promise stays.
+    expect(src).toMatch(/Works KEYLESS at preview depth/);
   });
 });
 
