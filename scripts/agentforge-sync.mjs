@@ -27,6 +27,10 @@
 // red no run could clear. So a tool-list difference is reported as a warning
 // with the owner step (delete the listing and let this job POST it again, or
 // ask AgentForge to re-read the tools); only drift a PUT can write fails the job.
+// The delete-and-POST is this job's `recreate` dispatch input
+// (AGENTFORGE_RECREATE=1): it runs only when the tool list is stale, and the
+// new listing id it prints must replace the repo variable AGENTFORGE_SERVER_ID,
+// or the next run reads the deleted id as "not listed" and POSTs a second copy.
 //
 // SAFE BY DEFAULT: without AGENTFORGE_API_KEY it is a dry run. It prints the
 // body it would send and what the public listing says, and writes nothing.
@@ -125,9 +129,12 @@ export function pickOurs(servers) {
   return (Array.isArray(servers) ? servers : []).find((s) => norm(s?.endpoint_url).replace(/\/+$/, '') === MCP_URL) || null;
 }
 
-/** POST, PUT or nothing. The key is required for either write. */
-export function planWrite({ remote, drift, hasKey }) {
+/** POST, PUT, recreate (DELETE then POST) or nothing. The key is required for any write. */
+export function planWrite({ remote, drift, hasKey, recreate = false }) {
   if (!drift.length) return { action: 'none', why: 'AgentForge listing matches the live server and listing-copy.json' };
+  if (recreate && remote?.id && hasKey && drift.some(isToolDrift)) {
+    return { action: 'recreate', why: `delete ${remote.id} and POST it again: ${drift.join('; ')}` };
+  }
   const writable = remote?.id ? drift.filter((d) => !isToolDrift(d)) : drift;
   if (!writable.length) return { action: 'none', why: 'only the tool list differs, and a PUT does not change it' };
   if (!hasKey) return { action: 'dry-run', why: `would ${remote ? 'PUT' : 'POST'}: ${writable.join('; ')}. AGENTFORGE_API_KEY is not set` };
@@ -237,7 +244,7 @@ async function main() {
   const want = buildListing(copy, await liveTools());
   const { remote, via } = await findOurs(key);
   const drift = listingDrift(remote, want);
-  const plan = planWrite({ remote, drift, hasKey: !!key });
+  const plan = planWrite({ remote, drift, hasKey: !!key, recreate: process.env.AGENTFORGE_RECREATE === '1' });
   const out = ['## AgentForge listing', '',
     `- live: ${want.tools.length} tools at ${want.endpoint_url}`,
     `- listing: ${remote ? `${remote.slug || remote.id} (found via ${via})` : 'none'}`,
@@ -247,7 +254,7 @@ async function main() {
     const t = listing ? listingDrift(listing, want).filter(isToolDrift) : [];
     if (!t.length) return;
     const msg = `AgentForge tool list is stale (${t.join('; ')}). PUT does not update tools; `
-      + 'owner step: delete the listing and run this job to POST it again, or ask AgentForge to re-read the tools';
+      + 'fix: run this workflow with recreate=true, then set the repo variable AGENTFORGE_SERVER_ID to the new listing id';
     out.push(`- tools: ${msg}`);
     if (process.env.GITHUB_ACTIONS) console.log(`::warning title=agentforge tools::${msg}`);
   };
@@ -261,19 +268,25 @@ async function main() {
     return;
   }
 
-  const res = plan.action === 'post'
+  if (plan.action === 'recreate') {
+    const del = await af('DELETE', `/servers/${encodeURIComponent(remote.id)}`, { key });
+    out.push(`- DELETE ${remote.id}: HTTP ${del.status}${del.ok ? '' : ` ${del.text}`}`);
+    if (!del.ok) { summary(out); process.exitCode = 1; return; }
+  }
+  const posting = plan.action === 'post' || plan.action === 'recreate';
+  const res = posting
     ? await af('POST', '/servers', { key, body: want })
     : await af('PUT', `/servers/${encodeURIComponent(remote.id)}`, { key, body: want });
-  out.push(`- ${plan.action.toUpperCase()}: HTTP ${res.status}${res.ok ? '' : ` ${res.text}`}`);
+  out.push(`- ${posting ? 'POST' : 'PUT'}: HTTP ${res.status}${res.ok ? '' : ` ${res.text}`}`);
   if (!res.ok) { summary(out); process.exitCode = 1; return; }
   const written = unwrap(res.json);
-  const id = written?.id || written?.server?.id || written?.slug || remote?.id;
+  const id = written?.id || written?.server?.id || written?.slug || (posting ? null : remote?.id);
   if (id) out.push(`- listing id: \`${id}\` (pin it as the repo variable AGENTFORGE_SERVER_ID)`);
 
   // Read back from the public side: a 200 on the write is not a listing.
   const after = id ? await readPublic(id) : (await findOurs(key)).remote;
   // A POST sets tools, so after one every difference counts; after a PUT only what a PUT writes.
-  const left = listingDrift(after, want).filter((d) => plan.action === 'post' || !isToolDrift(d));
+  const left = listingDrift(after, want).filter((d) => posting || !isToolDrift(d));
   out.push(`- read-back: ${left.length ? `STILL DIFFERENT: ${left.join('; ')}` : 'public listing matches'}`);
   if (plan.action === 'put') toolsStale(after);
   summary(out);
