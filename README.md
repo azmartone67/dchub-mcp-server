@@ -1,10 +1,10 @@
-# DC Hub MCP Server
+# DC Hub
 
 **[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
-DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers; limits are at [dchub.cloud/pricing](https://dchub.cloud/pricing). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
+DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. No key needed to start: previews need no key, and the API key (`DCHUB_API_KEY`) is optional and raises limits. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
-To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
+To start, [add the MCP server](https://dchub.cloud/connect). An API key is optional: [get one at /connect](https://dchub.cloud/connect#free-key) and set it as `DCHUB_API_KEY` (or the `X-API-Key` header). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
 DC Hub (dchub.cloud) is the orchestration layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
 MCP server: https://dchub.cloud/mcp  
@@ -60,7 +60,7 @@ MCP browse example: `source_capacity(min_mw=5, location="Germany")`. The MCP too
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
 [`/ai-agents`](https://dchub.cloud/ai-agents) ·
 [`/AGENTS.md`](https://dchub.cloud/AGENTS.md) ·
-MCP endpoint `https://dchub.cloud/mcp/github` (client setup at [/connect](https://dchub.cloud/connect))
+MCP endpoint `https://dchub.cloud/mcp` (client setup at [/connect](https://dchub.cloud/connect))
 
 ---
 
@@ -152,7 +152,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 | Endpoint | What it covers |
 |---|---|
-| `https://dchub.cloud/mcp/github` | everything — all 96 tools |
+| `https://dchub.cloud/mcp` | everything — all 96 tools (`?catalog=full` where a client gets the ten-tool list) |
 | `https://dchub.cloud/mcp/siting` | site selection end to end: find, analyze, score, compare, rank — plus Capacity Source |
 | `https://dchub.cloud/mcp/grid` | power availability: live ISO telemetry, interconnection queue, hosting + retirement headroom, prices |
 | `https://dchub.cloud/mcp/fiber` | routes, metro fiber, subsea cables, peering, lead-in planning, latency clustering |
@@ -160,8 +160,6 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 | `https://dchub.cloud/mcp/gas` | behind-the-meter and gas-fired economics against grid prices and forward generation |
 | `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
 | `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
-
-**Core profile for multi-server hosts:** `https://dchub.cloud/mcp/core` lists 10 task-shaped, read-only tools (`plan_and_answer`, `find_sites`, `evaluate_site`, `compare_sites`, `market_snapshot`, `rank_markets`, `grid_power`, `fiber_connectivity`, `facility_lookup`, `get_evidence`) composed from the same handlers, so its `tools/list` is about 17 KB against about 211 KB for the full catalog at `/mcp` (measured 2026-11-09). It suits hosts that load DC Hub beside other MCP servers, where context is tight; same key and gates. It is an alternate, not the default: `/mcp` stays the canonical endpoint. Details: [docs/core-profile.md](docs/core-profile.md).
 
 ## What DC Hub adds
 
@@ -187,12 +185,12 @@ Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use
 }
 ```
 
-Leave `DCHUB_API_KEY` empty for previews, or paste a free key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+`DCHUB_API_KEY` is optional: leave it empty for previews, or set a key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
 
 ### Claude Code
 
 ```bash
-claude mcp add dchub --transport http https://dchub.cloud/mcp/github
+claude mcp add dchub --transport http https://dchub.cloud/mcp
 ```
 
 ### Cursor
@@ -205,7 +203,7 @@ Or add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp/github"
+      "url": "https://dchub.cloud/mcp"
     }
   }
 }
@@ -215,7 +213,7 @@ Optional: set header `X-API-Key` from https://dchub.cloud/connect#free-key for h
 
 ### ChatGPT
 
-Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp/chatgpt`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
+Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
 
 DC Hub is the data-center and energy layer beside other research sources: power, grid, interconnection queues, facilities and markets, with a dated citation on every result. Prefer `execute_plan` for a multi-part question.
 
@@ -223,7 +221,7 @@ DC Hub is the data-center and energy layer beside other research sources: power,
 
 There is no separate xAI app-store listing path yet. Point Grok / Grok Bot at the hosted MCP:
 
-- URL: `https://dchub.cloud/mcp/github`
+- URL: `https://dchub.cloud/mcp`
 - Transport: Streamable HTTP
 - Auth: none required to start (optional `X-API-Key`)
 
@@ -234,17 +232,16 @@ Use DC Hub when the question needs live data-center or energy context — Data C
 Hosted Copilot / M365 connector packages are submitted through Partner Center (separate from this README). For any MCP-capable Copilot surface that accepts a remote server, use:
 
 - Full catalog: `https://dchub.cloud/mcp`
-- Optional core profile for empty-arg test panes: `https://dchub.cloud/mcp/core` (an alternate, not the default)
 
 Positioning: data-center and energy intelligence — DCPI, grid, interconnection, facilities — cited and read-only. Do not treat this README as a Partner Center resubmit instruction.
 
 ### Mistral Le Chat
 
-Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp/github`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
+Custom connector: Le Chat → Connectors → Add Connector → **Custom MCP Connector** → name `dchub`, server `https://dchub.cloud/mcp`, auth Auto-detect / None. The curated Connectors Directory is Mistral-managed (no public self-serve form); custom works today. Same product line: live data-center and energy answers with `as_of` citations; start with `execute_plan`.
 
 ### LobeHub
 
-DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp/github`. If the card looks stale, re-sync from the claimed listing while signed in.
+DC Hub is listed on LobeHub: [lobehub.com/mcp](https://lobehub.com/mcp) — search **DC Hub** / `azmartone67-dchub-mcp-server`. Install from the listing, or point any LobeHub MCP client at `https://dchub.cloud/mcp`. If the card looks stale, re-sync from the claimed listing while signed in.
 
 ### HOL Plugins
 
@@ -255,7 +252,7 @@ Listed on HOL Plugins as `dc-hub/dchub`. [DC Hub - the orchestration layer for d
 ```json
 {
   "name": "dchub",
-  "url": "https://dchub.cloud/mcp/github",
+  "url": "https://dchub.cloud/mcp",
   "transport": "http"
 }
 ```
@@ -268,13 +265,13 @@ Listed on HOL Plugins as `dc-hub/dchub`. [DC Hub - the orchestration layer for d
 {
   "mcpServers": {
     "dchub": {
-      "httpUrl": "https://dchub.cloud/mcp/github"
+      "httpUrl": "https://dchub.cloud/mcp"
     }
   }
 }
 ```
 
-Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp/github`
+Or one command: `gemini mcp add -s user --transport http dchub https://dchub.cloud/mcp`
 
 > **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the public Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
 
@@ -286,7 +283,7 @@ Or one command: `gemini mcp add -s user --transport http dchub https://dchub.clo
 {
   "mcpServers": {
     "dchub": {
-      "serverUrl": "https://dchub.cloud/mcp/github"
+      "serverUrl": "https://dchub.cloud/mcp"
     }
   }
 }
@@ -319,12 +316,13 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 - **Email capture (`bind_email`) is optional.** The `bind_email` tool exists to raise your daily limit. If you call it, the email you pass is stored against your key, and you can ignore the tool. The server never asks for or collects an email any other way.
 - **No install-time code.** Installing this package runs no scripts (no `preinstall`, `install`, `postinstall` or `prepare`). The git pre-commit hook for contributors is opt-in: `npm run hooks:install`.
 
-## Pricing
+## Keys
 
-- **Anonymous:** previews, no API key needed
+`DCHUB_API_KEY` is optional.
+
+- **No key:** previews, no API key needed
 - **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews.
 - **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
-- **Paid plans (more volume, every tool, exports):** plans and prices at https://dchub.cloud/pricing
 
 ## Data sources
 
