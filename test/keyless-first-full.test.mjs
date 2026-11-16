@@ -389,10 +389,14 @@ describe('G) the relay line says "free-tier limit" only when a limit was hit', (
 describe('H) execute_plan end to end: the plan is the first full answer', () => {
   const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
   const planTok = () => writes.loopback.filter((h) => typeof h[F.KEYLESS_FIRST_FULL_PLAN_HEADER] === 'string');
+  // 5.29 (Grok note K, item 2): a plan is the day's full answer only when a step returned data, so these
+  // runs answer their loopback steps in process (J's emulation); section K is the plan that answered nothing.
+  afterEach(() => { loopback.emulate = false; loopback.ip = null; });
 
   it('call 1 is full and says so, leads with the answer, is charged once; its steps carry the plan token', async () => {
     resetWrites();
     const ip = '198.18.50.10';
+    loopback.emulate = true; loopback.ip = ip;
     const r1 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
     expect(r1.isError).not.toBe(true);
     const h1 = head(r1);
@@ -413,6 +417,7 @@ describe('H) execute_plan end to end: the plan is the first full answer', () => 
   it('call 2 from the same IP is the preview: no block, no token, no second charge', async () => {
     resetWrites();
     const ip = '198.18.50.11';
+    loopback.emulate = true; loopback.ip = ip;
     await call('execute_plan', seat({ client_ip: ip }), PLAN);
     await settle();
     writes.loopback.length = 0;
@@ -570,4 +575,79 @@ describe('J) execute_plan end to end with its steps run: call 1 is full depth wi
     await settle();
     expect(kffConsumes(ip), 'no second charge').toEqual([]);
   }, 60_000);
+});
+
+describe('K) a plan that returned no data does not consume the first full answer (Grok note K, item 2)', () => {
+  const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
+  afterEach(() => { loopback.emulate = false; loopback.ip = null; });
+  const executed = (r) => (r.structuredContent && r.structuredContent.executed) || (head(r) || {}).executed || [];
+
+  it('call 1 runs no step (every loopback refused): no "used 1 of 1", nothing charged or tagged, the seat is still there', async () => {
+    resetWrites();
+    const ip = '198.18.70.10';
+    const s1 = seat({ client_ip: ip });
+    const r1 = await call('execute_plan', s1, PLAN);
+    const h1 = head(r1);
+    expect(executed(r1).filter((e) => e.status === 'executed'), JSON.stringify(executed(r1).map((e) => [e.tool, e.status]))).toEqual([]);
+    expect(h1.first_full_answer, 'no first-full block on a plan with no data').toBeUndefined();
+    expect(r1.structuredContent?.first_full_answer).toBeUndefined();
+    expect(JSON.stringify(r1)).not.toMatch(/"used":1/);
+    // Item 3: the plan says it has no data and names the calls to make by hand, with their arguments.
+    expect(h1.more_detail && Array.isArray(h1.more_detail.calls), JSON.stringify(h1).slice(0, 400)).toBe(true);
+    expect(h1.more_detail.calls.length).toBeGreaterThan(0);
+    expect(h1.more_detail.calls.every((c) => typeof c.tool === 'string' && c.args && typeof c.args === 'object')).toBe(true);
+    expect(h1.more_detail.calls.some((c) => Object.keys(c.args).length > 0), 'at least one call carries arguments').toBe(true);
+    expect(String(h1.answer_guide)).toMatch(/^NO DATA/);
+    expect(JSON.stringify(r1)).not.toMatch(/built from the FULL/);
+    expect(s1._kffPending, 'the deferred charge was settled').toBeUndefined();
+    await settle();
+    expect(kffConsumes(ip), 'no durable charge').toEqual([]);
+    expect(kffTracks().filter((w) => w.tool === 'execute_plan'), 'no first-full funnel tag').toEqual([]);
+
+    // The same IP's next plan, whose steps answer, is still the day's full answer, charged once.
+    resetWrites();
+    loopback.emulate = true; loopback.ip = ip;
+    const r2 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
+    expect(head(r2).first_full_answer, JSON.stringify(executed(r2).map((e) => [e.tool, e.status]))).toMatchObject({ used: 1, limit: 1 });
+    await settle();
+    expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['execute_plan']);
+  }, 90_000);
+
+  it('a plan with data is charged and tagged once, and the durable consume is written after the plan, not before', async () => {
+    resetWrites();
+    const ip = '198.18.70.11';
+    loopback.emulate = true; loopback.ip = ip;
+    const s = seat({ client_ip: ip });
+    const r = await call('execute_plan', s, PLAN);
+    expect(head(r).first_full_answer).toMatchObject({ used: 1 });
+    expect(s._kffPending).toBeUndefined();
+    await settle();
+    expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['execute_plan']);
+    expect(kffTracks().filter((w) => w.tool === 'execute_plan').length).toBe(1);
+  }, 90_000);
+
+  it('planDataStepsRan counts data steps with a result only; the navigator and skipped steps do not count', () => {
+    expect(F.planDataStepsRan([
+      { tool: 'discover_tools', status: 'executed', result: { ok: true } },
+      { tool: 'get_market_dcpi_rank', status: 'skipped_unresolved', missing: 'market_slug' },
+      { tool: 'get_grid_intelligence', status: 'failed', result: null },
+    ])).toBe(0);
+    expect(F.planDataStepsRan([{ tool: 'get_grid_intelligence', status: 'executed', result: { iso: 'PJM' } }])).toBe(1);
+    expect(F.planDataStepsRan(null)).toBe(0);
+  });
+
+  it('manualNextCalls names each step that did not return data with its arguments, and `fill` for a missing hand-off', () => {
+    const calls = F.manualNextCalls([
+      { step: 1, tool: 'get_grid_intelligence', status: 'executed', args: { iso: 'PJM' }, result: { ok: 1 } },
+      { step: 2, tool: 'get_refined_queue', status: 'failed', args: { state: 'TX', min_mw: 100 } },
+      { step: 3, tool: 'get_market_dcpi_rank', status: 'skipped_unresolved', missing: 'market_slug' },
+      { step: 4, tool: 'discover_tools', status: 'executed', result: {} },
+    ], [{ tool: 'find_sites', args: { state: 'TX' } }, { tool: 'get_refined_queue', args: { state: 'TX', min_mw: 100 } }],
+    (e) => (e.step === 3 ? { market_slug: '<the market named in the intent>' } : null));
+    expect(calls).toEqual([
+      { tool: 'get_refined_queue', args: { state: 'TX', min_mw: 100 }, status: 'failed' },
+      { tool: 'get_market_dcpi_rank', args: { market_slug: '<the market named in the intent>' }, status: 'skipped_unresolved', fill: 'market_slug' },
+      { tool: 'find_sites', args: { state: 'TX' } },
+    ]);
+  });
 });

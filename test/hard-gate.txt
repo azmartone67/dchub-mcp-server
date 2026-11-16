@@ -460,6 +460,8 @@ test/planner-527-qa1114-e2e.test.mjs
 test/planner-527-qa1114.test.mjs
 test/planner-528-e2e.test.mjs
 test/planner-528-named-towns.test.mjs
+test/planner-529-e2e.test.mjs
+test/planner-529-note-k.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
