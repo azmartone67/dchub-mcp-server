@@ -83,6 +83,7 @@ test/challenge-bound-and-widen.test.mjs
 test/challenge-budget-key.test.mjs
 test/challenge-carries-human-line.test.mjs
 test/challenges-same-resource.test.mjs
+test/changelog-and-publish-gate.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs
@@ -409,6 +410,7 @@ test/no-starter-offer.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
 test/npm-launcher-key-not-in-argv.test.mjs
+test/npm-launcher-start-hint.test.mjs
 test/npm-launcher-version-parity.test.mjs
 test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
@@ -512,6 +514,7 @@ test/ranked-answer.test.mjs
 test/readme-agent-policy.test.mjs
 test/readme-leads-with-dcpi.test.mjs
 test/readme-links-are-not-dead-ends.test.mjs
+test/readme-start-and-badges.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-categories-not-trimmed.test.mjs
 test/recommendation-returns-contract.test.mjs
