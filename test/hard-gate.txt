@@ -76,6 +76,7 @@ test/capacity-pointer-size-vs-ask.test.mjs
 test/capacity-source-pointers.test.mjs
 test/capacity-source-routing-instructions.test.mjs
 test/capacity-source-tools.test.mjs
+test/capacity-teaser-tools.test.mjs
 test/cf-worker-manifest-no-facility-count.test.mjs
 test/cf-worker-manifest-sync.test.mjs
 test/challenge-after-n.test.mjs
