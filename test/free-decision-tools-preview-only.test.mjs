@@ -660,8 +660,16 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     walk(ROOT);
     expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(3);
     // Item 3: the docs quote the CURRENT clause (lib/free-decision-taste.mjs FREE_DECISION_CLAUSE).
-    const missing = hits.filter((p) => !readFileSync(join(ROOT, p), 'utf8').includes(
-      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; an email adds 10 full answers/day each'));
+    // 2026-11-14 owner listing rule (applied to the GitHub README 2026-11-16): Glama
+    // renders README.md, so it must not say "previews on free" / "free key" / "free tier".
+    // It still states the 2-full-answers sentence and the email-rung clause without those words.
+    const CLAUSE_DOC = 'previews on free; an email adds 10 full answers/day each';
+    const missing = hits.filter((p) => {
+      const src = readFileSync(join(ROOT, p), 'utf8');
+      if (p.endsWith('.mjs')) return !src.includes('FREE_DECISION_CLAUSE');
+      if (p === 'README.md') return !src.includes('an email adds 10 full answers/day each');
+      return !src.includes(CLAUSE_DOC);
+    });
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);
   });
 });

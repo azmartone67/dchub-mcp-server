@@ -115,8 +115,18 @@ describe('repo docs', () => {
   const read = (p) => readFileSync(join(ROOT, p), 'utf8');
   it('each free-tier summary carries it right after the decision-tools clause', () => {
     // 2026-11-15 (owner, MCP Ecosystem PR review): the npm README names no tier, so it no longer quotes it.
-    const docs = ['README.md', 'REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md'];
+    const docs = ['REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md'];
     for (const p of docs) expect(read(p), p).toContain(CLAUSE + '. ' + OWNER_LINE);
+    // 2026-11-14 owner listing rule (applied to the GitHub README 2026-11-16): Glama
+    // renders this file, so it must not say "free key", "free tier", or "previews on free".
+    // The allowance is stated with "DCHUB_API_KEY is optional" and "an email adds 10 full
+    // answers/day each"; analyze_site's monthly full reports stay, without "free key".
+    const readme = read('README.md');
+    expect(readme).not.toContain(CLAUSE);
+    expect(readme).not.toContain(OWNER_LINE);
+    expect(readme).toContain('`DCHUB_API_KEY` is optional');
+    expect(readme).toContain('an email adds 10 full answers/day each');
+    expect(readme).toMatch(/analyze_site: a few full site reports each month; after that, previews\./);
   });
   // 2026-11-14 (owner, MCP Ecosystem PR review): the publish surfaces (smithery.yaml, mcp-server.json, dxt, npm README) name no plan, free tier or pricing page.
   it('the npm README states no free-key quota', () => {

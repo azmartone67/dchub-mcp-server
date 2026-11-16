@@ -1,10 +1,12 @@
 # DC Hub
 
+DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.
+
 **[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
-DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. No key needed to start: previews need no key, and the API key (`DCHUB_API_KEY`) is optional and raises limits. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
+DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. `DCHUB_API_KEY` is optional. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
-To start, [add the MCP server](https://dchub.cloud/connect). An API key is optional: [get one at /connect](https://dchub.cloud/connect#free-key) and set it as `DCHUB_API_KEY` (or the `X-API-Key` header). Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
+To start, [add the MCP server](https://dchub.cloud/connect). `DCHUB_API_KEY` is optional. Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
 DC Hub (dchub.cloud) is the orchestration layer for data center and energy questions: power, grid, interconnection queues, fiber, markets and sites, with an as_of date and a source on every result.  
 MCP server: https://dchub.cloud/mcp  
@@ -20,7 +22,7 @@ The orchestration layer for data center and energy intelligence.
 npx -y dchub-mcp-server
 ```
 
-No key needed for previews. Start with execute_plan. Every client's setup: https://dchub.cloud/connect
+`DCHUB_API_KEY` is optional. Start with execute_plan. Every client's setup: https://dchub.cloud/connect
 
 Star this repo to help other builders find DC Hub.
 
@@ -108,7 +110,7 @@ Your AI assistant gets real-time, structured answers, dated and cited.
 
 **97 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
-Two of them are **partner tools**: `read_inbox` (the notes DC Hub leaves for a partner key; the same inbox as the `dchub://inbox` resource) and `report_finding` (files an observation about a DC Hub surface as a brain finding, detector `external_audit`). They are listed for every caller so the catalog is one stable list, and they answer only a key issued under a partner slug; any other key gets a clear "partner key required".
+One of them is a **partner tool**: `read_inbox` (the notes DC Hub leaves for a partner key; the same inbox as the `dchub://inbox` resource). It is listed for every caller so the catalog is one stable list, and it answers only a key issued under a partner slug; any other key gets a clear "partner key required". `report_finding` files an observation about a DC Hub surface for the DC Hub team, who review findings daily. It works with or without a key. Reports should include the exact values observed.
 
 > **These counts are served, not stated.** Every number above is rendered from a
 > live source and this file is a copy of it — mirrors and registry listings copy
@@ -323,8 +325,8 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 
 `DCHUB_API_KEY` is optional.
 
-- **No key:** previews, no API key needed
-- **Optional key (one `claim_free_key` call, or set `DCHUB_API_KEY`):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews.
+- **No key:** previews, without an API key
+- **Optional key (one `claim_free_key` call, or set `DCHUB_API_KEY`):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews; an email adds 10 full answers/day each. analyze_site: a few full site reports each month; after that, previews.
 - **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
 
 ## Data sources
