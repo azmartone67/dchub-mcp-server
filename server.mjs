@@ -138,7 +138,7 @@ import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wal
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
-import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields } from './lib/unlock-line.mjs';
+import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields, EMAIL_ASK as _UNLOCK_EMAIL_ASK } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -191,6 +191,7 @@ import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies 
 import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
+import { humanEmailReplyOn as _humanEmailReplyOn, applyHumanEmailReply as _applyHumanEmailReply } from './lib/human-email-reply.mjs';
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
@@ -20304,7 +20305,7 @@ export const _TOOL_FAMILIES_TABLE = [
   // 2026-11-16 (owner "Let's do both"): the feedback family. Any caller, key or none, files what
   // looked wrong or missing (report_finding) or what their human wants next (request_enhancement);
   // both land in the same queue the DC Hub team reviews daily.
-  { family: 'feedback', when: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement. Free; works with or without a key.', keywords: ['finding','report','wrong','missing','stale','bug','feedback','feature','request','enhancement','coverage','observed','audit'],
+  { family: 'feedback', when: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement. Works with or without a key.', keywords: ['finding','report','wrong','missing','stale','bug','feedback','feature','request','enhancement','coverage','observed','audit'],
     tools: ['report_finding','request_enhancement'] },
 ];
 
@@ -23436,7 +23437,7 @@ export function _planDcpiLead(ia) {
 const _EXEC_BA_REGION = { SOCO: 'SERC', TVA: 'SERC' };
 // 5.25 (Grok QA 2026-11-13, /mcp/chatgpt Reno 200 MW): a step that did not apply what the question
 // asked said so only inside its own result (get_retirement_headroom `_ignored_params.target_mw`: "a MW
-// threshold is a paid filter; this preview uses the default 50"; get_refined_queue
+// threshold is not applied in this preview; it uses the default 50"; get_refined_queue
 // `filters_applied._min_mw_not_applied`), and the queue step for a state read one ISO's file without
 // saying the rest of that state is not in any queue DC Hub reads. An agent composing from
 // answer_guide never saw any of it. This lists each drop with the step's OWN reason, and
@@ -29898,7 +29899,33 @@ export function _powerBandLineStep(result, name) {
     { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] });
 }
 
+// ── Grok to Brain 2026-11-16: the person's line carries the email offer (lib/human-email-reply.mjs) ──
+// Only where this response's own wall asked the agent for an UNLOCK email (never key_line: there an email
+// opens no field), the prose names bind_email, the caller has no bound email, and the surface's copy is not
+// frozen (directory / Claude / core profiles, clean platforms, the Grok contract). Runs first in
+// _relayContractStep: every ask step has run, and human_message is filled from user_message after it.
+// Kill switch DCHUB_HUMAN_EMAIL_REPLY=0.
+const _HUMAN_EMAIL_REPLY_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field']);
+export function _humanEmailReplyStep(result, name) {
+  try {
+    if (!_humanEmailReplyOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    // The wall's own mark, else (G8: a hand-off line nothing marked) the unlock ask in the prose itself.
+    if (c.email || c._emailAsk === 'key_line') return result;
+    const marked = _HUMAN_EMAIL_REPLY_ASKS.has(c._emailAsk);
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform() || _pcIsGrok(c.platform)) return result;
+    const prose = result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string'
+      && !/^\s*[{[]/.test(b.text) && /`bind_email`/.test(b.text)
+      && (marked || b.text.includes(_UNLOCK_EMAIL_ASK)));
+    if (!prose) return result;
+    return _applyHumanEmailReply(result);
+  } catch (_) { return result; }
+}
+
 export function _relayContractStep(result, name) {
+  result = _humanEmailReplyStep(result, name);
   try {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     const sc0 = result.structuredContent;
@@ -31356,8 +31383,8 @@ export const FINDING_TOOL_OPTIONAL = Object.freeze(['feature_request', 'coverage
 export const FINDING_SUMMARY_REQUIRED = Object.freeze(['feature_request', 'missing_data', 'other']);
 export const FINDING_DEFAULT_TOOL = 'general';
 export const FINDING_THANKS = 'Thanks. The DC Hub team reviews findings daily.';
-export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
-export const REQUEST_ENHANCEMENT_DESCRIPTION = "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).";
+export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
+export const REQUEST_ENHANCEMENT_DESCRIPTION = "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).";
 export const FINDING_ENTRY_TOOLS = Object.freeze(['report_finding', 'request_enhancement']);
 export const FINDING_CLIENTS = Object.freeze(['claude', 'chatgpt', 'cursor', 'other']);
 const _FINDING_FIELDS = ['class', 'tool', 'args', 'quoted_fields', 'observed_at', 'session_id', 'recurrence', 'note',
@@ -33810,7 +33837,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (!_full) {
         data = _maskRetirementHeadroom(data, _c.session_id);
         if (_ignored && data && data._gated) {
-          data = { ...data, _ignored_params: { target_mw: 'a MW threshold is a paid filter; this preview uses the default '
+          data = { ...data, _ignored_params: { target_mw: 'a MW threshold is not applied in this preview; it uses the default '
             + RETIREMENT_DEFAULT_TARGET_MW } };
         }
       }
@@ -37152,7 +37179,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // owner-approved text, verbatim.
   // Literal text (scripts/sync-tools-manifest.mjs reads registrations as literals); test/findings-open-intake
   // pins it equal to REPORT_FINDING_DESCRIPTION / REQUEST_ENHANCEMENT_DESCRIPTION and lib/claude-directory.mjs.
-  trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
+  trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
     { class: z.enum(FINDING_CLASSES).describe('Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your human wants DC Hub to do), completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (a preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a wall that says stop while next_ask offers only another walled tool), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a gated field served to a caller it is gated from), link_hygiene (dead or wrong-shape links), other'),
       tool: z.string().min(1).max(80).optional().describe('The DC Hub tool or endpoint it is about, e.g. analyze_site (optional for feature_request and coverage_gap)'),
       summary: z.string().min(10).max(280).optional().describe('One sentence, 10-280 characters: what you saw or what your human wants (required for feature_request, missing_data, other)'),
@@ -37166,7 +37193,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       note: S.describe('One or two sentences of context'),
       contact_email: z.string().max(254).optional().describe('Only if your human asked for a reply') },
     async (a) => _reportFindingTool(getCtx().api_key, a, undefined, { entryTool: 'report_finding' }));
-  trackedTool(srv, 'request_enhancement', "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).",
+  trackedTool(srv, 'request_enhancement', "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).",
     { summary: z.string().min(10).max(280).describe('One sentence, 10-280 characters: what your human wants DC Hub to do or cover'),
       user_goal: z.string().max(500).optional().describe('What your human was trying to do'),
       tool: z.string().min(1).max(80).optional().describe('The DC Hub tool it relates to, if any'),
