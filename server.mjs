@@ -17687,6 +17687,52 @@ export async function _scoreboardForCaller(res, c) {
   return { ...res, content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
 }
 
+// Grok Note K item 6a (2026-11-15): compare_isos `isos` as a string or an array of codes. Pure.
+export function _isosPreprocess(v) {
+  return Array.isArray(v) ? v.map((x) => String(x == null ? '' : x)).join(',') : v;
+}
+export function _isosText(v) {
+  const t = _isosPreprocess(v);
+  return typeof t === 'string' ? t : '';
+}
+
+// Grok Note K items 6b + 6d (2026-11-15): name, for each ISO, which queue queue_depth_gw comes from,
+// that queue's source and the source's OWN date. queue_depth_gw is the GENERATION queue on every US ISO
+// (ERCOT included), but queue_depth_basis carried the ROW's kind, so ERCOT read
+// `queue_depth_basis: 'large_load'` beside its generation figure. PJM and MISO are live feeds that
+// publish no report date (their exports are generated on request), so their as_of is null and the
+// time DC Hub read them is named as collected_at, never under a data-date name. Labels only: no figure
+// rides in them, so what the free tier withholds is unchanged. Pure; exported for tests.
+export function _queueDepthLabels(q, qk) {
+  if (!q || !qk || qk.basis === 'unclassified') return null;
+  const out = {};   // queue_depth_basis itself is set inline in shapeGridIntelligence
+  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  out.queue_depth_source = (qk.basis === 'large_load'
+    ? (str(q.source_report) || 'ERCOT generation interconnection queue report')
+    : (str(q.source_report) || str(q.source_name))) || null;
+  const basis = str(q.source_as_of_basis);
+  let asOf = str(q.queued_generation_gw_as_of);
+  let asOfBasis = asOf ? (qk.basis === 'large_load' ? 'published_report' : (basis || 'published_report')) : null;
+  if (!asOf && basis && basis !== 'live_feed_fetch_date' && str(q.source_as_of)) {
+    asOf = str(q.source_as_of); asOfBasis = basis;
+  }
+  if (asOfBasis === 'live_feed_fetch_date') { asOf = null; asOfBasis = null; }
+  out.queue_depth_as_of = asOf;
+  out.queue_depth_as_of_basis = asOf ? asOfBasis
+    : 'none_published: this ISO serves its queue as a live feed with no report date of its own; '
+      + 'queue_depth_collected_at is when DC Hub read it. Quote the figure as "collected <time>", not "as of".';
+  out.queue_depth_collected_at = str(q.fetched_at) || str(q.last_refreshed) || null;
+  if (qk.basis === 'large_load') {
+    out.queue_kinds_note = 'ERCOT runs two separate queues. queue_depth_gw is its GENERATION interconnection '
+      + 'queue (requested generation, from the ERCOT generation queue report named in queue_depth_source), the '
+      + 'same kind as the other ISOs\' queue_depth_gw. large_load_queue_gw (with its data-center part, '
+      + 'large_load_queue_data_center_gw), data_center_load and data_center_share_pct come from its '
+      + 'LARGE-LOAD (demand) queue, the one data-center requests join (ERCOT large-load reporting). They count '
+      + 'different things: never add them together or compare one with the other.';
+  }
+  return out;
+}
+
 // ── shapeGridIntelligence: assemble the get_grid_intelligence per-ISO payload ─
 // r78-gridfix (2026-06-12): PURE shaper extracted from the tool handler so the
 // "empty {freshness,citation} structuredContent" regression stays fenced by a
@@ -17870,7 +17916,12 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const qrows = (qsnap && Array.isArray(qsnap.by_iso)) ? qsnap.by_iso : [];
   const q = qrows.find((r) => norm(r.iso) === norm(ISO)) || null;
   const qk = q ? _splitQueueRow(q) : null;
-  const buildRate = (row && row.market_count) ? Math.round((row.build_count / row.market_count) * 1000) / 10 : null;
+  // Grok Note L3 (2026-11-15): a build_count the DCPI row does not carry is NOT zero. `null / 64` is 0 in
+  // JS, so a missing count published build_rate_pct 0 and was narrated as "not building". Only a reported
+  // count (a real 0 included: PJM was 0 BUILD of 64 markets on 2026-11-15) yields a rate.
+  const _bc = row ? _n(row.build_count) : null;
+  const _mc = row ? _n(row.market_count) : null;
+  const buildRate = (_bc != null && _mc != null && _mc > 0) ? Math.round((_bc / _mc) * 1000) / 10 : null;
   // ROBUSTNESS (2026-06-19): freshness must reflect the actual EIA TELEMETRY
   // hour (UTC), not the DCPI compute time — else withFreshness claims "live" off
   // a fresh DCPI recompute while EIA itself lagged (gen-mix can be ~18h behind a
@@ -17911,7 +17962,8 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     // queue, which is data_center_load below). Was q.queued_load_total_gw,
     // which put ERCOT's demand queue beside six ISOs' generation queues.
     queue_depth_gw:           qk  ? qk.generation_gw                  : null,
-    queue_depth_basis:        qk && qk.basis !== 'unclassified' ? qk.basis : null,
+    // Note K 6b: what queue_depth_gw carries (the generation queue), not the row's kind; see _queueDepthLabels.
+    queue_depth_basis:        qk && qk.basis !== 'unclassified' ? (qk.basis === 'mixed_connection_queue' ? qk.basis : 'generation_queue') : null,
     // ERCOT only: its published data-center share of the LARGE-LOAD queue.
     data_center_share_pct:    qk  ? qk.dc_share_pct                   : null,
     stranded_capacity_mw:     row ? _n(row.total_stranded_capacity_mw): null,
@@ -17919,6 +17971,10 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     market_count:             row ? _n(row.market_count)              : null,
     build_count:              row ? _n(row.build_count)               : null,
     build_rate_pct:           buildRate,
+    // Note L3: what build_rate_pct measures, so it is not read as a construction pace.
+    build_rate_basis:         buildRate != null
+      ? 'share of this ISO\'s DCPI-scored markets whose siting verdict is BUILD (build_count of market_count); a verdict share, not a construction rate'
+      : 'not available: the DCPI row reports no BUILD count for this ISO; not zero, and not a ranking position',
     as_of:                    eiaTs || (row && row.latest_computed_at) || (q && q.as_of) || null,
     last_updated:             eiaTs || (row && row.latest_computed_at) || null,
     dcpi_computed_at:         (row && row.latest_computed_at) || null,
@@ -17962,6 +18018,16 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   // shape, _<k>_in_pro markers included) is unchanged. Gated exactly as
   // queue_depth_gw is: _isMetricKey `_gw$` and _HEADROOM_GATE_RE.
   if (qk && qk.connections_gw != null) out.connections_queue_gw = qk.connections_gw;
+  // Grok Note L4 (2026-11-15): ERCOT's LARGE-LOAD queue as its own figures, each with its own basis, beside
+  // the generation queue in queue_depth_gw (one basis per figure, not per row). ERCOT rows only, so a US
+  // generation row's key set is unchanged. `_gw$` figures: withheld exactly as queue_depth_gw is.
+  if (qk && qk.basis === 'large_load') {
+    out.large_load_queue_gw = qk.large_load_gw;
+    out.large_load_queue_basis = 'large_load';
+    out.large_load_queue_data_center_gw = qk.dc_load_gw;
+  }
+  // Note K 6b + 6d: which queue, which source, which date (labels only, never a figure).
+  { const _ql = _queueDepthLabels(q, qk); if (_ql) Object.assign(out, _ql); }
   const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
   if (!haveGrid && !row && !q) {
     out._warning = `No live feed for "${ISO}". Supported: the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (SOCO, DUK, FPL, AZPS, NEVP, PGE, SCL, LDWP, GCPD, PSCO, TVA). For GB/EU/Taiwan/Australia use get_grid_scoreboard.`;
@@ -28460,6 +28526,16 @@ const _STEP_SLIM_KEEP = ['ok', 'error', 'empty_result', 'applied_filters',
   'constraint_coverage', 'constraint_coverage_shape', 'request_interpretation',
   'identity', 'citation', 'provenance', 'as_of', 'matched', 'universe', 'quota'];
 
+// Grok Note K item 6a (2026-11-15): the SCOPE of an answer is a caveat too. compare_isos says which
+// grids it compared in `isos`; the slim below cut that array to its first row like any other, so a
+// live execute_plan "ERCOT vs PJM vs MISO" step read `isos: ["ERCOT"]` beside a `comparison` holding
+// all three. A short list of plain codes rides whole; anything longer is rows and is cut as before.
+const _STEP_SLIM_SCOPE = ['isos'];
+const _SCOPE_MAX = 16;
+function _isScopeList(v) {
+  return Array.isArray(v) && v.length <= _SCOPE_MAX && v.every((x) => typeof x === 'string' && x.length <= 40);
+}
+
 // ★2026-09-01 — THE ANSWER, not only the caveats.
 //
 // The list above is every block saying what an answer does NOT cover. It kept a
@@ -28500,6 +28576,19 @@ function _carriesProtected(v, depth = 0) {
   return Object.keys(v).some((k) => _STEP_PROTECTED_KEY_RE.test(k) || _carriesProtected(v[k], depth + 1));
 }
 
+// Grok Note K item 6c (2026-11-15): an array the TIER gate already cut carries its honest length in a
+// sibling `_<key>_total_in_<tier>` (trimForTrial / _teaseDepth). Cutting it again for size changed
+// the count every reader takes from that pair: compare_isos keeps 3 hourly demand rows per grid, and
+// the plan envelope then cited "1 of 21 shown" where the step itself said 3. Those rows are already a
+// preview, so they ride as the gate left them (bounded: a gate-cut list over _GATE_CUT_MAX is cut).
+const _GATE_TOTAL_SUFFIXES = ['_total_in_pro', '_total_in_developer', '_total_in_enterprise'];
+const _GATE_CUT_MAX = 10;
+function _gateCutArray(obj, k) {
+  const v = obj[k];
+  return Array.isArray(v) && v.length <= _GATE_CUT_MAX
+    && _GATE_TOTAL_SUFFIXES.some((sfx) => Number.isFinite(Number(obj['_' + k + sfx])) && obj['_' + k + sfx] !== null);
+}
+
 // Rows are the recoverable part: keep the first `rows` of every array (and any
 // later row carrying a protected field), cut long plain strings, recurse into
 // objects. Protected keys and protected strings are returned as they are.
@@ -28513,8 +28602,11 @@ function _shrinkStructured(v, rows, totals, path, depth = 0, strCap = 400) {
     if (depth > 6) return v;
     const o = {};
     for (const k of Object.keys(v)) {
+      const p = path ? path + '.' + k : k;
       o[k] = _STEP_PROTECTED_KEY_RE.test(k) ? v[k]
-        : _shrinkStructured(v[k], rows, totals, path ? path + '.' + k : k, depth + 1, strCap);
+        : _gateCutArray(v, k)
+          ? v[k].map((x, i) => _shrinkStructured(x, rows, totals, p + '[' + i + ']', depth + 2, strCap))
+          : _shrinkStructured(v[k], rows, totals, p, depth + 1, strCap);
     }
     return o;
   }
@@ -28545,6 +28637,7 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
 
     const kept = {};
     for (const k of _STEP_SLIM_KEEP) if (out[k] !== undefined) kept[k] = out[k];
+    for (const k of _STEP_SLIM_SCOPE) if (_isScopeList(out[k])) kept[k] = out[k];
     // Protected fields ride whole at the top level (owner guard above).
     for (const k of Object.keys(out)) if (_STEP_PROTECTED_KEY_RE.test(k)) kept[k] = out[k];
     // The answer itself, size-bounded — see _STEP_SLIM_HEADLINE.
@@ -28587,7 +28680,7 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
             + ' row(s) (truncation.rows_total gives the full counts) and text over '
             + strCap + ' characters is cut; call ' + name + ' directly for the full '
             + 'payload. The blocks that state what this answer does and does not '
-            + 'cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
+            + 'cover, and any next-step and access fields, are kept whole.';
           return cand;
         }
       }
@@ -28596,7 +28689,7 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
     last.note = 'step result slimmed as far as it structurally goes (1 row per array, '
       + 'text cut at 100 characters) and is still over the step budget; call ' + name
       + ' directly for the full payload. The blocks that state what this answer does '
-      + 'and does not cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
+      + 'and does not cover, and any next-step and access fields, are kept whole.';
     return last;
   } catch (_e) {
     return out;
@@ -32704,9 +32797,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // returned the same default-Colorado substation blob for EVERY iso (the
   // "every ISO looks identical" bug). HYDROQUEBEC/AESO/NORDPOOL are dropped:
   // they are modeled baselines (not live) and error on /grid/intelligence.
+  // Grok Note K item 6a (2026-11-15): agents send `isos` as an ARRAY (["ERCOT","PJM","MISO"]) as often
+  // as a string, and the string-only schema answered -32602. The array is joined before validation, so
+  // the advertised JSON Schema stays `type: string` (byte-identical on the frozen /mcp/chatgpt catalog)
+  // while both spellings work.
+  const _isosArg = z.preprocess(_isosPreprocess, Sreq);
   trackedTool(srv, 'compare_isos',
     'Use this when the user asks to compare two to four power grids side by side — fuel mix, demand, renewable/gas share, and for the US ISOs interconnection-queue depth and time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO"; "ERCOT vs AESO vs EU_DE_LU" also works. Params: isos is a comma-separated list (2-4 max): any of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE"), TVA, BPA, a US utility BA, or a non-US grid (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>, TAIPOWER, OCCTO, KEPCO-KR, ONS, AEMO, EMA); non-US and non-ISO rows carry null DCPI and queue fields (not tracked, not zero). Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, avg_queue_wait_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. ★avg_time_to_power_months (DCPI per-market estimate, ISO-averaged) and avg_queue_wait_months (proxy from live queue DEPTH) are DIFFERENT measurements — quote whichever you mean by name. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
-    { isos: Sreq.describe('Comma-separated list of 2-4 grids to compare, e.g. "PJM,ERCOT,CAISO" or "ERCOT,AESO,EU_DE_LU": US ISOs (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE), TVA, BPA, utility BAs, or non-US grids (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>, TAIPOWER, OCCTO, KEPCO-KR, ONS, AEMO, EMA)') },
+    { isos: _isosArg.describe('Comma-separated list of 2-4 grids to compare, e.g. "PJM,ERCOT,CAISO" or "ERCOT,AESO,EU_DE_LU": US ISOs (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE), TVA, BPA, utility BAs, or non-US grids (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>, TAIPOWER, OCCTO, KEPCO-KR, ONS, AEMO, EMA)') },
     async (a) => {
       const SUPPORTED = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
       const _norm = (s) => {
@@ -32714,7 +32812,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const u = String(s || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
         return (u === 'ISONE' || u === 'ISO-NE' || u === 'NEISO') ? 'ISO-NE' : u;
       };
-      const list = (a.isos || '').split(',').map(_norm).filter(Boolean)
+      const list = _isosText(a.isos).split(',').map(_norm).filter(Boolean)
         .filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 4);
       // 2026-10-21: every live grid, not only the 7 US ISOs (_gridRoute). US ISOs keep
       // the DCPI + queue join; EIA regions (TVA, BPA, utility BAs) are shaped the same
