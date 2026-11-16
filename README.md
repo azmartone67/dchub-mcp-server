@@ -150,7 +150,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 The canonical MCP endpoint is `https://dchub.cloud/mcp` (Streamable HTTP). Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
-`https://dchub.cloud/mcp` serves the full catalog (96 tools) to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`.
+`https://dchub.cloud/mcp` serves the full catalog (all 96 tools) to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`.
 
 ## What DC Hub adds
 
