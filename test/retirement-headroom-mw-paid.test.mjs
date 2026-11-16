@@ -184,7 +184,7 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
     const out = await retirement(K_FREE, { target_mw: 400, horizon_months: 18 });
     expect(targetSeen, 'the backend was not called — the check is vacuous').not.toHaveLength(0);
     expect(targetSeen.every((t) => t === '50'), `backend saw target_mw ${JSON.stringify(targetSeen)}`).toBe(true);
-    expect(out.sc._ignored_params && out.sc._ignored_params.target_mw).toContain('paid filter');
+    expect(out.sc._ignored_params && out.sc._ignored_params.target_mw).toContain('not applied in this preview');
   });
 
   // ladder stage 1 (owner 2026-09-29): the $10 pack is Developer depth paid per

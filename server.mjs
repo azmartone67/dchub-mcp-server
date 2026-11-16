@@ -23420,7 +23420,7 @@ export function _planDcpiLead(ia) {
 const _EXEC_BA_REGION = { SOCO: 'SERC', TVA: 'SERC' };
 // 5.25 (Grok QA 2026-11-13, /mcp/chatgpt Reno 200 MW): a step that did not apply what the question
 // asked said so only inside its own result (get_retirement_headroom `_ignored_params.target_mw`: "a MW
-// threshold is a paid filter; this preview uses the default 50"; get_refined_queue
+// threshold is not applied in this preview; it uses the default 50"; get_refined_queue
 // `filters_applied._min_mw_not_applied`), and the queue step for a state read one ISO's file without
 // saying the rest of that state is not in any queue DC Hub reads. An agent composing from
 // answer_guide never saw any of it. This lists each drop with the step's OWN reason, and
@@ -33776,7 +33776,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (!_full) {
         data = _maskRetirementHeadroom(data, _c.session_id);
         if (_ignored && data && data._gated) {
-          data = { ...data, _ignored_params: { target_mw: 'a MW threshold is a paid filter; this preview uses the default '
+          data = { ...data, _ignored_params: { target_mw: 'a MW threshold is not applied in this preview; it uses the default '
             + RETIREMENT_DEFAULT_TARGET_MW } };
         }
       }
