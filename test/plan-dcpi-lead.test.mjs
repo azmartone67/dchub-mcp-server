@@ -16,6 +16,7 @@ import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { CORE_PROFILE } from '../lib/core-profile.mjs';
+import { splitPlanFactHeader } from '../lib/plan-fact-header.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -207,8 +208,13 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     const r = await callAs(null, 'execute_plan', ASK, 'claude-code', opts);
     expect(r.result.isError).not.toBe(true);
     const blocks = (r.result.content || []).map((b) => b.text || '');
-    // 1) the verdict is the first thing in the answer: block 0's first key
-    const d = JSON.parse(blocks[0]);
+    // 1) the verdict is the first thing in the answer: the fact header's SUMMARY names it (lib/plan-fact-header.mjs,
+    //    2026-11-16), and it is the first key of the plan JSON that follows the header in block 0
+    const { header, json } = splitPlanFactHeader(blocks[0]);
+    // (sessionless over this harness's loopback socket reads as a plan step, which carries no header)
+    if (opts.sessionless) expect(header).toBeNull();
+    else expect(header).toMatch(/\nSUMMARY: [^\n]*\| Verdict: CAUTION$/);
+    const d = JSON.parse(json);
     // (a walled answer's wall puts its one link field, human_url, at the top: a URL, not an offer)
     expect(Object.keys(d).filter((k) => k !== 'human_url')[0]).toBe('dcpi_verdict');
     expect(d.intent_class).toBe('market_outlook');
@@ -225,15 +231,15 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     const offerAt = blocks.findIndex((t, i) => i > 0 && (t.includes(EMAIL_ASK) || /dchub\.cloud\/(?:upgrade\/|connect\b)/.test(t)));
     expect(offerAt, blocks.map((t) => t.slice(0, 80)).join(' | ')).toBeGreaterThan(0);
     // the verdict is the first key; the offer prose is not ahead of it inside block 0 either
-    const at = blocks[0].indexOf(EMAIL_ASK);
-    expect(at === -1 || at > blocks[0].indexOf('"dcpi_verdict"')).toBe(true);
+    const at = json.indexOf(EMAIL_ASK);
+    expect(at === -1 || at > json.indexOf('"dcpi_verdict"')).toBe(true);
   });
   it('keyless, the first full answer of the day (compact): the answer IS the verdict sentence, then as_of, then the verdict', async () => {
     delete process.env.DCHUB_KEYLESS_FIRST_FULL;
     try {
       // in a session: over this harness's loopback socket a sessionless call reads as a plan step
       const r = await callAs(null, 'execute_plan', ASK, 'claude-code');
-      const d = JSON.parse((r.result.content || [])[0].text);
+      const d = JSON.parse(splitPlanFactHeader((r.result.content || [])[0].text).json);
       expect(d.first_full_answer).toMatchObject({ used: 1, limit: 1 });
       // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer
       expect(Object.keys(d).filter((k) => k !== 'human_url').slice(0, 3)).toEqual(['answer', 'as_of', 'dcpi_verdict']);
@@ -244,8 +250,10 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
   });
   it('a market the index does not track gets no verdict block (never a substitute)', async () => {
     const r = await callAs(null, 'execute_plan', { intent: 'Is Timbuktu a good place to build?' }, 'claude-code');
-    const d = JSON.parse(r.result.content[0].text);
+    const { header, json } = splitPlanFactHeader(r.result.content[0].text);
+    const d = JSON.parse(json);
     expect(d.dcpi_verdict).toBeUndefined();
+    expect(String(header || '')).not.toMatch(/Verdict/);   // no substitute in the fact header either
   });
   it('_planDcpiLead: only a market-scoped verdict; ISO bands and other kinds are not led with', () => {
     const ia = { kind: 'market_check', verdict: { value: 'BUILD', scope: 'market', subject: 'san-antonio', composite_score: 71 },
