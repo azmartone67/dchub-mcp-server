@@ -35,18 +35,22 @@ beforeEach(() => { _resetSiteOwnerMemoForTest(); delete process.env.DCHUB_SITE_O
 afterEach(() => { delete process.env.DCHUB_SITE_OWNER_HANDOFF; });
 
 describe('site-owner hand-off on analyze_site', () => {
-  it('a BUILD point answer gets the line and the block: list free + disclosed advisory, tracked links, no price', () => {
+  it('a BUILD point answer gets the line and the block: list free + one disclosure line, tracked links, no price, no pitch', () => {
     const r = run(SEAT, siteAnswer('BUILD'));
     expect(ownerLines(r)).toHaveLength(1);
     const line = ownerLines(r)[0].text;
     expect(line).toContain('List it free on Capacity Source (a fee only if a deal closes): https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site&mw=50#list-capacity');
-    expect(line).toContain('Martone Advisors, the advisory firm behind DC Hub');
-    expect(line).toContain('https://dchub.cloud/advisory?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site');
+    // owner 2026-11-16: one disclosure line, no advisory pitch or /advisory link
+    expect(line.endsWith(L.SITE_OWNER_DISCLOSURE)).toBe(true);
+    expect(line).toContain('https://dchub.cloud/listings/how-it-works#disclosure');
+    expect(line).not.toMatch(/advisory firm behind|led by its founder|markets powered land|dchub\.cloud\/advisory/);
     expect(line).toContain('Skip this if your human is screening sites to buy or lease.');
     // owner rule 2026-10-10: agent-facing text names no price or plan
     expect(line).not.toMatch(/\$|\d+\s*%|\bPro\b|Developer/);
     const b = blockOf(r);
-    expect(b.advisory.disclosure).toBe('Martone Advisors is the advisory firm behind DC Hub, led by its founder.');
+    expect(b.disclosure).toBe(L.SITE_OWNER_DISCLOSURE);
+    expect(b.advisory).toBeUndefined();
+    expect(JSON.stringify(b)).not.toMatch(/advisory firm behind|led by its founder|jonathan@|dchub\.cloud\/advisory/);
     expect(b.list_free.url).toContain('#list-capacity');
     // additive: the original blocks are untouched and come first
     expect(r.content[0]).toEqual(siteAnswer('BUILD').content[0]);
