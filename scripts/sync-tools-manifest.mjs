@@ -21,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
+import { CHANGELOG_FILE, addChangelogEntry, todayUTC } from './changelog-entry.mjs';
 import { registryRemotes, remoteProfiles } from '../lib/registry-remotes.mjs';
 import { withPlanSuffix } from '../lib/dchub-identity.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
@@ -784,6 +785,15 @@ const names = new Set(tools.map((t) => t.name));
       VERSION = next;
       text = renderAt(next);
       bumped = `${VERSION} (content moved since ${fence.commit.slice(0, 7)})`;
+      // ★2026-11-16 (Note P follow-up): a bump needs its CHANGELOG.md entry, or the
+      // hard gate (changelog-and-publish-gate) fails on this very heal. A tree with
+      // no CHANGELOG.md is left alone; an existing entry for the version is kept.
+      let cl = null;
+      try { cl = readCur(CHANGELOG_FILE); } catch { cl = null; }
+      if (cl !== null) {
+        const withEntry = addChangelogEntry(cl, VERSION, todayUTC());
+        if (withEntry !== cl) pend(CHANGELOG_FILE, withEntry);
+      }
     } else {
       problems.push(`${SJ}: ${fence.reason}, so the official registry already holds ${VERSION} `
         + `with DIFFERENT content. The next publish is rejected as a duplicate and the registry `

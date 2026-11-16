@@ -609,6 +609,7 @@ test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
+test/sync-fix-changelog-entry.test.mjs
 test/tax-incentives-state-filter.test.mjs
 test/testimonials-resource.test.mjs
 test/tier-collapse-fix.test.mjs
