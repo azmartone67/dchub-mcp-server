@@ -23,7 +23,7 @@ describe('sessionInitEventBody (pure)', () => {
       qaMarker: false, selfPath: false, platform: 'claude', path: '/mcp' }, {});
     expect(b).toEqual({
       event: 'session_init', session_id: 'sid-1', client_name: 'Claude Code', client_version: '2.0.14',
-      protocol_version: '2025-06-18', user_agent: 'claude-code/2.0.14', via: 'pipeworx',
+      protocol_version: '2025-06-18', user_agent: 'claude-code/2.0.14', via: 'pipeworx', src: null,
       qa_marker: false, self_path: false, platform: 'claude', path: '/mcp', source: null,
       agent_hash: md5('198.51.100.7'),
     });

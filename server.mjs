@@ -277,6 +277,8 @@ import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmail
 import { wallOfferFloorOn as _wallOfferFloorOn, floorOfferKind as _floorOfferKind,
          hasFreeOffer as _hasFreeOffer, withFloorLine as _withFloorLine } from './lib/wall-offer-floor.mjs';
 import { keyMintVia } from './lib/via-tags.mjs';
+import { listingSrcFromRequest as _listingSrcFromRequest, rememberListingSrc as _rememberListingSrc,
+  listingAttribution as _listingAttribution, applyListingSrcHeaders as _applyListingSrcHeaders } from './lib/via-src.mjs';
 import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
@@ -3796,14 +3798,25 @@ const getCtx = () => ctx.getStore() || {};
 // counts calls per via (routes/via_attribution.py). A count only, never access.
 const viaCtx = new AsyncLocalStorage();
 export const getVia = () => viaCtx.getStore() || null;
-export const VIA_FUNNEL_CHANNELS = new Set(['x', 'linkedin', 'substack', 'reddit', 'media', 'mcp-wall']);   // = dchub-backend routes/via_funnel.py CHANNELS
+export const VIA_FUNNEL_CHANNELS = new Set(['x', 'linkedin', 'substack', 'reddit', 'media', 'mcp-wall',
+  'directory', 'partner']);   // all are dchub-backend routes/via_funnel.py CHANNELS
+// 2026-11-16 (Grok note N addendum): a listing link names its directory or partner, /mcp?via=directory&src=glama.
+// The {via, src} pair (lib/via-src.mjs: closed slug set from canonical/directories.json) has its own per-request store,
+// is remembered per MCP session, and rides the session_init event and the claim / bind calls as X-DCHub-Src.
+const listingSrcCtx = new AsyncLocalStorage();
+export const getListingSrc = () => listingSrcCtx.getStore() || null;
+function _listingPairFor(sessionId) {
+  return _listingAttribution({ requestPair: getListingSrc(), requestVia: getVia(), sessionId });
+}
 
 // 2026-10-21: one `session_init` telemetry event per initialize (lib/session-init-event.mjs),
 // so the backend can tell which kind of client opened the session. Fire and forget.
 export function _reportSessionInit(req, { sessionId = null, userAgent = '', clientIp = '', qaMarker = false, platform = '' } = {}) {
   try {
+    const _ls = getListingSrc();
+    if (_ls && sessionId) _rememberListingSrc(sessionId, _ls);
     const ev = _sessionInitEventBody({ body: req && req.body, sessionId, userAgent, clientIp,
-      via: getVia(), qaMarker, selfPath: !!_pathSelfTag(req), platform, path: _normPath(req),
+      via: getVia(), src: _ls ? _ls.src : null, qaMarker, selfPath: !!_pathSelfTag(req), platform, path: _normPath(req),
       source: _pathSource(req) });
     _postSessionInitEvent(ev, { apiBase: API_BASE, internalKey: INTERNAL_KEY });
   } catch (_) { /* telemetry never touches a handshake */ }
@@ -8068,6 +8081,9 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // itself and any other well-formed name as `other` (lib/via-tags.mjs), so a key minted through a listing is no longer
   // "(no via)". The closed social/wall set above is unchanged and wins.
   { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; else { const _k = keyMintVia(_v); if (_k) headers['X-DCHub-Via'] = _k; } }
+  // 2026-11-16 (Grok note N addendum): a session opened on a directory/partner link carries its slug onto the claim /
+  // bind (X-DCHub-Via: directory|partner + X-DCHub-Src: <slug>), from this request or, failing that, the session memo.
+  try { _applyListingSrcHeaders(headers, _listingPairFor(c.session_id)); } catch (_) { /* attribution never touches the call */ }
   // 2026-11-05 (owner, "ship ... MCP-side via tag"): a session that was handed a wall link credits its later
   // claim_free_key / bind_email to mcp-wall (lib/wall-via-tag.mjs). Only the two call sites that pass
   // opts.wallVia; a via the connector URL declared wins; no wall seen, no session id or a QA caller: nothing.
@@ -37039,10 +37055,11 @@ const app = express();
 app.use(utf8CharsetMiddleware);
 app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));
+app.use((req, res, next) => listingSrcCtx.run(_listingSrcFromRequest(req, getVia()), next));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via, X-DCHub-Src');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
   // r-csp (2026-07-23): the ChatGPT App Directory requires a Content-Security-
   // Policy on the MCP endpoint to submit ("you defined a CSP … required to submit
