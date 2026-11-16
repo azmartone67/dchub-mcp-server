@@ -20305,7 +20305,7 @@ export const _TOOL_FAMILIES_TABLE = [
   // 2026-11-16 (owner "Let's do both"): the feedback family. Any caller, key or none, files what
   // looked wrong or missing (report_finding) or what their human wants next (request_enhancement);
   // both land in the same queue the DC Hub team reviews daily.
-  { family: 'feedback', when: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement. Free; works with or without a key.', keywords: ['finding','report','wrong','missing','stale','bug','feedback','feature','request','enhancement','coverage','observed','audit'],
+  { family: 'feedback', when: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement. Works with or without a key.', keywords: ['finding','report','wrong','missing','stale','bug','feedback','feature','request','enhancement','coverage','observed','audit'],
     tools: ['report_finding','request_enhancement'] },
 ];
 
@@ -31349,8 +31349,8 @@ export const FINDING_TOOL_OPTIONAL = Object.freeze(['feature_request', 'coverage
 export const FINDING_SUMMARY_REQUIRED = Object.freeze(['feature_request', 'missing_data', 'other']);
 export const FINDING_DEFAULT_TOOL = 'general';
 export const FINDING_THANKS = 'Thanks. The DC Hub team reviews findings daily.';
-export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
-export const REQUEST_ENHANCEMENT_DESCRIPTION = "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).";
+export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
+export const REQUEST_ENHANCEMENT_DESCRIPTION = "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).";
 export const FINDING_ENTRY_TOOLS = Object.freeze(['report_finding', 'request_enhancement']);
 export const FINDING_CLIENTS = Object.freeze(['claude', 'chatgpt', 'cursor', 'other']);
 const _FINDING_FIELDS = ['class', 'tool', 'args', 'quoted_fields', 'observed_at', 'session_id', 'recurrence', 'note',
@@ -37145,7 +37145,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // owner-approved text, verbatim.
   // Literal text (scripts/sync-tools-manifest.mjs reads registrations as literals); test/findings-open-intake
   // pins it equal to REPORT_FINDING_DESCRIPTION / REQUEST_ENHANCEMENT_DESCRIPTION and lib/claude-directory.mjs.
-  trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
+  trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
     { class: z.enum(FINDING_CLASSES).describe('Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your human wants DC Hub to do), completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (a preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a wall that says stop while next_ask offers only another walled tool), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a gated field served to a caller it is gated from), link_hygiene (dead or wrong-shape links), other'),
       tool: z.string().min(1).max(80).optional().describe('The DC Hub tool or endpoint it is about, e.g. analyze_site (optional for feature_request and coverage_gap)'),
       summary: z.string().min(10).max(280).optional().describe('One sentence, 10-280 characters: what you saw or what your human wants (required for feature_request, missing_data, other)'),
@@ -37159,7 +37159,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       note: S.describe('One or two sentences of context'),
       contact_email: z.string().max(254).optional().describe('Only if your human asked for a reply') },
     async (a) => _reportFindingTool(getCtx().api_key, a, undefined, { entryTool: 'report_finding' }));
-  trackedTool(srv, 'request_enhancement', "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).",
+  trackedTool(srv, 'request_enhancement', "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).",
     { summary: z.string().min(10).max(280).describe('One sentence, 10-280 characters: what your human wants DC Hub to do or cover'),
       user_goal: z.string().max(500).optional().describe('What your human was trying to do'),
       tool: z.string().min(1).max(80).optional().describe('The DC Hub tool it relates to, if any'),
