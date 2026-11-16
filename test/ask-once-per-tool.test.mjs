@@ -21,6 +21,7 @@ import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.m
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
+import { KEY_LINE_RE } from '../lib/wall-key-line.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -133,15 +134,22 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(r3.ev.offers_shown).toContain('email_unlock');               // C3: the row names what was delivered
   });
 
+  // Grok note N item 1 (2026-11-15, lib/wall-key-line.mjs): a keyless caller on a digest-only wall also reads the
+  // free-key line (an email for a free KEY, never for this answer's fields) once per (session, tool), ahead of the
+  // digest offer, tagged key_line. Outside that one line the old rule holds: no email unlock ask, no claim_free_key,
+  // no "Reply with"; and the same tool again gets the floor's one digest line, not the key line a second time.
   it('a depth wall as the second tool gets the digest offer, never an email ask; its repeat gets the floor\'s one digest line', async () => {
     const call = await session();
     expect(count((await call('rank_markets')).text, RANK_ASK)).toBe(1);
     const d1 = await call('list_transactions');
     expect(d1.sc.preview_is_partial || d1.sc.trial_preview, 'list_transactions did not wall').toBeTruthy();
     expect(count(d1.text, DIGEST)).toBe(1);
-    expect(d1.text).not.toMatch(/`bind_email`|`claim_free_key`|Reply with your email/);
+    expect((d1.text.match(new RegExp(KEY_LINE_RE.source, 'g')) || []).length).toBe(1);
+    expect(d1.text.indexOf(DIGEST)).toBeGreaterThan(d1.text.search(new RegExp(KEY_LINE_RE.source)));
+    expect(d1.text.replace(new RegExp(KEY_LINE_RE.source, 'g'), '')).not.toMatch(/`bind_email`|`claim_free_key`|Reply with your email/);
     expect(d1.text).not.toContain(RANK_EMAIL_ASK_LEAD);
-    expect(d1.ev && d1.ev.email_ask).toBe('digest_line');
+    expect(d1.ev && d1.ev.email_ask).toBe('key_line');
+    expect(d1.ev.offers_shown).not.toContain('email_unlock');
     const d2 = await call('list_transactions');
     expect(count(d2.text, FLOOR_DIGEST_LEAD)).toBe(1);
     expect(count(d2.text, DIGEST)).toBe(1);

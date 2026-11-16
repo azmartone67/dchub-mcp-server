@@ -24,7 +24,8 @@ import { startHarness, fenceNetwork, GUESS_ARGS } from './helpers/claude-directo
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
-const OFFER_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field', 'digest_line']);
+// key_line (Grok note N item 1): the free-key line ahead of the digest offer, counted in hits_with_ask.
+const OFFER_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field', 'digest_line', 'key_line']);
 // Measured 2026-11-11: the anonymous hard wall does not apply to these (key, account and write
 // tools a keyless caller reaches without a wall, or keyed-only tools that answer with a key error).
 const NO_HARD_WALL = new Set(['save_to_shortlist', 'get_shortlist', 'set_shortlist_alert', 'suggest_reallocation',

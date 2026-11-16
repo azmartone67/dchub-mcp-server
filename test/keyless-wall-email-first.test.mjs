@@ -388,7 +388,10 @@ describe('C. quota_wall_hit', () => {
     const n = await call('search_facilities', { query: 'ashburn' });
     expect(n.status).toEqual(['anon_hard_wall']);
     expect(n.events.length).toBe(1);
-    expect(n.events[0].email_ask).toBe('digest_line');
+    // Grok note N item 1 (2026-11-15, lib/wall-key-line.mjs): keyless, no email on file, so the digest offer carries
+    // the free-key line ahead of it and the row reads key_line (an email-for-key ask), still never an email unlock.
+    expect(n.events[0].email_ask).toBe('key_line');
+    expect(n.events[0].offers_shown || []).not.toContain('email_unlock');
   });
 
   // Option E fix (2026-10-26): the event leaves after the outer response steps, so an ask they add

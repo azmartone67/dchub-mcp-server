@@ -23,6 +23,7 @@ import { wallOauthLeadEligible, wallOauthLeadLine, OAUTH_SIGNIN_URL } from '../l
 import { depthTrialEligible, depthTrialLine, DEPTH_TRIAL_TOOLS } from '../lib/wall-depth-trial.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
 import { TIER_CANON } from '../lib/tier-canon.mjs';
+import { keyLine } from '../lib/wall-key-line.mjs';
 // Note K item 8 (2026-11-15): a wall now carries ONE route (lib/wall-offers.mjs oneRoute). This file pins the stacked
 // offers (sign-in lead + floor + depth trial) that the kill switch DCHUB_WALL_ONE_ROUTE=0 keeps;
 // test/wall-one-route.test.mjs pins the one-route default.
@@ -68,7 +69,8 @@ describe('1. wallOffers is the old composition, byte for byte, where eligibility
     let n = 0;
     const places = { lead: 0, floor: 0, below_link: 0 };
     for (const [ent, f] of matrix()) {
-      const got = wallOffers(ent, { ...f, walled: true, env: ENV }).map((o) => ({ place: o.place, line: o.line, ask: o.ask }));
+      // The free-key line (Grok note N item 1) is the one deliberate change; off here, pinned with it on below.
+      const got = wallOffers(ent, { ...f, walled: true, env: { ...ENV, DCHUB_WALL_KEY_LINE: '0' } }).map((o) => ({ place: o.place, line: o.line, ask: o.ask }));
       expect(got, JSON.stringify({ ent, f })).toEqual(legacy(ent, f));
       n += 1; for (const o of got) places[o.place] += 1;
     }
@@ -77,6 +79,25 @@ describe('1. wallOffers is the old composition, byte for byte, where eligibility
     expect(places.lead).toBeGreaterThan(100);
     expect(places.floor).toBeGreaterThan(100);
     expect(places.below_link).toBeGreaterThan(10);
+  });
+  // Grok note N item 1: with the free-key line on, the ONLY difference from that composition is on a digest floor for
+  // a caller with no email on file: the key line first, then the digest line (without its own claim_free_key clause),
+  // tagged key_line. Every other offer, every place and every other tag is byte for byte the same.
+  it('with the free-key line on: the same, except a digest floor for a caller with no email on file', () => {
+    let changed = 0;
+    for (const [ent, f] of matrix()) {
+      const got = wallOffers(ent, { ...f, walled: true, env: ENV }).map((o) => ({ place: o.place, line: o.line, ask: o.ask }));
+      const want = legacy(ent, f).map((o) => {
+        const digestFloor = o.place === 'floor' && o.ask === 'digest_line' && !ent.bound && !ent.paid;   // not a paid key
+        if (!digestFloor) return o;
+        changed += 1;
+        const kind = floorOfferKind({ proOnly: f.proOnly, depth: f.depth, bound: ent.bound });
+        return { place: 'floor', ask: 'key_line', line: keyLine({ keyed: ent.keyed }) + '\n\n'
+          + floorOfferLine(kind, { keyed: true, bound: ent.bound, depth: f.proOnly || f.depth }) };
+      });
+      expect(got, JSON.stringify({ ent, f })).toEqual(want);
+    }
+    expect(changed).toBeGreaterThan(100);
   });
   it('not a wall: no offers at all', () => {
     expect(wallOffers({ keyed: false, bound: false, signedIn: false, paid: false }, { tool: 'rank_markets', walled: false, workosEnabled: true, link: LINK })).toEqual([]);

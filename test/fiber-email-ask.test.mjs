@@ -13,6 +13,7 @@ import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import { digestAskLine } from '../lib/depth-digest-ask.mjs';
 import { FLOOR_EMAIL_LEAD } from '../lib/wall-offer-floor.mjs';
+import { KEY_LINE_RE } from '../lib/wall-key-line.mjs';
 import { fiberEmailClause, RANK_EMAIL_ASK_LEAD, AICAP_EMAIL_LINE_HEAD } from '../lib/paid-sell-line.mjs';
 
 const realConnect = net.Socket.prototype.connect;
@@ -239,14 +240,20 @@ describe('what the fiber ask promises, on the real handler', () => {
 });
 
 describe('keyless get_dchub_recommendation wall (Pro-only) on /mcp', () => {
-  it('first wall: the digest line once, directly above the human line; tagged digest_line; no unlock ask', async () => {
+  // Grok note N item 1 (2026-11-15, lib/wall-key-line.mjs): a keyless caller also reads the free-key line once, ahead
+  // of the digest offer (an email for a free key, never for this answer), so the wall is tagged key_line. Outside that
+  // one line: no bind_email, no unlock ask.
+  it('first wall: the digest line once, directly above the human line; tagged key_line; no unlock ask', async () => {
     const r = await (await session('Claude Code', 'get_dchub_recommendation'))({ context: 'site-selection' });
     expect(r.sc.preview_is_partial || r.sc.trial_preview).toBe(true);
     const k = r.texts.findIndex((t) => t.startsWith(HUMAN));
     expect(k).toBeGreaterThan(0);
     expect(r.texts[k - 1].split('\n\n').at(-1)).toBe(digestAskLine('get_dchub_recommendation'));
     expect(count(r.text, '`subscribe_digest`')).toBe(1);
-    expect(r.text).not.toContain('bind_email');
-    expect(r.ev && r.ev.email_ask).toBe('digest_line');
+    const keyLines = r.text.match(new RegExp(KEY_LINE_RE.source, 'g')) || [];
+    expect(keyLines).toHaveLength(1);
+    expect(r.text.replace(new RegExp(KEY_LINE_RE.source, 'g'), '')).not.toContain('bind_email');
+    expect(r.ev && r.ev.email_ask).toBe('key_line');
+    expect(r.ev.offers_shown).not.toContain('email_unlock');
   });
 });
