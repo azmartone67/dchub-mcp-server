@@ -59,8 +59,10 @@ describe('tier_required on the access tag', () => {
       expect(t.connect_url, n).toBe(`https://dchub.cloud/connect?ref=mcp-tools-list&tool=${n}`);
       expect(t.pricing_url, n).toBeUndefined();
     }
+    // Grok note L item 5 (2026-11-15): gated tools point at /connect too, no pricing URL.
     const g = _accessTagFor('get_facility');
-    expect(g.pricing_url).toBe('https://dchub.cloud/pricing/upgrade?tool=get_facility&ref=mcp-tools-list');
+    expect(g.pricing_url).toBeUndefined();
+    expect(g.connect_url).toBe('https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_facility');
   });
 
   it('KEY_REQUIRED_TOOLS stays inside the measured key-only list of the directory profile', () => {
