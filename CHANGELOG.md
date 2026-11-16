@@ -10,6 +10,18 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.59 (2026-11-16)
+
+- `report_finding` takes findings from any caller, with or without a key; new `request_enhancement` files feature and coverage requests to the same queue (97 tools) (#1475).
+- `execute_plan`: block 0 opens with a three-line `fact_header` (source and as-of, entity, summary with the DCPI verdict); `compact: false` leaves it out (#1472).
+- `execute_plan`: a larger answer budget with lossless de-duplication of repeated envelopes and step notes (#1474); keyless first answers keep each step's full-depth figures (#1469).
+- Planner 5.29: several named states never give an empty plan, and `get_pipeline` stays on the named market or state, saying "Widened <metro> to <state>" when it widens (#1459, #1468).
+- `get_pipeline` takes `market` and `state` (#1458).
+- `compare_isos` lists every grid, labels and dates each queue figure, and gives coarse ISO bands where an answer withholds exact figures (#1460, #1476, #1479).
+- One durable key per MCP session, with a reuse line and a save-key line on a new key's first answer (#1470); a key line ahead of the digest offer on digest-only answers (#1467).
+- `?via=directory|partner&src=<slug>` attribution carries into the session (#1481).
+- Copy: tool descriptions, annotations and results name no plan or price; `DCHUB_API_KEY` is optional; six email tools say what they collect and confirm first; server display name is "DC Hub" (#1454, #1461, #1462, #1464, #1466).
+
 ## 2.12.58 (2026-11-15)
 
 - `execute_plan`: first-full plan steps run at full depth, with end-to-end tests (#1451).
