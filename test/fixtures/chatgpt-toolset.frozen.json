@@ -1259,7 +1259,7 @@
   {
    "name": "get_intelligence_index",
    "title": "Market Intelligence Index",
-   "description": "Get a composite 0-100 health index for a data-center market, combining supply and demand, vacancy, absorption, fiber, power availability and pricing trend.",
+   "description": "Get DC Hub's global data-center market index: a 0-100 pulse score, dataset totals and the top-scoring markets. It covers all markets and takes no market filter; for one market, use get_market_dcpi_rank or get_market_intel.",
    "inputSchema": {
     "type": "object",
     "properties": {}

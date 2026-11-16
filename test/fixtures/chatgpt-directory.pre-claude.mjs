@@ -100,7 +100,9 @@ export const DIRECTORY_TOOLS = Object.freeze({
   get_gas_economics: 'Get gas-fired power inputs for a US data-center market: Henry Hub spot, regional basis and delivered industrial and electric gas tariffs, each with its source.',
   get_grid_scoreboard: 'Get a live scoreboard of grid operators in the US, Great Britain, Europe and parts of Asia-Pacific and Latin America: demand, fuel mix, renewable share and gas share right now.',
   compare_isos: 'Compare 2-4 US ISO grids side by side (comma-separated, e.g. "PJM,ERCOT"): fuel mix, demand, renewable and gas share, queue depth and time to power.',
-  get_intelligence_index: 'Get a composite 0-100 health index for a data-center market, combining supply and demand, vacancy, absorption, fiber, power availability and pricing trend.',
+  // 2026-11-16 (Grok Note V M2, owner-approved): the one deliberate edit to this copy. The tool is ONE global
+  // index with no market filter; the old text read as a per-market score (test/chatgpt-toolset.frozen.json moved with it).
+  get_intelligence_index: 'Get DC Hub\'s global data-center market index: a 0-100 pulse score, dataset totals and the top-scoring markets. It covers all markets and takes no market filter; for one market, use get_market_dcpi_rank or get_market_intel.',
   list_transactions: 'List data-center M&A and capital transactions since 2019. Filter by buyer, seller, deal value, deal type, date range or region.',
   get_news: 'Get curated data-center industry news. Filter by keyword, category, source and date range.',
   semantic_search: 'Search DC Hub news, M&A deals, facilities and market analyses by meaning rather than keywords. Returns ranked records with source fields for citation.',
