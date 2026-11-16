@@ -138,7 +138,7 @@ import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wal
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
-import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields } from './lib/unlock-line.mjs';
+import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields, EMAIL_ASK as _UNLOCK_EMAIL_ASK } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -191,6 +191,7 @@ import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies 
 import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
+import { humanEmailReplyOn as _humanEmailReplyOn, applyHumanEmailReply as _applyHumanEmailReply } from './lib/human-email-reply.mjs';
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
@@ -29864,7 +29865,33 @@ export function _powerBandLineStep(result, name) {
     { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] });
 }
 
+// ── Grok to Brain 2026-11-16: the person's line carries the email offer (lib/human-email-reply.mjs) ──
+// Only where this response's own wall asked the agent for an UNLOCK email (never key_line: there an email
+// opens no field), the prose names bind_email, the caller has no bound email, and the surface's copy is not
+// frozen (directory / Claude / core profiles, clean platforms, the Grok contract). Runs first in
+// _relayContractStep: every ask step has run, and human_message is filled from user_message after it.
+// Kill switch DCHUB_HUMAN_EMAIL_REPLY=0.
+const _HUMAN_EMAIL_REPLY_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field']);
+export function _humanEmailReplyStep(result, name) {
+  try {
+    if (!_humanEmailReplyOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    // The wall's own mark, else (G8: a hand-off line nothing marked) the unlock ask in the prose itself.
+    if (c.email || c._emailAsk === 'key_line') return result;
+    const marked = _HUMAN_EMAIL_REPLY_ASKS.has(c._emailAsk);
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform() || _pcIsGrok(c.platform)) return result;
+    const prose = result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string'
+      && !/^\s*[{[]/.test(b.text) && /`bind_email`/.test(b.text)
+      && (marked || b.text.includes(_UNLOCK_EMAIL_ASK)));
+    if (!prose) return result;
+    return _applyHumanEmailReply(result);
+  } catch (_) { return result; }
+}
+
 export function _relayContractStep(result, name) {
+  result = _humanEmailReplyStep(result, name);
   try {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     const sc0 = result.structuredContent;
