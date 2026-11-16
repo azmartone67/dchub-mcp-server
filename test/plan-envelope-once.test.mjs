@@ -21,6 +21,10 @@ process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // The envelope pass alone: the later note L1 + L2 step (lib/neutral-cta.mjs) also drops step offer lists, which
 // would make this file's switch-off control pass for the wrong reason. It only removes keys, never adds one.
 process.env.DCHUB_PLAN_NEUTRAL_CTA = '0';
+// Same for the answer budget's plan stage 1b (lib/answer-shape.mjs, test/plan-answer-budget): on an over-budget
+// free plan it also drops each step's identity / next_session / capacity_source, so the switch-off control here
+// would read as already-once. This file pins the envelope pass alone.
+process.env.DCHUB_PLAN_BUDGET_DEDUPE = '0';
 
 const KEYS = ['identity', 'next_session', 'digest_offer', 'capacity_source'];
 const count = (s, k) => (String(s).match(new RegExp('"' + k + '":', 'g')) || []).length;
