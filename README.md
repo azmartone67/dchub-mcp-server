@@ -146,20 +146,11 @@ So *"500 kW anywhere in Europe"* is `min_kw=500, region=europe`. Any caller — 
 
 The `/dchub:find_capacity` prompt runs the whole path: requirement → listings → deal registration.
 
-## Task-scoped endpoints
+## Endpoint
 
-`https://dchub.cloud/mcp` serves the full catalog to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`. A client that only needs one job can bind to a narrower surface instead — same server, same key, a much smaller tool list in the context window. Every pack except `/mcp/deepresearch` carries `discover_tools`, `claim_free_key`, `unlock_more_data` and `summarize_for_citation`, so a pack is never a dead end; `/mcp/deepresearch` is deliberately exactly the two tools the Deep Research connector contract expects.
+The canonical MCP endpoint is `https://dchub.cloud/mcp` (Streamable HTTP). Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
-| Endpoint | What it covers |
-|---|---|
-| `https://dchub.cloud/mcp` | everything — all 96 tools (`?catalog=full` where a client gets the ten-tool list) |
-| `https://dchub.cloud/mcp/siting` | site selection end to end: find, analyze, score, compare, rank — plus Capacity Source |
-| `https://dchub.cloud/mcp/grid` | power availability: live ISO telemetry, interconnection queue, hosting + retirement headroom, prices |
-| `https://dchub.cloud/mcp/fiber` | routes, metro fiber, subsea cables, peering, lead-in planning, latency clustering |
-| `https://dchub.cloud/mcp/deals` | transactions, pipeline, news, market intelligence — plus Capacity Source |
-| `https://dchub.cloud/mcp/gas` | behind-the-meter and gas-fired economics against grid prices and forward generation |
-| `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
-| `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
+`https://dchub.cloud/mcp` serves the full catalog (96 tools) to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`.
 
 ## What DC Hub adds
 
@@ -185,7 +176,7 @@ Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use
 }
 ```
 
-`DCHUB_API_KEY` is optional: leave it empty for previews, or set a key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+`DCHUB_API_KEY` is optional: leave it empty for previews, or set a key from https://dchub.cloud/connect. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
 
 ### Claude Code
 
@@ -209,7 +200,7 @@ Or add to `.cursor/mcp.json`:
 }
 ```
 
-Optional: set header `X-API-Key` from https://dchub.cloud/connect#free-key for higher daily limits. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
+Optional: set header `X-API-Key` from https://dchub.cloud/connect for higher daily limits. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
 
 ### ChatGPT
 
@@ -321,7 +312,7 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 `DCHUB_API_KEY` is optional.
 
 - **No key:** previews, no API key needed
-- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews.
+- **Optional key (one `claim_free_key` call, or set `DCHUB_API_KEY`):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews.
 - **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
 
 ## Data sources
