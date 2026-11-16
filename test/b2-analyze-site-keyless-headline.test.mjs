@@ -170,7 +170,7 @@ describe('B2 keyless analyze_site: verdict band, weakest factor, counts', () => 
   it('D6 remainder: get_composite_site_score keyless stays the plain wall', async () => {
     const r = await call('get_composite_site_score', { lat: 39.04, lon: -77.48 }, seat('free'));
     const sc = r.structuredContent;
-    expect(sc.error).toBe('pro_required');
+    expect(sc.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
     expect(sc.site_teaser).toBeUndefined();
     expect(sc.site_verdicts).toBeUndefined();
     expect(textOf(r)).not.toMatch(/\b(BUILD|CAUTION|AVOID)\b/);
@@ -182,7 +182,7 @@ describe('compare_sites keyless preview (owner 2026-10-13, reverses D6 for compa
   it('keyless: per-site verdict band + power band, the rest named as locked, no pick, no figure', async () => {
     const r = await call('compare_sites', SITES, seat('free'));
     const sc = r.structuredContent;
-    expect(sc.error).toBe('pro_required');           // still a wall: gated, upgrade path intact
+    expect(sc.error).toBe('full_access_required');   // still a wall (Note V 2026-11-16: the keyless code, was pro_required)
     expect(sc._gated).toBe(true);
     expect(sc.site_teaser.sites).toEqual([
       { site: 1, verdict: 'BUILD', power_infrastructure: 'BUILD' },
@@ -214,7 +214,7 @@ describe('compare_sites keyless preview (owner 2026-10-13, reverses D6 for compa
     process.env.DCHUB_COMPARE_KEYLESS_PREVIEW = '0';
     try {
       const r = await call('compare_sites', SITES, seat('free'));
-      expect(r.structuredContent.error).toBe('pro_required');
+      expect(r.structuredContent.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
       expect(r.structuredContent.site_teaser).toBeUndefined();
       expect(r.structuredContent.message).toMatch(/returns no data/);
       expect(S._descFollowsSwitches('compare_sites', S.COMPARE_SITES_ACCESS_PREVIEW))

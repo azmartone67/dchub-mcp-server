@@ -6,6 +6,16 @@
 //      rung now points at the page that lists the plans.
 // Real registered handler, stubbed backend, no network.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
+// Note V (2026-11-16): this file pins the wall writers' own copy (what a keyed caller still reads). The keyless
+// rewrite that runs after them (lib/keyless-plan-wording.mjs) is switched off here; the keyless wording is pinned by
+// test/keyless-results-no-plan-wording.test.mjs.
+const _NOTE_V_PREV = process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+beforeAll(() => { process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = '0'; });
+afterAll(() => {
+  if (_NOTE_V_PREV === undefined) delete process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+  else process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = _NOTE_V_PREV;
+});
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
