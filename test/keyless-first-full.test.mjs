@@ -404,7 +404,7 @@ describe('H) execute_plan end to end: the plan is the first full answer', () => 
     expect(r1.structuredContent?.first_full_answer).toMatchObject({ used: 1, limit: 1 });
     expect(h1.first_full_answer.note).toMatch(/execute_plan|plan answer/);
     expect(h1.first_full_answer.note).not.toMatch(/\b(Developer|Pro|Starter|Enterprise|Founding)\b|\$\s?\d/);
-    expect(Object.keys(h1).slice(0, 2), 'the compact first plan answer leads with the answer and its as_of').toEqual(['answer', 'as_of']);
+    expect(Object.keys(h1).slice(0, 3), 'the compact first plan answer leads with its fact_header (mcp#1472), then the answer and its as_of').toEqual(['fact_header', 'answer', 'as_of']);
     expect(writes.loopback.length, 'the plan ran its steps').toBeGreaterThan(0);
     expect(planTok().length, 'every step carries the plan token').toBe(writes.loopback.length);
     await settle();

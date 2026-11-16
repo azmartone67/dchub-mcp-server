@@ -133,6 +133,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
@@ -25143,6 +25144,11 @@ function _sourceLineCb(name, fn) {
       // and its one call to action is https://dchub.cloud/connect (lib/neutral-cta.mjs). Last, after every other step.
       // Not on the frozen directory / Claude / core profiles or a clean platform (each keeps its own scrub).
       if (name === 'execute_plan') _final = _neutralCtaStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), paid: _planCallerPaid(c) });
+      // Gemini traction spec (2026-11-16): a 3-line fact header (SOURCE/AS_OF, ENTITY, SUMMARY) is the FIRST key,
+      // fact_header, of block 0's JSON and of structuredContent, read only from the plan's own result
+      // (lib/plan-fact-header.mjs). Block 0 stays valid JSON. LAST, after every trim. Not on the directory / Claude /
+      // core profiles or a clean platform; compact:false or DCHUB_PLAN_FACT_HEADER=0 returns the output without it.
+      if (name === 'execute_plan') _final = _planFactHeaderStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), compact: _planCompactRequested(args) });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -31441,6 +31447,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // z.any() (not z.string()) on purpose — a wrong-typed tag must be DROPPED,
       // not rejected by zod, because a rejection would fail the user's real
       // question over a telemetry label. Normalized in trackedTool.
+      compact: z.boolean().optional().describe('true (default) puts fact_header first in the answer: three lines, SOURCE and AS_OF, ENTITY, SUMMARY with the DCPI verdict when the answer carries one. false returns the answer without it.'),
       cohort: z.any().optional().describe('Optional experiment tag for adoption/retention measurement, e.g. "cohort.front_door". Has NO effect on routing, planning, geography or results — it is recorded only. Put your user\'s question in `intent` and the tag HERE; never inside the intent string, which would break classification. Max 64 chars, [a-z0-9._-]; a malformed tag is ignored, never an error.') },
     async (a) => {
       const t0 = Date.now();
