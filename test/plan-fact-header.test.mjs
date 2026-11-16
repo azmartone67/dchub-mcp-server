@@ -6,10 +6,11 @@
 //   * no fabricated verdict: "Verdict:" only when the plan carries BUILD / CAUTION / AVOID, never from a score;
 //   * every value in the header is a value the plan itself holds;
 //   * compact:false (and DCHUB_PLAN_FACT_HEADER=0) is today's output, byte for byte;
-//   * through the real /mcp handler: block 0 leads with the header, the JSON after it still parses;
+//   * block 0 stays valid JSON: the header is the FIRST key, fact_header, of block 0's object and of
+//     structuredContent (brain decision on mcp#1472), never a text prefix; through the real /mcp handler too;
 //   * the `compact` input is held off /mcp/chatgpt (frozen for review) and /mcp/claude, where the header does not run.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildPlanFactHeader, planFactHeaderStep, compactRequested, HEADER_MAX_CHARS } from '../lib/plan-fact-header.mjs';
+import { buildPlanFactHeader, planFactHeaderStep, compactRequested, HEADER_MAX_CHARS, FACT_HEADER_KEY } from '../lib/plan-fact-header.mjs';
 import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
@@ -132,15 +133,27 @@ describe('buildPlanFactHeader: shape, values from the plan only', () => {
 });
 
 describe('planFactHeaderStep: compact default, compact:false and the kill switch', () => {
-  it('compact (default): the header leads block 0, the JSON after it is unchanged', () => {
+  it('compact (default): fact_header is the FIRST key of block 0 and of structuredContent; block 0 parses', () => {
     const r = resultOf(clone(MARKET_PLAN));
     const out = planFactHeaderStep(r, { env: {} });
-    const [head, json] = out.content[0].text.split('\n\n');
-    expect(head).toBe(buildPlanFactHeader(MARKET_PLAN));
-    expect(json).toBe(r.content[0].text);
+    expect(FACT_HEADER_KEY).toBe('fact_header');
+    const b0 = JSON.parse(out.content[0].text);           // block 0 is still valid JSON
+    expect(Object.keys(b0)[0]).toBe('fact_header');
+    expect(b0.fact_header).toBe(buildPlanFactHeader(MARKET_PLAN));
+    const { fact_header: _h, ...rest } = b0;
+    expect(rest).toEqual(JSON.parse(r.content[0].text));  // every other key unchanged
+    expect(Object.keys(out.structuredContent)[0]).toBe('fact_header');
+    expect(out.structuredContent.fact_header).toBe(b0.fact_header);
+    const { fact_header: _s, ...scRest } = out.structuredContent;
+    expect(scRest).toEqual(r.structuredContent);
     expect(out.content.slice(1)).toEqual(r.content.slice(1));
-    expect(out.structuredContent).toBe(r.structuredContent);
-    expect(out.content[0].text.length - r.content[0].text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS + 2);
+    // the cost is the header plus the key, its quotes and escapes
+    expect(out.content[0].text.length - r.content[0].text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS + 32);
+  });
+
+  it('idempotent: a result that already carries fact_header is returned as is', () => {
+    const once = planFactHeaderStep(resultOf(clone(MARKET_PLAN)), { env: {} });
+    expect(planFactHeaderStep(once, { env: {} })).toBe(once);
   });
 
   it('compact:false is today\'s output, the same object', () => {
@@ -214,24 +227,30 @@ describe('through the real handler', () => {
   const INTENT = 'compare ERCOT vs PJM for a 100 MW campus';
   const plan = async (args) => (await rpc('/mcp', { method: 'tools/call', params: { name: 'execute_plan', arguments: { intent: INTENT, ...args } } })).result;
 
-  it('/mcp: block 0 leads with the header; the JSON after it parses to the plan', async () => {
+  it('/mcp: block 0 is JSON whose first key is fact_header; structuredContent leads with the same', async () => {
     const r = await plan({});
     const t = r.content[0].text;
-    expect(t.startsWith('SOURCE: DC Hub (dchub.cloud)')).toBe(true);
-    const cut = t.indexOf('\n\n{');
-    expect(cut).toBeGreaterThan(0);
-    const head = t.slice(0, cut);
+    expect(t.startsWith('{')).toBe(true);
+    const b0 = JSON.parse(t);
+    expect(b0._entity).toBe('plan_execution');
+    expect(Object.keys(b0)[0]).toBe('fact_header');
+    const head = b0.fact_header;
+    expect(head.startsWith('SOURCE: DC Hub (dchub.cloud)')).toBe(true);
     expect(head.split('\n').length).toBeLessThanOrEqual(3);
     expect(head).not.toMatch(NULLISH);
     expect(head).toBe(buildPlanFactHeader(r.structuredContent));
     expect(head).toContain('ERCOT (ISO)');
-    expect(JSON.parse(t.slice(cut + 2))._entity).toBe('plan_execution');
+    expect(Object.keys(r.structuredContent)[0]).toBe('fact_header');
+    expect(r.structuredContent.fact_header).toBe(head);
   }, 120_000);
 
-  it('/mcp compact:false: block 0 is the plan JSON with no header', async () => {
+  it('/mcp compact:false: block 0 is the plan JSON with no fact_header anywhere', async () => {
     const r = await plan({ compact: false });
     expect(r.content[0].text.startsWith('{')).toBe(true);
-    expect(JSON.parse(r.content[0].text)._entity).toBe('plan_execution');
+    const b0 = JSON.parse(r.content[0].text);
+    expect(b0._entity).toBe('plan_execution');
+    expect(b0).not.toHaveProperty('fact_header');
+    expect(r.structuredContent).not.toHaveProperty('fact_header');
   }, 120_000);
 
   it('tools/list: compact is offered on /mcp, held off /mcp/chatgpt and /mcp/claude', async () => {

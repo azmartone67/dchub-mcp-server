@@ -16,7 +16,6 @@ import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { CORE_PROFILE } from '../lib/core-profile.mjs';
-import { splitPlanFactHeader } from '../lib/plan-fact-header.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -208,15 +207,18 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     const r = await callAs(null, 'execute_plan', ASK, 'claude-code', opts);
     expect(r.result.isError).not.toBe(true);
     const blocks = (r.result.content || []).map((b) => b.text || '');
-    // 1) the verdict is the first thing in the answer: the fact header's SUMMARY names it (lib/plan-fact-header.mjs,
-    //    2026-11-16), and it is the first key of the plan JSON that follows the header in block 0
-    const { header, json } = splitPlanFactHeader(blocks[0]);
-    // (sessionless over this harness's loopback socket reads as a plan step, which carries no header)
-    if (opts.sessionless) expect(header).toBeNull();
-    else expect(header).toMatch(/\nSUMMARY: [^\n]*\| Verdict: CAUTION$/);
+    // 1) the verdict is the first thing in the answer: block 0 is JSON whose first key, fact_header, names it in its
+    //    SUMMARY line (lib/plan-fact-header.mjs, 2026-11-16), and dcpi_verdict is the first data key after it
+    const json = blocks[0];
     const d = JSON.parse(json);
+    // (sessionless over this harness's loopback socket reads as a plan step, which carries no header)
+    if (opts.sessionless) expect(d).not.toHaveProperty('fact_header');
+    else {
+      expect(Object.keys(d)[0]).toBe('fact_header');
+      expect(d.fact_header).toMatch(/\nSUMMARY: [^\n]*\| Verdict: CAUTION$/);
+    }
     // (a walled answer's wall puts its one link field, human_url, at the top: a URL, not an offer)
-    expect(Object.keys(d).filter((k) => k !== 'human_url')[0]).toBe('dcpi_verdict');
+    expect(Object.keys(d).filter((k) => k !== 'human_url' && k !== 'fact_header')[0]).toBe('dcpi_verdict');
     expect(d.intent_class).toBe('market_outlook');
     expect(d.executed[0].tool).toBe('get_market_dcpi_rank');
     const v = d.dcpi_verdict;
@@ -239,21 +241,21 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     try {
       // in a session: over this harness's loopback socket a sessionless call reads as a plan step
       const r = await callAs(null, 'execute_plan', ASK, 'claude-code');
-      const d = JSON.parse(splitPlanFactHeader((r.result.content || [])[0].text).json);
+      const d = JSON.parse((r.result.content || [])[0].text);
       expect(d.first_full_answer).toMatchObject({ used: 1, limit: 1 });
-      // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer
-      expect(Object.keys(d).filter((k) => k !== 'human_url').slice(0, 3)).toEqual(['answer', 'as_of', 'dcpi_verdict']);
-      expect(Object.keys(d).slice(0, 2)).toEqual(['answer', 'as_of']);
+      // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer;
+      // the fact header (in a session) is the one key ahead of the answer
+      expect(Object.keys(d).filter((k) => k !== 'human_url' && k !== 'fact_header').slice(0, 3)).toEqual(['answer', 'as_of', 'dcpi_verdict']);
+      expect(Object.keys(d).slice(0, 3)).toEqual(['fact_header', 'answer', 'as_of']);
       expect(d.answer).toBe(d.dcpi_verdict.text);
       expect(d.answer).toMatch(/^Data Center Power Index \(DCPI\): Phoenix: CAUTION, composite 43\.5\/100\./);
     } finally { process.env.DCHUB_KEYLESS_FIRST_FULL = '0'; }
   });
   it('a market the index does not track gets no verdict block (never a substitute)', async () => {
     const r = await callAs(null, 'execute_plan', { intent: 'Is Timbuktu a good place to build?' }, 'claude-code');
-    const { header, json } = splitPlanFactHeader(r.result.content[0].text);
-    const d = JSON.parse(json);
+    const d = JSON.parse(r.result.content[0].text);
     expect(d.dcpi_verdict).toBeUndefined();
-    expect(String(header || '')).not.toMatch(/Verdict/);   // no substitute in the fact header either
+    expect(String(d.fact_header || '')).not.toMatch(/Verdict/);   // no substitute in the fact header either
   });
   it('_planDcpiLead: only a market-scoped verdict; ISO bands and other kinds are not led with', () => {
     const ia = { kind: 'market_check', verdict: { value: 'BUILD', scope: 'market', subject: 'san-antonio', composite_score: 71 },
