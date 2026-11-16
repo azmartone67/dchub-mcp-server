@@ -192,6 +192,7 @@ test/email-benefit-leads-1023.test.mjs
 test/email-bound-decision-full.test.mjs
 test/email-entered.test.mjs
 test/email-hint-after-taste.test.mjs
+test/email-tools-data-use.test.mjs
 test/end-of-burst-hook.test.mjs
 test/energy-capacity-cross-link.test.mjs
 test/energy-prices-describes-what-is-served.test.mjs
