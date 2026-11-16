@@ -8,9 +8,8 @@ pipeline.
 ## 1. Prerequisites
 
 - Access to **Copilot Studio** with MCP support enabled.
-- A **DC Hub account**:
-  - Free tier: no authentication, limited rate (100 requests/day, 10/min).
-  - Pro tier: API token for higher rate limits (10,000 requests/day, 100/min).
+- Optional: a **DC Hub key**. No key is needed to start (some keyless answers are
+  previews). A free key with an email gives 50 MCP calls/day: https://dchub.cloud/connect
 - Basic familiarity with:
   - YAML configuration files.
   - HTTP APIs and JSON responses.
@@ -27,11 +26,11 @@ DC Hub documentation and connection guides:
      - `base_url` is set to `https://dchub.cloud/mcp`.
      - `transport` is `http` and `stream` is enabled.
 4. Configure authentication:
-   - **Free tier**:
-     - Select the `free` auth mode (no headers required).
-   - **Pro tier**:
-     - Select the `pro` auth mode.
-     - Add your DC Hub API token; Copilot Studio will inject it as:
+   - **No key**:
+     - Select the `keyless` auth mode (no headers required).
+   - **With a key**:
+     - Select the `api_key` auth mode.
+     - Add your DC Hub key; Copilot Studio will inject it as:
        - `Authorization: Bearer <your_token>`
 5. Save and test the connection.
 
