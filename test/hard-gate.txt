@@ -445,6 +445,7 @@ test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
+test/plan-answer-budget.test.mjs
 test/plan-caller-ip.test.mjs
 test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
