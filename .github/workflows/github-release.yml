@@ -108,6 +108,34 @@ jobs:
             echo "attach=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # ★2026-11-16 (Grok Note P item 4). The release body is the short, user-facing
+      # CHANGELOG.md entry for this version (the "## <version> (<date>)" section), not
+      # the generated list of every merged PR title. No entry -> the old generated
+      # notes, with a warning: test/changelog-and-publish-gate.test.mjs fails a bump PR
+      # whose top CHANGELOG entry is not the new version, so this is the fallback only.
+      - name: Release summary from CHANGELOG.md
+        id: summary
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          out="$RUNNER_TEMP/release-notes.md"
+          # Prints the lines under "## <version> " up to the next "## " heading, with
+          # leading and trailing blank lines dropped (inner ones kept).
+          awk -v v="$VERSION" '
+            /^## / { if (on) exit; if (index($0, "## " v " ") == 1 || $0 == "## " v) { on = 1; next } }
+            on && $0 == "" { blank++; next }
+            on { if (printed) for (i = 0; i < blank; i++) print ""; blank = 0; print; printed = 1 }
+          ' CHANGELOG.md > "$out" 2>/dev/null || true
+          if [ -s "$out" ]; then
+            printf '\nRemote server: https://dchub.cloud/mcp · npm: dchub-mcp-server@%s · [CHANGELOG](https://github.com/%s/blob/main/CHANGELOG.md)\n' "$VERSION" "$GITHUB_REPOSITORY" >> "$out"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "release summary from CHANGELOG.md:"; cat "$out"
+          else
+            echo "::warning::CHANGELOG.md has no '## $VERSION' entry; the release falls back to generated notes."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create the release
         id: create
         if: steps.exists.outputs.skip == 'false'
@@ -116,19 +144,24 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
           TOOLS: ${{ steps.ver.outputs.tools }}
           ATTACH: ${{ steps.dxt.outputs.attach }}
+          FOUND: ${{ steps.summary.outputs.found }}
           SHA: ${{ github.sha }}
         run: |
           TITLE="v$VERSION"
           if [ -n "$TOOLS" ]; then TITLE="v$VERSION — $TOOLS tools"; fi
           NOTES="Remote server: https://dchub.cloud/mcp · npm: dchub-mcp-server@$VERSION"
+          if [ "$FOUND" = "true" ]; then
+            BODY=(--notes-file "$RUNNER_TEMP/release-notes.md")
+          else
+            BODY=(--notes "$NOTES" --generate-notes)
+          fi
           # gemini-extension.json rides every release (see the note at the top).
           ASSETS=(gemini-extension.json)
           if [ "$ATTACH" = "true" ]; then ASSETS=(dchub.dxt gemini-extension.json); fi
           gh release create "v$VERSION" "${ASSETS[@]}" \
             --target "$SHA" \
             --title "$TITLE" \
-            --notes "$NOTES" \
-            --generate-notes \
+            "${BODY[@]}" \
             --latest
           echo "created=true" >> "$GITHUB_OUTPUT"
 

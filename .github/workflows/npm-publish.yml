@@ -11,6 +11,25 @@
 # would miss most versions. registry-refresh.yml publishes the MCP registry on
 # the same event for the same reason.
 #
+# PUBLISH GATE (★2026-11-16, Grok Note P item 4). npm saw 8 versions in one week
+# (2.12.46-2.12.54, five within ~8h on 2026-11-14) and ~90% of weekly downloads
+# landed on publish days: mirrors and crawlers re-fetch every new tarball. A
+# publish happens only when BOTH hold:
+#   1. this workflow runs: a push to main touching one of the paths below. README.md,
+#      CHANGELOG.md, docs/**, canonical/** (directories.json included), server.mjs and
+#      lib/** are NOT listed, so a docs-, directories- or canonical-only merge never
+#      even starts it;
+#   2. the version in server.json is not on npm yet (the skip step below). A run with
+#      an unchanged version is a no-op, so only a version bump publishes.
+# The bump itself is gated before merge: the required `check` runs
+# scripts/version-bump-justified.mjs, which fails a bump that carries no tool,
+# description or install-config change, and a bump PR adds its CHANGELOG.md entry.
+# Tool and behaviour changes in server.mjs / lib/** reach users through the hosted
+# /mcp deploy with no publish; they publish only when the PR also bumps the version.
+# Do NOT add server.mjs, lib/** or README.md here: it would change nothing about
+# when npm publishes (the version decides) and would only add no-op runs.
+# Pinned by test/changelog-and-publish-gate.test.mjs.
+#
 # AUTH: npm trusted publishing (GitHub Actions OIDC). There is NO NPM_TOKEN —
 # the short-lived credential is minted from `id-token: write` and only works for
 # the repo + workflow filename registered on npmjs.com (package Settings →
