@@ -865,6 +865,18 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`package.json version ${pj.version} != ${VERSION}`);
     if (FIX) { pj.version = VERSION; pend('package.json', JSON.stringify(pj, null, 2) + '\n'); }
   }
+  // ★2026-11-16 (Note P owner call, delegated): the npm launcher carries the same version.
+  // npm-publish.yml publishes on a server.json version not yet on npm and REFUSES when the
+  // three versions differ, so a fence bump that left this file behind failed the
+  // npm-launcher-version-parity hard gate and the publish. Text-anchored (first "version"
+  // line only): the file does not round-trip through JSON.stringify byte-for-byte.
+  const LP = 'npm-launcher/package.json';
+  const lt = readCur(LP);
+  const lv = JSON.parse(lt).version;
+  if (lv !== VERSION) {
+    problems.push(`${LP} version ${lv} != ${VERSION}`);
+    if (FIX) pend(LP, lt.replace(/("version"\s*:\s*")[^"]*(")/, `$1${VERSION}$2`));
+  }
   // ★2026-08-30 — this check used to be `!sy.includes(VERSION)`: does the canonical
   // version appear ANYWHERE in the file. That is not the same question as "does
   // this descriptor DECLARE the canonical version", and the gap is reachable.

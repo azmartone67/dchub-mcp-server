@@ -65,6 +65,7 @@ describe('daily-manifest-sync.yml stages CHANGELOG.md', () => {
     const owned = new Set(m[1].replace(/\\\n/g, ' ').split(/\s+/).filter(Boolean));
     expect(owned.size).toBeGreaterThan(20);
     expect(owned.has('CHANGELOG.md')).toBe(true);
+    expect(owned.has('npm-launcher/package.json')).toBe(true);
   });
 });
 
@@ -122,6 +123,9 @@ describe('sync-tools-manifest --fix and CHANGELOG.md', () => {
     expect(r.out).toMatch(/version bumped to 9\.9\.10/);   // non-vacuity: the bump happened
     expect(sjVersion()).toBe('9.9.10');
     expect(r.out).toMatch(/wrote:.*CHANGELOG\.md/);
+    // the npm launcher moves with it (npm-launcher-version-parity; npm-publish.yml refuses a mismatch)
+    expect(JSON.parse(rd('npm-launcher/package.json')).version).toBe('9.9.10');
+    expect(r.out).toMatch(/wrote:.*npm-launcher\/package\.json/);
     const after = rd('CHANGELOG.md');
     const hits = entriesFor(after, '9.9.10');
     expect(hits).toHaveLength(1);
