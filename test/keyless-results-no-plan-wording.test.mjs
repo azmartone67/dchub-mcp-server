@@ -20,7 +20,12 @@
 //     masks), so the guard proves this server drops them rather than assuming the data API never sends them;
 //   * non-vacuity: the stubbed strings were served, the walls are walls (the person line and the relay link are
 //     present), and with DCHUB_KEYLESS_NO_PLAN_WORDING=0 the same calls DO carry the banned wording;
-//   * a keyed caller is left as it was (the step is keyless only);
+//   * a keyed caller is left as it was (the step is keyless only), EXCEPT on dchub_services and the execute_plan
+//     front-desk footers: their source copy is neutral for every caller (keyed follow-up, 2026-11-16), so a KEYED
+//     caller is scanned too: dchub_services through the real handler (every service, and `need` ranking each one
+//     first), and execute_plan through the real handler (the site and repeat footers, the two that named a plan)
+//     plus every footer class through the real planner and step under a keyed context (non-vacuous: the line is
+//     present before it is scanned, and the keyless step is OFF for those calls, so only the source can be clean);
 //   * the scan itself catches every measured sentence (must-fail controls).
 //
 // Qualifies for the hard gate: real handlers, backend stubbed at the fetch boundary, every other host fenced.
@@ -28,6 +33,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 import * as K from '../lib/keyless-plan-wording.mjs';
+import * as FD from '../lib/dchub-services.mjs';
 
 // ── the scan ─────────────────────────────────────────────────────────────────────────────────────────
 // Data rows a fixture plants on purpose (a tax incentive's "$150M+" is the state's figure, not a DC Hub price):
@@ -120,6 +126,11 @@ const served = { autopsy: 0, rates: 0 };
 const R = {};      // `${tool}@${seat}` -> { first, next, preview }
 const OFF = {};    // tool -> result with the kill switch off (same calls)
 let KEYED = null;
+const KEYED_SVC = {};   // label -> dchub_services result for a keyed caller
+const KEYED_PLAN = {};  // label -> execute_plan result for a keyed caller
+const KEY = 'dchub_test_key_not_real';
+const KEY_EMAIL = 'dch_live_KNPWemail0123456789abcdef';
+const KEY_PAID = 'dch_live_KNPWpaid00123456789abcdef';
 
 const TOOLS5 = {
   compare_sites: { locations: '39.04,-77.49;32.78,-96.80' },
@@ -164,6 +175,12 @@ beforeAll(async () => {
     if (p === '/api/v1/mcp/full-cap/consume' || p === '/api/v1/mcp/full-cap/peek') return json({ ok: false });
     if (p.startsWith('/api/v1/mcp/credits/balance')) return json({ credits: 0, had_pack: false });
     if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/sources/')) return json({ ok: true });
+    if (p === '/api/v1/keys/validate') {
+      let k = null; try { k = JSON.parse(String(init && init.body || '{}')).api_key; } catch (_) { /* no body */ }
+      // the keyed follow-up's callers: a valid email-tier key and a valid paid key (the real validate carries the plan)
+      if (k === KEY_EMAIL) return json({ valid: true, tier: 'identified', developer_id: 'dev_knpw_email', email: 'knpw@example.org', tier_detail: { users_plan: null } });
+      if (k === KEY_PAID) return json({ valid: true, tier: 'pro', developer_id: 'dev_knpw_paid', email: null, tier_detail: { users_plan: 'pro' } });
+    }
     if (p.startsWith('/api/v1/keys/')) return json({ valid: false, tier: 'free' });
     if (p === '/api/v1/deal-autopsy') { served.autopsy += 1; return json(structuredClone(DEALS)); }
     if (p === '/api/site-score') return json(structuredClone(SITE));
@@ -205,7 +222,35 @@ beforeAll(async () => {
   delete process.env[K.KEYLESS_NO_PLAN_WORDING_FLAG];
   // a keyed caller (any key): the step leaves its copy alone
   KEYED = await call('compare_sites', seat({ ...SEATS.cursor, api_key: 'dchub_test_key_not_real', tier: 'free' }), TOOLS5.compare_sites);
+
+  // Keyed callers on dchub_services and execute_plan (keyed follow-up). The keyless step is switched OFF for these
+  // calls as well, so a clean result can only come from the source copy, never from a rewrite.
+  process.env[K.KEYLESS_NO_PLAN_WORDING_FLAG] = '0';
+  KEYED_SVC.default = await call('dchub_services', seat({ ...SEATS.cursor, path: '/mcp', api_key: KEY }), {});
+  for (const [label, need] of Object.entries(SERVICE_NEEDS)) {
+    KEYED_SVC[label] = await call('dchub_services', seat({ ...SEATS.cursor, path: '/mcp', api_key: KEY }), { need });
+  }
+  S._fdCallMemoForTest.clear();
+  // site: a paid key (its answer is not walled, so the line goes out); the intent is site-class ("my site") with
+  // small steps, so no step is slimmed (a slimmed plan gets no line by design)
+  const sc1 = seat({ ...SEATS.cursor, path: '/mcp', api_key: KEY_PAID, tier: 'pro' });
+  KEYED_PLAN.site = await call('execute_plan', sc1, { intent: SITE_PLAN_INTENT });
+  KEYED_PLAN.site_ctx = { plan: sc1._frontDeskPlan, shown: sc1._frontDeskShown };
+  // repeat: an email-tier key's second call plans the unpaid repeat line (its stubbed steps are previews, so the
+  // answer is walled and the step holds the line back; the planned line is what the real handler would send)
+  const re1 = seat({ ...SEATS.cursor, path: '/mcp', api_key: KEY_EMAIL, tier: 'identified' });
+  KEYED_PLAN.repeat_first = await call('execute_plan', re1, { intent: REPEAT_INTENT });
+  KEYED_PLAN.repeat_first_ctx = { plan: re1._frontDeskPlan };
+  const re2 = seat({ ...SEATS.cursor, path: '/mcp', api_key: KEY_EMAIL, tier: 'identified' });
+  KEYED_PLAN.repeat = await call('execute_plan', re2, { intent: REPEAT_INTENT });
+  KEYED_PLAN.repeat_ctx = { plan: re2._frontDeskPlan };
+  delete process.env[K.KEYLESS_NO_PLAN_WORDING_FLAG];
 }, 240_000);
+
+const SERVICE_NEEDS = { full_depth: 'full depth answers, no previews, every field', deal_desk_brief: 'a PDF brief to share with my board' };
+const SITE_INTENT = 'analyze the site at 32.77,-96.79 for a data center';
+const SITE_PLAN_INTENT = 'gas economics for on-site generation at my site in Texas';
+const REPEAT_INTENT = 'gas economics for on-site generation in Texas';
 
 afterAll(async () => {
   globalThis.fetch = realFetch;
@@ -271,6 +316,57 @@ describe('keyless results: no plan, trial, upgrade or price wording, no pricing 
   }
 });
 
+describe('keyed callers: dchub_services and the execute_plan front-desk footers carry no plan wording either', () => {
+  const lineOf = (r) => ((r && r.content) || []).map((b) => b && b.text).filter((t) => FD.isFrontDeskLine(t));
+  it('dchub_services, keyed: every service, and each formerly-paid service ranked first, is clean', () => {
+    const d = sc(KEYED_SVC.default);
+    expect(d._entity).toBe('dchub_services');
+    expect((d.services || []).map((x) => x.id)).toEqual(FD.DCHUB_SERVICES.map((x) => x.id));
+    for (const [label, r] of Object.entries(KEYED_SVC)) {
+      if (label !== 'default') expect(sc(r).services[0].id, label).toBe(label);   // the need ranked it first
+      expect(offenders(r), label).toEqual([]);
+      for (const x of sc(r).services) expect(x.link, `${label} ${x.id}`).toMatch(/\?via=agent-referral&src=services/);
+    }
+  });
+  // The scope here is the front-desk line: the rest of a keyed execute_plan answer keeps its own copy (and the scan
+  // reads "DC Hub ran the plan" as plan wording), so the whole answer is checked only for a front-desk-tagged
+  // pricing link, the shape the footers used to carry.
+  const FD_PRICING_LINK = /dchub\.cloud\/(?:pricing|plans)\b[^\s"]*src=(?:footer|services)|#pricing[^\s"]*src=(?:footer|services)|src=(?:footer|services)[^\s"]*#pricing/;
+  it('execute_plan, keyed, real handler: the site footer goes out and is clean', () => {
+    expect(KEYED_PLAN.site_ctx.plan && KEYED_PLAN.site_ctx.plan.cls, 'precondition: the planner chose the site line').toBe('site');
+    expect(KEYED_PLAN.site_ctx.shown, 'precondition: the step attached it').toBe('footer:site');
+    const fd = lineOf(KEYED_PLAN.site);
+    expect(fd).toEqual([KEYED_PLAN.site_ctx.plan.line]);
+    expect(fd[0]).toMatch(/Deal Desk Brief/);
+    expect(offenders({ content: [{ type: 'text', text: fd[0] }] })).toEqual([]);
+    expect(JSON.stringify(KEYED_PLAN.site)).not.toMatch(FD_PRICING_LINK);
+  });
+  it('execute_plan, keyed, real handler: the second call plans the unpaid repeat line, and it is clean', () => {
+    expect(KEYED_PLAN.repeat_first_ctx.plan, 'first call: no class, no line').toBeUndefined();
+    const planned = KEYED_PLAN.repeat_ctx.plan;
+    expect(planned && planned.cls, 'precondition: the second keyed call plans the repeat line').toBe('repeat');
+    expect(planned.service).toBe('full_depth');
+    expect(offenders({ content: [{ type: 'text', text: planned.line }] })).toEqual([]);
+    for (const r of [KEYED_PLAN.repeat, KEYED_PLAN.repeat_first]) expect(JSON.stringify(r)).not.toMatch(FD_PRICING_LINK);
+  });
+  it('every footer class, keyed and paid-keyed, through the real planner and step: present and clean', async () => {
+    const intents = { site: SITE_INTENT, capacity: 'lease colocation space in Dallas', comparison: 'compare Dallas vs Phoenix',
+      repeat: REPEAT_INTENT };
+    for (const tier of ['free', 'pro']) {
+      for (const [cls, intent] of Object.entries(intents)) {
+        const c = { path: '/mcp', api_key: KEY, tier, platform: 'cursor', user_agent: 'cursor/1.0', _priorCalls: cls === 'repeat' ? 1 : 0 };
+        const planned = await S._ctxALS.run(c, async () => S._frontDeskPlanFor({ intent, args: { intent }, c }));
+        expect(planned && planned.cls, `${tier} ${cls}: planned`).toBe(cls);
+        c._frontDeskPlan = planned;
+        const base = { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } };
+        const out = await S._ctxALS.run(c, async () => S._frontDeskStep(base, 'execute_plan', c));
+        expect(lineOf(out), `${tier} ${cls}: the line went out`).toEqual([planned.line]);
+        expect(offenders(out), `${tier} ${cls}`).toEqual([]);
+      }
+    }
+  });
+});
+
 describe('must-fail controls: the scan catches each measured sentence', () => {
   const bad = (text) => offenders({ content: [{ type: 'text', text }] });
   for (const s of [
@@ -278,6 +374,9 @@ describe('must-fail controls: the scan catches each measured sentence', () => {
     '[Start a 7-day DC Hub trial](https://dchub.cloud/u/paa8t3)',
     'Your AI assistant hit DC Hub’s paid data boundary on compare_sites.',
     'Every field of every tool, with no previews or withheld values, on a paid DC Hub plan.',
+    // the keyed front-desk footers before the keyed follow-up
+    'DC Hub service for this: the Deal Desk Brief turns a site read like this one into a branded PDF your human can share (paid DC Hub plan): https://dchub.cloud/pricing?via=agent-referral&src=footer',
+    'DC Hub service for this: full-depth answers, every field with no previews, come with a paid DC Hub plan: https://dchub.cloud/connect?via=agent-referral&src=footer',
     'https://dchub.cloud/pricing?via=agent-referral&src=services',
     'https://dchub.cloud/ai?via=agent-referral&src=services#pricing',
     OLD_AUTOPSY, OLD_RATES, 'Northern Virginia ' + OLD_MARK,
