@@ -29,7 +29,7 @@ const OFFER_ASKS = new Set(['line', 'link', 'link_exit', 'bind_field', 'digest_l
 // tools a keyless caller reaches without a wall, or keyed-only tools that answer with a key error).
 const NO_HARD_WALL = new Set(['save_to_shortlist', 'get_shortlist', 'set_shortlist_alert', 'suggest_reallocation',
   'set_market_alert', 'subscribe_digest', 'set_site_alert', 'register_standing_intent', 'delete_standing_intent',
-  'bind_email', 'recover_my_key', 'report_finding',
+  'bind_email', 'recover_my_key', 'report_finding', 'request_enhancement',
   // Funnel item 1 (2026-11-11): discovery is never walled (server.mjs ANON_WALL_EXEMPT_TOOLS).
   'discover_tools']);
 // Tools the plain stub walls (trial / Pro / Land & Power walls); pinned so the second pass cannot go vacuous.

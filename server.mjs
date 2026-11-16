@@ -248,6 +248,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
+import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark } from './lib/offers-shown.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
@@ -3037,7 +3038,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
 // (That guard lived in regression.test.mjs until #267 moved it onto the hard
 // gate — it had been running in a continue-on-error step and could not fail.)
-const SERVER_VERSION = { version: '2.12.58' }.version;  // 2.12.58 (2026-11-15): npm-launcher keywords gain the AgentNode ownership challenge token so a new npm publish can prove package ownership; also ships the already-merged npm README listing-copy cleanup (#1452). No tool or schema change, tool count stays 96.  // 2.12.57 (2026-11-15; 2.12.56 skipped: Glama already lists an unrelated 2.12.56): tool descriptions name no plan and no price (owner listing rule 2026-11-14): 'free tier', 'paid plan', 'paid DC Hub plan', 'paid key' and 'the DC Hub plan that includes every tool' become 'a free key' / 'a full-access key' / 'without full access' on 18 tools. No tool or schema shape change, tool count stays 96.  // 2.12.55 (2026-11-14): install config: server.json lists ONE remote, https://dchub.cloud/mcp (owner item D4; was six: /mcp/registry first, then /mcp/claude, /mcp/grok, /mcp/oauth, /mcp/core, /mcp), and _meta.remoteProfiles is gone with /mcp/core. Every path still serves. No tool change, tool count stays 96.  // 2.12.54 (2026-11-14; written as 2.12.51 on 11-13, main reached 2.12.53 first): dchub_services, the 96th tool (owner-approved 'MCP as front desk'): DC Hub's services with one ?via=agent-referral&src=services link each; execute_plan's one next-step line (footer / referral) and the /mcp welcome. Not listed on /mcp/claude, /mcp/chatgpt, /mcp/core, /mcp/grok or the packs. Tool count 95 -> 96 and every published count moves with it.  // 2.12.49 (2026-11-13): release so npm carries the orchestration-layer description (#1403, npm refuses a second 2.12.48 upload; owner 'bump to 2.12.49' 2026-11-13). Already on main and live, now under this version: planner 5.24 (#1408, #1409), crawler tools/list test (#1404), @hono/node-server 2.1.6 (#1398). Version only; tool count stays 95.  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.12.59' }.version;  // 2.12.59 (2026-11-16): report_finding opens to every caller (keyless 5/day per IP, any key 30/day, partner 120/day, all held by the backend), with the public classes wrong_number, missing_data, coverage_gap, bug and feature_request and the fields summary, user_goal, region and contact_email; request_enhancement, the 97th tool, is its alias (same handler and queue). Both are on /mcp and /mcp/claude, not on the frozen /mcp/chatgpt. execute_plan, site_selection_canvas and get_refined_queue point at report_finding only on a gap answer. Tool count 96 -> 97.  // 2.12.58 (2026-11-15): npm-launcher keywords gain the AgentNode ownership challenge token so a new npm publish can prove package ownership; also ships the already-merged npm README listing-copy cleanup (#1452). No tool or schema change, tool count stays 96.  // 2.12.57 (2026-11-15; 2.12.56 skipped: Glama already lists an unrelated 2.12.56): tool descriptions name no plan and no price (owner listing rule 2026-11-14): 'free tier', 'paid plan', 'paid DC Hub plan', 'paid key' and 'the DC Hub plan that includes every tool' become 'a free key' / 'a full-access key' / 'without full access' on 18 tools. No tool or schema shape change, tool count stays 96.  // 2.12.55 (2026-11-14): install config: server.json lists ONE remote, https://dchub.cloud/mcp (owner item D4; was six: /mcp/registry first, then /mcp/claude, /mcp/grok, /mcp/oauth, /mcp/core, /mcp), and _meta.remoteProfiles is gone with /mcp/core. Every path still serves. No tool change, tool count stays 96.  // 2.12.54 (2026-11-14; written as 2.12.51 on 11-13, main reached 2.12.53 first): dchub_services, the 96th tool (owner-approved 'MCP as front desk'): DC Hub's services with one ?via=agent-referral&src=services link each; execute_plan's one next-step line (footer / referral) and the /mcp welcome. Not listed on /mcp/claude, /mcp/chatgpt, /mcp/core, /mcp/grok or the packs. Tool count 95 -> 96 and every published count moves with it.  // 2.12.49 (2026-11-13): release so npm carries the orchestration-layer description (#1403, npm refuses a second 2.12.48 upload; owner 'bump to 2.12.49' 2026-11-13). Already on main and live, now under this version: planner 5.24 (#1408, #1409), crawler tools/list test (#1404), @hono/node-server 2.1.6 (#1398). Version only; tool count stays 95.  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -3972,6 +3973,16 @@ export function _answerBlocksAllowed() {
   } catch (_) { return false; }
 }
 
+// 2026-11-16 (findings item 4): the surfaces where a gap answer may carry next_tools -> report_finding.
+// Not on /mcp/chatgpt (frozen, report_finding not listed), not on /mcp/core (its own ten-tool list),
+// and not for a ChatGPT-identified client anywhere (the same freeze).
+export function _findingNudgeAllowed() {
+  try {
+    const c = getCtx();
+    if (!c || c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE) return false;
+    return !_isCleanPlatform();
+  } catch (_) { return false; }
+}
 function _isCleanPlatform() {
   try {
     const p = (getCtx()?.platform || '').toLowerCase();
@@ -6204,13 +6215,17 @@ export const QUOTA_EXEMPT_TOOLS = new Set([
   // same class as bind_email — never walled by call volume.
   'request_capacity_intro',
   'accept_capacity_terms',
+  // 2026-11-16 (owner "Let's do both"): feedback is never walled by call volume; the backend holds
+  // its own per-caller daily limit on findings (5 keyless per IP, 30 per key, 120 per partner key).
+  'report_finding', 'request_enhancement',
 ]);
 // Funnel item 1 (owner 2026-11-11): discovery is never walled. discover_tools is catalog metadata (the
 // tool families and the not_for list), so the anonymous per-IP HARD wall skips it as the key quotas above
 // already do (the anonymous soft cap skips every tool in QUOTA_EXEMPT_TOOLS). Measured 7d to 11-11: 3
 // discover_tools walls, all keyless 'mcp' sessionless rows with no offer: execute_plan's unknown-intent
 // fallback runs discover_tools as its only step, and that step walled at the soft cap.
-export const ANON_WALL_EXEMPT_TOOLS = new Set(['discover_tools']);
+// 2026-11-16: the feedback pair too: a keyless caller past the wall can still say what was wrong or missing.
+export const ANON_WALL_EXEMPT_TOOLS = new Set(['discover_tools', 'report_finding', 'request_enhancement']);
 
 export function _quotaTtlMs(d) {
   if (!d || d.allowed === false) return 30_000;   // blocked → re-check fast
@@ -10078,6 +10093,7 @@ const FREE_FULL_TOOLS = new Set([
   'get_hosting_capacity',
   'get_agent_demand',      // the weekly Agent Demand Report: public aggregate, registered only while AGENT_DEMAND_PUBLIC is on (lib/agent-demand.mjs)
   'dchub_services',        // front desk (owner 2026-11-13): DC Hub's own service list, free and full for every caller
+  'report_finding', 'request_enhancement',  // 2026-11-16: a filing receipt for any caller, key or none; never trimmed, never an offer
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
   // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
   // ONLY public, crawlable facility-page fields (name, operator, location, status,
@@ -10402,10 +10418,11 @@ export const KEY_REQUIRED_TOOLS = new Set([
   'save_site', 'list_saved_sites', 'set_site_alert', 'set_market_alert',
   'save_to_shortlist', 'get_shortlist', 'set_shortlist_alert', 'suggest_reallocation',
   'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
-  // 2026-10-08 (owner: "add the two tools"): the partner tools. Keyless -> the
+  // 2026-10-08 (owner: "add the two tools"): the partner inbox. Keyless -> the
   // backend's 401; a key without a partner slug -> its 403, rendered as
   // "partner key required". Listed for every caller; data for none but a partner.
-  'read_inbox', 'report_finding',
+  // report_finding left this set on 2026-11-16: it files with or without a key.
+  'read_inbox',
 ]);
 
 // The lowest seat that gets this tool's full answer, from the SAME sets the
@@ -15165,7 +15182,7 @@ const _RANK_PRO_ROW_KEYS = new Set(['total_mw', 'avg_kwh_cents']);
 // on every other criterion it is total_mw or a weighting of it (backend _rank_markets_score).
 const _RANK_FREE_SCORE_CRITERIA = new Set(['ai_ready', 'most_operators', 'fastest_growing']);
 // Tools whose answer is the caller's own words or DC Hub's own catalog, never a DCPI read.
-const _DCPI_PRO_EXEMPT_TOOLS = new Set(['summarize_for_citation', 'report_finding', 'read_inbox',
+const _DCPI_PRO_EXEMPT_TOOLS = new Set(['summarize_for_citation', 'report_finding', 'request_enhancement', 'read_inbox',
   'plan_query', 'discover_tools', 'why_dchub', 'dchub_services', 'get_agent_registry']);
 const _isDcpiVerdictWord = (v) => typeof v === 'string' && _DCPI_VERDICTS.has(v.trim().toUpperCase());
 function _isDcpiRow(node) {
@@ -18487,6 +18504,8 @@ const WRITE_TOOLS = new Set([
   'accept_capacity_terms',
   // 2026-10-08: files a brain_findings row (POST /api/v1/inbox/findings).
   'report_finding',
+  // 2026-11-16: the same filing through its alias.
+  'request_enhancement',
   // 2026-10-09: POSTs a research job row and may return a task_id to poll; each
   // call queues a new job, so it is neither read-only nor idempotent.
   'research_task',
@@ -18927,7 +18946,7 @@ const _RETURN_NUDGE_SKIP = new Set([
   'generate_site_analysis',  // r-endburst: same — the hook is the ONE return line on this response
   'request_capacity_intro',  // r-listings: a lead receipt; its next step is the confirmation email, not a data refresh
   'accept_capacity_terms',   // an acceptance receipt; its next step is source_capacity, not a data refresh
-  'read_inbox', 'report_finding',  // partner tools: notes and a filing receipt, not data to refresh
+  'read_inbox', 'report_finding', 'request_enhancement',  // notes and filing receipts, not data to refresh
 ]);
 function withReturnNudge(result, toolName, c) {
   try {
@@ -19705,7 +19724,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 96 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 97 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -20094,8 +20113,13 @@ export const _TOOL_FAMILIES_TABLE = [
   // the notes DC Hub leaves it and files what it observed as brain findings.
   // Listed for every caller so tools/list is one stable catalog per session; a
   // key without a partner slug gets a clear "partner key required", never data.
-  { family: 'partner', when: 'Partner agents only: read the notes DC Hub left for your key (read_inbox) and file what you observed on a DC Hub surface as a brain finding (report_finding).', keywords: ['partner','inbox','notes','finding','audit','report','observed'],
-    tools: ['read_inbox','report_finding'] },
+  { family: 'partner', when: 'Partner agents only: read the notes DC Hub left for your key (read_inbox).', keywords: ['partner','inbox','notes'],
+    tools: ['read_inbox'] },
+  // 2026-11-16 (owner "Let's do both"): the feedback family. Any caller, key or none, files what
+  // looked wrong or missing (report_finding) or what their human wants next (request_enhancement);
+  // both land in the same queue the DC Hub team reviews daily.
+  { family: 'feedback', when: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement. Free; works with or without a key.', keywords: ['finding','report','wrong','missing','stale','bug','feedback','feature','request','enhancement','coverage','observed','audit'],
+    tools: ['report_finding','request_enhancement'] },
 ];
 
 // r-discovery-coverage: tools that intentionally belong to NO family, with
@@ -30926,6 +30950,9 @@ function _overlayCanonPhrases(facts) {
 // longer rule (_freeTierRuleText) still serves claim_free_key / bind_email as `free_tier_rule`, and the
 // decision / siting clauses still ride there as their own fields.
 export const _INSTR_FREE_TIER = ' ' + _freeOffersLine();
+// 2026-11-16 (owner "Let's do both"): one line on every handshake that lists report_finding and
+// request_enhancement (owner-approved text, verbatim). Not on /mcp/chatgpt (frozen, neither tool listed).
+export const INSTR_FEEDBACK_LINE = "If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement. Both are free.";
 // The siting sentence every emission of the free-tier rule carries while the switch is on.
 export function _sitingFreeClause(env = process.env) {
   return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH, { planCallerKey: planStepsCallerKeyOn(env) }) : '';
@@ -30948,7 +30975,7 @@ export const _INSTRUCTIONS = (() => {
   const asf = _analyzeSiteFreeSentence();
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
   return CANON_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
-    + (asf ? ' ' + asf : '') + _composeScopeSection(_TAXONOMY);
+    + (asf ? ' ' + asf : '') + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
@@ -30971,7 +30998,9 @@ export const INSTRUCTIONS_RESOURCE_URI = 'dchub://instructions';
 // a keyed session (createServer opts.keyed), so a keyless resources/list is
 // unchanged and the keyless instructions stay byte for byte what they were.
 export const INBOX_RESOURCE_URI = 'dchub://inbox';
-export const _INSTR_TAIL_INBOX = ' If you are a partner agent, read dchub://inbox at the start of a session for notes from DC Hub. The same notes come back from the read_inbox tool, and report_finding files what you observed on a DC Hub surface as a brain finding (detector external_audit).';
+// 2026-11-16: report_finding is no longer partner-only, so the keyed tail names the inbox alone; the
+// feedback line (INSTR_FEEDBACK_LINE) names report_finding for every caller.
+export const _INSTR_TAIL_INBOX = ' If you are a partner agent, read dchub://inbox at the start of a session for notes from DC Hub. The same notes come back from the read_inbox tool.';
 export async function _inboxResourceText(apiKey, fetchImpl) {
   const f = (typeof fetchImpl === 'function') ? fetchImpl : fetch;
   if (!apiKey) {
@@ -31002,11 +31031,14 @@ export async function _inboxResourceText(apiKey, fetchImpl) {
 // drive them with a stubbed fetch.
 export const FINDING_CLASSES = Object.freeze([
   'completeness_contradiction', 'geography_leak', 'as_of_cite_as', 'pro_wall_dead_end',
-  'count_drift', 'stale_payload_complete', 'leak_past_pro_gate', 'link_hygiene', 'other',
+  'count_drift', 'stale_payload_complete', 'leak_past_pro_gate', 'link_hygiene',
+  // 2026-11-16: the public classes (any caller, any key or none)
+  'wrong_number', 'missing_data', 'coverage_gap', 'bug', 'feature_request', 'other',
 ]);
-export const PARTNER_TOOLS = Object.freeze(['read_inbox', 'report_finding']);
-const _PARTNER_KEY_REQUIRED_TEXT = 'Partner key required (403): this key was not issued under a partner slug, so it has no inbox and cannot file findings. read_inbox and report_finding are partner tools; every other DC Hub tool works with this key as usual.';
-const _PARTNER_NO_KEY_TEXT = 'DC Hub key required: this session presented no DC Hub key. Send your key as X-API-Key (or a Bearer token) and call again. Only a key issued under a partner slug has an inbox or can file findings.';
+// 2026-11-16: report_finding left this list (every caller may file); read_inbox is the one partner tool.
+export const PARTNER_TOOLS = Object.freeze(['read_inbox']);
+const _PARTNER_KEY_REQUIRED_TEXT = 'Partner key required (403): this key was not issued under a partner slug, so it has no inbox. read_inbox is a partner tool; every other DC Hub tool works with this key as usual, report_finding included.';
+const _PARTNER_NO_KEY_TEXT = 'DC Hub key required: this session presented no DC Hub key. Send your key as X-API-Key (or a Bearer token) and call again. Only a key issued under a partner slug has an inbox.';
 function _partnerFail(entity, text, code, extra) {
   return { isError: true, content: [{ type: 'text', text }],
            structuredContent: { _entity: entity, ok: false, error: code, ...(extra || {}) } };
@@ -31086,44 +31118,123 @@ export async function _readInboxTool(apiKey, opts, fetchImpl) {
     return _partnerFail('inbox', `DC Hub inbox could not be read just now (${String((e && e.message) || e)}). Retry later; nothing was marked read.`, 'inbox_unavailable');
   }
 }
-const _FINDING_FIELDS = ['class', 'tool', 'args', 'quoted_fields', 'observed_at', 'session_id', 'recurrence', 'note'];
-export async function _reportFindingTool(apiKey, a, fetchImpl) {
+// ── 2026-11-16 (owner "Let's do both", Grok findings tightening): report_finding is open ──────
+// to every caller and request_enhancement is its alias. The backend (dchub-backend
+// routes/agent_inbox.py + routes/finding_intake.py) takes a finding with no key (5 a day per IP),
+// with any key (30 a day per key) or with a partner key (120 a day, unchanged), strips secrets
+// before storing, and sets every tag itself. This server only says WHICH door and WHICH client the
+// call came through: X-DCHub-Entry-Tool, X-DCHub-Finding-Client, X-MCP-Client and the caller's
+// X-DC-Client-IP ride beside X-Internal-Key, and the backend honours them only with that key. A
+// caller-sent caller_tier / client / entry_tool in the arguments is never forwarded (not in
+// _FINDING_FIELDS). Public findings route to a human, never to the squasher.
+export const FINDING_TOOL_OPTIONAL = Object.freeze(['feature_request', 'coverage_gap']);
+export const FINDING_SUMMARY_REQUIRED = Object.freeze(['feature_request', 'missing_data', 'other']);
+export const FINDING_DEFAULT_TOOL = 'general';
+export const FINDING_THANKS = 'Thanks. The DC Hub team reviews findings daily.';
+export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
+export const REQUEST_ENHANCEMENT_DESCRIPTION = "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).";
+export const FINDING_ENTRY_TOOLS = Object.freeze(['report_finding', 'request_enhancement']);
+export const FINDING_CLIENTS = Object.freeze(['claude', 'chatgpt', 'cursor', 'other']);
+const _FINDING_FIELDS = ['class', 'tool', 'args', 'quoted_fields', 'observed_at', 'session_id', 'recurrence', 'note',
+  'summary', 'user_goal', 'region', 'url', 'evidence', 'contact_email'];
+// The client tag: the directory endpoint first (/mcp/claude, /mcp/chatgpt), then ?via=, then the
+// clientInfo name / platform / user agent. Anything else is `other`.
+export function _findingClient(c) {
+  if (!c) return 'other';
+  if (c.profile === CLAUDE_PROFILE) return 'claude';
+  if (c.profile === DIRECTORY_PROFILE) return 'chatgpt';
+  let via = '';
+  try { via = String(getVia() || ''); } catch (_) { via = ''; }
+  const s = [via, c.client_name_raw, c.platform, c.user_agent || c.client_ua].map((x) => String(x || '')).join(' ').toLowerCase();
+  if (/chatgpt|openai/.test(s)) return 'chatgpt';
+  if (/claude|anthropic/.test(s)) return 'claude';
+  if (/cursor/.test(s)) return 'cursor';
+  return 'other';
+}
+export function _findingHeaders(apiKey, c, entryTool) {
+  const h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (apiKey) h['X-API-Key'] = apiKey;
+  const ik = process.env.DCHUB_INTERNAL_KEY || INTERNAL_KEY;
+  if (ik) {
+    h['X-Internal-Key'] = ik;
+    h['X-DCHub-Entry-Tool'] = FINDING_ENTRY_TOOLS.includes(entryTool) ? entryTool : 'report_finding';
+    h['X-DCHub-Finding-Client'] = _findingClient(c);
+    if (c && c.client_name_raw) h['X-MCP-Client'] = String(c.client_name_raw).slice(0, 120);
+    if (c && c.client_ip) h['X-DC-Client-IP'] = String(c.client_ip);
+  }
+  if (_isQaCaller(c)) h[QA_MARKER_HEADER] = '1';
+  return h;
+}
+function _findingFail(text, code, extra) { return _partnerFail('finding', text, code, extra); }
+export async function _reportFindingTool(apiKey, a, fetchImpl, opts) {
   const f = (typeof fetchImpl === 'function') ? fetchImpl : fetch;
-  if (!apiKey) return _partnerFail('finding', _PARTNER_NO_KEY_TEXT, 'api_key_required');
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  let c = o.ctx;
+  if (c === undefined) { try { c = getCtx(); } catch (_) { c = null; } }
   const body = {};
   for (const k of _FINDING_FIELDS) if (a && a[k] !== undefined && a[k] !== null) body[k] = a[k];
+  if (!body.tool && FINDING_TOOL_OPTIONAL.includes(body.class)) body.tool = FINDING_DEFAULT_TOOL;
   try {
     const r = await f(new URL('/api/v1/inbox/findings', API_BASE).toString(), {
       method: 'POST',
-      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: _findingHeaders(apiKey, c, o.entryTool || 'report_finding'),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(20000),
     });
     const raw = await r.text();
     let j = null;
     try { j = JSON.parse(raw); } catch { j = null; }
-    if (r.status === 401) return _partnerFail('finding', 'DC Hub key refused (401): the backend did not accept the key this session sends. Check the key.', 'api_key_rejected');
-    if (r.status === 403) return _partnerFail('finding', _PARTNER_KEY_REQUIRED_TEXT, 'partner_key_required');
     if (r.status === 400) {
       const err = (j && j.error) || 'invalid_finding';
-      const classes = (j && j.classes) ? ` Classes: ${j.classes.join(', ')}.` : '';
-      return _partnerFail('finding', `Finding refused (400 ${err}).${classes} Nothing was filed.`, err, { classes: j && j.classes });
+      let hint = '';
+      if (err === 'summary_required' || err === 'summary_length') hint = ' Add summary: one sentence, 10 to 280 characters, saying what you saw or what your human wants.';
+      else if (err === 'invalid_tool') hint = ' Name the DC Hub tool it is about in tool (for example execute_plan).';
+      else if (err === 'invalid_contact_email') hint = ' contact_email must be one email address, and only if your human asked for a reply.';
+      else if (j && j.classes) hint = ` Classes: ${j.classes.join(', ')}.`;
+      return _findingFail(`Finding not filed (400 ${err}).${hint} Nothing was filed.`, err, { classes: j && j.classes });
     }
-    if (r.status === 413) return _partnerFail('finding', 'Finding refused (413): the body is over the 16 KB cap. Trim quoted_fields/note and file again.', 'body_too_large');
+    if (r.status === 413) return _findingFail('Finding not filed (413): the body is over the 16 KB cap. Trim quoted_fields, evidence or note and file again.', 'body_too_large');
     if (r.status === 429) {
       const ra = (j && j.retry_after_seconds) || null;
-      return _partnerFail('finding', `Finding refused (429): this key filed its daily allowance${ra ? `; retry in ${ra}s` : ''}. Nothing was filed.`, 'rate_limited', { retry_after_seconds: ra });
+      const msg = (j && j.message) || 'DC Hub has received as many findings from this caller as it takes in one day. Nothing was filed this time; please try again tomorrow.';
+      return _findingFail(msg, 'rate_limited', { status: 'not_filed', retry_after_seconds: ra, limit_per_day: (j && j.limit_per_day) || null });
     }
     if (!r.ok || !j || j.ok !== true) {
-      return _partnerFail('finding', `Finding could not be filed just now (HTTP ${r.status}). Retry later; nothing was filed.`, 'findings_unavailable', { status: r.status });
+      return _findingFail(`Finding could not be filed just now (HTTP ${r.status}). Retry later; nothing was filed.`, 'findings_unavailable', { status: r.status });
     }
-    const sq = j.squasher ? ` Squasher hand-off: ${j.squasher.ok ? `queued (#${j.squasher.id ?? '?'})` : `declined (${j.squasher.error || j.squasher.reason || 'see structuredContent'})`}.` : '';
-    const text = `Filed ${j.result}: ${j.issue_label} (finding #${j.id}, seen ${j.recurrence}x, route ${j.route}).${sq}`
-      + ' It is on the brain findings board under detector external_audit; GET /api/v1/inbox/findings (same key) lists what you filed.';
-    return { content: [{ type: 'text', text }], structuredContent: { _entity: 'finding', ...j } };
+    const fid = j.finding_id ?? j.id ?? null;
+    const message = j.message || FINDING_THANKS;
+    const receipt = { finding_id: fid, status: j.status || 'received', recurrence: j.recurrence ?? 1, message };
+    // caller_tier 'partner' from the backend; route + slug alone is the pre-2026-11-16 backend's partner receipt.
+    if (j.caller_tier === 'partner' || (j.route && j.slug)) {
+      // a partner keeps the 2026-10-08 receipt (route, lane, squasher) beside the new four fields
+      const sq = j.squasher ? ` Squasher hand-off: ${j.squasher.ok ? `queued (#${j.squasher.id ?? '?'})` : `declined (${j.squasher.error || j.squasher.reason || 'see structuredContent'})`}.` : '';
+      const text = `${message} Filed ${j.result}: ${j.issue_label} (finding #${fid}, seen ${receipt.recurrence}x, route ${j.route}).${sq}`
+        + ' It is on the brain findings board under detector external_audit; GET /api/v1/inbox/findings (same key) lists what you filed.';
+      return { content: [{ type: 'text', text }], structuredContent: { _entity: 'finding', ...j, ...receipt } };
+    }
+    const text = `${message} Finding #${fid} received${receipt.recurrence > 1 ? ` (seen ${receipt.recurrence} times)` : ''}.`;
+    return { content: [{ type: 'text', text }], structuredContent: { _entity: 'finding', ...receipt } };
   } catch (e) {
-    return _partnerFail('finding', `Finding could not be filed just now (${String((e && e.message) || e)}). Retry later; nothing was filed.`, 'findings_unavailable');
+    return _findingFail(`Finding could not be filed just now (${String((e && e.message) || e)}). Retry later; nothing was filed.`, 'findings_unavailable');
   }
+}
+// request_enhancement: a pure wrapper. Same handler, same backend, same dedupe; class
+// feature_request, or coverage_gap when the request is about missing coverage (a region named, or
+// the summary says coverage / not covered / missing data for a place).
+const _COVERAGE_RE = /\b(coverage|not covered|doesn'?t cover|does not cover|no data (for|in|on)|missing (data|coverage) (for|in))\b/i;
+export function _enhancementClass(a) {
+  const s = `${(a && a.summary) || ''} ${(a && a.user_goal) || ''}`;
+  return ((a && a.region) || _COVERAGE_RE.test(s)) ? 'coverage_gap' : 'feature_request';
+}
+export async function _requestEnhancementTool(apiKey, a, fetchImpl, opts) {
+  const src = a || {};
+  const args = {};
+  for (const k of ['summary', 'user_goal', 'tool', 'region', 'url', 'evidence', 'contact_email']) {
+    if (src[k] !== undefined && src[k] !== null) args[k] = src[k];
+  }
+  args.class = _enhancementClass(src);
+  return _reportFindingTool(apiKey, args, fetchImpl, { ...(opts || {}), entryTool: 'request_enhancement' });
 }
 export const _INSTRUCTIONS_LEAN = (() => {
   const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
@@ -31161,6 +31272,8 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // Item 1 (owner 2026-10-16): no "needs a paid DC Hub plan" line; the walls carry the link.
     + 'Past that, previews. '
     + 'A gated result carries `human_url` and `human_message`. ' + RELAY_CONTRACT + ' '
+    // 2026-11-16 (owner "Let's do both"): the feedback line, on every handshake that lists the two tools.
+    + INSTR_FEEDBACK_LINE + ' '
     // Energy-first lead (owner 2026-11-11, item 3) took 37 more characters; the llms.txt URL gives them back (the
     // resource carries the full text, and llms.txt is linked from it and from every public page).
     + 'Reference: resource `' + INSTRUCTIONS_RESOURCE_URI + '`.';
@@ -31855,6 +31968,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.25: what a step did not apply, with its own reason (_execDroppedFilters); named after UNDATED.
       const _dropped = _execDroppedFilters(executed, fullByEntry, _sig && _sig.__outlook ? _sig.__outlook : null);
       const _droppedLine = _execDroppedSentence(_dropped);
+      // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
+      let _findingNext = null;
+      try {
+        if (_findingNudgeAllowed()) {
+          _findingNext = _findingNextTool('execute_plan', _findingPlanGaps(executed, fullByEntry, _dropped,
+            classifyCoverageGap(a && a.intent, executed, fullByEntry)));
+        }
+      } catch (_e) { _findingNext = null; }
       // B1: a geocoded town is said as one (a town point, not a parcel), and a failed geocode says why.
       const _geoLine = Array.isArray(_geocoded) && _geocoded.length
         ? 'PLACE — ' + _geocoded.map((g) => (g.resolved === false
@@ -31960,6 +32081,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           hyperscaler_activity: { prompt: 'market_selection', why: 'Rank the markets the deal flow is concentrating in — verdicts + time-to-power.' },
         })[sc.intent_class] || { prompt: 'whats_changed', why: 'See what moved in the dataset since this call — the return hook.' },
         _source: 'DC Hub — dchub.cloud',
+        ...(_findingNext ? { next_tools: [_findingNext] } : {}),
       };
       // A2: mint the Deal Desk Brief for the callers entitled to one. Attached
       // BEFORE the stringify so both halves of the response carry it.
@@ -33388,6 +33510,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // flip isError:true so the agent treats it as an actionable error state
       // (act on suggested_params) instead of an empty success. structuredContent
       // carries the deterministic hint. See /docs/error-codes.
+      // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
+      try {
+        if (_findingNudgeAllowed()) _attachFindingNext(sc, _findingNextTool('get_refined_queue', _findingResultGaps(sc, a)));
+      } catch (_e) { /* never blocks the answer */ }
       const out = { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
       if (sc && sc._error_mitigation) out.isError = true;
       return out;
@@ -33839,6 +33965,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           refresh_when: 'You already pulled data and want only what moved since a timestamp — incremental sync, not a re-pull.',
           binding_note: 'These two are not in any family because they cross all of them. If you are building a capability map, bind it from tools/list — this navigator is curated, not exhaustive.',
         },
+        // 2026-11-16 (owner "Let's do both"): the feedback pair, where both are listed. A top-level key,
+        // not inside front_door: the /mcp lean step (lib/lean-response.mjs DROP_KEY '_?front_door.*')
+        // drops the whole front_door block, so a line there would never reach a /mcp caller.
+        ...(_findingNudgeAllowed() ? { feedback: 'Wrong or missing data: report_finding. Feature ideas: request_enhancement.' } : {}),
         count: (hits.length ? hits : _TOOL_FAMILIES).length,
         families: hits.length ? hits : _TOOL_FAMILIES,
         note: 'Flagship tools per family are the front door for planners; call tools/list for the complete, always-current catalog + full schemas. If nothing matched your query, all families are returned.',
@@ -35114,15 +35244,18 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       max_months: z.number().int().min(1).max(120).optional().describe('Maximum acceptable time-to-power in months, 1-120, e.g. 24'),
       verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID — or ALL to see every scored market in the geography. Defaults to BUILD,CAUTION, so a geography whose markets are all AVOID returns matched:0 plus an `empty_result` block explaining that; re-run with verdict=ALL to see those rows.'),
       limit: LIMIT.describe('Number of shortlist markets to return') },
-    async (a) => ({
-      content: [{ type: 'text',
-        text: JSON.stringify(await callAPI('/api/v1/site-selection/canvas', {
-          capacity_mw: a.capacity_mw, region: a.region, state: a.state, iso: a.iso,
-          max_months: a.max_months,
-          verdict: a.verdict, limit: a.limit || 12,
-        }))
-      }]
-    }));
+    async (a) => {
+      const data = await callAPI('/api/v1/site-selection/canvas', {
+        capacity_mw: a.capacity_mw, region: a.region, state: a.state, iso: a.iso,
+        max_months: a.max_months,
+        verdict: a.verdict, limit: a.limit || 12,
+      });
+      // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
+      try {
+        if (_findingNudgeAllowed()) _attachFindingNext(data, _findingNextTool('site_selection_canvas', _findingResultGaps(data, a)));
+      } catch (_e) { /* never blocks the answer */ }
+      return { content: [{ type: 'text', text: JSON.stringify(data) }] };
+    });
 
   trackedTool(srv, 'grid_transition_radar',
     'Use this when the user asks where new grid headroom for data centers is emerging. Returns the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), an ISO rollup, and a grid-headroom leaderboard. With a full-access key, also the transition thesis: which ISO is opening up and why. The predictive counter to retrospective "where capacity landed" reports. Answers "where should I be looking next", "which market is about to become buildable". Try: grid_transition_radar max_months=24. Do NOT use for the current ISO queue snapshot (use get_interconnection_queue) or a present-day market ranking (use rank_markets); this is the forward-looking emergence radar.',
@@ -36665,7 +36798,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 96 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 97 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',
@@ -36747,16 +36880,36 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       include_read: B.describe('true = re-read read and unread notes, marks nothing'),
       days: z.number().int().min(1).max(_INBOX_DAYS_MAX).optional().describe('Days back (default 14)') },
     async (a) => _readInboxTool(getCtx().api_key, { peek: a.peek === true, include_read: a.include_read === true, days: a.days }));
-  trackedTool(srv, 'report_finding', 'Use this when a partner key reports a DC Hub data issue. PARTNER KEY ONLY: file what you observed on a DC Hub surface as a brain finding (detector external_audit) so it is triaged like every other detector\'s. class is one of completeness_contradiction, geography_leak, as_of_cite_as, pro_wall_dead_end, count_drift, stale_payload_complete, leak_past_pro_gate, link_hygiene, other; tool names the DC Hub tool or endpoint; quoted_fields carries the exact fields you saw (hashed for dedupe: the same observation re-filed within 24h bumps recurrence instead of inserting). Proxies POST /api/v1/inbox/findings with the session\'s own key; a key issued without a partner slug answers partner key required (403). 120 per key per day.',
-    { class: z.enum(FINDING_CLASSES).describe('Finding class: completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a paid-plan wall that says stop while next_ask offers another paid-plan tool and no cheaper rung), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a paid-plan field served below its plan), link_hygiene (dead or wrong-shape links), other'),
-      tool: z.string().min(1).max(80).describe('The DC Hub tool or endpoint the finding is about, e.g. analyze_site'),
-      args: z.record(z.any()).optional().describe('The arguments you called it with'),
-      quoted_fields: z.union([z.record(z.any()), z.array(z.any()), z.string()]).optional().describe('The exact fields/values you observed (object, list or string); hashed for dedupe'),
+  // ── report_finding + request_enhancement (2026-11-16, owner "Let's do both") ──
+  // Open to every caller: keyless, any key, partner key. The backend sets the caller tier, the
+  // client and the entry tool itself, strips secrets before storing and holds the daily limits;
+  // this server only names the door (see _reportFindingTool). The two descriptions are the
+  // owner-approved text, verbatim.
+  // Literal text (scripts/sync-tools-manifest.mjs reads registrations as literals); test/findings-open-intake
+  // pins it equal to REPORT_FINDING_DESCRIPTION / REQUEST_ENHANCEMENT_DESCRIPTION and lib/claude-directory.mjs.
+  trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
+    { class: z.enum(FINDING_CLASSES).describe('Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your human wants DC Hub to do), completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (a preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a wall that says stop while next_ask offers only another walled tool), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a gated field served to a caller it is gated from), link_hygiene (dead or wrong-shape links), other'),
+      tool: z.string().min(1).max(80).optional().describe('The DC Hub tool or endpoint it is about, e.g. analyze_site (optional for feature_request and coverage_gap)'),
+      summary: z.string().min(10).max(280).optional().describe('One sentence, 10-280 characters: what you saw or what your human wants (required for feature_request, missing_data, other)'),
+      user_goal: z.string().max(500).optional().describe('What your human was trying to do'),
+      region: z.string().max(120).optional().describe('The market, state, ISO or country it is about'),
+      args: z.record(z.any()).optional().describe('The arguments you called the tool with'),
+      quoted_fields: z.union([z.record(z.any()), z.array(z.any()), z.string()]).optional().describe('The exact fields/values you saw (object, list or string); hashed for dedupe'),
       observed_at: S.describe('ISO-8601 time you observed it'),
       session_id: S.describe('Your session identifier, if any'),
       recurrence: I.describe('How many times you have seen it (default 1)'),
-      note: S.describe('One or two sentences of context') },
-    async (a) => _reportFindingTool(getCtx().api_key, a));
+      note: S.describe('One or two sentences of context'),
+      contact_email: z.string().max(254).optional().describe('Only if your human asked for a reply') },
+    async (a) => _reportFindingTool(getCtx().api_key, a, undefined, { entryTool: 'report_finding' }));
+  trackedTool(srv, 'request_enhancement', "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan).",
+    { summary: z.string().min(10).max(280).describe('One sentence, 10-280 characters: what your human wants DC Hub to do or cover'),
+      user_goal: z.string().max(500).optional().describe('What your human was trying to do'),
+      tool: z.string().min(1).max(80).optional().describe('The DC Hub tool it relates to, if any'),
+      region: z.string().max(120).optional().describe('The market, state, ISO or country it is about, if any'),
+      url: z.string().max(500).optional().describe('A DC Hub page or source it relates to, if any'),
+      evidence: z.string().max(2000).optional().describe('What you saw that shows the gap, quoted exactly'),
+      contact_email: z.string().max(254).optional().describe('Only if your human asked for a reply') },
+    async (a) => _requestEnhancementTool(getCtx().api_key, a));
 
   // get_agent_demand (owner 2026-11-10): registered only while AGENT_DEMAND_PUBLIC is on, so the
   // derived tool count, the manifests and the handshake texts do not move before the owner

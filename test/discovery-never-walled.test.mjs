@@ -148,6 +148,20 @@ describe('discover_tools is never walled (funnel item 1)', () => {
     }
   });
 
+  // 2026-11-16 (findings open intake): a keyless caller past either cap can still file what was wrong or
+  // missing; the backend holds its own per-IP daily limit on findings.
+  it.each([['soft cap', 25, 'anon_daily_cap'], ['hard wall', 999, 'anon_hard_wall']])('%s: report_finding and request_enhancement are not walled', async (_l, n, status) => {
+    anonCount = n;
+    for (const [name, args] of [['report_finding', { class: 'bug', tool: 'get_news', summary: 'get_news returned nothing today' }],
+      ['request_enhancement', { summary: 'please add queue data for Ontario' }]]) {
+      for (const hdr of [sessionless(), await session()]) {
+        const r = await call(name, args, hdr);
+        expect(r.rows.map((e) => `${e.tool}/${e.wall_status}`), name).toEqual([]);
+        expect(JSON.stringify(r.result), name).not.toContain(status);
+      }
+    }
+  });
+
   it.each([['soft cap', 25, 'anon_daily_cap'], ['hard wall', 999, 'anon_hard_wall']])('CONTROL %s: plan_query (not exempt) walls at the same count', async (_l, n, status) => {
     anonCount = n;
     const r = await call('plan_query', { intent: 'rank markets for a 200 MW AI campus' }, sessionless());

@@ -94,7 +94,7 @@ Your AI assistant gets real-time, structured answers, dated and cited.
 - **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 - **Capacity Source** — data-center capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
 
-**96 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**97 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 Two of them are **partner tools**: `read_inbox` (the notes DC Hub leaves for a partner key; the same inbox as the `dchub://inbox` resource) and `report_finding` (files an observation about a DC Hub surface as a brain finding, detector `external_audit`). They are listed for every caller so the catalog is one stable list, and they answer only a key issued under a partner slug; any other key gets a clear "partner key required".
 
@@ -109,7 +109,7 @@ Two of them are **partner tools**: `read_inbox` (the notes DC Hub leaves for a p
 
 ## Guided prompts & resources
 
-Beyond the 96 tools, DC Hub ships **14 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
+Beyond the 97 tools, DC Hub ships **14 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
@@ -150,7 +150,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 The canonical MCP endpoint is `https://dchub.cloud/mcp` (Streamable HTTP). Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
-`https://dchub.cloud/mcp` serves the full catalog (all 96 tools) to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`.
+`https://dchub.cloud/mcp` serves the full catalog (all 97 tools) to directories and to clients it does not recognise. Coding CLIs (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, opencode) and IDE hosts that load several MCP servers at once (Cursor, VS Code, Windsurf, Cline) get a ten-tool list there instead, with execute_plan first. That is a listing scope: every tool is still callable by name. Any client gets the full list at `https://dchub.cloud/mcp?catalog=full`.
 
 ## What DC Hub adds
 

@@ -151,20 +151,37 @@ describe('coverage_gap is on the logged plan record', () => {
   });
 });
 
+// 2026-11-16 (owner "Let's do both", findings item 4): 'coverage_gap' is now also a report_finding CLASS, and a
+// gap answer carries next_tools [{tool:'report_finding', args:{class:'coverage_gap', ...}}]. What stays log-only is
+// the classification itself: no coverage_gap FIELD on the answer and no topic id (lease_comps, colo_pricing, ...).
+const TOPIC_IDS = /lease_comps|colo_pricing|vacancy_absorption|colo_availability_nofit/;
+const withoutFindingClass = (raw) => String(raw)
+  .replace(/class\\*"\s*:\s*\\*"coverage_gap/g, '')                       // next_tools args.class / the class value
+  .replace(/\\*"coverage_gap\\*"/g, '')                                      // the report_finding class enum
+  .replace(/coverage_gap \(a place or source DC Hub does not cover\)|feature_request and coverage_gap/g, '');   // its descriptions
 describe('coverage_gap is NEVER agent-facing', () => {
-  it('the execute_plan response body has no coverage_gap key (control: the same call logged one)', () => {
+  it('the execute_plan response body has no coverage_gap field and no topic id (control: the same call logged one)', () => {
     expect(stepsRow(run.lease.hits).coverage_gap).toBe('lease_comps');
-    expect(run.lease.res.raw).not.toMatch(/coverage_gap/);
-    expect(JSON.stringify(run.lease.res.body)).not.toMatch(/coverage_gap/);
-    expect(run.plain.res.raw).not.toMatch(/coverage_gap/);
+    for (const raw of [run.lease.res.raw, JSON.stringify(run.lease.res.body), run.plain.res.raw]) {
+      expect(withoutFindingClass(raw)).not.toMatch(/coverage_gap/);
+      expect(raw).not.toMatch(TOPIC_IDS);
+    }
+  });
+  it('next_tools -> report_finding rides the gap answer (lease comps) and not the clean one (findings item 4)', () => {
+    expect(run.lease.res.raw).toMatch(/next_tools\\*"\s*:\s*\[\s*\{\\*"tool\\*"\s*:\s*\\*"report_finding/);
+    expect(run.lease.res.raw).toMatch(/execute_plan: lease comparables are not covered/);
+    // the plain ranking runs under a keyless preview: its skipped steps are about access, so no entry
+    expect(run.plain.res.raw).not.toMatch(/report_finding/);
   });
   it('a directory profile response has none either', () => {
-    expect(run.profile.res.raw).not.toMatch(/coverage_gap/);
+    expect(withoutFindingClass(run.profile.res.raw)).not.toMatch(/coverage_gap/);
+    expect(run.profile.res.raw).not.toMatch(TOPIC_IDS);
   });
-  it('no tools/list surface (any profile) mentions it', async () => {
+  it('no tools/list surface (any profile) mentions it, other than as a report_finding class', async () => {
     for (const p of ['/mcp', '/mcp/claude', '/mcp/chatgpt', '/mcp/grok']) {
       const l = await H.list(p, UA);
-      expect(l.raw, p).not.toMatch(/coverage_gap/);
+      expect(withoutFindingClass(l.raw), p).not.toMatch(/coverage_gap/);
+      expect(l.raw, p).not.toMatch(TOPIC_IDS);
     }
   });
 });

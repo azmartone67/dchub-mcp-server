@@ -416,8 +416,8 @@ describe('item 5: partner notes ride the first result and get_changes, no new to
     expect(inbox.hits).toHaveLength(0);
   });
 
-  it('no tool was added for it: the catalog is exactly what mcp#831 left (94), plus get_air_permit_context (2026-11-11) and dchub_services (2026-11-13)', () => {
-    expect(Object.keys(TOOLS)).toHaveLength(96);
+  it('no tool was added for it: the catalog is exactly what mcp#831 left (94), plus get_air_permit_context (2026-11-11), dchub_services (2026-11-13) and request_enhancement (2026-11-16)', () => {
+    expect(Object.keys(TOOLS)).toHaveLength(97);
     expect(Object.keys(TOOLS)).not.toContain('partner_inbox');
   });
 });
