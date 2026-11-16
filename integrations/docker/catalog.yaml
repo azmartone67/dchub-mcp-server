@@ -114,7 +114,7 @@ registry:
       - name: "get_infrastructure"
         description: "Use this when the user asks what power infrastructure is near a site: substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas…"
       - name: "get_intelligence_index"
-        description: "Use this when the user asks how healthy a data center market is: composite score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing…"
+        description: "Use this when the user asks how the data center market looks overall, across all markets: ONE global DC Hub index, not a per-market score, and it takes no arguments (no market filter)."
       - name: "get_interconnection_queue"
         description: "Use this when the user asks about grid interconnection queues: how congested an ISO's queue is or how much data-center load is waiting."
       - name: "get_iso_context"

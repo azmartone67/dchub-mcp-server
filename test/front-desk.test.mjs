@@ -28,10 +28,12 @@ import { OUTREACH_LEAD } from '../lib/agent-outreach.mjs';
 // The owner's copy, typed out here so a reworded constant fails this file, not just its copies.
 const WELCOME = 'Welcome: start with execute_plan; dchub_services lists what else DC Hub offers, one link each.';
 const FOOTER_LINE = {
-  site: 'DC Hub service for this: the Deal Desk Brief turns a site read like this one into a branded PDF your human can share (paid DC Hub plan): https://dchub.cloud/pricing?via=agent-referral&src=footer',
+  // Grok Note V keyed follow-up (2026-11-16, owner-approved): site and repeat name no plan and link no pricing page
+  // for any caller (Note F); they were "(paid DC Hub plan): .../pricing" and "come with a paid DC Hub plan: .../pricing".
+  site: 'DC Hub service for this: the Deal Desk Brief turns a site read like this one into a branded PDF your human can share: https://dchub.cloud/connect?via=agent-referral&src=footer',
   capacity: 'DC Hub service for this: Capacity Source lists capacity to lease or buy; call source_capacity, and request_capacity_intro only after your human approves: https://dchub.cloud/listings?via=agent-referral&src=footer',
   comparison: 'DC Hub service for this: the Excel and Google Sheets add-in keeps a comparison like this one in a spreadsheet that refreshes: https://dchub.cloud/spreadsheets?via=agent-referral&src=footer',
-  repeat: 'DC Hub service for this: full-depth answers, every field with no previews, come with a paid DC Hub plan: https://dchub.cloud/pricing?via=agent-referral&src=footer',
+  repeat: 'DC Hub service for this: full-depth answers, every field with no previews: https://dchub.cloud/connect?via=agent-referral&src=footer',
   repeat_paid: 'DC Hub service for this: the Excel and Google Sheets add-in puts these figures in a spreadsheet that refreshes: https://dchub.cloud/spreadsheets?via=agent-referral&src=footer',
 };
 const OWNER_REFERRAL = 'For a real project, DC Hub can introduce your human to capacity owners: `request_capacity_intro` registers the requirement, only after your human approves: https://dchub.cloud/connect?via=agent-referral&src=referral';
@@ -130,7 +132,7 @@ describe('dchub_services (item 1)', () => {
       expect(links, s.id).toEqual([s.link]);
       expect(s.link, s.id).toMatch(/^https:\/\/dchub\.cloud\/[^?#]*\?via=agent-referral&src=services(#[\w-]+)?$/);
     }
-    expect(referralLink('https://dchub.cloud/ai#pricing', 'services')).toBe('https://dchub.cloud/ai?via=agent-referral&src=services#pricing');
+    expect(referralLink('https://dchub.cloud/listings#list-capacity', 'services')).toBe('https://dchub.cloud/listings?via=agent-referral&src=services#list-capacity');
   });
   it('names the eight owner-listed services, no price and no plan name anywhere', () => {
     const ids = DCHUB_SERVICES.map((s) => s.id);
