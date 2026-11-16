@@ -5916,6 +5916,66 @@ async function validateKey(api_key, opts = {}) {
   _keyValidateInflight.set(flightKey, p);
   return p;
 }
+// ── Grok note N item 5 (2026-11-16): save the key, once, on a new key's first answer ──────────
+// install_artifact_30d: the install pages' keys called (claude 1/1, claude-desktop 1/1) and none
+// came back on a later day. The backend's /keys/validate answers save_notice_due=true on exactly
+// one validate per new dch_live_ key (it stamps metadata.save_notice_at in the same UPDATE, only
+// while the key has made no MCP call: dchub-backend, same note), with the key's client_name. That
+// arms the key here; the first answer that is not an error and not the key's own claim / bind
+// reply carries one line, "Save this key in your client config to keep your history and alerts",
+// and the paste-ready config for that client. Shown once per key: the backend stamp holds across
+// replicas, and this map holds the armed key until its first successful answer on this replica.
+// Kill switch DCHUB_SAVE_KEY_NOTICE=0 (read per call).
+export const SAVE_KEY_LINE = 'Save this key in your client config to keep your history and alerts';
+export const _saveKeyNoticeOn = (env = process.env) =>
+  !/^(0|off|false|no)$/i.test(String((env && env.DCHUB_SAVE_KEY_NOTICE) || '').trim());
+export const _saveKeyPending = new Map();   // api_key -> { client_name, at }
+const _SAVE_KEY_PENDING_TTL_MS = 86400e3;
+export function _armSaveKeyNotice(api_key, data) {
+  try {
+    if (!api_key || !data || data.valid !== true || data.save_notice_due !== true) return false;
+    if (!/^dch_live_/.test(String(api_key))) return false;
+    if (_saveKeyPending.size >= 5000) _saveKeyPending.delete(_saveKeyPending.keys().next().value);
+    _saveKeyPending.set(String(api_key), {
+      client_name: typeof data.client_name === 'string' ? data.client_name.slice(0, 80) : null, at: Date.now() });
+    return true;
+  } catch (_) { return false; }
+}
+// Set by createServer() (where the per-client snippets live): (key, via, clientKey|null) -> text.
+let _saveKeySnippetText = null;
+export function _setSaveKeySnippetText(fn) { _saveKeySnippetText = typeof fn === 'function' ? fn : null; }
+// The client a key was minted for: metadata.client_name from the install pages
+// (install-claude-desktop, install-cursor, ...) first, then what this caller says it is.
+export function _saveKeyClientNames(pending, c) {
+  const cn = String((pending && pending.client_name) || '').replace(/^install-/i, '').replace(/-/g, ' ');
+  return [cn, c && c.client_name_raw, c && c.platform, c && (c.client_ua || c.user_agent)];
+}
+export function _saveKeyOnceStep(result, name) {
+  try {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (!_saveKeyNoticeOn()) return result;
+    const c = getCtx() || {};
+    const key = c.api_key ? String(c.api_key) : '';
+    const p = key ? _saveKeyPending.get(key) : null;
+    if (!p) return result;
+    if (Date.now() - p.at > _SAVE_KEY_PENDING_TTL_MS) { _saveKeyPending.delete(key); return result; }
+    if (result.isError === true) return result;            // not a successful answer: wait for one
+    if (_OWN_TELL_TOOLS.has(name)) return result;          // the key's own claim / bind reply
+    _saveKeyPending.delete(key);                            // spent, shown or skipped
+    // The claim / bind reply on this replica already handed this key with its snippet.
+    if (_keysHandedWithSnippet.has(key)) return result;
+    // No key in the answer on the directory, Claude and core profiles; none for bots, QA, internal.
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (isBotOrInternalCtx(c) || _isQaCaller(c)) return result;
+    if (!_saveKeySnippetText) return result;
+    const text = _saveKeySnippetText(key, _claimVia(), _saveKeyClientNames(p, c));
+    if (!text) return result;
+    if (result.content.some((x) => x && typeof x.text === 'string' && x.text.includes(SAVE_KEY_LINE))) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+      ? { ...result.structuredContent, save_key_line: SAVE_KEY_LINE } : result.structuredContent;
+    return { ...result, content: [...result.content, { type: 'text', text }], ...(sc ? { structuredContent: sc } : {}) };
+  } catch (_) { return result; }   // a notice is never worth failing a response over
+}
 // Injectable for tests: the backend /keys/validate hop.
 export let _validateFetchImpl = null;
 export function _setValidateFetchImpl(fn) { _validateFetchImpl = fn; }
@@ -5948,6 +6008,7 @@ async function _validateKeyUncached(api_key, opts = {}) {
       return { valid: false, tier: 'free', key_rejected: false, indeterminate: true };
     }
     const data = await resp.json();
+    _armSaveKeyNotice(api_key, data);   // Grok note N item 5: once per key, from the backend's stamp
     return cacheKey(api_key, {
       valid: !!data.valid,
       // The backend answered 200 and said no. THIS is the authoritative
@@ -6520,6 +6581,18 @@ export function _internalSkipLine(c, tool_name) {
 export function _autoTrialMintOn(env = process.env) {
   return String((env && env.DCHUB_AUTO_TRIAL_MINT) || '0').trim() === '1';
 }
+// Grok note N item 3: true when the request's session already holds a durable DC Hub key
+// (claim_free_key / bind_email bound it, or the caller sent one), so no walled call may mint
+// another. A dch_trial_ seat is not durable and keeps its own path. See mintAutoTrial.
+// A key PRESENTED on the request is F-1's (its own kill switch, DCHUB_MINT_SKIP_KEYED); this covers
+// the key the session holds with no credential on the request: auto-bound in this session
+// (auth_source 'none' + api_key) or restored server-side from the session's claim
+// ('session_restore'). Both are the session's own claimed / bound key.
+export function _sessionKeyMintSkip(c, env = process.env) {
+  if (/^(0|off|false|no)$/i.test(String((env && env.DCHUB_MINT_SKIP_SESSION_KEY) || '').trim())) return false;
+  const k = c && c.api_key ? String(c.api_key) : '';
+  return !!k && !k.startsWith('dch_trial_') && !_keyPresentedOnRequest(c);
+}
 
 export async function mintAutoTrial(tool_name) {
   try {
@@ -6585,6 +6658,13 @@ export async function mintAutoTrial(tool_name) {
         && (process.env.DCHUB_MINT_SKIP_KEYED || '1') !== '0') {
       return null;
     }
+    // Grok note N item 3 (2026-11-16): F-1 above covers a key PRESENTED on the request; a key
+    // that claim_free_key or bind_email bound to this MCP session arrives on no channel
+    // (auth_source 'session'), so a later walled call in the same session still reached the
+    // backend mint and got a dch_trial_ sibling of the session's own durable key. A session
+    // that holds a durable key (anything but a dch_trial_ seat) mints nothing: that key is the
+    // one it keeps using. Kill switch: DCHUB_MINT_SKIP_SESSION_KEY=0.
+    if (_sessionKeyMintSkip(c)) return null;
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {
@@ -6681,6 +6761,66 @@ export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
 // Per-IP free-tier counters are untouched: they never read this map.
 export const _heldKeyByIpOn = () => process.env.DCHUB_HELD_KEY_BY_IP === '1';
 // The repeat-caller line (E4): one sentence every reuse reply carries, same words as the backend's guidance.
+// Grok note N item 3 (2026-11-16): claim_free_key and bind_email hand back ONE durable dch_live_
+// key and say, in the text AND in structuredContent.reuse_key_line, to reuse it on every later
+// call. One sentence, the same in both channels; added once (an answer that already carries it
+// is left alone, so bind_email's keyless path, which runs claim_free_key, does not say it twice).
+// Kill switch DCHUB_REUSE_KEY_LINE=0, read per call.
+export const REUSE_KEY_LINE = 'Reuse this one key on every later DC Hub call: send it as the X-API-Key header. Do not call claim_free_key again.';
+export const _reuseKeyLineOn = (env = process.env) =>
+  !/^(0|off|false|no)$/i.test(String((env && env.DCHUB_REUSE_KEY_LINE) || '').trim());
+// Keys this replica just handed back with their client snippet (claim_free_key / bind_email), so
+// the first-answer save line (item 5) does not repeat what the claim reply already showed.
+export const _keysHandedWithSnippet = new Map();   // key -> handed at (ms)
+export function _noteKeyHanded(key) {
+  try {
+    if (!key) return;
+    if (_keysHandedWithSnippet.size >= 5000) _keysHandedWithSnippet.delete(_keysHandedWithSnippet.keys().next().value);
+    _keysHandedWithSnippet.set(String(key), Date.now());
+  } catch (_) { /* best-effort */ }
+}
+// The last words of the claim reply's per-client snippet block (_ownSnippetBlock and the older
+// "Save it for" block both end with this pointer).
+const _SNIPPET_BLOCK_END = 'Other clients: https://dchub.cloud/connect';
+export function _withReuseKeyLine(result, key) {
+  try {
+    if (!result || typeof result !== 'object' || result.isError === true) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+      ? result.structuredContent : null;
+    const k = String(key || (sc && sc.api_key) || '');
+    if (!/^dch_live_/.test(k)) return result;          // only a durable key is "the one key"
+    if (sc && (sc.error || sc.ok === false)) return result;   // nothing was handed back
+    _noteKeyHanded(k);
+    if (!_reuseKeyLineOn()) return result;
+    const content = Array.isArray(result.content) ? result.content : [];
+    const has = content.some((b) => b && typeof b.text === 'string' && b.text.includes(REUSE_KEY_LINE));
+    let nc = content;
+    if (!has) {
+      const i = content.findIndex((b) => b && b.type === 'text' && typeof b.text === 'string');
+      if (i < 0) nc = [...content, { type: 'text', text: REUSE_KEY_LINE }];
+      else {
+        const t = content[i].text;
+        const anchor = '**Your key:** `' + k + '`';
+        const at = t.indexOf(anchor);
+        // Under the key, after the client's own snippet block when the reply carries one (owner
+        // 2026-11-13: nothing but the heading sits between the key line and that snippet); with
+        // no key line (bind_email on a key the caller already holds), the key and the line close
+        // the prose.
+        const snipEnd = at >= 0 ? t.indexOf(_SNIPPET_BLOCK_END, at) : -1;
+        const cut = snipEnd >= 0 ? snipEnd + _SNIPPET_BLOCK_END.length
+          : (at >= 0 ? t.indexOf('\n', at + anchor.length) : -1);
+        const text = at >= 0
+          ? (cut >= 0 ? t.slice(0, cut) + '\n' + REUSE_KEY_LINE + t.slice(cut) : t + '\n' + REUSE_KEY_LINE)
+          : t + '\n\n' + anchor + '\n' + REUSE_KEY_LINE;
+        nc = content.map((b, j) => (j === i ? { ...b, text } : b));
+      }
+    }
+    // api_key on a bind_email result means "this call minted it" to its callers (set_market_alert's
+    // one-call watch), so a key the caller already held is named in bound_api_key instead.
+    return { ...result, content: nc,
+      structuredContent: { ...(sc || {}), ...((sc && sc.api_key) ? {} : { bound_api_key: k }), reuse_key_line: REUSE_KEY_LINE } };
+  } catch (_) { return result; }
+}
 export const ALREADY_HAVE_KEY_GUIDANCE = 'You already have a DC Hub key: keep using it (send it as X-API-Key) and do not claim again. ' +
   'If you lose it, call recover_my_key {email}: it re-sends the key to the email bound to it (bind_email binds one).';
 // 2026-11-09: a held key that now carries an email (bind_email ran after the
@@ -28279,12 +28419,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withSiteOwnerHandoff(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_saveKeyOnceStep(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _resumeStateStep(await _returnNudgeStep(_withSiteOwnerHandoff(_withCapacityPointer(_gridSellThenDigestStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
+       name, args, _outSchema), name, args, _outSchema), name), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
@@ -35680,6 +35820,19 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       + 'Show your human this and ask them to save it once: the key is then sent on every future session. '
       + (_keyLasts(key) ? _KEY_LASTS + ' ' : '') + 'Other clients: https://dchub.cloud/connect\n\n';
   };
+  // Grok note N item 5: the first-answer save line reuses the claim reply's per-client snippets
+  // (mcp#1421): the calling client's config with the key filled in, else the connector URL that
+  // carries it (Claude.ai web, ChatGPT, Grok, Perplexity: a URL box, no config file).
+  _setSaveKeySnippetText((key, via, names) => {
+    const ck = _clientKeyFromNames(...(Array.isArray(names) ? names : []));
+    const cfg = ck ? (_persistConfig(key, via).clients || {})[ck] : null;
+    if (cfg) {
+      return '🔑 ' + SAVE_KEY_LINE + ' (' + cfg.label + (cfg.file ? ', `' + cfg.file + '`' : '') + '), key already filled in:\n```\n'
+        + cfg.snippet + '\n```';
+    }
+    return '🔑 ' + SAVE_KEY_LINE + ': paste this as the DC Hub connector URL (it carries the key):\n```\n'
+      + _connectUrl(key, via) + '\n```';
+  });
   // 2026-11-11 (owner funnel item 4): the paste-ready line, one wording with the backend's
   // persist.paste_line (routes/claim_persist.paste_line): server URL + the X-API-Key header.
   // Spaced exactly as Python's json.dumps prints it, so both servers give the same line.
@@ -35743,7 +35896,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     'Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. DATA USE: the optional email, used to make the key recoverable and send its weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the email with them first. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). A key: ' + _freeKeyOfferText() + '. ' + _emailBenefitText() + ' Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave and confirmed. DC Hub keeps it and never sells or shares it") },
-    async (a) => {
+    // Grok note N item 3: one durable key, and the reuse line in text + structuredContent.
+    async (a) => _withReuseKeyLine(await (async () => {
       const _via   = _claimVia();
       const _isByo = _BYO_MCP_PLATFORMS.has(_via);
       // 2026-10-25: Grok's connector opens a new session for every tool call, so
@@ -36196,7 +36350,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ..._emailRejectFields,
         },
       };
-    });
+    })()));
 
   // r-bind (2026-06-18): bind_email — the anon-reachable, DISCOVERABLE tool that
   // ties an existing key to the human's email. The binding constraint is
@@ -36222,7 +36376,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave and confirmed; placeholder/fake addresses are rejected. DC Hub keeps it and never sells or shares it"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
-    async (a) => {
+    // Grok note N item 3: the bound key (an explicit api_key, else this session's, else the one the
+    // keyless path minted) comes back with the reuse line in text + structuredContent.
+    async (a) => _withReuseKeyLine(await (async () => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
         return { content: [{ type: 'text', text: JSON.stringify({
@@ -36354,7 +36510,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ...(r && typeof r === 'object' ? { backend: r } : {}),
         },
       };
-    });
+    })(), (() => { try { return String((a && a.api_key) || (getCtx() || {}).api_key || '').trim(); } catch (_) { return ''; } })()));
 
   // r-bind (2026-06-18): recover_my_key — the anon-reachable companion to
   // bind_email. Re-sends a LOST key to the email it was bound to (does NOT

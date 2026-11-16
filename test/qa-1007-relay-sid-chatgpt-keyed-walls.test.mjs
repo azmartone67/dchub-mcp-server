@@ -294,11 +294,18 @@ describe('F-1 / F-5 / F-6 — a caller that presented a valid key', () => {
     expect(text(r)).toContain('claim_free_key');            // the keyless wall keeps its free rung
   });
 
-  it('a key the session RESTORED (not presented on this request) keeps the inline-trial ack path', async () => {
-    // The gate is "presented": an auto-bound / session-restored key arrived on no channel, and
-    // test/relay-cap-one-human-line pins that seat's one ACK line. Same mint as before here.
+  it('a key the session RESTORED (not presented on this request) mints no sibling (Grok note N item 3)', async () => {
+    // F-1's gate is "presented": a session-restored key arrived on no channel. Before note N item 3
+    // that seat still minted a dch_trial_ sibling here; the restored key is the session's own
+    // claimed key, so _sessionKeyMintSkip now skips the mint. DCHUB_MINT_SKIP_SESSION_KEY=0 is the
+    // old behaviour (one mint), pinned so this case can fail.
     await call('get_interconnection_queue', { iso: 'PJM' }, KEYED({ auth_source: 'session_restore' }));
-    expect(mintHits).toBe(1);
+    expect(mintHits).toBe(0);
+    process.env.DCHUB_MINT_SKIP_SESSION_KEY = '0';
+    try {
+      await call('get_interconnection_queue', { iso: 'PJM' }, KEYED({ auth_source: 'session_restore' }));
+      expect(mintHits).toBe(1);
+    } finally { delete process.env.DCHUB_MINT_SKIP_SESSION_KEY; }
     expect(S._keyPresentedOnRequest({ api_key: LIVE, auth_source: 'session_restore' })).toBe(false);
     for (const ch of ['header', 'bearer', 'query', 'inline_argument']) {
       expect(S._keyPresentedOnRequest({ api_key: LIVE, auth_source: ch }), ch).toBe(true);
