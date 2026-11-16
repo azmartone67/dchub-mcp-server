@@ -10443,10 +10443,10 @@ export function _tierRequiredFor(name) {
 }
 // One plain sentence per class. No prices, no plan counts.
 export const FREE_ANSWER_BY_TIER = Object.freeze({
-  pro: 'Keyless: no data. A free key: a preview where the tool has one (verdicts, bands, counts). Scores, figures and exports need a paid DC Hub plan.',
+  pro: 'Keyless: no data. A free key: a preview where the tool has one (verdicts, bands, counts). Scores, figures and exports need a full-access key.',
   email: 'Keyless: a trimmed preview. A free key with a bound email (bind_email) opens full answers within the daily allowance.',
-  developer_for_full: 'Keyless and free keys: a trimmed preview (top rows). Full depth needs a paid DC Hub plan or a credit pack.',
-  free_key: 'Needs a free key (claim_free_key). No paid plan required.',
+  developer_for_full: 'Keyless and free keys: a trimmed preview (top rows). Full depth needs a full-access key.',
+  free_key: 'Needs a free key (claim_free_key).',
   anonymous: 'Works keyless. Some keyless results are trimmed; a free key (claim_free_key) raises the allowance.',
 });
 
@@ -10487,11 +10487,12 @@ function _accessTagFor(name) {
   // search_facilities (free_preview, anonymous) returned four /go/c/<token>
   // checkout links IN ITS RESULT. Tokenized, session-bound, minted per call —
   // never frozen into this shared list.
+  // Grok note L item 5 (2026-11-15): directories (Glama and the registry cascade) republish
+  // tools/list annotations, so a /pricing/upgrade URL here became listing copy. Every tool,
+  // gated or not, now points at /connect; a gated RESULT still carries its own per-call link.
   const tag = { access, tier_required: tierRequired, free_answer: FREE_ANSWER_BY_TIER[tierRequired] };
-  if (!gated) {
-    tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
-  } else {
-    tag.pricing_url = `https://dchub.cloud/pricing/upgrade?tool=${q}&ref=mcp-tools-list`;
+  tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
+  if (gated) {
     // This tag rides the SHARED tools/list, so it cannot know the caller's
     // paywall arm (DCHUB_PAYWALL_CONTRACT=ab). The v2 arm leads with one
     // /upgrade/h/ link in a `Tell the user:` line; the v1 control arm (and the
@@ -10499,7 +10500,7 @@ function _accessTagFor(name) {
     // human:` lines, which can carry /go/c/ checkout links instead. So the
     // pointer names the line, not a link shape that is true for one arm only.
     tag.upgrade_relay = 'Call the tool first: a gated result carries the link for this caller in its '
-      + '`Tell the user:` / `For your human:` line. Share that line with your user along with its link; pricing_url is only a fallback.';
+      + '`Tell the user:` / `For your human:` line. Share that line with your user along with its link.';
   }
   return tag;
 }
