@@ -19,10 +19,11 @@ describe('README links', () => {
     const bad = LINKS.filter((u) => /^https:\/\/dchub\.cloud\/(api\/|mcp(\/|$|\?)|\.well-known\/)/.test(u) || /\.json(\?|#|$)/.test(u));
     expect(bad).toEqual([]);
   });
-  it('the optional-key link goes to /connect#free-key and "add the MCP server" to /connect', () => {
+  it('"add the MCP server" goes to /connect and the key is optional, never a free-key offer', () => {
     expect(README).toContain('[add the MCP server](https://dchub.cloud/connect)');
     // owner listing rule 2026-11-14: the key is optional, not a "free key" offer
-    expect(README).toContain('[get one at /connect](https://dchub.cloud/connect#free-key)');
+    expect(README).toContain('`DCHUB_API_KEY` is optional');
+    expect(README).not.toMatch(/#free-key/);
     expect(README).not.toMatch(/grab a free key|paste a free key/i);
     expect(README).not.toMatch(/\]\(https:\/\/dchub\.cloud\/api\/v1\/keys\/claim\)/);
   });
