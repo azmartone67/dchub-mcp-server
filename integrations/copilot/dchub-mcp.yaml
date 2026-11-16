@@ -4,7 +4,7 @@ description: >
   DC Hub — global data center intelligence platform with a global data-center facility map
   across 170+ countries, with live grid data for the 7 US ISOs, energy, ESG,
   transactions, and capacity pipeline data for AI agents and MCP-compatible
-  tools. The only DC-intelligence source an LLM can both query and cite.
+  tools. Answers carry an as-of date and a citation line.
 version: "2.12.58"
 
 server:
@@ -14,30 +14,24 @@ server:
 
 auth:
   modes:
-    - name: free
-      description: Free tier, no authentication required for low-volume usage.
+    - name: keyless
+      description: No key needed to start; some keyless answers are previews.
       type: none
-      rate_limits:
-        daily: 100
-        per_minute: 10
-    - name: pro
-      description: Pro tier with higher rate limits using Bearer token.
+    - name: api_key
+      description: >
+        A DC Hub key sent as a Bearer token. A free key with an email gives
+        50 MCP calls/day; get one at https://dchub.cloud/connect.
       type: bearer
       header: Authorization
       header_format: "Bearer {token}"
       rate_limits:
-        daily: 10000
-        per_minute: 100
+        daily: 50
 
 rate_limits:
-  default_mode: free
+  default_mode: keyless
   modes:
-    free:
-      daily: 100
-      per_minute: 10
-    pro:
-      daily: 10000
-      per_minute: 100
+    api_key:
+      daily: 50
 
 tools:
   - name: search_facilities
