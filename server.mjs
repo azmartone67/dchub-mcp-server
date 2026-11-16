@@ -19732,7 +19732,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / rank_markets instead of returning empty. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -20290,6 +20290,19 @@ export function _planUnmatchedPlace(text, d) {
   } catch (_e) { return null; }
 }
 
+// 5.29 (Grok note K follow-up): where the dc_capacity pipeline read is held. The market the text
+// resolved (its market-intel slug, e.g. northern-virginia) when there is one; else the state; a town
+// (submarket) reads its state and is cut after the call, because a town is not a pipeline market.
+// mcp#1458 adds market/state to the get_pipeline schema; on a server without it Zod strips both and
+// the step reads the country, as before. Pure; {} when there is nothing to hold it to.
+export function _planPipelinePlace(d, sm, st) {
+  try {
+    const o = d && d.__outlook;
+    if (!sm && o && !o.unresolved && typeof o.intel === 'string' && /^[a-z0-9-]{2,60}$/.test(o.intel)) return { market: o.intel };
+    if (st) return { state: st };
+  } catch (_e) { /* routing must never throw */ }
+  return {};
+}
 // 5.26: the city a submarket question names, for filters that take a city (search_facilities
 // city=) and for the post-call row cut (lib/submarket-scope.mjs): one corridor place that is a town
 // ("Ashburn, VA", "Manassas, VA", "Secaucus, NJ"), with its centroid and radius. A county, valley or
@@ -20768,10 +20781,15 @@ export const _PLAN_CLASSES = [
       const st = _planStateScope(d);
       const us = !!(st || sm || d.isoFromPlace || d.iso);
       const construction = !!d.__constructionAsk;
+      const pm = _planPipelinePlace(d, sm, st);
       const steps = [
         { step: 1, tool: 'get_pipeline', depends_on: [], estimated_calls: 1,
-          why: 'Data centers announced, permitted and under construction, with expected commissioning dates: the capacity coming online. get_pipeline takes no market or city, so a place-named run cuts its rows to the place after the call.',
-          args_hint: { ...(us ? { country: 'US' } : {}), ...(construction ? { status: 'construction' } : {}), ...(sm ? { limit: 100 } : {}) } },
+          why: 'Data centers announced, permitted and under construction, with expected commissioning dates: the capacity coming online. '
+            + (pm.market ? `Held to the ${pm.market} market; the server says when it widens rows to the state. `
+              : pm.state ? `Held to ${pm.state}. ` : '')
+            + (sm ? `A town is not a pipeline market, so the rows are cut to ${sm.city} after the call. ` : '')
+            + 'A server older than the market/state filter drops them and reads the country.',
+          args_hint: { ...(us ? { country: 'US' } : {}), ...pm, ...(construction ? { status: 'construction' } : {}), ...(sm ? { limit: 100 } : {}) } },
         { step: 2, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
           why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
           args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } },
@@ -20796,7 +20814,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_retirement_headroom', when: 'The question is where GRID headroom opens for a new load.',
         rejected_because: 'Grid headroom is power capacity, not data-center capacity.' },
     ],
-    coverage_notes: 'get_pipeline has no market or city filter: a city-named run reads the US pipeline and keeps the rows it can place in that city (submarket_scope on the step says what was cut and why); a state-named run reads it uncut. source_capacity lists what providers have registered, which is not all the capacity in a market.',
+    coverage_notes: 'get_pipeline is held to the named market (market=<slug>) or state (state=<ST>); it has no city filter, so a town-named run reads the state and keeps the rows it can place in that town (submarket_scope on the step says what was cut and why). A server whose get_pipeline schema predates market/state drops both and reads the country. source_capacity lists what providers have registered, which is not all the capacity in a market.',
   },
   {
     // ★2026-11-07 (Grok #118011, #117816/#117817): ONE NAMED METRO, read as itself.
@@ -22884,10 +22902,13 @@ export function _planWorkflowConfidence(seq, d) {
 //         (Arizona lost to Texas's minted ISOs), capacity_search (its DCPI step skipped) or fiber_power_pairing
 //         (0 of 4 steps); a state's "<ISO serving the state>" step reads that state's own grid (Arizona: AZPS);
 //         market steps with no market named read the nearest market find_sites names in each state; a plan none
-//         of whose steps reached a tool runs find_sites / rank_markets instead of returning empty; a bare place
+//         of whose steps reached a tool runs find_sites / canvas per state, else discover_tools, instead of returning empty; a bare place
 //         with a forward window ("Northern Virginia, next 18 months") is the data-center capacity question; a
 //         plan with no data does not consume the keyless first full answer, mints no Deal Desk brief, and
-//         names its manual calls in more_detail.calls.
+//         names its manual calls in more_detail.calls. dc_capacity holds get_pipeline to the named market
+//         (market=<slug>) or state, with expected_completion_before from the window; a metro the plan reads
+//         state-wide says "Widened <metro> to <state>" in answer_guide, and the server's own get_pipeline
+//         widening note (scope.note) is relayed there too.
 export const PLANNER_VERSION = '5.29';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
@@ -23199,6 +23220,51 @@ function _dropReason(v) {
 // B2 (owner 2026-11-14): the utility that runs the grid in a non-ISO state's tracked markets, named when a
 // state queue read came back from an ISO that is not it (Reno: NV Energy, WECC; the NV rows are CAISO's).
 const _NON_ISO_UTILITY = Object.freeze({ NV: 'NV Energy', AZ: 'APS, SRP or TEP' });
+// 5.29 (Grok note K follow-up): a metro the plan could only read state-wide says so in plain words,
+// "Widened Northern Virginia to Virginia", naming the steps that read the whole state; and the
+// server's own get_pipeline widening note (be#8854 scope.note, "Widened <market> to <state>: ...")
+// is relayed as it came. Only steps that ran and carry a bare `state` (no market, city or point)
+// count as widened. '' when nothing was widened. Pure.
+const _WIDEN_NOTE_MAX = 300;
+function _stateTitle(code) {
+  for (const [nm, c] of Object.entries(_PLAN_STATE_NAMES)) {
+    if (c === code) return nm.replace(/\b\w/g, (ch) => ch.toUpperCase());
+  }
+  return null;
+}
+export function _execWidenedLine(scopeWidened, executed, fullByEntry = null) {
+  try {
+    const ran = (Array.isArray(executed) ? executed : [])
+      .filter((e) => e && e.tool && (e.status === 'executed' || e.status === 'gated_preview'));
+    const lines = [];
+    for (const e of ran) {
+      if (e.tool !== 'get_pipeline') continue;
+      const r = (fullByEntry && fullByEntry.get && fullByEntry.get(e)) || e.result;
+      const n = r && typeof r === 'object' && r.scope && typeof r.scope.note === 'string' ? r.scope.note.replace(/\s+/g, ' ').trim() : '';
+      if (/^Widened\b/.test(n) && !lines.includes(n)) lines.push(n.length > _WIDEN_NOTE_MAX ? n.slice(0, _WIDEN_NOTE_MAX - 1) + '…' : n);
+    }
+    const from = scopeWidened && typeof scopeWidened.widened_from === 'string' ? scopeWidened.widened_from.trim() : '';
+    if (from) {
+      const byState = new Map();
+      for (const e of ran) {
+        const a = e.args;
+        if (!a || typeof a.state !== 'string' || !/^[A-Z]{2}$/.test(a.state)) continue;
+        if (a.market != null || a.city != null || a.lat != null) continue;
+        if (!byState.has(a.state)) byState.set(a.state, []);
+        if (!byState.get(a.state).includes(e.tool)) byState.get(a.state).push(e.tool);
+      }
+      for (const [st, tools] of byState) {
+        const name = _stateTitle(st) || st;
+        if (name.toLowerCase() === from.toLowerCase()) continue;
+        const head = `Widened ${from} to ${name}`;
+        const tail = `${tools.join(', ')} read all of ${name}, not ${from} alone; say so when quoting them.`;
+        // The server already said the sentence for the pipeline: name the plan's other state-wide steps after it.
+        lines.push(lines.some((l) => l.startsWith(head)) ? `Also: ${tail}` : `${head}: ${tail}`);
+      }
+    }
+    return lines.join(' ');
+  } catch (_e) { return ''; }
+}
 // `place` (optional): the market the plan bound, {name, state, iso} (_planSignals __outlook).
 export function _execDroppedFilters(executed, fullByEntry, place = null) {
   const out = [];
@@ -31791,7 +31857,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             ? `the point-based steps read the geocoded town point of "${g.query}" (${g.lat}, ${g.lon}); say the figures are for the town centre, not a specific parcel`
             : `"${g.query}" is not a market DC Hub tracks, so the point-based steps read its geocoded town point (${g.lat}, ${g.lon}); say the figures are for that town, not a specific parcel`)).join('; ') + '.'
         : '';
-      const _notes = [_undated, _droppedLine, _geoLine].filter(Boolean).join(' ');   // UNDATED, then DROPPED, then PLACE
+      // 5.29: a metro read state-wide, and the server's own pipeline widening, said plainly (_execWidenedLine).
+      const _widened = _execWidenedLine(replay && replay.scope_widened, executed, fullByEntry);
+      const _notes = [_widened, _undated, _droppedLine, _geoLine].filter(Boolean).join(' ');   // WIDENED, UNDATED, then DROPPED, then PLACE
       const _gridLine = _gridRank ? gridRankingGuideLine(_gridRank.block) : '';
       const _gridLead = _gridLine ? _gridLine + ' ' : '';   // after the UNDATED sentence, before the verdict guide
       // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
