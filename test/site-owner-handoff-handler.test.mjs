@@ -37,7 +37,8 @@ describe('analyze_site handler carries the site-owner hand-off', () => {
   it('BUILD at a point: one line and structuredContent.site_owner (the tool schema accepts it)', async () => {
     const r = await call(SEAT, { lat: 44.08, lon: -103.21, capacity_mw: 50 });
     expect(lines(r)).toHaveLength(1);
-    expect(r.structuredContent.site_owner.advisory.name).toBe('Martone Advisors');
+    expect(r.structuredContent.site_owner.disclosure).toContain("Martone Advisors, DC Hub's affiliated advisory");
+    expect(r.structuredContent.site_owner.advisory).toBeUndefined();
   });
   it('control: AVOID at the same point carries nothing', async () => {
     verdict = 'AVOID';
