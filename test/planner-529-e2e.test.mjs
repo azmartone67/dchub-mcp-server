@@ -9,14 +9,21 @@ import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-
 
 const PRO = { 'x-api-key': PRO_KEY, 'user-agent': 'dchub-qa-readonly', 'x-dc-client-ip': '203.0.113.29' };
 let H, fence;
-const mode = { failData: false };
+const mode = { failData: false, pipelineNote: null };
+const pipelineQueries = [];   // the query string every /api/v1/pipeline call carried
 const sc = (r) => r.msg.result.structuredContent || JSON.parse(r.msg.result.content[0].text);
 const steps = (o) => JSON.stringify(o.executed.map((e) => [e.tool, e.status, e.args]));
 const ran = (o) => o.executed.filter((e) => e.status === 'executed');
 
 beforeAll(async () => {
   fence = fenceNetwork();
-  H = await startHarness({ extraRoutes: async (p) => {
+  H = await startHarness({ extraRoutes: async (p, _req, _body, u) => {
+    if (p === '/api/v1/pipeline') pipelineQueries.push(Object.fromEntries(u.searchParams));
+    if (p === '/api/v1/pipeline' && mode.pipelineNote && !mode.failData) {
+      return { status: 200, body: { projects: [{ name: 'Stub campus', operator: 'Stub', capacity_mw: 300, status: 'construction',
+        expected_commissioning: '2027-06', market_slug: 'northern-virginia', country: 'US' }], total: 1,
+        scope: { market: 'Northern Virginia', note: mode.pipelineNote } } };
+    }
     if (mode.failData && p.startsWith('/api/v1/') && !p.startsWith('/api/v1/mcp/') && !p.startsWith('/api/v1/keys/')) {
       return { status: 500, body: { error: 'stub outage' } };
     }
@@ -55,6 +62,37 @@ describe('execute_plan 5.29: the three re-check prompts (real server.mjs on loop
     for (const t of ['get_pipeline', 'search_facilities', 'get_power_availability_timeline', 'source_capacity']) expect(tools, steps(o)).toContain(t);
     expect(tools).not.toContain('discover_tools');
     expect(ran(o).length, steps(o)).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('"Northern Virginia, next 18 months": get_pipeline is held to the market with a completion cutoff, and the widening is said', async () => {
+    const note = 'Widened Northern Virginia to Virginia: 3 more projects are labelled only with the state.';
+    mode.pipelineNote = note;
+    pipelineQueries.length = 0;
+    try {
+      const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'Northern Virginia, next 18 months' }, PRO));
+      const pipe = o.executed.find((e) => e.tool === 'get_pipeline');
+      expect(pipe, steps(o)).toBeTruthy();
+      expect(pipe.status, steps(o)).toBe('executed');
+      // The plan passes the resolved market slug and the date cutoff from "next 18 months".
+      expect(pipe.args.market).toBe('northern-virginia');
+      expect(pipe.args.expected_completion_before).toMatch(/^\d{4}-\d{2}-01$/);
+      // Reached the backend. The cutoff is always declared; `market` arrives only on a schema that declares it
+      // (mcp#1458): an older schema strips it and the step still runs (tolerated, not an error).
+      expect(pipelineQueries.length, steps(o)).toBeGreaterThan(0);
+      const q = pipelineQueries[pipelineQueries.length - 1];
+      expect(q.expected_completion_before).toBe(pipe.args.expected_completion_before);
+      expect([undefined, 'northern-virginia']).toContain(q.market);
+      // The server's widening sentence is relayed, and the plan's own state-wide reads are named after it.
+      expect(o.answer_guide).toContain(note);
+      expect(o.answer_guide).toMatch(/Also: [a-z_, ]*search_facilities[a-z_, ]* read all of Virginia, not Northern Virginia alone/);
+    } finally { mode.pipelineNote = null; }
+  }, 120_000);
+
+  it('a metro read state-wide says "Widened <metro> to <state>" even when the server says nothing', async () => {
+    const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'What data center capacity is under construction in Dallas?' }, PRO));
+    expect(o.intent_class).toBe('dc_capacity');
+    expect(o.executed.find((e) => e.tool === 'get_pipeline').args.market, steps(o)).toBe('dallas');
+    expect(o.answer_guide).toMatch(/Widened Dallas to Texas: [a-z_, ]*search_facilities/);
   }, 120_000);
 
   it('a plan whose steps all wait on a market nobody named runs the guaranteed read instead of returning empty', async () => {
