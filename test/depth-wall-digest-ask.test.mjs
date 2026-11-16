@@ -14,6 +14,7 @@ import { createServer } from 'node:http';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import { digestAskLine, digestAskApplies, DIGEST_ASK_LEAD } from '../lib/depth-digest-ask.mjs';
+import { KEY_LINE_RE } from '../lib/wall-key-line.mjs';
 
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {
@@ -167,7 +168,9 @@ describe('depth wall tool set', () => {
 });
 
 describe('keyless list_transactions wall on /mcp, production transport', () => {
-  it('first wall: the digest line once, directly above the human line; tagged digest_line', async () => {
+  // Grok note N item 1 (lib/wall-key-line.mjs): a keyless caller now reads the free-key line ahead of the digest line,
+  // in the same block, and the call is tagged key_line; the digest line itself and its place are unchanged.
+  it('first wall: the digest line once, directly above the human line; the free-key line ahead of it; tagged key_line', async () => {
     const r = await (await session())();
     expect(r.sc.preview_is_partial || r.sc.trial_preview).toBe(true);
     expect(() => JSON.parse(r.texts[0])).not.toThrow();                // block 0 stays JSON
@@ -175,8 +178,11 @@ describe('keyless list_transactions wall on /mcp, production transport', () => {
     expect(k).toBeGreaterThan(0);
     expect(r.texts[k - 1].split('\n\n').at(-1)).toBe(digestAskLine('list_transactions'));
     expect(count(r.text, '`subscribe_digest`')).toBe(1);
-    expect(r.text).not.toContain('bind_email');                          // no unlock ask was added
-    expect(r.ev && r.ev.email_ask).toBe('digest_line');
+    // no unlock ask was added: the only bind_email is the free-key line's (an email-for-key ask)
+    expect(r.text.replace(new RegExp(KEY_LINE_RE.source, 'g'), '')).not.toContain('bind_email');
+    expect(count(r.text, 'Add your email to get your free key')).toBe(1);
+    expect(r.text.indexOf('Add your email to get your free key')).toBeLessThan(r.text.indexOf('`subscribe_digest`'));
+    expect(r.ev && r.ev.email_ask).toBe('key_line');
   });
 
   // The offer floor (item 2, 2026-11-11) is a separate layer with its own switch; off here so this switch is read alone.

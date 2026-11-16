@@ -128,7 +128,9 @@ async function runTool(name) {
   for (const n of [1, 2]) out.push({ where: 'session#' + n, ...(await call(name, s)) });
   return out;
 }
-const at = (blocks, lead) => blocks.findIndex((t) => t.startsWith(lead));
+// A block that starts with the lead, or holds a paragraph that does (Grok note N item 1: the floor block of a keyless
+// digest wall opens with the free-key paragraph, the digest paragraph second).
+const at = (blocks, lead) => blocks.findIndex((t) => t.startsWith(lead) || t.split('\n\n').some((p) => p.startsWith(lead)));
 
 // The walls of one tool that broke the rule, as readable strings ([] = clean).
 function offenders(name, calls) {
@@ -213,7 +215,7 @@ describe('server.mjs _wallOfferFloorStep: who gets the trial line', () => {
     const t = S._wallOfferFloorStep(w, 'list_transactions', ctx()).content.map((b) => b.text);
     const iT = at(t, DEPTH_TRIAL_LEAD);
     expect(t[iT - 1]).toMatch(/For your human/);
-    expect(t[iT - 2].startsWith(FLOOR_DIGEST_LEAD)).toBe(true);
+    expect(t[iT - 2].split('\n\n').at(-1).startsWith(FLOOR_DIGEST_LEAD)).toBe(true);
   });
   it('a free keyed or signed-in caller gets it too (no sign-in line for the signed-in one)', () => {
     expect(has(S._wallOfferFloorStep(wall(), 'compare_isos', ctx({ api_key: 'dchub_free_x', tier: 'free' }, 'compare_isos')))).toBe(true);

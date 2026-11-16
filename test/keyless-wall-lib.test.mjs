@@ -131,7 +131,7 @@ describe('identity and switches', () => {
 
 describe('option E: markEmailAsk + the email_ask field (owner 2026-10-26)', () => {
   it('kinds equal dchub-backend routes/mcp_funnel_events.WALL_ASK_KINDS', () => {
-    expect([...WALL_ASK_KINDS].sort()).toEqual(['bind_field', 'line', 'link', 'link_exit']);
+    expect([...WALL_ASK_KINDS].sort()).toEqual(['bind_field', 'key_line', 'line', 'link', 'link_exit']);   // key_line: Grok note N item 1
   });
   it('bind_field never replaces a stronger mark; a stronger mark replaces bind_field; junk is ignored', () => {
     const c = {};
