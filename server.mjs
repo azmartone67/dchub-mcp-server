@@ -307,7 +307,7 @@ import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAg
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
   buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent,
-  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY,
+  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY, CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE,
   capacityStepIntent, capacityAvailableBy, capacityKwFromText, capacityRegionFromText, agentReferralIntent } from './lib/capacity-source-summary.mjs';
 export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, FOUNDING_URL, PRO_URL };
 
@@ -24156,6 +24156,17 @@ export function _capacityRegisterOffer(executed, fullOf) {
 }
 
 /**
+ * The listings teaser for a finished plan that executed a source_capacity step, or null.
+ * Pure; never throws.
+ */
+export function _capacityTeaser(executed) {
+  try {
+    if (!capacityPointersEnabled() || !Array.isArray(executed)) return null;
+    return executed.some((e) => e && e.tool === 'source_capacity' && e.status === 'executed') ? CAPACITY_TEASER_LINE : null;
+  } catch (_e) { return null; }
+}
+
+/**
  * The steps a plan should append because the INTENT NAMED those constraints and
  * nothing in the plan covers them.
  *
@@ -30247,6 +30258,7 @@ function _oneLinkProse(t, human, seen) {
   if (typeof t !== 'string') return t;
   let out = t;
   if (_MPP_PROSE_RE.test(out)) out = out.split('\n').filter((l) => !_MPP_PROSE_RE.test(l)).join('\n');
+  if (out.includes(CAPACITY_TEASER_LINE)) out = out.split(CAPACITY_TEASER_LINE).join(CAPACITY_TEASER_WALL_LINE);
   if (!out.includes('dchub.cloud/')) return out;
   const hb = _linkBase(human);
   const keep = (u) => _linkBase(u) === hb || _keepsOwnLink(u);
@@ -32146,6 +32158,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // route_back and the complement (DC Hub's own path first). Every surface gets the sentence; the
       // structured field follows the answer-block gate.
       const _capReg = _capacityRegisterOffer(executed, (e) => fullByEntry.get(e));
+      // 2026-11-16 (owner via Grok): a plan that ran source_capacity also carries the listings teaser
+      // (CAPACITY_TEASER_LINE), on every surface. DCHUB_CAPACITY_POINTERS=off removes it with the rest.
+      const _capTeaser = _capacityTeaser(executed);
       // 2026-11-12 (owner via Grok, item 4): when the register offer is there, the capacity_no_fit
       // complement is not: a buyer with no listed match is offered DC Hub's own register path, not
       // outside procurement or brokerage desks. The market_answer complement is unchanged.
@@ -32314,6 +32329,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)),
                              sc.intent_class === 'market_ranking')
+          + (_capTeaser ? ' ' + _capTeaser : '')
           + (_capReg ? ' ' + _capReg.sentence : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
         ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
@@ -36788,8 +36804,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // scanners read it; byte-stable (test/capacity-source-tools.test.mjs pins it against the constant). In
   // source_capacity it sits before "Returns listing cards" because the wire copy is cut at ~1.3 KB
   // (lib/list-slim.mjs SLIM_DESC_MAX) and the later sentences never reach tools/list on /mcp.
+  // 2026-11-16 (owner via Grok): CAPACITY_TEASER_LINE sits right after the example for the same reason;
+  // test/capacity-teaser-tools.test.mjs pins it against the constant and inside the slim cut.
   trackedTool(srv, 'source_capacity',
-    'Use this when the user needs data center or colocation capacity to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
+    'Use this when the user needs data center or colocation capacity to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings. Size is min_kw (in kW) or min_mw (in MW), matched against what a listing can ACTUALLY deliver, not its headline total: `contiguous_kw` (the largest single contiguous block) and `min_contract_kw` (the smallest chunk the provider will contract); a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
     { slug: ID.describe('One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards'),
       market: S.describe('Browse filter: market name as it appears on a listing, e.g. "Dallas"'),
       state: S.describe('Browse filter: two-letter US state, e.g. "TX"'),
