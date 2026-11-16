@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import {
   capToBudget, answerBudgetResult, answerShapeStep, dataFirstResult, planBudgetDedupeOn, dropStepNavigation, dedupePlanProvenance,
+  planBudgetBytes, pointRepeatsAtEarlierStep, SAME_AS_KEYS,
   STEP_NAV_DROP, STEP_ROWS_MIN, SIZE_CAP_DEDUPE_NOTE, PLAN_SIZE_CAP_RESERVE,
 } from '../lib/answer-shape.mjs';
 import { splitLeadingJson } from '../lib/facility-location.mjs';
@@ -84,8 +85,9 @@ function plan({ steps = 6, rows = 3, filler = 0 } = {}) {
 const sized = (opts, over) => { const p = plan(opts); p.answer_guide = 'g'.repeat(Math.max(0, MAX + over - B(p))); return p; };
 // What 1b and 1c each save on the default synthetic plan, so a test can land between them.
 const SAVED = (() => {
-  const p = plan(); const b0 = B(p); dropStepNavigation(p); const b1 = B(p); dedupePlanProvenance(p);
-  return { b: b0 - B(p) > 0 ? b0 - b1 : 0, c: b1 - B(p) };
+  const p = plan(); const b0 = B(p); dropStepNavigation(p); const b1 = B(p); dedupePlanProvenance(p); const b2 = B(p);
+  pointRepeatsAtEarlierStep(p);
+  return { b: b0 - b1, c: b1 - b2, d: b2 - B(p) };
 })();
 const ONLY_1B = SAVED.b - PLAN_SIZE_CAP_RESERVE - 300;                 // 1b alone brings it within budget
 const NEEDS_1C = SAVED.b + Math.floor(SAVED.c / 2) - PLAN_SIZE_CAP_RESERVE;   // 1b is not enough, 1b + 1c is
@@ -204,6 +206,39 @@ describe('A) stages on a synthetic plan (unit)', () => {
     expect(PLAN_SIZE_CAP_RESERVE).toBeGreaterThan(0);
   });
 
+  it('1d: a step\'s basis / constraint_coverage / citation / note equal to an earlier step\'s points at it; the first stays full', () => {
+    const v = plan({ steps: 4, rows: 3 });
+    v.executed[2].result.note = 'a different note on step 3';
+    const p = clone(v);
+    const counts = pointRepeatsAtEarlierStep(p);
+    expect(counts).toEqual({ basis: 3, constraint_coverage: 3, citation: 3, note: 2 });
+    for (const k of SAME_AS_KEYS) expect(p.executed[0].result[k], `step 1 ${k}`).toEqual(v.executed[0].result[k]);
+    for (const i of [1, 3]) for (const k of SAME_AS_KEYS) expect(p.executed[i].result[k], `step ${i + 1} ${k}`).toEqual({ same_as_step: 1 });
+    expect(p.executed[2].result.note).toBe('a different note on step 3');
+    for (const k of ['basis', 'constraint_coverage', 'citation']) expect(p.executed[2].result[k]).toEqual({ same_as_step: 1 });
+    // only the four keys; rows, sources, truncation and withheld are never pointed
+    for (const i of [1, 2, 3]) for (const k of ['candidates', 'sources', 'truncation', 'withheld', 'withheld_fields', 'completeness']) {
+      expect(p.executed[i].result[k], `step ${i + 1} ${k}`).toEqual(v.executed[i].result[k]);
+    }
+    // a value no bigger than its pointer stays
+    const q = plan({ steps: 2 }); q.executed[0].result.note = 'x'; q.executed[1].result.note = 'x';
+    pointRepeatsAtEarlierStep(q);
+    expect(q.executed[1].result.note).toBe('x');
+  });
+
+  it('1d runs inside capToBudget after 1b and 1c, records its counts, and applies to both copies', () => {
+    expect(SAVED.d, 'control: 1d saves bytes on the synthetic plan').toBeGreaterThan(600);
+    const v = sized({}, SAVED.b + SAVED.c + Math.floor(SAVED.d / 2) - PLAN_SIZE_CAP_RESERVE);
+    const res = { content: [{ type: 'text', text: JSON.stringify(v) }], structuredContent: v };
+    const out = answerBudgetResult(res, MAX);
+    const sc = out.structuredContent, j = splitLeadingJson(out.content[0].text).json;
+    expect(sc.size_cap.same_as_earlier_step).toEqual({ basis: 5, constraint_coverage: 5, citation: 5, note: 5 });
+    expect(sc.size_cap.cut).toEqual([]);
+    expect(B(sc)).toBeLessThanOrEqual(MAX);
+    expect(j).toEqual(sc);
+    expect(capToBudget(v, MAX, { dedupe: false }).cut, 'the switch turns 1d off too').toBeNull();
+  });
+
   it('kill switch DCHUB_PLAN_BUDGET_DEDUPE=0: no 1b, 1c or cross-step cut (stage 1 and the single-array cut as before)', () => {
     const v = plan({ steps: 10, rows: 25 });
     const prev = process.env.DCHUB_PLAN_BUDGET_DEDUPE;
@@ -244,27 +279,44 @@ describe('A) stages on a synthetic plan (unit)', () => {
 // ── B) the recorded live answers ──────────────────────────────────────────────────────────────────────────────
 const FIX = (n) => JSON.parse(zlib.gunzipSync(fs.readFileSync(new URL(`./fixtures/plan-budget/${n}.json.gz`, import.meta.url))).toString('utf8'));
 const copies = (res) => ({ sc: res.structuredContent, b0: splitLeadingJson(res.content[0].text).json });
-// Per-step keys an agent quotes: never dropped or edited by 1b / 1c (rows are cut only by stage 2, never here).
+// Per-step keys an agent quotes: never dropped or edited by the stages (rows are cut only by stage 2). The 1d keys
+// may instead point at an earlier step that holds the same value in full.
 const STEP_KEEP = ['citation', 'sources', 'note', 'truncation', 'truncated', 'withheld', 'withheld_total', 'withheld_fields',
   'completeness', 'basis', 'constraint_coverage', 'candidates', 'shortlist', 'timeline', 'queue_context', 'comparison', 'taste',
   'layer_status', 'ranking', 'filter', 'synthesis', 'as_of'];
-// Ceilings measured on this branch (PR body): disabling 1b or 1c pushes each copy over its ceiling.
-const CEIL = { 'txaz-keyless-1116': { sc: 55_500, b0: 54_350 }, 'iso3-keyless-1116': { sc: 35_300, b0: 34_000 } };
+const isPtr = (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 1 && Number.isInteger(v.same_as_step);
+// The value an agent reads for step i's key k: its own, or the earlier step's it points at (which must be full).
+function expectKept(before, after, i, k, label) {
+  const r0 = before.executed[i].result, r = after.executed[i].result;
+  if (!(k in r0)) return 0;
+  if (SAME_AS_KEYS.includes(k) && isPtr(r[k])) {
+    const j = after.executed.findIndex((e) => e.step === r[k].same_as_step);
+    expect(j, `${label}: points at an earlier step`).toBeGreaterThanOrEqual(0);
+    expect(j, `${label}: points at an earlier step`).toBeLessThan(i);
+    expect(isPtr(after.executed[j].result[k]), `${label}: the first occurrence is full`).toBe(false);
+    expect(after.executed[j].result[k], label).toEqual(r0[k]);
+    return 1;
+  }
+  expect(r[k], label).toEqual(r0[k]);
+  return 0;
+}
+const FIXTURES = ['txaz-keyless-1116', 'iso3-keyless-1116', 'nova-keyless-1116', 'findsites-keyless-1116'];
 
-describe('B) recorded live keyless answers (2026-11-16)', () => {
-  for (const name of Object.keys(CEIL)) {
-    it(`${name}: every step, row, citation and note kept; envelope copies and restated provenance gone; size_cap accurate`, () => {
+describe('B) recorded live keyless answers (2026-11-16), every stage forced at 30,000 bytes', () => {
+  for (const name of FIXTURES) {
+    it(`${name}: every step, row, citation and note kept (or pointed at); envelope copies and restated provenance gone; size_cap accurate`, () => {
       const res = FIX(name);
       const out = answerBudgetResult(res, MAX);
       const before = copies(res), after = copies(out);
       for (const c of ['sc', 'b0']) {
         const a = before[c], z = after[c];
+        if (c === 'b0' && B(res.content[0].text) <= MAX) { expect(out.content[0].text, 'b0 under budget: untouched').toBe(res.content[0].text); continue; }
         expect(B(a), `control: ${c} over budget`).toBeGreaterThan(MAX);
         expect(z.executed.map((e) => [e.step, e.tool, e.status, e.args])).toEqual(a.executed.map((e) => [e.step, e.tool, e.status, e.args]));
-        const dropped = {};
+        const dropped = {}, pointed = {};
         z.executed.forEach((e, i) => {
           const r0 = a.executed[i].result, r = e.result;
-          for (const k of STEP_KEEP) if (k in r0) expect(r[k], `${c} step ${e.step} ${k}`).toEqual(r0[k]);
+          for (const k of STEP_KEEP) if (expectKept(a, z, i, k, `${name} ${c} step ${e.step} ${k}`)) pointed[k] = (pointed[k] || 0) + 1;
           for (const k of Object.keys(r0)) if (!(k in r)) dropped[k] = (dropped[k] || 0) + 1;
           for (const k of ['as_of', 'completeness', 'withheld_fields', 'shown', 'total', 'preview_warning']) {
             if (r0.provenance && k in r0.provenance) expect(r.provenance[k], `${c} step ${e.step} provenance.${k}`).toEqual(r0.provenance[k]);
@@ -274,8 +326,10 @@ describe('B) recorded live keyless answers (2026-11-16)', () => {
           expect(r.provenance.evidence, `${c} step ${e.step} carries its own layer`).toEqual(want);
         });
         const sc = z.size_cap;
+        expect(sc.budget_bytes).toBe(MAX);
         expect(sc.step_envelope_dropped).toEqual(dropped);
         for (const k of Object.keys(dropped)) expect([...STEP_NAV_DROP, 'cite_as'], k).toContain(k);
+        expect(sc.same_as_earlier_step || {}).toEqual(pointed);
         expect(sc.provenance_evidence.layers_moved_to_steps).toBe(a.executed.length);
         for (const k of sc.provenance_evidence.restated_fields_dropped) expect(z.provenance.evidence[k], k).toBeUndefined();
         expect(sc.replay_compatibility_dropped).toBe(true);
@@ -285,20 +339,55 @@ describe('B) recorded live keyless answers (2026-11-16)', () => {
         if (B(withoutCap(z)) > MAX) expect(sc.over_budget_bytes).toBe(B(withoutCap(z)));
       }
     });
+  }
+});
 
-    it(`${name}: each copy is smaller by what 1b and 1c remove (size ceilings measured on this branch)`, () => {
+// The plan budget (DCHUB_PLAN_BUDGET_BYTES, default 50,000), as server.mjs applies it to execute_plan.
+// GAP (owner, see the PR): the two Texas-or-Arizona plans end ~1.3-2 KB over 50,000 with nothing left to drop
+// losslessly and every step at <= 3 rows, so their ceilings below are the measured sizes, not 50,000.
+const PLAN_CEIL = {
+  'txaz-keyless-1116': { sc: 52_100, b0: 50_950 }, 'findsites-keyless-1116': { sc: 52_100, b0: 50_950 },
+  'iso3-keyless-1116': { sc: 50_000, b0: 50_000 }, 'nova-keyless-1116': { sc: 50_000, b0: 50_000 },
+};
+describe('B) recorded live keyless answers at the plan budget', () => {
+  for (const name of FIXTURES) {
+    it(`${name}: bytes per copy within its ceiling`, () => {
+      expect(planBudgetBytes({})).toBe(50_000);
       const res = FIX(name);
-      const out = answerBudgetResult(res, MAX);
+      const out = answerShapeStep(clone(res), { budget: true, plan: true });
       const report = {};
       for (const c of ['sc', 'b0']) {
         const before = c === 'sc' ? res.structuredContent : res.content[0].text;
         const after = c === 'sc' ? out.structuredContent : out.content[0].text;
         report[c] = `${B(before)} -> ${B(after)}`;
-        expect(B(after), `${c} ceiling`).toBeLessThanOrEqual(CEIL[name][c]);
+        expect(B(after), `${c} ceiling`).toBeLessThanOrEqual(PLAN_CEIL[name][c]);
       }
-      console.log(`[plan-answer-budget] ${name} bytes per copy: ${JSON.stringify(report)}`);
+      const cap = out.structuredContent.size_cap;
+      if (B(res.structuredContent) > 50_000) expect(cap.budget_bytes, 'size_cap reports the plan budget').toBe(50_000);
+      else expect(cap, 'under the plan budget: untouched').toBeUndefined();
+      console.log(`[plan-answer-budget] ${name} at 50,000: ${JSON.stringify(report)}`);
     });
   }
+
+  it('plan vs tool budget: execute_plan 50,000 by default, every other tool 30,000; the switches', () => {
+    expect(planBudgetBytes({})).toBe(50_000);
+    expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '60000' })).toBe(60_000);
+    expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '0' }), '0 falls back to the general budget').toBe(30_000);
+    expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '0', DCHUB_ANSWER_BUDGET_BYTES: '25000' })).toBe(25_000);
+    expect(planBudgetBytes({ DCHUB_ANSWER_BUDGET_BYTES: '0' }), 'the general kill switch turns the plan budget off too').toBe(0);
+    // A single-tool answer of ~40 KB: capped at 30,000; the same bytes as a plan answer pass under 50,000.
+    const data = Array.from({ length: 200 }, (_, i) => row(0, i));
+    const tool = { content: [{ type: 'text', text: JSON.stringify({ data }) }], structuredContent: { data } };
+    expect(B(tool.structuredContent), 'control: between the two budgets').toBeGreaterThan(30_000);
+    expect(B(tool.structuredContent), 'control: between the two budgets').toBeLessThan(50_000);
+    const asTool = answerShapeStep(clone(tool), { budget: true });
+    expect(B(asTool.structuredContent)).toBeLessThanOrEqual(30_000);
+    expect(B(asTool.content[0].text)).toBeLessThanOrEqual(30_000);
+    expect(asTool.structuredContent.size_cap.budget_bytes).toBe(30_000);
+    const asPlan = answerShapeStep(clone(tool), { budget: true, plan: true });
+    expect(asPlan.structuredContent.size_cap).toBeUndefined();
+    expect(asPlan.structuredContent.data.length).toBe(200);
+  });
 });
 
 // ── C) the paid control ──────────────────────────────────────────────────────────────────────────────────────
@@ -308,13 +397,15 @@ describe('C) paid / unknown-tier answers: byte-identical, switch on or off', () 
     try {
       const synth = plan({ steps: 10, rows: 25 });
       const synthRes = { content: [{ type: 'text', text: JSON.stringify(synth) }], structuredContent: synth };
-      for (const res of [FIX('txaz-keyless-1116'), FIX('iso3-keyless-1116'), synthRes]) {
+      for (const res of [...FIXTURES.map(FIX), synthRes]) {
         const want = JSON.stringify(dataFirstResult(clone(res)));
         for (const sw of ['1', '0']) {
           process.env.DCHUB_PLAN_BUDGET_DEDUPE = sw;
-          const got = answerShapeStep(clone(res), { budget: false });
-          expect(JSON.stringify(got), `switch ${sw}`).toBe(want);
-          expect(got.structuredContent.size_cap).toBeUndefined();
+          for (const asPlan of [true, false]) {
+            const got = answerShapeStep(clone(res), { budget: false, plan: asPlan });
+            expect(JSON.stringify(got), `switch ${sw}, plan ${asPlan}`).toBe(want);
+            expect(got.structuredContent.size_cap).toBeUndefined();
+          }
         }
       }
     } finally { if (prev === undefined) delete process.env.DCHUB_PLAN_BUDGET_DEDUPE; else process.env.DCHUB_PLAN_BUDGET_DEDUPE = prev; }
@@ -346,15 +437,20 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, h);
     return H.post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name, arguments: args } }, h);
   }
-  async function planAs(intent, sw) {
-    const prev = process.env.DCHUB_PLAN_BUDGET_DEDUPE;
+  async function planAs(intent, sw, planBudget) {
+    const prev = { d: process.env.DCHUB_PLAN_BUDGET_DEDUPE, b: process.env.DCHUB_PLAN_BUDGET_BYTES };
     process.env.DCHUB_PLAN_BUDGET_DEDUPE = sw;
+    if (planBudget !== undefined) process.env.DCHUB_PLAN_BUDGET_BYTES = String(planBudget); else delete process.env.DCHUB_PLAN_BUDGET_BYTES;
     try {
       const r = await callAs('execute_plan', { intent });
       const res = r.msg && r.msg.result;
       expect(res && res.structuredContent, 'control: an answer').toBeTruthy();
       return { res, sc: res.structuredContent, j: splitLeadingJson(res.content[0].text).json, b0: res.content[0].text };
-    } finally { if (prev === undefined) delete process.env.DCHUB_PLAN_BUDGET_DEDUPE; else process.env.DCHUB_PLAN_BUDGET_DEDUPE = prev; }
+    } finally {
+      for (const [k, v] of [['DCHUB_PLAN_BUDGET_DEDUPE', prev.d], ['DCHUB_PLAN_BUDGET_BYTES', prev.b]]) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
   }
   beforeAll(async () => {
     fence = fenceNetwork();
@@ -368,17 +464,41 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
     if (fence) fence.restore();
   });
 
-  for (const intent of ['Texas or Arizona, 100 MW by 2028', 'ERCOT vs PJM vs MISO', 'Northern Virginia, next 18 months',
-    'Compare ERCOT vs PJM vs MISO for a 100 MW data center']) {
-    it(`"${intent}": same steps and rows as with the switch off; over budget, each copy shrinks and keeps its notes`, async () => {
+  const PROMPTS = ['Texas or Arizona, 100 MW by 2028', 'ERCOT vs PJM vs MISO', 'Northern Virginia, next 18 months',
+    'Compare ERCOT vs PJM vs MISO for a 100 MW data center', 'Find sites for a 100 MW data center in Texas or Arizona, energized by 2028'];
+  const between = [];   // prompts whose answer is over the tool budget and within the plan budget
+
+  for (const intent of PROMPTS) {
+    it(`"${intent}" at the plan budget: each copy within 50,000 bytes; size_cap reports the real budget`, async () => {
       const on = await planAs(intent, '1');
-      const off = await planAs(intent, '0');
+      console.log(`[plan-answer-budget e2e] ${intent} at the plan budget: sc ${B(on.sc)}, block 0 ${B(on.b0)}`);
+      expect(B(on.sc)).toBeLessThanOrEqual(50_000);
+      expect(B(on.b0)).toBeLessThanOrEqual(50_000);
+      if (on.sc.size_cap) expect(on.sc.size_cap.budget_bytes).toBe(50_000);
+      if (B(on.sc) > MAX) {
+        // over the tool budget, within the plan's: no row is cut (a size_cap here is from the lossless stages alone)
+        between.push(intent);
+        if (on.sc.size_cap) expect(on.sc.size_cap.cut, JSON.stringify(on.sc.size_cap)).toEqual([]);
+        for (const e of on.sc.executed) for (const [k, arr] of Object.entries(e.result || {})) {
+          if (Array.isArray(arr) && arr.length && typeof arr[0] === 'object') expect(arr.length, `step ${e.step} ${k}`).toBeGreaterThan(0);
+        }
+      }
+    }, 180_000);
+  }
+  it('control: at least one plan answer lies between the tool budget and the plan budget', () => {
+    expect(between.length).toBeGreaterThan(0);
+  });
+
+  for (const intent of PROMPTS) {
+    it(`"${intent}" with the plan budget forced to 30,000: same steps and rows as with the switch off; each copy shrinks, notes kept`, async () => {
+      const on = await planAs(intent, '1', MAX);
+      const off = await planAs(intent, '0', MAX);
       expect(on.sc.executed.map((e) => [e.tool, e.status])).toEqual(off.sc.executed.map((e) => [e.tool, e.status]));
       for (const v of [on.sc, on.j]) {
         v.executed.forEach((e, i) => {
           const r0 = off.sc.executed[i].result || {}, r = e.result || {};
           for (const k of ['citation', 'sources', 'note', 'truncation', 'withheld', 'withheld_fields', 'completeness', 'basis', 'constraint_coverage']) {
-            if (k in r0) expect(r[k], `step ${e.step} ${k}`).toEqual(r0[k]);
+            if (off.sc.executed[i].result) expectKept(off.sc, v, i, k, `step ${e.step} ${k}`);
           }
           for (const [k, arr] of Object.entries(r0)) {
             if (!Array.isArray(arr) || !arr.length || typeof arr[0] !== 'object' || STEP_NAV_DROP.includes(k)) continue;
@@ -388,9 +508,9 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
           }
         });
       }
-      const overOff = B(off.sc) > MAX;
-      console.log(`[plan-answer-budget e2e] ${intent}: sc ${B(off.sc)} -> ${B(on.sc)}, block 0 ${B(off.b0)} -> ${B(on.b0)}`, JSON.stringify(on.sc.size_cap));
-      if (!overOff) { expect(on.sc.size_cap).toBeUndefined(); return; }
+      console.log(`[plan-answer-budget e2e] ${intent} at 30,000: sc ${B(off.sc)} -> ${B(on.sc)}, block 0 ${B(off.b0)} -> ${B(on.b0)}`);
+      if (B(off.sc) <= MAX) { expect(on.sc.size_cap).toBeUndefined(); return; }
+      expect(on.sc.size_cap.budget_bytes).toBe(MAX);
       expect(on.sc.size_cap.step_envelope_dropped, 'stage 1b ran').toBeTruthy();
       expect(B(on.sc)).toBeLessThan(B(off.sc));
       expect(B(on.b0)).toBeLessThan(B(off.b0));
@@ -400,5 +520,4 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
       expect(on.j.size_cap.step_envelope_dropped).toBeTruthy();
     }, 180_000);
   }
-
 });

@@ -275,6 +275,7 @@ describe('/mcp e2e (real server.mjs, stub backend)', () => {
     expect(B(sc)).toBeLessThanOrEqual(30_000);
     expect(B(b0)).toBeLessThanOrEqual(30_000);
     expect(sc.size_cap && sc.size_cap.cut.map((c) => c.field)).toContain('data');
+    expect(sc.size_cap.budget_bytes, 'a single tool keeps the 30,000 budget (execute_plan alone gets the plan budget)').toBe(30_000);
     expect(sc.data.length).toBeLessThan(BIG_ROWS);
     expect(sc.data.map((r) => r.id)).toEqual(Array.from({ length: sc.data.length }, (_, i) => i));
     // A size cut is not tier gating: the size_cap block carries no link and no partial_preview stamp is added.
