@@ -35,7 +35,10 @@ describe('1. the plan geography reaches every step that accepts it', () => {
   });
 
   it('every toolspec tool with a point or state argument is either mapped or deliberately left out', () => {
-    const LEFT_OUT = new Set(['execute_plan', 'save_site', 'register_standing_intent', 'generate_site_analysis']);
+    // get_pipeline takes market OR state (mcp#1458) and is held by _planPipelinePlace (5.29): the
+    // resolved market when there is one, else the state. The generic bind would add state beside
+    // market, so it stays out of _EXEC_GEO_ARGS on purpose.
+    const LEFT_OUT = new Set(['execute_plan', 'save_site', 'register_standing_intent', 'generate_site_analysis', 'get_pipeline']);
     for (const [tool, props] of Object.entries(PROPS)) {
       const geo = props.includes('lat') || props.includes('state');
       if (geo && !LEFT_OUT.has(tool)) expect(_EXEC_GEO_ARGS[tool], tool).toBeTruthy();
