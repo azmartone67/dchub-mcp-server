@@ -31189,9 +31189,14 @@ export function _withWelcome(text, env = process.env) {
   return lead + INSTR_WELCOME + ' ' + s.slice(lead.length);
 }
 
+export const SERVER_DISPLAY_NAME = 'DC Hub';
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
+  // Display name (Grok note L item 7, 2026-11-15): catalogs that build a toolkit name from
+  // serverInfo (Arcade showed "DcHubIntelligence") now show "DC Hub", the name server.json,
+  // mcp-server.json and /.well-known/mcp.json already carry.
+  const srv = new McpServer({ name: SERVER_DISPLAY_NAME, title: SERVER_DISPLAY_NAME, version: SERVER_VERSION }, {
     // `instructions` is composed at module scope from canonical/mcp_facts.json
     // behind a freshness gate — see _composeInstructions above for the contract
     // and this string's full provenance history. r-held-key (2026-09-02): a

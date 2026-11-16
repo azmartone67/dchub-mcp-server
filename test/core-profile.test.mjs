@@ -443,7 +443,20 @@ describe('the canonical /mcp endpoint is unchanged', () => {
 
   it('initialize on /mcp still identifies as the full server', async () => {
     const r = await rpc('/mcp', 'initialize', INIT);
-    expect(r.body.result.serverInfo.name).toBe('DC Hub Intelligence');
+    expect(r.body.result.serverInfo.name).toBe('DC Hub');
+  });
+
+  // Grok note L item 7 (2026-11-15): catalogs that derive a toolkit name from serverInfo
+  // (Arcade showed "DcHubIntelligence") must read "DC Hub", in name AND title, and no
+  // tool metadata may carry the old display name.
+  it('serverInfo name and title are "DC Hub"; tools/list carries no old display name', async () => {
+    const r = await rpc('/mcp', 'initialize', INIT);
+    expect(r.body.result.serverInfo.name).toBe('DC Hub');
+    expect(r.body.result.serverInfo.title).toBe('DC Hub');
+    expect(JSON.stringify(r.body.result.serverInfo)).not.toMatch(/intelligence/i);
+    const t = await rpc('/mcp', 'tools/list');
+    expect(t.body.result.tools.length).toBeGreaterThan(50);
+    expect(JSON.stringify(t.body.result.tools)).not.toMatch(/DcHubIntelligence|DC Hub Intelligence/);
   });
 });
 
