@@ -80,6 +80,6 @@ describe('keyless wall, end to end', () => {
     process.env.DCHUB_REPORT_KEYLESS_PREVIEW = '0';
     const r = await call('generate_site_analysis', { lat: 33.45, lon: -112.07, capacity_mw: 50 });
     expect(r.structuredContent.site_teaser).toBeUndefined();
-    expect(r.structuredContent.error).toBe('pro_required');
+    expect(r.structuredContent.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
   });
 });

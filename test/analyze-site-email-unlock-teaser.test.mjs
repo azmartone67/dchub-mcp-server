@@ -11,6 +11,16 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+
+// Note V (2026-11-16): this file pins the wall writers' own copy (what a keyed caller still reads). The keyless
+// rewrite that runs after them (lib/keyless-plan-wording.mjs) is switched off here; the keyless wording is pinned by
+// test/keyless-results-no-plan-wording.test.mjs.
+const _NOTE_V_PREV = process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+beforeAll(() => { process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = '0'; });
+afterAll(() => {
+  if (_NOTE_V_PREV === undefined) delete process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+  else process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = _NOTE_V_PREV;
+});
 // This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
 // are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
 process.env.DCHUB_KEYLESS_SITE_FULL = '0';

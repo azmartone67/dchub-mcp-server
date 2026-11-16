@@ -210,7 +210,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     try { r = await call(tool, K.args, seat('anonymous', null)); } finally { delete process.env.DCHUB_SITE_EMAIL_UNLOCK; }
     const sc = r.structuredContent || {};
     expect(sc._wall).toBe(true);
-    expect(sc.error).toBe('pro_required');
+    expect(sc.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
     const text = all(r);
     // B2 (owner 2026-10-03; merge on/after 2026-10-19): keyless analyze_site
     // carries its headline, the verdict BAND (and the weakest factor's name and
@@ -238,7 +238,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     // key-bound /go/c (the payer binding rides it; see the keyed cases above).
     expect(textOf(r).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/\S+/)[0]).toMatch(/\/upgrade\/h\//);
     expect(plansOf(r)).toEqual([]);
-    expect(text).toContain("DC Hub's paid plan");
+    expect(text).toContain('This preview leaves out');   // Note V (2026-11-16): the keyless person line (was "DC Hub's paid plan")
     expect(text).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
     expect(text).toContain('claim_free_key');

@@ -13,6 +13,16 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as PC from '../lib/paywall-contract.mjs';
+
+// Note V (2026-11-16): this file pins the wall writers' own copy (what a keyed caller still reads). The keyless
+// rewrite that runs after them (lib/keyless-plan-wording.mjs) is switched off here; the keyless wording is pinned by
+// test/keyless-results-no-plan-wording.test.mjs.
+const _NOTE_V_PREV = process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+beforeAll(() => { process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = '0'; });
+afterAll(() => {
+  if (_NOTE_V_PREV === undefined) delete process.env.DCHUB_KEYLESS_NO_PLAN_WORDING;
+  else process.env.DCHUB_KEYLESS_NO_PLAN_WORDING = _NOTE_V_PREV;
+});
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';

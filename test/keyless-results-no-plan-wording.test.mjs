@@ -297,9 +297,9 @@ describe('must-fail controls: the scan catches each measured sentence', () => {
     expect(offenders({ structuredContent: { deals: [{ note: 'a $150M+ minimum' }] } })).toEqual([]);
   });
   it('every rewrite lands on wording the scan passes', () => {
-    for (const [, to] of K.REWRITES) {
-      if (typeof to !== 'string') continue;
-      expect(offenders({ content: [{ type: 'text', text: to.replace(/\$\d/g, 'x') }] }), to).toEqual([]);
+    for (const [, f] of K.REWRITES) {
+      const to = typeof f === 'function' ? f('', 'the full answer', 'https://dchub.cloud/u/qux9j3') : f;
+      expect(offenders({ content: [{ type: 'text', text: to }] }), to).toEqual([]);
     }
   });
 });
