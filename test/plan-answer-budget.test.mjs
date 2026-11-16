@@ -342,17 +342,13 @@ describe('B) recorded live keyless answers (2026-11-16), every stage forced at 3
   }
 });
 
-// The plan budget (DCHUB_PLAN_BUDGET_BYTES, default 50,000), as server.mjs applies it to execute_plan.
-// GAP (owner, see the PR): the two Texas-or-Arizona plans end ~1.3-2 KB over 50,000 with nothing left to drop
-// losslessly and every step at <= 3 rows, so their ceilings below are the measured sizes, not 50,000.
-const PLAN_CEIL = {
-  'txaz-keyless-1116': { sc: 52_100, b0: 50_950 }, 'findsites-keyless-1116': { sc: 52_100, b0: 50_950 },
-  'iso3-keyless-1116': { sc: 50_000, b0: 50_000 }, 'nova-keyless-1116': { sc: 50_000, b0: 50_000 },
-};
+// The plan budget (DCHUB_PLAN_BUDGET_BYTES, default 55,000; owner 2026-11-16: keyless users keep every row they get
+// today), as server.mjs applies it to execute_plan. Every live replay fits with no row cut.
+const PLAN_MAX = 55_000;
 describe('B) recorded live keyless answers at the plan budget', () => {
   for (const name of FIXTURES) {
     it(`${name}: bytes per copy within its ceiling`, () => {
-      expect(planBudgetBytes({})).toBe(50_000);
+      expect(planBudgetBytes({})).toBe(PLAN_MAX);
       const res = FIX(name);
       const out = answerShapeStep(clone(res), { budget: true, plan: true });
       const report = {};
@@ -360,26 +356,36 @@ describe('B) recorded live keyless answers at the plan budget', () => {
         const before = c === 'sc' ? res.structuredContent : res.content[0].text;
         const after = c === 'sc' ? out.structuredContent : out.content[0].text;
         report[c] = `${B(before)} -> ${B(after)}`;
-        expect(B(after), `${c} ceiling`).toBeLessThanOrEqual(PLAN_CEIL[name][c]);
+        expect(B(after), `${c} within the plan budget`).toBeLessThanOrEqual(PLAN_MAX);
       }
       const cap = out.structuredContent.size_cap;
-      if (B(res.structuredContent) > 50_000) expect(cap.budget_bytes, 'size_cap reports the plan budget').toBe(50_000);
-      else expect(cap, 'under the plan budget: untouched').toBeUndefined();
-      console.log(`[plan-answer-budget] ${name} at 50,000: ${JSON.stringify(report)}`);
+      if (B(res.structuredContent) > PLAN_MAX) {
+        expect(cap.budget_bytes, 'size_cap reports the plan budget').toBe(PLAN_MAX);
+        expect(cap.cut, 'no row cut').toEqual([]);
+        expect(cap.over_budget_bytes).toBeUndefined();
+      } else expect(cap, 'under the plan budget: untouched').toBeUndefined();
+      // every row the answer carried is still there
+      out.structuredContent.executed.forEach((e, i) => {
+        for (const [k, v] of Object.entries(res.structuredContent.executed[i].result || {})) {
+          if (STEP_NAV_DROP.includes(k)) continue;   // navigation (next_calls), not rows
+          if (Array.isArray(v) && v.length && typeof v[0] === 'object') expect(e.result[k], `step ${e.step} ${k}`).toEqual(v);
+        }
+      });
+      console.log(`[plan-answer-budget] ${name} at ${PLAN_MAX}: ${JSON.stringify(report)}`);
     });
   }
 
-  it('plan vs tool budget: execute_plan 50,000 by default, every other tool 30,000; the switches', () => {
-    expect(planBudgetBytes({})).toBe(50_000);
+  it('plan vs tool budget: execute_plan 55,000 by default, every other tool 30,000; the switches', () => {
+    expect(planBudgetBytes({})).toBe(PLAN_MAX);
     expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '60000' })).toBe(60_000);
     expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '0' }), '0 falls back to the general budget').toBe(30_000);
     expect(planBudgetBytes({ DCHUB_PLAN_BUDGET_BYTES: '0', DCHUB_ANSWER_BUDGET_BYTES: '25000' })).toBe(25_000);
     expect(planBudgetBytes({ DCHUB_ANSWER_BUDGET_BYTES: '0' }), 'the general kill switch turns the plan budget off too').toBe(0);
-    // A single-tool answer of ~40 KB: capped at 30,000; the same bytes as a plan answer pass under 50,000.
+    // A single-tool answer of ~40 KB: capped at 30,000; the same bytes as a plan answer pass under the plan budget.
     const data = Array.from({ length: 200 }, (_, i) => row(0, i));
     const tool = { content: [{ type: 'text', text: JSON.stringify({ data }) }], structuredContent: { data } };
     expect(B(tool.structuredContent), 'control: between the two budgets').toBeGreaterThan(30_000);
-    expect(B(tool.structuredContent), 'control: between the two budgets').toBeLessThan(50_000);
+    expect(B(tool.structuredContent), 'control: between the two budgets').toBeLessThan(PLAN_MAX);
     const asTool = answerShapeStep(clone(tool), { budget: true });
     expect(B(asTool.structuredContent)).toBeLessThanOrEqual(30_000);
     expect(B(asTool.content[0].text)).toBeLessThanOrEqual(30_000);
@@ -469,12 +475,12 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
   const between = [];   // prompts whose answer is over the tool budget and within the plan budget
 
   for (const intent of PROMPTS) {
-    it(`"${intent}" at the plan budget: each copy within 50,000 bytes; size_cap reports the real budget`, async () => {
+    it(`"${intent}" at the plan budget: each copy within 55,000 bytes, no row cut; size_cap reports the real budget`, async () => {
       const on = await planAs(intent, '1');
       console.log(`[plan-answer-budget e2e] ${intent} at the plan budget: sc ${B(on.sc)}, block 0 ${B(on.b0)}`);
-      expect(B(on.sc)).toBeLessThanOrEqual(50_000);
-      expect(B(on.b0)).toBeLessThanOrEqual(50_000);
-      if (on.sc.size_cap) expect(on.sc.size_cap.budget_bytes).toBe(50_000);
+      expect(B(on.sc)).toBeLessThanOrEqual(PLAN_MAX);
+      expect(B(on.b0)).toBeLessThanOrEqual(PLAN_MAX);
+      if (on.sc.size_cap) { expect(on.sc.size_cap.budget_bytes).toBe(PLAN_MAX); expect(on.sc.size_cap.cut).toEqual([]); }
       if (B(on.sc) > MAX) {
         // over the tool budget, within the plan's: no row is cut (a size_cap here is from the lossless stages alone)
         between.push(intent);

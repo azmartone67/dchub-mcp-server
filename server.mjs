@@ -25121,7 +25121,7 @@ function _sourceLineCb(name, fn) {
       // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
       // The budget is for free / anonymous callers only; paid and unknown tiers keep every row (owner 11-14).
       // c.tier is read here, after the handler, so a paid lift inside the call counts.
-      // execute_plan takes its own, larger budget (DCHUB_PLAN_BUDGET_BYTES, default 50,000 per copy; owner 2026-11-16).
+      // execute_plan takes its own, larger budget (DCHUB_PLAN_BUDGET_BYTES, default 55,000 per copy; owner 2026-11-16).
       _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name), budget: _answerBudgetAppliesTo(c), plan: name === 'execute_plan' });
       // Front desk (owner 2026-11-13): execute_plan's one next-step line, LAST, after every trim: it replaces the
       // identity line rather than adding a second one, and never rides a wall (_frontDeskStep).
