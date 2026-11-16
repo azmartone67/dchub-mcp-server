@@ -2911,7 +2911,7 @@
   },
   {
     "name": "report_finding",
-    "description": "Use this when a partner key reports a DC Hub data issue. PARTNER KEY ONLY: file what you observed on a DC Hub surface as a brain finding (detector external_audit) so it is triaged like every other detector's. class is one of completeness_contradiction, geography_leak, as_of_cite_as, pro_wall_dead_end, count_drift, stale_payload_complete, leak_past_pro_gate, link_hygiene, other; tool names the DC Hub tool or endpoint; quoted_fields carries the exact fields you saw (hashed for dedupe: the same observation re-filed within 24h bumps recurrence instead of inserting). Proxies POST /api/v1/inbox/findings with the session's own key; a key issued without a partner slug answers partner key required (403). 120 per key per day. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2926,18 +2926,39 @@
             "stale_payload_complete",
             "leak_past_pro_gate",
             "link_hygiene",
+            "wrong_number",
+            "missing_data",
+            "coverage_gap",
+            "bug",
+            "feature_request",
             "other"
           ],
-          "description": "Finding class: completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date),…"
+          "description": "Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your…"
         },
         "tool": {
+          "description": "The DC Hub tool or endpoint it is about, e.g. analyze_site (optional for feature_request and coverage_gap)",
           "type": "string",
           "minLength": 1,
-          "maxLength": 80,
-          "description": "The DC Hub tool or endpoint the finding is about, e.g. analyze_site"
+          "maxLength": 80
+        },
+        "summary": {
+          "description": "One sentence, 10-280 characters: what you saw or what your human wants (required for feature_request, missing_data, other)",
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 280
+        },
+        "user_goal": {
+          "description": "What your human was trying to do",
+          "type": "string",
+          "maxLength": 500
+        },
+        "region": {
+          "description": "The market, state, ISO or country it is about",
+          "type": "string",
+          "maxLength": 120
         },
         "args": {
-          "description": "The arguments you called it with",
+          "description": "The arguments you called the tool with",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -2945,7 +2966,7 @@
           "additionalProperties": {}
         },
         "quoted_fields": {
-          "description": "The exact fields/values you observed (object, list or string); hashed for dedupe",
+          "description": "The exact fields/values you saw (object, list or string); hashed for dedupe",
           "anyOf": [
             {
               "type": "object",
@@ -2980,11 +3001,15 @@
         "note": {
           "description": "One or two sentences of context",
           "type": "string"
+        },
+        "contact_email": {
+          "description": "Only if your human asked for a reply",
+          "type": "string",
+          "maxLength": 254
         }
       },
       "required": [
-        "class",
-        "tool"
+        "class"
       ]
     },
     "outputSchema": {
@@ -3071,6 +3096,60 @@
           "type": "string"
         }
       }
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  {
+    "name": "request_enhancement",
+    "description": "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 280,
+          "description": "One sentence, 10-280 characters: what your human wants DC Hub to do or cover"
+        },
+        "user_goal": {
+          "description": "What your human was trying to do",
+          "type": "string",
+          "maxLength": 500
+        },
+        "tool": {
+          "description": "The DC Hub tool it relates to, if any",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "region": {
+          "description": "The market, state, ISO or country it is about, if any",
+          "type": "string",
+          "maxLength": 120
+        },
+        "url": {
+          "description": "A DC Hub page or source it relates to, if any",
+          "type": "string",
+          "maxLength": 500
+        },
+        "evidence": {
+          "description": "What you saw that shows the gap, quoted exactly",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "contact_email": {
+          "description": "Only if your human asked for a reply",
+          "type": "string",
+          "maxLength": 254
+        }
+      },
+      "required": [
+        "summary"
+      ]
     },
     "outputSchema": {
       "type": "object",

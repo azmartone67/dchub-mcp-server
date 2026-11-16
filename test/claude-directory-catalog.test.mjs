@@ -26,7 +26,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import {
-  CLAUDE_TOOLS, CLAUDE_REMOVED, CLAUDE_WITHDRAWN, CLAUDE_INSTRUCTIONS, EXECUTE_PLAN_DESCRIPTION,
+  CLAUDE_TOOLS, CLAUDE_REMOVED, CLAUDE_WITHDRAWN, CLAUDE_INSTRUCTIONS, EXECUTE_PLAN_DESCRIPTION, CLAUDE_FEEDBACK_NAMES,
   CLAUDE_PROMPTS, SOURCE_CAPACITY_DESCRIPTION, CLAUDE_ALWAYS_LOAD,
 } from '../lib/claude-directory.mjs';
 import { STANDARD_ANNOTATION_KEYS } from '../lib/chatgpt-directory.mjs';
@@ -88,7 +88,10 @@ describe('tools/list', () => {
     expect(names).toEqual(Object.keys(CLAUDE_TOOLS));
     // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
     // 68 → 67 on 2026-10-09: research_task removed (it queues a job).
-    expect(names).toHaveLength(67);
+    // 67 → 69 on 2026-11-16 (owner "Let's do both"): report_finding + request_enhancement, the two
+    // feedback tools, listed last.
+    expect(names).toHaveLength(69);
+    expect(names.slice(-2)).toEqual([...CLAUDE_FEEDBACK_NAMES]);
     expect(names).toContain('source_capacity');
     // /mcp/chatgpt measured 72,831 chars live and /mcp 473,081 (2026-09-26).
     expect(LIST_RAW.length).toBeLessThan(90_000);
@@ -123,13 +126,15 @@ describe('tools/list', () => {
     const removed = new Set(CLAUDE_REMOVED);
     for (const t of CANON) expect(listed.has(t.name) || removed.has(t.name), `${t.name} is neither listed nor removed`).toBe(true);
     for (const n of listed) expect(removed.has(n), n).toBe(false);
-    expect(CANON.length).toBe(96);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; both held off this profile)
+    expect(CANON.length).toBe(97);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; both held off this profile; 97 on 2026-11-16: request_enhancement, listed here)
   });
 
-  it('only the five standard annotation keys; read-only and non-destructive; no _meta or outputSchema', () => {
+  it('only the five standard annotation keys; read-only (but the two feedback tools) and non-destructive; no _meta or outputSchema', () => {
+    const feedback = new Set(CLAUDE_FEEDBACK_NAMES);
     for (const t of LIST.tools) {
       expect(Object.keys(t.annotations).sort(), t.name).toEqual([...STANDARD_ANNOTATION_KEYS].sort());
-      expect(t.annotations.readOnlyHint, t.name).toBe(true);
+      // 2026-11-16: report_finding / request_enhancement file one row each, so they say so (readOnlyHint false).
+      expect(t.annotations.readOnlyHint, t.name).toBe(!feedback.has(t.name));
       expect(t.annotations.destructiveHint, t.name).toBe(false);
       expect(typeof t.annotations.title, t.name).toBe('string');
       // Owner GO 2026-10-20 (tool search): the five common tools carry exactly one _meta key,
@@ -161,9 +166,12 @@ describe('tools/list', () => {
       'save_site', 'set_market_alert', 'set_site_alert', 'set_shortlist_alert', 'subscribe_digest',
       'register_standing_intent', 'delete_standing_intent', 'request_capacity_intro',
       'accept_capacity_terms', 'export_dataset']) expect(names.has(n), n).toBe(false);
-    // Every tool /mcp itself marks non-read-only is off the profile.
+    // Every tool /mcp itself marks non-read-only is off the profile, but the two feedback tools
+    // (2026-11-16), which are named exactly so a third write cannot ride in with them.
+    const feedback = new Set(CLAUDE_FEEDBACK_NAMES);
+    expect([...feedback].sort()).toEqual(['report_finding', 'request_enhancement']);
     for (const t of CANON) {
-      if (t.annotations && t.annotations.readOnlyHint === false) expect(names.has(t.name), t.name).toBe(false);
+      if (t.annotations && t.annotations.readOnlyHint === false) expect(names.has(t.name), t.name).toBe(feedback.has(t.name));
     }
   });
 
@@ -372,9 +380,11 @@ describe('listing copy', () => {
   });
   it('lists exactly the profile tools and states the profile count', () => {
     // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
-    const tools = section('Tools \\(67, all read-only\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+    // 67 + 2 on 2026-11-16: the two feedback tools, named apart from the read-only count.
+    const tools = section('Tools \\(69: 67 read-only, 2 feedback\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
     expect(tools).toEqual(Object.keys(CLAUDE_TOOLS));
-    expect(section('Long description')).toMatch(new RegExp(`\\b${Object.keys(CLAUDE_TOOLS).length} read-only tools\\b`));
+    expect(section('Long description')).toMatch(new RegExp(`\\b${Object.keys(CLAUDE_TOOLS).length - CLAUDE_FEEDBACK_NAMES.length} read-only tools\\b`));
+    expect(section('Long description')).toMatch(/report_finding and request_enhancement, send feedback to the DC Hub team/);
   });
   it('at least three example prompts, canon quantities, no prices, no superlatives, no steering', () => {
     const prompts = section('Example prompts').split('\n').filter((l) => /^\d+\. /.test(l));
@@ -394,7 +404,7 @@ describe('listing copy', () => {
     // The tool-name list is exempt: since 2026-09-29 it names source_capacity,
     // which the phrase list carries to catch steering toward it in prose.
     expect(injectionHits(PASTED.replace(/== Example prompts ==[\s\S]*?(?=\n== )/, '')
-      .replace(/== Tools \(\d+, all read-only\) ==[\s\S]*$/, ''))).toEqual([]);
+      .replace(/== Tools \([^)]*\) ==[\s\S]*$/, ''))).toEqual([]);
     expect(section('Prompts')).toMatch(/^\/dchub:find_capacity: /);
     expect(PASTED).not.toMatch(/api_key=/);   // the URL-key channel stays out of the public copy
   });

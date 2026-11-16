@@ -271,7 +271,10 @@ describe('the change is bounded', () => {
     }
   });
 
-  it('exactly 27 tools declare a required argument', () => {
+  it('exactly 28 tools declare a required argument', () => {
+    // ★2026-11-16 27 -> 28. report_finding now requires only class (tool is optional for
+    //   feature_request and coverage_gap, defaulting to "general"); request_enhancement, its alias,
+    //   requires summary. Net +1.
     // ★2026-10-08 26 -> 27. report_finding (a partner tool) requires class + tool:
     //   a finding without a class or a subject is not a finding. read_inbox,
     //   added alongside it, requires nothing. Net +1.
@@ -281,6 +284,6 @@ describe('the change is bounded', () => {
     //   register_standing_intent (kind + webhook_url) and delete_standing_intent
     //   (intent_id) — plus a lister that correctly requires nothing. Net +2.
     const withReq = TOOLS.filter((t) => (t.inputSchema.required || []).length).map((t) => t.name);
-    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(27);
+    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(28);
   });
 });

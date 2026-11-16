@@ -20,7 +20,9 @@ describe('Pro-only list', () => {
 
 describe('served copy never makes an email a requirement for a key', () => {
   it('no served string says "email only" / "email-only" (the key flow takes no email)', () => {
-    const hits = [...CODE.matchAll(/[^\n]{0,60}email[- ]only[^\n]{0,40}/gi)].map((m) => m[0].trim());
+    // (?<!_): the field name contact_email followed by "only if your human asked" (report_finding, 2026-11-16)
+    // is not the phrase this guards.
+    const hits = [...CODE.matchAll(/[^\n]{0,60}(?<!_)email[- ]only[^\n]{0,40}/gi)].map((m) => m[0].trim());
     expect(hits).toEqual([]);
   });
   it('the automated-usage block points at claim_free_key / /connect#free-key, not /signup', () => {

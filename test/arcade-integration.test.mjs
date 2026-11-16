@@ -3,7 +3,7 @@
 // allowlists in step with the real catalog, offline.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CLAUDE_REMOVED } from '../lib/claude-directory.mjs';
+import { CLAUDE_REMOVED, CLAUDE_FEEDBACK_NAMES } from '../lib/claude-directory.mjs';
 import { CORE_PATH } from '../lib/core-profile.mjs';
 import { VIA_HEADER, SUGGESTED_TOOLS, normalizeVia } from '../lib/builders-page.mjs';
 import {
@@ -12,7 +12,9 @@ import {
 
 const TOOLSPEC = JSON.parse(readFileSync(new URL('../toolspec.json', import.meta.url), 'utf8'));
 const NAMES = new Set(TOOLSPEC.map((t) => t.name));
-const REMOVED = new Set(CLAUDE_REMOVED);
+// 2026-11-16: /mcp/claude also lists the two feedback tools (report_finding, request_enhancement). They
+// file a row, so the Arcade read_only profile keeps them out.
+const REMOVED = new Set([...CLAUDE_REMOVED, ...CLAUDE_FEEDBACK_NAMES]);
 const README = readFileSync(new URL('../integrations/arcade/README.md', import.meta.url), 'utf8');
 const RAW = readFileSync(new URL('../integrations/arcade/arcade-remote-server.json', import.meta.url), 'utf8');
 const PRICE = /\$\s?\d|\/mo\b|per month|\b(pro|developer|starter|enterprise) (plan|tier)\b/i;

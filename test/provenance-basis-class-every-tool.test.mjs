@@ -210,6 +210,7 @@ function argsFor(name, json) {
   if (name === 'get_facility') a.facility_id = 'fac_1';
   if (name === 'compare_isos') a.isos = 'PJM,ERCOT,CAISO';
   if (name === 'compare_sites') { a.locations = '33.45,-112.07;39.04,-77.48'; delete a.sites; }
+  if (name === 'request_enhancement') a.summary = 'please add queue data for Ontario';   // 10-280 chars
   return a;
 }
 

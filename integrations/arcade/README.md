@@ -34,8 +34,9 @@ Use one of these profiles:
 `summarize_for_citation`.
 
 **Read-only (67 tools):** every tool except the key, email, alert, shortlist, saved-site,
-capacity-terms and other write tools. This is the same set as the `/mcp/claude` directory
-profile. The list is `gateway_profiles.read_only` in the JSON.
+capacity-terms and other write tools. This is the `/mcp/claude` directory profile without
+its two feedback tools (`report_finding`, `request_enhancement`). The list is
+`gateway_profiles.read_only` in the JSON.
 
 **Core endpoint (alternative):** register `https://dchub.cloud/mcp/core` as a second server
 with ID `dchub-core`. It exposes ten composite read-only tools that share one

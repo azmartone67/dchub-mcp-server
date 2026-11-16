@@ -1,5 +1,8 @@
-// read_inbox / report_finding (2026-10-08, owner: "add the two tools") — the
-// PARTNER TOOLS. Pins: both are registered for every caller (keyed and keyless
+// read_inbox / report_finding (2026-10-08, owner: "add the two tools").
+// 2026-11-16 (owner "Let's do both"): report_finding is open to every caller (keyless, any key,
+// partner; the backend holds the daily limits) and has its own pins in
+// test/findings-open-intake.test.mjs; here it keeps the partner receipt and the helper failure
+// shapes. read_inbox stays the partner tool. Pins: both are registered for every caller (keyed and keyless
 // servers list the same 94 names, so the per-session catalog is stable); the
 // report_finding schema carries the closed class enum; discover_tools reaches
 // them through the `partner` family; both proxy the backend with the SESSION's
@@ -37,8 +40,10 @@ beforeAll(async () => {
         }
         if (u.pathname === '/api/v1/inbox' || u.pathname === '/api/v1/inbox/findings') {
           const key = req.headers['x-api-key'];
-          if (!key) { res.statusCode = 401; res.end('{"ok":false,"error":"api_key_required"}'); return; }
-          if (key !== PARTNER) { res.statusCode = 403; res.end('{"ok":false,"error":"not_a_partner_key"}'); return; }
+          // 2026-11-16: findings are open to every caller; the inbox GET stays partner-only.
+          const isInbox = u.pathname === '/api/v1/inbox';
+          if (isInbox && !key) { res.statusCode = 401; res.end('{"ok":false,"error":"api_key_required"}'); return; }
+          if (isInbox && key !== PARTNER) { res.statusCode = 403; res.end('{"ok":false,"error":"not_a_partner_key"}'); return; }
           if (u.pathname === '/api/v1/inbox' && u.searchParams.get('include_read') === '1') {
             res.end(JSON.stringify({ ok: true, inbox_slug: 'slug-test', count: 2, peek: true, include_read: true,
               days: Number(u.searchParams.get('days') || 14), unread_count: 1,
@@ -56,9 +61,12 @@ beforeAll(async () => {
           if (body.class === 'bogus') { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: 'invalid_class', classes: ['other'] })); return; }
           if (body.tool === 'ratelimited') { res.statusCode = 429; res.end(JSON.stringify({ ok: false, error: 'rate_limited', retry_after_seconds: 42 })); return; }
           res.statusCode = body.note === 'again' ? 200 : 201;
+          // the pre-2026-11-16 partner receipt shape (no caller_tier, no finding_id): route + slug mark it
+          const partnerBits = key === PARTNER ? { slug: 'slug-test',
+            route: body.class === 'leak_past_pro_gate' ? 'squasher_queue' : 'needs_human' } : {};
           res.end(JSON.stringify({ ok: true, id: 31, result: body.note === 'again' ? 'deduped' : 'created',
-            issue_label: `external_audit:${body.class}:${body.tool}`, detector: 'external_audit', slug: 'slug-test',
-            recurrence: body.note === 'again' ? 2 : 1, route: body.class === 'leak_past_pro_gate' ? 'squasher_queue' : 'needs_human',
+            issue_label: `external_audit:${body.class}:${body.tool}`, detector: 'external_audit', ...partnerBits,
+            recurrence: body.note === 'again' ? 2 : 1,
             quoted_fields_hash: 'abcdef0123456789',
             ...(body.class === 'leak_past_pro_gate' && body.note !== 'again' ? { squasher: { ok: true, id: 5 } } : {}) }));
           return;
@@ -84,32 +92,33 @@ afterAll(async () => {
 const names = (s) => Object.keys(s._registeredTools).sort();
 
 describe('registration: one catalog for every caller', () => {
-  it('both tools are registered on keyed and keyless servers alike, and the catalog is 96', () => {
+  it('both tools are registered on keyed and keyless servers alike, and the catalog is 97', () => {
     const keyless = names(S.createServer(null, ''));
     const keyed = names(S.createServer(null, '', undefined, { keyed: true }));
     expect(keyless).toEqual(keyed);
     expect(keyless).toContain('read_inbox');
     expect(keyless).toContain('report_finding');
-    expect(keyless.length).toBe(96);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services
-    expect(S.PARTNER_TOOLS).toEqual(['read_inbox', 'report_finding']);
+    expect(keyless.length).toBe(97);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement
+    expect(S.PARTNER_TOOLS).toEqual(['read_inbox']);
   });
 
-  it('access tags: key-required, free_key class; report_finding is a write, read_inbox a read', () => {
-    for (const n of ['read_inbox', 'report_finding']) {
-      expect(S.KEY_REQUIRED_TOOLS.has(n), n).toBe(true);
-      expect(S._tierRequiredFor(n), n).toBe('free_key');
-    }
+  it('access tags: read_inbox key-required (free_key); report_finding open (anonymous) and a write', () => {
+    expect(S.KEY_REQUIRED_TOOLS.has('read_inbox')).toBe(true);
+    expect(S._tierRequiredFor('read_inbox')).toBe('free_key');
+    expect(S.KEY_REQUIRED_TOOLS.has('report_finding')).toBe(false);
+    expect(S._tierRequiredFor('report_finding')).toBe('anonymous');
     const t = S.createServer(null, '')._registeredTools;
     expect(t.report_finding.annotations.readOnlyHint).toBe(false);
     expect(t.report_finding.annotations.destructiveHint).toBe(false);
     expect(t.read_inbox.annotations.readOnlyHint).toBe(true);
   });
 
-  it('discover_tools reaches both through the partner family', () => {
+  it('discover_tools reaches read_inbox through the partner family and report_finding through feedback', () => {
     const fam = S._TOOL_FAMILIES_TABLE.find((f) => f.family === 'partner');
     expect(fam).toBeTruthy();
-    expect(fam.tools).toEqual(['read_inbox', 'report_finding']);
+    expect(fam.tools).toEqual(['read_inbox']);
     expect(fam.when).toMatch(/Partner agents only/);
+    expect(S._TOOL_FAMILIES_TABLE.find((f) => f.family === 'feedback').tools).toContain('report_finding');
     expect(S._DISCOVERY_EXEMPT.read_inbox).toBeUndefined();
   });
 });
@@ -136,51 +145,51 @@ describe('over HTTP: schema, instructions, partner vs non-partner', () => {
   it('tools/list carries both for a keyless session, with the class enum on report_finding', async () => {
     const { h } = await open({});
     const list = (await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).msg.result.tools;
-    expect(list.length).toBe(96);
+    expect(list.length).toBe(97);
     const rf = list.find((t) => t.name === 'report_finding');
     const ri = list.find((t) => t.name === 'read_inbox');
     expect(rf && ri).toBeTruthy();
     expect(rf.inputSchema.properties.class.enum).toEqual([...S.FINDING_CLASSES]);
-    expect(rf.inputSchema.required).toEqual(expect.arrayContaining(['class', 'tool']));
-    expect(rf.description).toMatch(/leak_past_pro_gate/);
-    expect(rf.description).toMatch(/PARTNER KEY ONLY/);
+    expect(rf.inputSchema.required).toEqual(['class']);
+    expect(JSON.stringify(rf.inputSchema.properties.class)).toMatch(/leak_past_pro_gate/);
+    expect(rf.description).not.toMatch(/PARTNER KEY ONLY/);
     expect(ri.inputSchema.properties.peek.type).toBe('boolean');
     expect(ri.description).toMatch(/PARTNER KEY ONLY/);
   });
 
-  it('keyed instructions name both tools; keyless instructions do not', async () => {
+  it('keyed instructions name read_inbox; keyless do not; both name report_finding (open to all)', async () => {
     const keyed = await open({ 'x-api-key': PARTNER });
     expect(keyed.instructions).toContain('read_inbox');
     expect(keyed.instructions).toContain('report_finding');
     expect(keyed.instructions).toContain('If you are a partner agent, read dchub://inbox at the start of a session for notes from DC Hub.');
     const keyless = await open({});
     expect(keyless.instructions).not.toContain('read_inbox');
-    expect(keyless.instructions).not.toContain('report_finding');
+    expect(keyless.instructions).toContain('report_finding');
   });
 
-  it('a keyless call is a clear "key required" error and never reaches the backend', async () => {
+  it('a keyless read_inbox is a clear "key required" error and never reaches the backend', async () => {
     const { h } = await open({});
-    for (const name of ['read_inbox', 'report_finding']) {
-      const r = (await call(h, name, name === 'report_finding' ? { class: 'other', tool: 't' } : {})).msg.result;
-      expect(r.isError, name).toBe(true);
-      expect(r.content[0].text, name).toMatch(/DC Hub key required/);
-      expect(r.structuredContent.error, name).toBe('api_key_required');
-    }
+    const r = (await call(h, 'read_inbox', {})).msg.result;
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/DC Hub key required/);
+    expect(r.structuredContent.error).toBe('api_key_required');
     expect(hits.filter((x) => x.path.startsWith('/api/v1/inbox'))).toEqual([]);
   });
 
-  it('a non-partner key gets "partner key required" (the backend 403), with its own key sent and no internal key', async () => {
+  it('a non-partner key: read_inbox is "partner key required" (403, own key, no internal key); report_finding files', async () => {
     const { h } = await open({ 'x-api-key': PLAIN });
     const r = (await call(h, 'read_inbox', {})).msg.result;
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toMatch(/Partner key required \(403\)/);
     expect(r.structuredContent.error).toBe('partner_key_required');
-    const f = (await call(h, 'report_finding', { class: 'other', tool: 't' }, 10)).msg.result;
-    expect(f.isError).toBe(true);
-    expect(f.structuredContent.error).toBe('partner_key_required');
-    const inboxHits = hits.filter((x) => x.path.startsWith('/api/v1/inbox'));
-    expect(inboxHits.length).toBe(2);
-    for (const x of inboxHits) { expect(x.key).toBe(PLAIN); expect(x.internal).toBeNull(); }
+    const f = (await call(h, 'report_finding', { class: 'other', tool: 't', summary: 'a plain key files this' }, 10)).msg.result;
+    expect(f.isError).toBeFalsy();
+    expect(f.structuredContent.finding_id).toBe(31);
+    const [ri] = hits.filter((x) => x.path === '/api/v1/inbox');
+    expect(ri.key).toBe(PLAIN); expect(ri.internal).toBeNull();
+    // report_finding sends the caller's key AND the internal key (server-set tags ride beside it)
+    const [rf] = hits.filter((x) => x.path === '/api/v1/inbox/findings');
+    expect(rf.key).toBe(PLAIN); expect(rf.internal).toBe('test-internal-key-not-a-real-secret');
   });
 
   it('a partner key: read_inbox returns the notes as text + structuredContent; peek is forwarded', async () => {
@@ -254,13 +263,14 @@ describe('over HTTP: schema, instructions, partner vs non-partner', () => {
                    quoted_fields: { dcpi_score: 81 }, recurrence: 2, note: 'score served to a free key' };
     const r = (await call(h, 'report_finding', args)).msg.result;
     expect(r.isError).toBeFalsy();
-    expect(r.content[0].text).toMatch(/^Filed created: external_audit:leak_past_pro_gate:analyze_site \(finding #31, seen 1x, route squasher_queue\)\. Squasher hand-off: queued \(#5\)\./);
-    expect(r.structuredContent).toMatchObject({ _entity: 'finding', ok: true, id: 31, result: 'created', route: 'squasher_queue' });
+    expect(r.content[0].text).toMatch(/^Thanks\. The DC Hub team reviews findings daily\. Filed created: external_audit:leak_past_pro_gate:analyze_site \(finding #31, seen 1x, route squasher_queue\)\. Squasher hand-off: queued \(#5\)\./);
+    expect(r.structuredContent).toMatchObject({ _entity: 'finding', ok: true, id: 31, result: 'created', route: 'squasher_queue',
+      finding_id: 31, status: 'received', recurrence: 1 });
     const hit = hits.find((x) => x.path === '/api/v1/inbox/findings');
-    expect(hit.method).toBe('POST'); expect(hit.key).toBe(PARTNER); expect(hit.internal).toBeNull();
+    expect(hit.method).toBe('POST'); expect(hit.key).toBe(PARTNER); expect(hit.internal).toBe('test-internal-key-not-a-real-secret');
     expect(JSON.parse(hit.body)).toEqual(args);
     const d = (await call(h, 'report_finding', { class: 'other', tool: 't', note: 'again' }, 12)).msg.result;
-    expect(d.content[0].text).toMatch(/^Filed deduped: external_audit:other:t \(finding #31, seen 2x, route needs_human\)\./);
+    expect(d.content[0].text).toMatch(/^Thanks\. The DC Hub team reviews findings daily\. Filed deduped: external_audit:other:t \(finding #31, seen 2x, route needs_human\)\./);
     expect(d.content[0].text).not.toMatch(/Squasher/);
   });
 
@@ -312,13 +322,19 @@ describe('helpers with a stubbed fetch: every failure is text, never a throw', (
       async (url, init) => { seen.push({ url: String(url), init }); return new Response('{"ok":true,"id":1,"result":"created","issue_label":"x","recurrence":1,"route":"needs_human"}', { status: 201 }); });
     expect(seen[0].url.endsWith('/api/v1/inbox/findings')).toBe(true);
     expect(JSON.parse(seen[0].init.body)).toEqual({ class: 'other', tool: 't' });
-    expect(Object.keys(seen[0].init.headers).sort()).toEqual(['Accept', 'Content-Type', 'X-API-Key']);
+    // with the internal key set: the caller's key, the internal key and the server-set tags
+    expect(Object.keys(seen[0].init.headers).sort()).toEqual(['Accept', 'Content-Type', 'X-API-Key', 'X-DCHub-Entry-Tool',
+      'X-DCHub-Finding-Client', 'X-Internal-Key'].sort());   // no session here, so no X-MCP-Client / X-DC-Client-IP
   });
-  it('no key: explains and never fetches', async () => {
-    let called = 0;
-    const f = async () => { called++; return new Response('{}'); };
+  it('no key: read_inbox explains and never fetches; report_finding files keyless (no X-API-Key)', async () => {
+    let called = 0; const seen = [];
+    const f = async (url, init) => { called++; seen.push(init); return new Response('{"ok":true,"finding_id":3,"status":"received","recurrence":1}', { status: 201 }); };
     expect((await S._readInboxTool('', false, f)).structuredContent.error).toBe('api_key_required');
-    expect((await S._reportFindingTool(null, { class: 'other', tool: 't' }, f)).structuredContent.error).toBe('api_key_required');
     expect(called).toBe(0);
+    const r = await S._reportFindingTool(null, { class: 'other', tool: 't', summary: 'keyless filing works' }, f, { ctx: null });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.finding_id).toBe(3);
+    expect(called).toBe(1);
+    expect(seen[0].headers['X-API-Key']).toBeUndefined();
   });
 });
