@@ -660,6 +660,7 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-bump-justified.test.mjs
 test/version-consistency.test.mjs
+test/via-src-directory-attribution.test.mjs
 test/via-tags.test.mjs
 test/wall-alert-line-d.test.mjs
 test/wall-ask-guard.test.mjs
