@@ -42,7 +42,7 @@ POST https://dchub.cloud/mcp                                  # the full 97-tool
 ```
 
 ## Free vs. paid
-- **Free tier:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Higher limits: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. No signup. Claim a key (optional, raises limits + saves it):
+- **Free tier:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. No signup. Claim a key (optional, raises limits + saves it):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
 - **Paid tools** (e.g. `analyze_site`, `compare_sites`, `get_grid_intelligence`, `get_interconnection_queue`): pass the key as **`X-API-Key`** header (REST) or in your MCP client config.
 

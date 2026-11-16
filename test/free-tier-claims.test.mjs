@@ -72,8 +72,10 @@ const SURFACES = [
 // is the rule, not an anonymous 50/day claim.
 const FREE_TIER_RULE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
   + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
-  + 'Higher limits: dchub.cloud/pricing.';
+  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day).';
+// ★2026-11-16 (Note F, Grok item 11): the discovery files quote it without the pin's closing
+// "Higher limits: dchub.cloud/pricing." sentence (lib/tier-canon.mjs _freeTierRuleForGate),
+// so the constant stops before it; test/discovery-docs-no-higher-limits.test.mjs bars the pointer.
 // ★2026-10-14: "calls" is optional. integrations/chatgpt/openapi.json said "the full
 // 100/day free tier" three times, a rung that does not exist, and this gate never saw
 // it because the shape had no "calls". A bare "N/day" is the same claim.
@@ -381,8 +383,8 @@ describe("registry manifests offer no Starter plan", () => {
 describe("the composed free-tier rule", () => {
   it("is the published sentence verbatim and states no price", async () => {
     const { _freeTierRuleText } = await import("../lib/tier-canon.mjs");
-    expect(_freeTierRuleText()).toBe(FREE_TIER_RULE);
-    expect(FREE_TIER_RULE.endsWith(" Higher limits: dchub.cloud/pricing.")).toBe(true);
+    // The pin (lib/tier-canon mirrors the backend) keeps its closing pointer; discovery copy drops it.
+    expect(_freeTierRuleText()).toBe(FREE_TIER_RULE + " Higher limits: dchub.cloud/pricing.");
     expect(FREE_TIER_RULE).not.toMatch(/\$/);
   });
 });

@@ -102,9 +102,11 @@ describe('llms-install.md carries no plan-price table', () => {
   it('links the pricing page and quotes the canon free-tier rule', async () => {
     // The composed rule is pinned verbatim to canon's free_tier by
     // test/free-tier-claims.test.mjs; this file must quote it whole.
-    const { _freeTierRuleText } = await import('../lib/tier-canon.mjs');
-    const rule = _freeTierRuleText();
+    // 2026-11-16 (Note F, Grok item 11): less the pin's closing "Higher limits" pointer.
+    const { _freeTierRuleForGate } = await import('../lib/tier-canon.mjs');
+    const rule = _freeTierRuleForGate();
     expect(rule).toMatch(/^No key needed: /);   // 2026-11-16 (owner, Grok Note K)
+    expect(rule).not.toMatch(/higher limits/i);
     expect(doc).toContain(rule);
     expect(doc).toContain('https://dchub.cloud/pricing');
   });

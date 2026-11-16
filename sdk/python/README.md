@@ -32,7 +32,7 @@ pip install "dchub[agents]"       # + smolagents Tools
 from dchub import DCHub
 
 dc = DCHub()                              # no key
-# dc = DCHub(api_key="dch_live_...")      # higher limits / key-gated endpoints
+# dc = DCHub(api_key="dch_live_...")      # optional key / key-gated endpoints
 
 rank = dc.get_market_dcpi_rank("phoenix")
 print(rank["composite_score"], rank["verdict"])

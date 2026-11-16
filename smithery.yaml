@@ -96,7 +96,7 @@ configSchema:
   properties:
     apiKey:
       type: string
-      title: "DC Hub API key — paste one to raise your limits"
+      title: "DC Hub API key (optional)"
       description: >-
         Optional. Blank = no key: previews, no key
         needed. A FREE key gives previews plus 2 full answers per tool per day, no email, no card:
