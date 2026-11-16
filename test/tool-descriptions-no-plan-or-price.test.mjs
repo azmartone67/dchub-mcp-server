@@ -34,6 +34,13 @@ export const PLAN_OR_PRICE = new RegExp([
   '\\$\\s?\\d',
 ].join('|'), 'i');
 
+// "free" as access wording (Grok note 2026-11-15: directories copy "free key" verbatim; the line is
+// "DCHUB_API_KEY is optional; a key unlocks full answers"). "free" in a data sense stays: free-text
+// parameters, retiring plants that free grid capacity, free county/state GIS polygons; and the
+// claim_free_key tool's own name and derived title.
+export const FREE_WORDING = /\bfree\b(?![- ]text\b)(?! grid capacity\b)(?! up\b)(?! county\/state GIS\b)/i;
+const FREE_NAME_OK = ['Claim Free Key'];
+
 // Energy / market / deal-value phrases that carry a dollar sign on purpose. tool -> exact phrases.
 export const PRICE_ALLOWLIST = {
   hyperscaler_deals: ['($1B+/week typical)', 'the live $1B+ AI-capex feed'],
@@ -96,12 +103,16 @@ export function offenders(tools) {
       for (const ok of PRICE_ALLOWLIST[t.name] || []) s = s.split(ok).join('');
       const m = PLAN_OR_PRICE.exec(s);
       if (m) hits.push(`${t.name} ${where}: "…${s.slice(Math.max(0, m.index - 50), m.index + m[0].length + 30)}…"`);
+      let f = s;
+      for (const ok of FREE_NAME_OK) f = f.split(ok).join('');
+      const fm = FREE_WORDING.exec(f);
+      if (fm) hits.push(`${t.name} ${where} free wording: "…${f.slice(Math.max(0, fm.index - 50), fm.index + fm[0].length + 30)}…"`);
     }
   }
   return hits;
 }
 
-describe('tool descriptions name no plan and state no price (owner listing rule 2026-11-14)', () => {
+describe('tool descriptions name no plan, state no price and say no "free" (owner listing rule 2026-11-14; Grok 2026-11-15)', () => {
   it('the full catalog is served (non-vacuous)', () => {
     expect(LISTS['/mcp?catalog=full'].length).toBeGreaterThanOrEqual(90);
     for (const p of PATHS) expect(LISTS[p].length, `${p} served no tools`).toBeGreaterThan(0);
@@ -144,6 +155,18 @@ describe('tool descriptions name no plan and state no price (owner listing rule 
       'get_energy_prices returns $/MWh', 'a time-of-use price', 'call claim_free_key',
       'DC Hub plans the lookups (markets, grid, fiber)', 'Full results need a full-access DC Hub key.',
     ]) expect(ok, ok).not.toMatch(PLAN_OR_PRICE);
+    // "free" as access wording fails; "free" as data passes
+    for (const bad of [
+      'Keyless: a trimmed preview; a free key gets more.', 'On a free key, email alerts are delivered',
+      '(free with a key)', 'With a free key, a few full briefs a day', 'Free = preview.',
+      'limit 1-500 (free 10)', 'Want a free key instead (no payment)', 'WHAT AN EMAIL GETS (free, no card)',
+      'At an anonymous or free-key seat', 'FREE and full for every caller.', 'Free, no key.',
+    ]) expect(bad, bad).toMatch(FREE_WORDING);
+    for (const ok of [
+      'Free-text query', 'Optional free-text notes', 'comma-separated free text matched against',
+      'retiring power plants free grid capacity', 'about to free up', '(free county/state GIS polygons',
+      'call claim_free_key', 'DCHUB_API_KEY is optional; a key unlocks full answers.',
+    ]) expect(ok, ok).not.toMatch(FREE_WORDING);
     // an allowlisted phrase passes only on its own tool
     const deal = { name: 'hyperscaler_deals', description: 'the live $1B+ AI-capex feed', inputSchema: {} };
     expect(offenders([deal])).toEqual([]);
