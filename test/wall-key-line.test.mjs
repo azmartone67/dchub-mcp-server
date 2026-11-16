@@ -199,7 +199,14 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
     const d = prose.indexOf('`subscribe_digest`');
     expect(k, 'the key line is in the answer').toBeGreaterThanOrEqual(0);
     expect(d, 'the digest offer is still there').toBeGreaterThan(k);
-    expect(prose.match(new RegExp(KEY_LINE_RE.source, 'g'))).toHaveLength(1);   // once
+    const delivered = prose.match(new RegExp(KEY_LINE_RE.source, 'g'));
+    expect(delivered).toHaveLength(1);   // once
+    // The exact text the agent receives (a prose block: note K's neutral-cta allowlist does not police it), checked
+    // here: canon's figure in canon's form, the one /connect link, no plan, no price, no paid / upgrade / trial.
+    expect(delivered[0]).toContain('(50 MCP calls/day)');
+    expect(delivered[0]).not.toMatch(FORBIDDEN);
+    expect(BANNED.test(delivered[0])).toBe(false);
+    expect(delivered[0].match(/https?:\/\/\S+/g)).toEqual(['https://dchub.cloud/connect']);
     for (const e of rows) {
       expect(e.email_ask).toBe('key_line');
       expect(e.offers_shown).toEqual(expect.arrayContaining(['digest', 'email_key']));
