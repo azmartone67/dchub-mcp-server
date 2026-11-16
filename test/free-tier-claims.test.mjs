@@ -70,9 +70,10 @@ const SURFACES = [
 // dchub-backend ai_surface_canon.PINNED['free_tier_rule']). A surface quoting it
 // whole names "Anonymous:" and "50 calls/day" in one sentence by design — that
 // is the rule, not an anonymous 50/day claim.
-const FREE_TIER_RULE = "Anonymous: previews, no key needed. "
-  + "Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day "
-  + "(up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.";
+const FREE_TIER_RULE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
+  + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
+  + 'Higher limits: dchub.cloud/pricing.';
 // ★2026-10-14: "calls" is optional. integrations/chatgpt/openapi.json said "the full
 // 100/day free tier" three times, a rung that does not exist, and this gate never saw
 // it because the shape had no "calls". A bare "N/day" is the same claim.
@@ -381,7 +382,7 @@ describe("the composed free-tier rule", () => {
   it("is the published sentence verbatim and states no price", async () => {
     const { _freeTierRuleText } = await import("../lib/tier-canon.mjs");
     expect(_freeTierRuleText()).toBe(FREE_TIER_RULE);
-    expect(FREE_TIER_RULE.endsWith(" Paid plans: dchub.cloud/pricing.")).toBe(true);
+    expect(FREE_TIER_RULE.endsWith(" Higher limits: dchub.cloud/pricing.")).toBe(true);
     expect(FREE_TIER_RULE).not.toMatch(/\$/);
   });
 });

@@ -112,6 +112,8 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         'scripts/listing-canon.mjs',
                         'canonical/listing.json',
                         'canonical/skill.md',
+                        // ★2026-11-16: the CHANGELOG entry a --fix bump writes. Same failure mode.
+                        'scripts/changelog-entry.mjs',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs

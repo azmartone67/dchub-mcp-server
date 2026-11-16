@@ -187,6 +187,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
+import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
@@ -15335,6 +15336,11 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   // Pro and above read everything: no walk.
   const t = String((c && c.tier) || '').trim().toLowerCase();
   if (_tierIsProOrAbove(t) || (t === 'paid' && !(c && c.api_key))) return result;
+  // An execute_plan served as its caller's first full answer of the day (owner 2026-11-15, Grok note G):
+  // its steps ran at full depth (KEYLESS_FIRST_FULL_STEP_TIER), so this walk at the caller's own tier
+  // re-masked every DCPI score, time to power and queue wait they returned (measured live 2026-11-16 on
+  // 2.12.58, ERCOT). The plan is the one full answer: no walk. Later plans today are previews again.
+  if (name === 'execute_plan' && c && c._kffPlan === true && !c.loopback_step) return result;
   let st = null;
   try { st = _muState(); } catch (_) { st = null; }
   const priorGates = !!(st && st.gates && st.gates.size > 0);
@@ -15881,6 +15887,13 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = v;
     } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = _keepProvenanceCredit(v, trimForTrial(v, toolName, _inRate));   // G-2: credit lists survive
+    } else if (toolName === 'compare_isos' && k === 'comparison' && v && typeof v === 'object' && !Array.isArray(v)) {
+      // Owner 2026-11-16 (Grok Note K item 7, option A): each withheld time to power, constraint
+      // score and headroom leaves a coarse band of the SAME exact value (lib/iso-bands.mjs). The
+      // rows trim exactly as before; the bands are cut from the untrimmed rows, never invented.
+      const _b = _withIsoBands(v, trimForTrial(v, toolName, _inRate));
+      out[k] = _b.comparison;
+      if (_b.summary) out.bands_summary = _b.summary;
     } else if (RETRIEVAL_TOOLS.has(toolName) && _RETRIEVAL_PASSTHROUGH_KEYS.has(k)) {
       out[k] = v;                             // RAG-1: relevance score + corpus list
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
@@ -25130,7 +25143,8 @@ function _sourceLineCb(name, fn) {
       // copy (lib/answer-shape.mjs). Same skips as lean. Kill switches DCHUB_DATA_FIRST=0, DCHUB_ANSWER_BUDGET_BYTES=0.
       // The budget is for free / anonymous callers only; paid and unknown tiers keep every row (owner 11-14).
       // c.tier is read here, after the handler, so a paid lift inside the call counts.
-      _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name), budget: _answerBudgetAppliesTo(c) });
+      // execute_plan takes its own, larger budget (DCHUB_PLAN_BUDGET_BYTES, default 55,000 per copy; owner 2026-11-16).
+      _final = _answerShapeStep(_final, { skip: leanSkip || _LEAN_SKIP_TOOLS.has(name), budget: _answerBudgetAppliesTo(c), plan: name === 'execute_plan' });
       // Front desk (owner 2026-11-13): execute_plan's one next-step line, LAST, after every trim: it replaces the
       // identity line rather than adding a second one, and never rides a wall (_frontDeskStep).
       _final = _frontDeskStep(_final, name, c);
@@ -31920,7 +31934,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
-                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth' : 'no key — steps returned preview depth; claim_free_key raises it') },
+                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth'
+                      // 2026-11-16 (owner, Grok Note K): a keyless plan that took today's first full answer ran its
+                      // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
+                      : (c && c._kffPlan === true
+                        ? 'no key — today\'s first full answer: steps ran at full depth; later keyless plans today return previews; an email raises the limit'
+                        : 'no key — steps returned preview depth (the first keyless plan each UTC day is a full answer); an email raises the limit')) },
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
@@ -32956,6 +32975,21 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const g = giList[i];
         comparison[iso] = (g && g._latest) ? shapeLatestGrid(iso, g.body) : shapeGridIntelligence(iso, g, cmp, qsnap);
       });
+      // Owner 2026-11-16 (Note K item 7A), mcp#1476 follow-up: the iso-comparison read above carries
+      // the caller's forwarded tier, so below the backend's paid plans its aggregates arrive null and
+      // the free trim had no figure to band (live 06:15Z: no bands). Where a US row withholds a band
+      // source, read the server view ONCE and cut the bands from it (lib/iso-bands.mjs). Only the
+      // band labels leave this block; the caller's figures are the ones the backend sent.
+      const _bandIsos = valid.filter((iso) => !(giList[valid.indexOf(iso)] && giList[valid.indexOf(iso)]._latest)
+        && _rowWithholdsBandSource(comparison[iso]));
+      if (_bandIsos.length) {
+        const _full = await callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true, serverView: true }).catch(() => null);
+        if (_full && Array.isArray(_full.isos)) {
+          const _raw = {};
+          for (const iso of _bandIsos) _raw[iso] = shapeGridIntelligence(iso, giList[valid.indexOf(iso)], _full, qsnap);
+          Object.assign(comparison, _attachIsoBands(Object.fromEntries(_bandIsos.map((iso) => [iso, comparison[iso]])), _raw));
+        }
+      }
       const out = {
         isos: valid,
         comparison,
@@ -32966,6 +33000,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      const _bandsLine = _bandsSummary(comparison);
+      if (_bandsLine) out.bands_summary = _bandsLine;
       // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
       const _cmpProv = composeCompareProvenance(usValid, usValid.map(iso => giList[valid.indexOf(iso)]), cmp, qsnap);
       if (_cmpProv) out.provenance = _cmpProv;

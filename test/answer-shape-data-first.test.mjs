@@ -121,7 +121,9 @@ describe('size budget (unit)', () => {
     const step = (i) => ({ step: i, tool: `t${i}`, status: 'executed',
       result: { items: rows(60), _upgrade: { message: 'u'.repeat(800) }, human_message: 'h'.repeat(300), human_url: 'https://dchub.cloud/u/abc234' } });
     const v = { human_url: 'https://dchub.cloud/u/abc234', executed: [step(1), step(2), step(3), step(4)], human_message: 'top' };
-    const { value } = capToBudget(v, 30_000);
+    // Stage 1 alone (dedupe off): a link is not prose. Stage 1b (test/plan-answer-budget) drops a step's copy of
+    // the plan's human_url as envelope, not as prose; the plan's own stays either way.
+    const { value } = capToBudget(v, 30_000, { dedupe: false });
     expect(value.executed.map((s) => s.step)).toEqual([1, 2, 3, 4]);
     expect(B(value)).toBeLessThanOrEqual(30_000);
     for (const s of value.executed) {
@@ -129,6 +131,7 @@ describe('size budget (unit)', () => {
       expect(s.result.human_message).toBeUndefined();
       expect(s.result.human_url).toBe('https://dchub.cloud/u/abc234');   // a link is not prose
     }
+    expect(capToBudget(v, 30_000).value.human_url).toBe('https://dchub.cloud/u/abc234');
     expect(value.human_message).toBe('top');   // the top-level relay line stays
     expect(value.size_cap.nested_relay_copy_dropped).toBe(8);
   });
@@ -272,6 +275,7 @@ describe('/mcp e2e (real server.mjs, stub backend)', () => {
     expect(B(sc)).toBeLessThanOrEqual(30_000);
     expect(B(b0)).toBeLessThanOrEqual(30_000);
     expect(sc.size_cap && sc.size_cap.cut.map((c) => c.field)).toContain('data');
+    expect(sc.size_cap.budget_bytes, 'a single tool keeps the 30,000 budget (execute_plan alone gets the plan budget)').toBe(30_000);
     expect(sc.data.length).toBeLessThan(BIG_ROWS);
     expect(sc.data.map((r) => r.id)).toEqual(Array.from({ length: sc.data.length }, (_, i) => i));
     // A size cut is not tier gating: the size_cap block carries no link and no partial_preview stamp is added.

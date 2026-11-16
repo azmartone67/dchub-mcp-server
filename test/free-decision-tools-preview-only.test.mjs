@@ -604,8 +604,10 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
 
 describe('copy canon: every emission of the free-tier rule carries the decision-tools clause', () => {
   const CLAUSE = T.FREE_DECISION_CLAUSE;
-  const B1 = 'Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. '
-    + 'Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.';
+  const B1 = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
+    + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+    + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
+    + 'Higher limits: dchub.cloud/pricing.';
   it('the clause names the three tools and the rung', () => {
     // the shortest honest form: the lean handshake quotes the FREE TIER block verbatim under a 2,048-char budget
     for (const t of ['grid', 'queue', 'market-intel']) expect(CLAUSE.toLowerCase()).toContain(t);

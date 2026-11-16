@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // DC Hub MCP launcher: bridges a stdio MCP client to the hosted server.
-// Free tier works with no key. Set DCHUB_API_KEY (or X_API_KEY) for full data.
+// No key needed for previews. Set DCHUB_API_KEY (or X_API_KEY) to send a key.
+//
+// stdout belongs to the MCP protocol (the child's JSON-RPC stream), so this file
+// never writes to it. The one start-up hint goes to stderr, which MCP clients
+// show as a server log line. No network call happens here: the child connects.
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -28,6 +32,14 @@ if (key) {
   args.push("--header", "X-API-Key:${DCHUB_MCP_HEADER_KEY}");
 }
 args.push(...process.argv.slice(2));
+
+// One line, once, on stderr. DCHUB_QUIET=1 turns it off.
+if (!/^(1|true|yes)$/i.test(process.env.DCHUB_QUIET || "")) {
+  process.stderr.write(
+    `[dchub] Connected to ${url}. No key needed for previews. Start with execute_plan. ` +
+      "Save a key from claim_free_key or https://dchub.cloud/connect.\n",
+  );
+}
 
 const child = spawn(process.execPath, args, { stdio: "inherit", env });
 child.on("exit", (code, signal) => {

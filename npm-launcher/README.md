@@ -35,6 +35,7 @@ Environment variables:
 | --- | --- |
 | `DCHUB_API_KEY` (or `X_API_KEY`) | Optional API key, sent as the `X-API-Key` header |
 | `DCHUB_MCP_URL` | Override the endpoint (default `https://dchub.cloud/mcp`) |
+| `DCHUB_QUIET` | `1` hides the one-line start-up hint the launcher prints on stderr |
 
 ## Links
 

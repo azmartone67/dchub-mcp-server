@@ -21,7 +21,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import * as U from '../lib/unlock-line.mjs';
-import { _freeKeyOfferText, _freeTierRuleForGate, ANALYZE_SITE_FREE_LINE, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
+import { _freeKeyOfferText, _freeTierRuleForGate, ANALYZE_SITE_FREE_LINE, _rungNum, _fullAnswersPerToolPerDay, KEYLESS_FIRST_FULL_CLAUSE } from '../lib/tier-canon.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 
@@ -29,10 +29,15 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
   const rule = _freeTierRuleForGate();
-  it('control: the canon paragraph is composed (snapshot present) and states the free-key clause', () => {
+  // 2026-11-16 (owner, Grok Note K): the rule leads with the keyless first full answer and no longer
+  // states the free-key clause; _freeKeyOfferText() stays the free key's one source, and the unlock lines
+  // below still quote it.
+  it('control: the canon paragraph is composed (snapshot present), keyless clause first, the email rung, no free-key sale', () => {
     expect(rule).toBeTruthy();
-    expect(rule).toContain('Free key: ' + _freeKeyOfferText() + '.');
-    expect(rule).toContain('Add an email: ' + _rungNum('identified') + ' calls/day');
+    expect(rule.startsWith(KEYLESS_FIRST_FULL_CLAUSE)).toBe(true);
+    expect(rule).toContain('With an email: ' + _rungNum('identified') + ' calls/day');
+    expect(rule).not.toContain('Free key:');
+    expect(_freeKeyOfferText()).toBeTruthy();
   });
   it('the free-key lines quote the canon clause and the email rung, and nothing else numeric', () => {
     const L = U.unlockLines();
