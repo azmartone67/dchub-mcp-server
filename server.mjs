@@ -23410,7 +23410,8 @@ export function _planDcpiLead(ia) {
       + (score != null ? `, composite ${score}/100` : '') + '.'
       + (ttp ? ' ' + String(ttp).replace(/^DCPI t/, 'T') : '');
     return { market_slug: slug || null, verdict: v, composite_score: score, text,
-      cite: typeof ia.source === 'string' ? ia.source : null,
+      // #118323: the verdict's own DCPI read (ia.verdict.source), never the answer-wide oldest-input line.
+      cite: typeof ia.verdict.source === 'string' ? ia.verdict.source : (typeof ia.source === 'string' ? ia.source : null),
       instruction: 'State this verdict and its Source line first, before the supporting reads.' };
   } catch (_e) { return null; }
 }

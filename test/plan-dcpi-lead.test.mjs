@@ -112,6 +112,9 @@ beforeAll(async () => {
       if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/sources/') || p.startsWith('/api/v1/keys/')) return send({ ok: true });
       dataHits.push({ path: p, key: req.headers['x-api-key'] || '' });
       if (p === '/api/v1/dcpi/scores/phoenix') return send(DCPI_PHOENIX);
+      // #118323: the market-intel read is OLDER than the DCPI card (its newest facility discovery), as for
+      // Kansas City live 2026-11-14. The verdict's cite must still carry the DCPI card's date (SOURCE_RE).
+      if (p === '/api/v1/markets/phoenix') return send({ ...GENERIC, as_of: '2026-09-26', provenance: { as_of: '2026-09-26' } });
       return send(GENERIC);
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -228,6 +231,9 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     expect(v.text).toMatch(/^Data Center Power Index \(DCPI\): Phoenix: CAUTION, composite 43\.5\/100\./);
     // 2) with its citation line
     expect(v.cite).toMatch(SOURCE_RE);
+    // #118323 non-vacuous: the market-intel step ran and dated the answer older than the verdict's own read
+    expect(d.executed.find((e) => e.tool === 'get_market_intel').status).toBe('executed');
+    expect(d.intent_answer.as_of).toBe('2026-09-26');
     // 3) the offer (the plan's email ask, or the wall's one-link line) comes after it, in a later block
     // (Note L1 + L2, 2026-11-15: a keyless plan wall's one link is https://dchub.cloud/connect, lib/neutral-cta.mjs)
     const offerAt = blocks.findIndex((t, i) => i > 0 && (t.includes(EMAIL_ASK) || /dchub\.cloud\/(?:upgrade\/|connect\b)/.test(t)));
@@ -264,6 +270,16 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     expect(S._planDcpiLead({ ...ia, verdict: { ...ia.verdict, scope: 'iso' } })).toBe(null);
     expect(S._planDcpiLead({ ...ia, kind: 'siting' })).toBe(null);
     expect(S._planDcpiLead(null)).toBe(null);
+  });
+  it('#118323: the cite is the verdict\'s own DCPI Source line, not the answer-wide oldest-input line', () => {
+    const ia = { kind: 'market_check',
+      verdict: { value: 'BUILD', scope: 'market', subject: 'kansas-city', composite_score: 68.8,
+        source: 'Source: DC Hub (dchub.cloud/markets/kansas-city), as of 2026-11-14' },
+      evidence: [], as_of: '2026-09-26', source: 'Source: DC Hub (dchub.cloud/markets/kansas-city), as of 2026-09-26' };
+    expect(S._planDcpiLead(ia).cite).toBe('Source: DC Hub (dchub.cloud/markets/kansas-city), as of 2026-11-14');
+    // an answer built before verdict.source existed still cites its one line
+    const { source: _s, ...bare } = ia.verdict;
+    expect(S._planDcpiLead({ ...ia, verdict: bare }).cite).toBe(ia.source);
   });
   it('the frozen /mcp/chatgpt and /mcp/claude answers carry no new block', async () => {
     for (const path of ['/mcp/chatgpt', '/mcp/claude']) {
