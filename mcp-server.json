@@ -393,11 +393,11 @@
     },
     {
       "name": "report_finding",
-      "description": "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Free; works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "request_enhancement",
-      "description": "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Free; works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when your human asks for a feature, data or coverage DC Hub doesn't have yet, or says something would make DC Hub more useful. Same queue as report_finding. Works with or without a key. Do NOT use to report wrong numbers (use report_finding) or for data questions (use execute_plan). For multi-step data center or energy questions, start with execute_plan."
     }
   ],
   "example_queries": [
