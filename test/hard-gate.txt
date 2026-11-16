@@ -307,6 +307,7 @@ test/held-key-persists.test.mjs
 test/high-intent-needs-a-session.test.mjs
 test/honest-tier.test.mjs
 test/hosting-capacity.test.mjs
+test/human-email-reply.test.mjs
 test/human-line-first.test.mjs
 test/human-relay-artifact.test.mjs
 test/hyperscaler-deals-schema.test.mjs
