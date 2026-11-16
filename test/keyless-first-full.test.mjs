@@ -551,6 +551,10 @@ describe('J) execute_plan end to end with its steps run: call 1 is full depth wi
     expect(typeof h1.answer).toBe('string');
     expect(h1.answer, 'the answer is not the steps fallback').not.toMatch(/^DC Hub ran \d+ reads?/);
     expect(h1.answer).not.toMatch(/\(preview\)/);
+    // 2026-11-16 (Grok Note K): totals.tier_note said "steps returned preview depth" on this full-depth plan
+    const tn1 = ((r1.structuredContent && r1.structuredContent.totals) || h1.totals || {}).tier_note;
+    expect(tn1).toMatch(/first full answer: steps ran at full depth/);
+    expect(tn1).not.toMatch(/preview depth|claim_free_key/);
     // the backend heard the full-depth tier on every step read
     const stepReads = writes.backend.filter((w) => w.path.startsWith('/api/v1/grid/') || w.path.startsWith('/api/v1/interconnection-queue/'));
     expect(stepReads.length).toBeGreaterThan(0);
@@ -568,6 +572,9 @@ describe('J) execute_plan end to end with its steps run: call 1 is full depth wi
     resetWrites();
     const r2 = await call('execute_plan', seat({ client_ip: ip }), PLAN);
     expect(head(r2).first_full_answer).toBeUndefined();
+    const tn2 = ((r2.structuredContent && r2.structuredContent.totals) || head(r2).totals || {}).tier_note;
+    expect(tn2).toMatch(/steps returned preview depth/);
+    expect(tn2).not.toMatch(/claim_free_key/);
     const prev = executed(r2).filter((e) => e.status === 'gated_preview' || e.depth === 'preview');
     expect(prev.length, JSON.stringify(executed(r2).map((e) => [e.tool, e.status, e.depth]))).toBeGreaterThan(0);
     const stepReads = writes.backend.filter((w) => w.path.startsWith('/api/v1/grid/') || w.path.startsWith('/api/v1/interconnection-queue/'));
