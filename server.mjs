@@ -15317,6 +15317,11 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   // Pro and above read everything: no walk.
   const t = String((c && c.tier) || '').trim().toLowerCase();
   if (_tierIsProOrAbove(t) || (t === 'paid' && !(c && c.api_key))) return result;
+  // An execute_plan served as its caller's first full answer of the day (owner 2026-11-15, Grok note G):
+  // its steps ran at full depth (KEYLESS_FIRST_FULL_STEP_TIER), so this walk at the caller's own tier
+  // re-masked every DCPI score, time to power and queue wait they returned (measured live 2026-11-16 on
+  // 2.12.58, ERCOT). The plan is the one full answer: no walk. Later plans today are previews again.
+  if (name === 'execute_plan' && c && c._kffPlan === true && !c.loopback_step) return result;
   let st = null;
   try { st = _muState(); } catch (_) { st = null; }
   const priorGates = !!(st && st.gates && st.gates.size > 0);
