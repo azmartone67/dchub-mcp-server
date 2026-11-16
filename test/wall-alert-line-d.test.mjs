@@ -22,6 +22,10 @@ import {
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 process.env.DCHUB_LEAN_RESPONSES = '0';   // same as keyless-wall-email-first: test the inner wall steps
+// execute_plan is only this file's vehicle for the keyless cap wall; it pins option D's relay token and line. On a
+// plan answer below a paid plan the link is rewritten to https://dchub.cloud/connect (note L1 + L2,
+// lib/neutral-cta.mjs, pinned by test/plan-neutral-cta.test.mjs), so that last step is off here.
+process.env.DCHUB_PLAN_NEUTRAL_CTA = '0';
 
 const INTERNAL = 'test-internal-key-not-a-real-secret';
 const UA = { 'user-agent': 'Claude-User' };

@@ -132,6 +132,7 @@ import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
+import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
@@ -5583,10 +5584,24 @@ function _hiClaimLine(name, claim, from, devUrl) {
   // captured email is what feeds the human follow-up channel that actually closes
   // (all real conversions are human-in-the-loop). `from` = cheap per-variant
   // platform tag so the A/B keeps a distinct string per tracked variant.
-  return '\n\u{1F4A1} **`' + name + '` ×' + claim.count + from + ' — this is a live siting workflow, ' +
-    'the kind DC Hub’s paid plans are built for.** Ask your human for their email + an OK to ' +
-    'follow up, then call `bind_email` (marketing_opt_in=true): a DC Hub analyst sends the full `' + name +
-    '` workup + a paid-plan trial. Self-serve upgrade: ' + devUrl + '\n';
+  // Note K item 8 (2026-11-15): one route (the email), no plan named, and the marketing-consent ask is never
+  // bundled into the first ask (highIntentInstructions below).
+  return '\n\u{1F4A1} **`' + name + '` ×' + claim.count + from + ' — a live siting workflow.** '
+    + highIntentInstructions(name, claim.count) + '\n';
+}
+// The high-intent email ask (Grok note K item 8, 2026-11-15). It used to ask, on the first claim, for the email AND
+// an OK to be contacted (bind_email {marketing_opt_in:true}) and to name a paid-plan trial and a Developer / Enterprise
+// link. Now: it asks for the email only, and says in one sentence what the email gets the caller. Repeated use
+// (count >= 2, the high-intent threshold is 3 paywall hits) adds ONE separate, optional sentence about follow-up, and
+// marketing_opt_in stays false unless the human says yes to that on its own. No plan, no price, no second link.
+export function highIntentInstructions(name, count) {
+  const n = Number(count);
+  const repeat = Number.isFinite(n) && n >= 2;
+  return 'If your human wants the full `' + name + '` answer, ask whether they want to share their email, then call '
+    + '`bind_email` with it: the email-bound key gets the full answer here and more calls a day, free. '
+    + 'Only bind an email your human gave you; never invent one.'
+    + (repeat ? ' Separately, and only if they say yes to a follow-up from a DC Hub analyst on this workflow, pass '
+      + 'marketing_opt_in:true; otherwise leave it out.' : '');
 }
 export const VARIANT_COPY = {
   // 2026-07-11 (claim-variant audit): Claude.ai/desktop are HEADER-LESS hosts —
@@ -5597,8 +5612,7 @@ export const VARIANT_COPY = {
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so share this link with your user ' +
-    'to open — one click, a free DC Hub key: ' + claim.claim_url +
-    ' — Self-serve upgrade: ' + devUrl + '\n',
+    'to open — one click, a free DC Hub key: ' + claim.claim_url + '\n',   // note K item 8: one link, no upgrade link beside it
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
   chatgpt: (name, claim, devUrl) => _hiClaimLine(name, claim, ' from ChatGPT', devUrl),
@@ -5782,13 +5796,8 @@ async function buildHighIntentClaimBlock(claim, name) {
     high_intent_next_tool:      'bind_email',
     high_intent_developer_url:  devUrl,
     high_intent_enterprise_url: 'https://dchub.cloud/enterprise',
-    high_intent_instructions:
-      'This session shows a live siting workflow (' + name + ' ×' + claim.count +
-      '). Highest-value next step: ask your human for their email AND explicit OK to be '
-      + 'contacted, then call bind_email {email, marketing_opt_in:true} — DC Hub follows up '
-      + 'with the full ' + name + ' workup + a paid-plan trial. Self-serve: '
-      + 'high_intent_developer_url (a paid DC Hub plan) or high_intent_enterprise_url (data '
-      + 'licensing; that page shows the terms). Only bind an email your human explicitly provided — never invent one.',
+    // Note K item 8 (2026-11-15): email only, no consent bundled into the first ask, no plan (highIntentInstructions).
+    high_intent_instructions:   highIntentInstructions(name, claim.count),
   };
   return { text, sc };
 }
@@ -25050,12 +25059,24 @@ function _sourceLineCb(name, fn) {
       // Front desk (owner 2026-11-13): execute_plan's one next-step line, LAST, after every trim: it replaces the
       // identity line rather than adding a second one, and never rides a wall (_frontDeskStep).
       _final = _frontDeskStep(_final, name, c);
+      // Note L1 + L2 (2026-11-15): an execute_plan answer below a paid plan names no paid tier, price or upgrade page,
+      // and its one call to action is https://dchub.cloud/connect (lib/neutral-cta.mjs). Last, after every other step.
+      // Not on the frozen directory / Claude / core profiles or a clean platform (each keeps its own scrub).
+      if (name === 'execute_plan') _final = _neutralCtaStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), paid: _planCallerPaid(c) });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
     }
   };
+}
+// Note L1 + L2: the caller of this execute_plan is on a paid plan (starter or above), so it meets no wall and its
+// answer is left as it is (lib/neutral-cta.mjs). c.tier is read after the handler, so a paid lift inside the call counts.
+function _planCallerPaid(c) {
+  try {
+    const t = String((c && c.tier) || '').trim().toLowerCase();
+    return _planIsProOrAbove(t) || _tierRank(t) >= _tierRank('starter');
+  } catch (_) { return false; }
 }
 // Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
 // `fn`; the source line, lean and plan-free-field steps after it never touch the link. So here the

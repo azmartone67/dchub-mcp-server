@@ -448,7 +448,9 @@ test/place-name-iso.test.mjs
 test/plan-caller-ip.test.mjs
 test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
+test/plan-envelope-once.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-neutral-cta.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
@@ -660,6 +662,7 @@ test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-oauth-lead.test.mjs
 test/wall-offers.test.mjs
+test/wall-one-route.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs
 test/wall-transport.test.mjs

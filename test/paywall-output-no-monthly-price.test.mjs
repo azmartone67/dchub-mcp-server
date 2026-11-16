@@ -179,7 +179,7 @@ describe('tools/call OUTPUT: no monthly price on any /mcp tool', () => {
         const body = String(r.body || '');
         seen.calls++;
         if (body.includes(PLANTED_BACKEND_NOTE)) seen.plant++;
-        if (/on a paid DC Hub plan with a 7-day free trial/.test(body)) seen.relayArm++;   // offerText('pro'), v13
+        if (/behind this link, with a 7-day free trial/.test(body)) seen.relayArm++;   // offerText('pro'), note K item 8 (was v13's "on a paid DC Hub plan ...")
         if (/\/go\/c\/|\/upgrade\/h\//.test(body)) seen.walls++;
         const m = body.split(PLANTED_BACKEND_NOTE).join('').match(MONTHLY);
         if (m) {

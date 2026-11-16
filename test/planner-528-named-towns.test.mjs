@@ -203,10 +203,15 @@ describe('provenance once per plan (D1)', () => {
 
   it('identity / quota go only when equal to the top level; data rows untouched; next_session once at the top', () => {
     const src = plan();
+    // D1 alone (DCHUB_PLAN_ENVELOPE_ONCE=0): a differing identity stays on its step.
+    expect(planProvenanceOnceObject(src, { envelopeOnce: false }).value.executed[1].result.identity).toEqual({ tier: 'other' });
     const { value } = planProvenanceOnceObject(src);
     expect(value.executed[0].result.identity).toBeUndefined();
     expect(value.executed[0].result.quota).toBeUndefined();
-    expect(value.executed[1].result.identity).toEqual({ tier: 'other' });
+    // Note K item 9 (envelope once, the default): identity is emitted once, at the top; a step served under a
+    // different tier keeps only that tier as `served_as`.
+    expect(value.executed[1].result.identity).toBeUndefined();
+    expect(value.executed[1].result.served_as).toBe('other');
     for (let i = 0; i < 3; i++) expect(value.executed[i].result.rows).toEqual(src.executed[i].result.rows);
     expect(value.executed[0].result.next_session).toBeUndefined();
     expect(value.executed[1].result.next_session).toBeUndefined();
