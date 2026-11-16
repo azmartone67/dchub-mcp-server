@@ -149,7 +149,8 @@ describe('tools/list on each endpoint', () => {
     for (const d of [rf.description, re.description]) {
       expect(d).not.toMatch(/your human|\bstale\b/i);
       expect(d).not.toMatch(FORBIDDEN);
-      expect(d).toMatch(/Free; works with or without a key\./);
+      expect(d).toMatch(/Works with or without a key\./);
+      expect(d).not.toMatch(/\bfree\b/i);
     }
     expect(rf.annotations.readOnlyHint).toBe(false);
     expect(re.annotations.readOnlyHint).toBe(false);
