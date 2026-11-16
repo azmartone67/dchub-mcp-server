@@ -172,7 +172,8 @@ describe('buildHighIntentClaimBlock prints the Developer link through /go/c what
     expect(parts[0]).toBe('developer');
     expect(parts[1]).toMatch(/^a-[0-9a-f]{32}$/);
     expect(parts).toHaveLength(2);
-    expect(text).toContain(sc.high_intent_developer_url);
+    // Note K item 8 (2026-11-15): the prose names one route, the email, so the signed link stays a machine field.
+    expect(text).not.toContain(sc.high_intent_developer_url);
     expect(JSON.stringify({ text, sc })).not.toContain('buy.stripe.com');
   });
 

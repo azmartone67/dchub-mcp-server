@@ -14,6 +14,10 @@ import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs
 import { OAUTH_LEAD, GROK_OAUTH_LEAD, OAUTH_SIGNIN_URL, GROK_OAUTH_SIGNIN_URL, wallOauthLeadEligible, wallOauthLeadLine,
   withOauthLeadLine, wallOauthLeadOn } from '../lib/wall-oauth-lead.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
+// Note K item 8 (2026-11-15): a wall now carries ONE route (lib/wall-offers.mjs oneRoute). This file pins the stacked
+// offers (sign-in lead + floor + depth trial) that the kill switch DCHUB_WALL_ONE_ROUTE=0 keeps;
+// test/wall-one-route.test.mjs pins the one-route default.
+process.env.DCHUB_WALL_ONE_ROUTE = '0';
 
 let S, fence;
 const prev = {};

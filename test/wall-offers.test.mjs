@@ -23,6 +23,10 @@ import { wallOauthLeadEligible, wallOauthLeadLine, OAUTH_SIGNIN_URL } from '../l
 import { depthTrialEligible, depthTrialLine, DEPTH_TRIAL_TOOLS } from '../lib/wall-depth-trial.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
 import { TIER_CANON } from '../lib/tier-canon.mjs';
+// Note K item 8 (2026-11-15): a wall now carries ONE route (lib/wall-offers.mjs oneRoute). This file pins the stacked
+// offers (sign-in lead + floor + depth trial) that the kill switch DCHUB_WALL_ONE_ROUTE=0 keeps;
+// test/wall-one-route.test.mjs pins the one-route default.
+process.env.DCHUB_WALL_ONE_ROUTE = '0';
 
 // These tests pin the keyless wall a caller meets AFTER its first full answer of the day
 // (lib/keyless-first-full.mjs, #1438). With that grant on, a keyless first call to
@@ -30,7 +34,7 @@ import { TIER_CANON } from '../lib/tier-canon.mjs';
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 const LINK = 'https://dchub.cloud/u/abcdef';
-const ENV = {};   // no kill switch set: every offer on
+const ENV = { DCHUB_WALL_ONE_ROUTE: '0' };   // every offer on; the stacked composition (note K item 8 kill switch)
 
 // The composition the floor step ran before the builder (server.mjs _wallOfferFloorStep / _oauthLead / _depthTrial
 // on origin/main 2026-11-14), from the same primitives, keyed on the identity THIS call is served with.

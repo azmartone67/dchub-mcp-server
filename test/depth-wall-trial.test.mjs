@@ -27,6 +27,10 @@ import { DEPTH_TRIAL_LEAD, DEPTH_TRIAL_TOOLS, depthTrialLine, depthTrialEligible
 import { OAUTH_LEAD } from '../lib/wall-oauth-lead.mjs';
 import { FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
+// Note K item 8 (2026-11-15): a wall now carries ONE route (lib/wall-offers.mjs oneRoute). This file pins the stacked
+// offers (sign-in lead + floor + depth trial) that the kill switch DCHUB_WALL_ONE_ROUTE=0 keeps;
+// test/wall-one-route.test.mjs pins the one-route default.
+process.env.DCHUB_WALL_ONE_ROUTE = '0';
 
 const SEVEN = ['list_transactions', 'get_pipeline', 'get_dchub_recommendation', 'hyperscaler_deals', 'compare_isos',
   'get_intelligence_index', 'get_air_permit_context'];

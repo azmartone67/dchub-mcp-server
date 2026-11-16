@@ -19,8 +19,14 @@ describe('agent-facing Enterprise copy', () => {
   it('the scan can fire on the text it replaced', () => {
     expect("high_intent_enterprise_url ($25k+/yr data ").toMatch(/\$25k/i);
   });
-  it('the high-intent hint still names the enterprise lane', () => {
-    // v14 (owner 2026-10-10): the lane is named by its field; the copy names no plan.
-    expect(code).toContain("high_intent_enterprise_url (data '\n      + 'licensing; that page shows the terms)");
+  it('the high-intent hint is the email route alone (note K item 8, 2026-11-15)', () => {
+    // v14 (owner 2026-10-10) named the Enterprise lane by its field beside a Developer link. Note K item 8: the hint
+    // names one route (the email) and no plan lane; high_intent_enterprise_url stays a machine field.
+    expect(code).toContain('high_intent_instructions:   highIntentInstructions(name, claim.count)');
+    const fn = code.slice(code.indexOf('export function highIntentInstructions('));
+    const body = fn.slice(0, fn.indexOf('\n}\n'));
+    expect(body.length).toBeGreaterThan(100);
+    expect(body).toMatch(/`bind_email`/);
+    expect(body).not.toMatch(/enterprise|developer|paid|\bplans?\b|\$\d/i);
   });
 });

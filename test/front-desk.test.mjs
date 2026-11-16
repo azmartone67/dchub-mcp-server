@@ -224,7 +224,8 @@ describe('never on a wall, never a second line (item 2)', () => {
   it('a keyless plan whose steps were walled (and slimmed) carries its relay link and no front-desk line; its row is unmarked and sent once', async () => {
     const r = await plan('analyze the site at 32.77,-96.79 for a data center', { key: null });
     const all = r.blocks.join('\n');
-    expect(all, 'precondition: the answer carries a relay link').toMatch(/dchub\.cloud\/(?:u|upgrade\/h)\//);
+    // Note L1 + L2 (2026-11-15): a keyless execute_plan wall's one link is /connect (lib/neutral-cta.mjs).
+    expect(all, 'precondition: the answer carries its wall link').toMatch(/dchub\.cloud\/(?:(?:u|upgrade\/h)\/|connect\b)/);
     expect(r.fd).toEqual([]);
     expect(all).not.toMatch(/agent-referral/);
     expect(r.rows.length).toBe(1);
