@@ -160,9 +160,44 @@ describe('one durable key per MCP session (Grok note N item 3)', () => {
   });
 });
 
+describe('_withReuseKeyLine (unit)', () => {
+  const res = (text, sc = {}) => ({ content: [{ type: 'text', text }], structuredContent: sc });
+  it('bind_email on a key the caller already held: key + line close the prose, named in bound_api_key', () => {
+    const out = S._withReuseKeyLine(res('Bound human@acme-infra.com to your key.', { ok: true, bound: true }), KEY);
+    expect(out.content[0].text.endsWith('**Your key:** `' + KEY + '`\n' + S.REUSE_KEY_LINE)).toBe(true);
+    expect(out.structuredContent.bound_api_key).toBe(KEY);
+    // api_key on a bind_email result means "minted by this call" to set_market_alert: never added here.
+    expect(out.structuredContent.api_key).toBeUndefined();
+    expect(out.structuredContent.reuse_key_line).toBe(S.REUSE_KEY_LINE);
+  });
+  it('a claim reply with a client snippet: the line goes after the snippet block, not between key and heading', () => {
+    const t = '**Your key:** `' + KEY + '`\n\n**Save it for Cursor** (`~/.cursor/mcp.json`):\n```\n{}\n```\nOther clients: https://dchub.cloud/connect\n\nMore prose.';
+    const out = S._withReuseKeyLine(res(t, { ok: true, api_key: KEY }), KEY).content[0].text;
+    const iKey = out.indexOf('**Your key:**'), iHead = out.indexOf('**Save it for'), iLine = out.indexOf(S.REUSE_KEY_LINE);
+    expect(out.slice(iKey, iHead).split('\n').filter(Boolean)).toHaveLength(1);
+    expect(iLine).toBeGreaterThan(out.indexOf('Other clients: https://dchub.cloud/connect'));
+    expect(iLine).toBeLessThan(out.indexOf('More prose.'));
+    expect(out.split(S.REUSE_KEY_LINE).length - 1).toBe(1);
+  });
+  it('an error result, a refused result or a trial key gets nothing', () => {
+    const e = { ...res('nope'), isError: true };
+    expect(S._withReuseKeyLine(e, KEY)).toBe(e);
+    const r = res('refused', { ok: false });
+    expect(S._withReuseKeyLine(r, KEY)).toBe(r);
+    const t = res('ok', { ok: true });
+    expect(S._withReuseKeyLine(t, 'dch_trial_abc')).toBe(t);
+  });
+});
+
 describe('_sessionKeyMintSkip', () => {
   it('skips for a durable session key, never for a trial seat or a keyless caller', () => {
     expect(S._sessionKeyMintSkip({ api_key: KEY, auth_source: 'session' }, {})).toBe(true);
+    expect(S._sessionKeyMintSkip({ api_key: KEY, auth_source: 'none' }, {})).toBe(true);
+    expect(S._sessionKeyMintSkip({ api_key: KEY, auth_source: 'session_restore' }, {})).toBe(true);
+    // A key presented on the request is F-1's call (its own kill switch, DCHUB_MINT_SKIP_KEYED).
+    for (const ch of ['header', 'bearer', 'query', 'inline_argument']) {
+      expect(S._sessionKeyMintSkip({ api_key: KEY, auth_source: ch }, {}), ch).toBe(false);
+    }
     expect(S._sessionKeyMintSkip({ api_key: 'dch_trial_abc', auth_source: 'session' }, {})).toBe(false);
     expect(S._sessionKeyMintSkip({ api_key: null }, {})).toBe(false);
     expect(S._sessionKeyMintSkip({ api_key: KEY }, { DCHUB_MINT_SKIP_SESSION_KEY: '0' })).toBe(false);

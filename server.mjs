@@ -6562,10 +6562,14 @@ export function _autoTrialMintOn(env = process.env) {
 // Grok note N item 3: true when the request's session already holds a durable DC Hub key
 // (claim_free_key / bind_email bound it, or the caller sent one), so no walled call may mint
 // another. A dch_trial_ seat is not durable and keeps its own path. See mintAutoTrial.
+// A key PRESENTED on the request is F-1's (its own kill switch, DCHUB_MINT_SKIP_KEYED); this covers
+// the key the session holds with no credential on the request: auto-bound in this session
+// (auth_source 'none' + api_key) or restored server-side from the session's claim
+// ('session_restore'). Both are the session's own claimed / bound key.
 export function _sessionKeyMintSkip(c, env = process.env) {
   if (/^(0|off|false|no)$/i.test(String((env && env.DCHUB_MINT_SKIP_SESSION_KEY) || '').trim())) return false;
   const k = c && c.api_key ? String(c.api_key) : '';
-  return !!k && !k.startsWith('dch_trial_');
+  return !!k && !k.startsWith('dch_trial_') && !_keyPresentedOnRequest(c);
 }
 
 export async function mintAutoTrial(tool_name) {
@@ -6753,6 +6757,9 @@ export function _noteKeyHanded(key) {
     _keysHandedWithSnippet.set(String(key), Date.now());
   } catch (_) { /* best-effort */ }
 }
+// The last words of the claim reply's per-client snippet block (_ownSnippetBlock and the older
+// "Save it for" block both end with this pointer).
+const _SNIPPET_BLOCK_END = 'Other clients: https://dchub.cloud/connect';
 export function _withReuseKeyLine(result, key) {
   try {
     if (!result || typeof result !== 'object' || result.isError === true) return result;
@@ -6773,16 +6780,23 @@ export function _withReuseKeyLine(result, key) {
         const t = content[i].text;
         const anchor = '**Your key:** `' + k + '`';
         const at = t.indexOf(anchor);
-        // Directly under the key line when the reply has one; else at the end of the prose.
-        const eol = at >= 0 ? t.indexOf('\n', at + anchor.length) : -1;
+        // Under the key, after the client's own snippet block when the reply carries one (owner
+        // 2026-11-13: nothing but the heading sits between the key line and that snippet); with
+        // no key line (bind_email on a key the caller already holds), the key and the line close
+        // the prose.
+        const snipEnd = at >= 0 ? t.indexOf(_SNIPPET_BLOCK_END, at) : -1;
+        const cut = snipEnd >= 0 ? snipEnd + _SNIPPET_BLOCK_END.length
+          : (at >= 0 ? t.indexOf('\n', at + anchor.length) : -1);
         const text = at >= 0
-          ? (eol >= 0 ? t.slice(0, eol) + '\n' + REUSE_KEY_LINE + t.slice(eol) : t + '\n' + REUSE_KEY_LINE)
-          : t + '\n\n' + REUSE_KEY_LINE;
+          ? (cut >= 0 ? t.slice(0, cut) + '\n' + REUSE_KEY_LINE + t.slice(cut) : t + '\n' + REUSE_KEY_LINE)
+          : t + '\n\n' + anchor + '\n' + REUSE_KEY_LINE;
         nc = content.map((b, j) => (j === i ? { ...b, text } : b));
       }
     }
+    // api_key on a bind_email result means "this call minted it" to its callers (set_market_alert's
+    // one-call watch), so a key the caller already held is named in bound_api_key instead.
     return { ...result, content: nc,
-      structuredContent: { ...(sc || {}), api_key: (sc && sc.api_key) || k, reuse_key_line: REUSE_KEY_LINE } };
+      structuredContent: { ...(sc || {}), ...((sc && sc.api_key) ? {} : { bound_api_key: k }), reuse_key_line: REUSE_KEY_LINE } };
   } catch (_) { return result; }
 }
 export const ALREADY_HAVE_KEY_GUIDANCE = 'You already have a DC Hub key: keep using it (send it as X-API-Key) and do not claim again. ' +
