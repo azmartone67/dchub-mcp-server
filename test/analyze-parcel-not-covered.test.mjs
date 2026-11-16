@@ -125,7 +125,9 @@ describe('analyze_parcel: uncovered point -> preview + coverage list', () => {
     expect(pv.power_cost.rate_cents_kwh ?? null).toBe(null);
     expect(pv.nearby.substations_50km).toBe(7);           // counts stay, as in analyze_site's preview
     expect(pv.site_teaser).toMatchObject({ verdict: 'BUILD', power_infrastructure: 'BUILD' });
-    const all = JSON.stringify(r.sc) + r.text;
+    // ISO timestamps (retrieved_at, as_of) are masked first: a clock reading like 09:04:07.425Z
+    // contains '7.42' and failed this on main (run 43835051693) with no figure leaked.
+    const all = (JSON.stringify(r.sc) + r.text).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<ts>');
     expect(all).not.toContain('Test Sub XYZ');
     expect(all).not.toContain('83.7');
     expect(all).not.toContain('7.42');
