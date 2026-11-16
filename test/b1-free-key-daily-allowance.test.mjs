@@ -18,9 +18,13 @@
 //     daily allowance is made of).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-const B1_SENTENCE = 'Anonymous: previews, no key needed. Free key: previews plus 2 full answers '
-  + 'per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). '
-  + 'Paid plans: dchub.cloud/pricing.';
+// 2026-11-16 (owner, Grok Note K): the rule leads with the keyless first full answer and no longer
+// sells the free key, so it reads the same under either free-key shape (the free-key copy below still
+// follows the shape). Byte for byte dchub-backend ai_surface_canon PINNED['free_tier_rule'].
+const B1_SENTENCE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
+  + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
+  + 'Higher limits: dchub.cloud/pricing.';
 const LIFETIME = {
   calls_per_day: { identified: 50 },
   allowance: {
@@ -53,9 +57,7 @@ describe('B1 free-key copy follows the published shape', () => {
     expect(TC._freeKeyAllowanceText(LIFETIME)).toBe('10 calls to try, 50/day with an email');
     expect(TC._unboundKeyLadderText(LIFETIME))
       .toBe("10 free calls total, then results drop to previews until it's bound");
-    expect(TC._freeTierRuleText(LIFETIME)).toBe('Anonymous: previews, no key needed. '
-      + 'Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). '
-      + 'Paid plans: dchub.cloud/pricing.');
+    expect(TC._freeTierRuleText(LIFETIME)).toBe(B1_SENTENCE);
   });
 
   it('daily shape: the B1 sentence, byte for byte the backend pin', () => {

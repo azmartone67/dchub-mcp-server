@@ -33,14 +33,32 @@ const GATED = ['get_fiber_intel', 'get_grid_intelligence', 'analyze_site', 'comp
 const UNGATED = ['why_dchub', 'discover_tools', 'source_capacity'];
 
 describe('the gated-tool CTA', () => {
-  it('sends a gated tool through the tier-resolving upgrade route, attributed', () => {
+  // Grok note L item 5 (2026-11-15): directories republish tools/list annotations, so the
+  // gated tools' /pricing/upgrade URL became listing copy (Glama). Every tool now points at
+  // /connect, attributed; the per-caller upgrade link rides the gated RESULT only.
+  it('sends a gated tool to connect, attributed, with no pricing URL', () => {
     for (const name of GATED) {
       const tag = _accessTagFor(name);
       expect(['paid', 'metered'], `${name} is no longer gated — pick another fixture`)
         .toContain(tag.access);
-      expect(tag.pricing_url).toContain('/pricing/upgrade?tool=' + name);
-      expect(tag.pricing_url).toContain('ref=mcp-tools-list');
+      expect(tag.connect_url).toBe(`https://dchub.cloud/connect?ref=mcp-tools-list&tool=${name}`);
+      expect(tag.pricing_url, `${name} still carries a pricing URL`).toBeUndefined();
     }
+  });
+
+  it('POPULATION: no tag carries a pricing or upgrade URL, a price or a plan name', () => {
+    expect(ALL_TOOL_NAMES.length).toBeGreaterThan(60);
+    const offenders = [];
+    for (const name of ALL_TOOL_NAMES) {
+      const tag = _accessTagFor(name);
+      const urls = JSON.stringify([tag.connect_url, tag.pricing_url]);
+      const copy = JSON.stringify([tag.free_answer, tag.upgrade_relay]);
+      if (/\/pricing|\/upgrade|checkout|stripe/i.test(urls)
+        || /\$\s?\d|paid (DC Hub )?plan|credit pack|pricing_url|\b(Pro|Developer|Starter|Enterprise) (plan|tier)\b/i.test(copy)) {
+        offenders.push(name);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('names where the tokenized link actually comes from', () => {
@@ -111,19 +129,16 @@ describe('the gated-tool CTA', () => {
       .toEqual([]);
   });
 
-  it('POPULATION: every tool carries exactly one destination, and the right one', () => {
+  it('POPULATION: every tool carries exactly one destination, connect; gated tools keep the relay pointer', () => {
     const names = ALL_TOOL_NAMES;
     for (const name of names) {
       const tag = _accessTagFor(name);
-      // The destination follows the PAYWALL class, not the advertised access:
-      // A2 (2026-10-03) relabelled two Pro tools paid without moving their
-      // link (pricing A/B 10-04..10-18), see test/tier-required-tag.test.mjs.
       const gc = _accessGateClass(name);
       const gated = gc === 'paid' || gc === 'metered';
-      expect(Boolean(tag.pricing_url), `${name} (${tag.access}): pricing_url presence`)
-        .toBe(gated);
-      expect(Boolean(tag.connect_url), `${name} (${tag.access}): connect_url presence`)
-        .toBe(!gated);
+      expect(tag.pricing_url, `${name} (${tag.access}): pricing_url`).toBeUndefined();
+      expect(tag.connect_url, `${name} (${tag.access}): connect_url`)
+        .toBe(`https://dchub.cloud/connect?ref=mcp-tools-list&tool=${encodeURIComponent(name)}`);
+      expect(Boolean(tag.upgrade_relay), `${name} (${tag.access}): upgrade_relay presence`).toBe(gated);
     }
   });
 
@@ -142,5 +157,17 @@ describe('the gated-tool CTA', () => {
     // the stateless cached path and the registration path.
     expect((SRC.match(/function _accessTagFor\(/g) || []).length).toBe(1);
     expect((SRC.match(/_accessTagFor\(/g) || []).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Grok note L item 5 (2026-11-15): the BUILT tools/list, every tool and every field, is
+// what Glama and the registry cascade scrape. No pricing or upgrade URL may ride it.
+describe('the built tools/list carries no pricing URL (note L item 5)', () => {
+  it('no tool, annotation or schema in tools/list names /pricing or /pricing/upgrade', async () => {
+    const S = await import('../server.mjs');
+    const tools = (await S._buildToolsListResult(null)).tools;
+    expect(tools.length).toBeGreaterThan(60);
+    const hits = tools.filter((t) => /dchub\.cloud\/pricing/.test(JSON.stringify(t))).map((t) => t.name);
+    expect(hits).toEqual([]);
   });
 });

@@ -161,7 +161,8 @@ async function runTool(name, args = GUESS_ARGS) {
   for (const n of [1, 2, 3]) out.push({ where: 'session#' + n, ...(await call(name, args, s)) });
   return out;
 }
-const PROSE_OFFER = /`(?:bind_email|subscribe_digest|claim_free_key)`|dchub\.cloud\/u\//;
+// Note L1 + L2 (2026-11-15): an execute_plan wall's one link is https://dchub.cloud/connect (lib/neutral-cta.mjs).
+const PROSE_OFFER = /`(?:bind_email|subscribe_digest|claim_free_key)`|dchub\.cloud\/u\/|dchub\.cloud\/connect\b/;
 // The rows of one call that broke the rule, as readable strings ([] = clean).
 function offenders(name, calls) {
   const bad = [];

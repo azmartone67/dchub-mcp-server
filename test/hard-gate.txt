@@ -83,6 +83,7 @@ test/challenge-bound-and-widen.test.mjs
 test/challenge-budget-key.test.mjs
 test/challenge-carries-human-line.test.mjs
 test/challenges-same-resource.test.mjs
+test/changelog-and-publish-gate.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs
@@ -128,6 +129,11 @@ test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
+test/compare-isos-array-arg.test.mjs
+test/compare-isos-bands-forwarded-tier.test.mjs
+test/compare-isos-coarse-bands.test.mjs
+test/compare-isos-consistency.test.mjs
+test/compare-isos-note-l-e2e.test.mjs
 test/compare-isos-source-composed.test.mjs
 test/comparison-primary-metro-e2e.test.mjs
 test/comparison-primary-metro.test.mjs
@@ -336,6 +342,7 @@ test/keyless-wall-anon-cap-daily-reset.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
+test/kff-plan-full-depth-real-loopback.test.mjs
 test/ladder-stage1.test.mjs
 test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
@@ -405,6 +412,7 @@ test/no-starter-offer.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
 test/npm-launcher-key-not-in-argv.test.mjs
+test/npm-launcher-start-hint.test.mjs
 test/npm-launcher-version-parity.test.mjs
 test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
@@ -442,10 +450,13 @@ test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
+test/plan-answer-budget.test.mjs
 test/plan-caller-ip.test.mjs
 test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
+test/plan-envelope-once.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-neutral-cta.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
@@ -460,6 +471,8 @@ test/planner-527-qa1114-e2e.test.mjs
 test/planner-527-qa1114.test.mjs
 test/planner-528-e2e.test.mjs
 test/planner-528-named-towns.test.mjs
+test/planner-529-e2e.test.mjs
+test/planner-529-note-k.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
@@ -503,6 +516,7 @@ test/ranked-answer.test.mjs
 test/readme-agent-policy.test.mjs
 test/readme-leads-with-dcpi.test.mjs
 test/readme-links-are-not-dead-ends.test.mjs
+test/readme-start-and-badges.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-categories-not-trimmed.test.mjs
 test/recommendation-returns-contract.test.mjs
@@ -597,6 +611,7 @@ test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
+test/sync-fix-changelog-entry.test.mjs
 test/tax-incentives-state-filter.test.mjs
 test/testimonials-resource.test.mjs
 test/tier-collapse-fix.test.mjs
@@ -655,6 +670,7 @@ test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-oauth-lead.test.mjs
 test/wall-offers.test.mjs
+test/wall-one-route.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs
 test/wall-transport.test.mjs

@@ -65,7 +65,10 @@ describe('get_grid_intelligence: queue_depth_gw is the generation queue', () => 
   it('ERCOT publishes 454.5 (generation), not 474 (large load)', () => {
     const out = shapeGridIntelligence('ERCOT', NO_GRID, NO_CMP, QSNAP);
     expect(out.queue_depth_gw).toBe(454.5);
-    expect(out.queue_depth_basis).toBe('large_load');
+    // Note K 6b (2026-11-15): the basis names what queue_depth_gw carries (ERCOT's generation queue),
+    // not the row's kind; ERCOT's large-load queue is named in queue_kinds_note.
+    expect(out.queue_depth_basis).toBe('generation_queue');
+    expect(out.queue_kinds_note).toMatch(/LARGE-LOAD/);
     expect(out.data_center_share_pct).toBe(90.0);
     expect('connections_queue_gw' in out).toBe(false);
   });

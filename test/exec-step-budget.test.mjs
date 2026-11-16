@@ -95,7 +95,7 @@ describe('execute_plan step budget (#210)', () => {
     // could not tell "works, we stopped waiting" from "this is broken" — and
     // reported the subject as unavailable.
     const mappings = SRC.match(/\?\s*'timed_out'/g) || [];
-    expect(mappings.length).toBe(2);                  // wave + deferred retry
+    expect(mappings.length).toBe(3);                  // wave + deferred retry + 5.29 guaranteed reads
     expect(SRC).not.toMatch(/'gated_preview'\s*:\s*'failed'/);
   });
 

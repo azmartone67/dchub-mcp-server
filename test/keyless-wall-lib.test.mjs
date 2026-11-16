@@ -55,23 +55,37 @@ describe('the email-first cap wall', () => {
     expect(r.structuredContent.human_url).toBe('https://dchub.cloud/u/abcdef');
     expect(r.structuredContent.for_your_human.url).toBe('https://dchub.cloud/u/abcdef');
   });
-  it('keeps the limit facts, drops sign-up links; wall offers pack/Pro (owner 2026-11-05)', () => {
+  // Note K item 8 (2026-11-15): owner 2026-11-05 put pack + Pro beside the email unlock on this wall (three routes,
+  // priced). Now one route, the email link, and no plan or price; DCHUB_WALL_ONE_ROUTE=0 brings the three back.
+  it('keeps the limit facts, drops sign-up links; ONE route, the email link (note K item 8)', () => {
     expect(r.structuredContent).toMatchObject({ error: 'anon_hard_wall', limit: 300, unlock_kind: 'email_cap' });
     expect(r.structuredContent.signup_url).toBeUndefined();
-    // Without signed pack/pro URLs the offer falls back to /pricing (still one email unlock link).
     const urls = [...new Set(JSON.stringify(r).match(/https:\/\/dchub\.cloud\/[A-Za-z0-9/#_.-]+/g) || [])];
-    expect(urls).toContain('https://dchub.cloud/u/abcdef');
-    expect(urls.some((u) => u.includes('/pricing'))).toBe(true);
+    // The email link stays the wall's human_url; the one route's own link is /connect (note L1 + L2).
+    expect(urls.sort()).toEqual(['https://dchub.cloud/connect', 'https://dchub.cloud/u/abcdef']);
     const opts = r.structuredContent.upgrade_options || [];
-    expect(opts.map((o) => o.id)).toEqual(['email_unlock', 'metered', 'pro']);
-    expect(opts.find((o) => o.id === 'metered').price).toMatch(/^\$/);
-    expect(opts.find((o) => o.id === 'pro').plan).toBe('pro');
+    expect(opts.map((o) => o.id)).toEqual(['email_unlock']);
+    expect(opts[0].url).toBe('https://dchub.cloud/connect');
+    expect(opts[0].plan).toBeUndefined();
+    expect(opts[0].price).toBeUndefined();
+    expect(r.structuredContent.credits_url).toBeUndefined();
+    expect(r.structuredContent.pro_url).toBeUndefined();
   });
-  it('wall upgrade surfaces may name pack/Pro; still no Developer/Starter', () => {
-    const s = JSON.stringify(r);
-    expect(s).not.toMatch(/\bDeveloper\b|\bStarter\b|buy\.stripe\.com/);
-    expect(s).toMatch(/\$\d|1,000-Credit Pack/);
-    expect(s).toMatch(/\bPro\b/);
+  it('the wall names no plan and no price', () => {
+    const signed = keylessCapEmailResult({ name: 'find_sites', link: 'https://dchub.cloud/u/abcdef',
+      packUrl: 'https://dchub.cloud/go/c/pack', proUrl: 'https://dchub.cloud/go/c/pro', base: { error: 'anon_hard_wall' } });
+    for (const w of [r, signed]) {
+      const s = JSON.stringify(w);
+      expect(s).not.toMatch(/\bDeveloper\b|\bStarter\b|\bPro\b|buy\.stripe\.com|\$\d|Credit Pack|\/go\/c\//);
+    }
+  });
+  it('CONTROL: DCHUB_WALL_ONE_ROUTE=0 brings back email + pack + Pro (the 2026-11-05 wall)', () => {
+    process.env.DCHUB_WALL_ONE_ROUTE = '0';
+    try {
+      const w = keylessCapEmailResult({ name: 'find_sites', link: 'https://dchub.cloud/u/abcdef', base: { error: 'anon_hard_wall' } });
+      expect((w.structuredContent.upgrade_options || []).map((o) => o.id)).toEqual(['email_unlock', 'metered', 'pro']);
+      expect(JSON.stringify(w)).toMatch(/\$\d|1,000-Credit Pack/);
+    } finally { delete process.env.DCHUB_WALL_ONE_ROUTE; }
   });
   it('no link, no wall', () => {
     expect(keylessCapEmailResult({ name: 'find_sites', link: '' })).toBe(null);

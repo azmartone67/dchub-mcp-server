@@ -149,9 +149,10 @@ describe('the committed snapshot carries the rule', () => {
     expect(FREE_TIER.identified_calls_per_day).toBe(50);
     expect(_rungNum('free')).toBeNull();
     expect(_rungNum('anonymous')).toBeNull();
-    expect(_freeTierRuleText()).toBe('Anonymous: previews, no key needed. Free key: previews plus 2 full '
-      + 'answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). '
-      + 'Paid plans: dchub.cloud/pricing.');
+    expect(_freeTierRuleText()).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
+      + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+      + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
+      + 'Higher limits: dchub.cloud/pricing.');
     expect(existsSync(join(ROOT, 'scripts/refresh-tier-limits.mjs'))).toBe(true);
   });
 });

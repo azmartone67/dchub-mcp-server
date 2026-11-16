@@ -167,3 +167,11 @@ describe('the server accepts a token minted for either resource on /mcp/oauth', 
 describe('no foreign network', () => {
   it('nothing left the loopback', () => { expect(foreign).toEqual([]); });
 });
+
+// Grok note L item 7 (2026-11-15): the protected-resource document names the server the
+// way serverInfo does, so an OAuth consent screen does not show the old display name.
+describe('MCP_OAUTH_PRM display name', () => {
+  it('resource_name is "DC Hub"', () => {
+    expect(MCP_OAUTH_PRM.resource_name).toBe('DC Hub');
+  });
+});

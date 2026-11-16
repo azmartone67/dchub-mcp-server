@@ -1670,6 +1670,20 @@
       "tracking_url": null,
       "added_at": "2026-11-15",
       "note": "Submitted by email 2026-11-14 10:08 PM MST (2026-11-15 05:08Z). No listing URL yet; set status live + listing_url when it appears."
+    },
+    {
+      "id": "agentnode",
+      "name": "AgentNode",
+      "status": "pending",
+      "status_text": "Ownership verified 2026-11-15; listing in AgentNode review",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": null,
+      "added_at": "2026-11-16",
+      "note": "Package ownership proved by the AgentNode keyword in npm dchub-mcp-server 2.12.58 (mcp#1457). No public listing URL yet; set status live + listing_url when it appears."
     }
   ]
 }

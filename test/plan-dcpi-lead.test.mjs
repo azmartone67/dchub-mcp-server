@@ -221,7 +221,8 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     // 2) with its citation line
     expect(v.cite).toMatch(SOURCE_RE);
     // 3) the offer (the plan's email ask, or the wall's one-link line) comes after it, in a later block
-    const offerAt = blocks.findIndex((t, i) => i > 0 && (t.includes(EMAIL_ASK) || /dchub\.cloud\/upgrade\//.test(t)));
+    // (Note L1 + L2, 2026-11-15: a keyless plan wall's one link is https://dchub.cloud/connect, lib/neutral-cta.mjs)
+    const offerAt = blocks.findIndex((t, i) => i > 0 && (t.includes(EMAIL_ASK) || /dchub\.cloud\/(?:upgrade\/|connect\b)/.test(t)));
     expect(offerAt, blocks.map((t) => t.slice(0, 80)).join(' | ')).toBeGreaterThan(0);
     // the verdict is the first key; the offer prose is not ahead of it inside block 0 either
     const at = blocks[0].indexOf(EMAIL_ASK);
