@@ -8,12 +8,16 @@
 //   * gated fields are described neutrally, and an offer line states only canon's two free offers;
 //   * CONTROL: with DCHUB_PLAN_NEUTRAL_CTA=0 the same plan breaks the rule, so the check can fail.
 // The backend fixture plants the wording Grok saw ("paid data tier", "paid upgrade", a /pricing and a checkout link)
-// so the boundary is proven to remove it rather than assumed never to receive it.
+// in the step's CTA fields, where the server puts wall copy.
+// DATA IS NEVER REWRITTEN (coordinator, blocking on mcp#1465): an energy-price / gas-index plan's step data
+// ($/MWh, $/MMBtu, a deal value, an incentive amount) is byte-identical with the switch on and off. The bare
+// "$<digit>" of the banned pattern is therefore a check for the compare plan, whose data carries no dollar figure.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
-import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL } from '../lib/neutral-cta.mjs';
+import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL, CTA_KEYS, COMMERCE_KEY } from '../lib/neutral-cta.mjs';
+import { leanObject } from '../lib/lean-response.mjs';
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 export const BANNED = /paid upgrade|paid data tier|paid (plan|tier|key)|upgrade page|\/pricing|\/upgrade|checkout|stripe|\$\d|\b(Pro|Developer|Enterprise|Starter) plan/i;
@@ -24,10 +28,16 @@ const INTENT = 'compare ERCOT vs PJM vs MISO for 100 MW by 2028';
 const FREE_KEY = 'dch_live_FREEgatewaykey0123456789abcd';
 const PLANTED = 'Full rows are behind a paid data tier (paid upgrade): https://dchub.cloud/pricing or https://checkout.stripe.com/c/pay/x.';
 
+// The wall / offer copy rides the step's CTA fields (where the server puts it); data fields carry real figures.
+const WALL = { human_message: PLANTED, for_your_human: { text: PLANTED, url: 'https://dchub.cloud/pricing' } };
+// Data that must come out byte-identical (coordinator, blocking on mcp#1465): cited prices are never rewritten.
+const PRICES = { price_note: 'Real-time LMP averaged $45/MWh; Henry Hub gas $3.12/MMBtu.', deal_value: '$1.2B',
+  incentive: '$25,000,000 sales-tax exemption over 10 years', lmp_usd_mwh: 45.2,
+  rows: [{ hub: 'HB_NORTH', price: '$45.20/MWh' }, { hub: 'Henry Hub', price: '$3.12/MMBtu' }] };
 const GI = (iso) => ({ iso, demand_mw: 93825, demand_period: '2026-11-14T14', peak_mw: 102346, min_mw: 85900, load_factor: 0.839,
-  queue_depth_gw: 373.6, market_count: 64, generation_mix: { NG: { mw: 40289 } }, as_of: '2026-11-14T14:00:00Z', note: PLANTED,
+  queue_depth_gw: 373.6, market_count: 64, generation_mix: { NG: { mw: 40289 } }, as_of: '2026-11-14T14:00:00Z', ...WALL,
   demand_24h: Array.from({ length: 8 }, (_, i) => ({ period: `2026-11-14T0${i}`, mw: 90000 + i })) });
-const QUEUE = (iso) => ({ iso, total_projects: 1174, total_gw: 373.6, as_of: '2026-11-14', note: PLANTED,
+const QUEUE = (iso) => ({ iso, total_projects: 1174, total_gw: 373.6, as_of: '2026-11-14', ...WALL,
   projects: Array.from({ length: 6 }, (_, i) => ({ name: `Q${i}`, mw: 100 + i, fuel: 'solar', status: 'active', state: 'TX' })) });
 
 let H, fence;
@@ -59,9 +69,10 @@ beforeAll(async () => {
       if (p === '/api/v1/mcp/anon-usage') return { count: 0 };
       if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
       const iso = ((p.match(/\/(ERCOT|PJM|MISO)\b/i) || [])[1] || 'ERCOT').toUpperCase();
+      if (/energy|gas|price|dcgi|lmp/i.test(p)) return { success: true, iso, as_of: '2026-11-14', ...PRICES, ...WALL };
       if (p.startsWith('/api/v1/grid/')) return GI(iso);
       if (p.includes('queue')) return QUEUE(iso);
-      return { success: true, count: 3, as_of: '2026-11-14', note: PLANTED, data: [{ iso: 'ERCOT', mw: 1 }, { iso: 'PJM', mw: 2 }] };
+      return { success: true, count: 3, as_of: '2026-11-14', ...WALL, data: [{ iso: 'ERCOT', mw: 1 }, { iso: 'PJM', mw: 2 }] };
     },
   });
 }, 120_000);
@@ -94,10 +105,10 @@ function rpc(headers, body) {
   });
 }
 let ip = 1, rid = 7000;
-async function plan(extraHeaders = {}, { planted = false, walled = false } = {}) {
+async function plan(extraHeaders = {}, { planted = false, walled = false, intent = INTENT } = {}) {
   PLANTED_BACKEND = planted; ANON_COUNT = walled ? 999 : 0;
   const msg = await rpc({ 'user-agent': 'cursor/1.0', 'x-dc-client-ip': `198.51.120.${ip++}`, ...extraHeaders },
-    { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name: 'execute_plan', arguments: { intent: INTENT } } });
+    { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name: 'execute_plan', arguments: { intent } } });
   PLANTED_BACKEND = false; ANON_COUNT = 0;
   return msg && msg.result;
 }
@@ -128,8 +139,6 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
     expect(r && r.structuredContent && r.structuredContent._entity).toBe('plan_execution');
     expect(r.structuredContent.executed.length).toBeGreaterThan(1);
     expect(violations(r)).toEqual([]);
-    // the planted sentence reached the answer and was said neutrally instead (not silently lost data)
-    expect(surface(r)).toContain(NEUTRAL_GATED);
   }, 120_000);
 
   it('CONTROL: DCHUB_PLAN_NEUTRAL_CTA=0 brings the wording and the relay / pricing links back', async () => {
@@ -139,6 +148,49 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
       expect(violations(r).length).toBeGreaterThan(0);
     } finally { delete process.env.DCHUB_PLAN_NEUTRAL_CTA; }
   }, 120_000);
+
+  // DATA IS NEVER REWRITTEN (coordinator, blocking on mcp#1465). A keyless energy-price / gas-index plan whose steps
+  // carry $/MWh, $/MMBtu, a deal value and an incentive amount in data fields: every step's data (the result minus
+  // the CTA / commerce keys and lean's relay keys) is byte-identical with the switch on and off.
+  const dataOf = (v, depth = 0) => {
+    if (depth > 60 || !v || typeof v !== 'object') return v;
+    if (Array.isArray(v)) return v.map((x) => dataOf(x, depth + 1));
+    const o = {};
+    for (const [k, x] of Object.entries(v)) if (!CTA_KEYS.has(k) && !COMMERCE_KEY.test(k)) o[k] = dataOf(x, depth + 1);
+    return o;
+  };
+  it('energy prices + gas index: step data is byte-identical with the switch on and off; the figures are there', async () => {
+    const intent = 'energy prices and the gas index for a 100 MW campus in ERCOT';
+    process.env.DCHUB_PLAN_NEUTRAL_CTA = '0';
+    let off;
+    try { off = await plan({}, { intent }); } finally { delete process.env.DCHUB_PLAN_NEUTRAL_CTA; }
+    const on = await plan({}, { intent });
+    const steps = on.structuredContent.executed;
+    expect(steps.length).toBeGreaterThan(0);
+    expect(steps.map((e) => e.step)).toEqual(off.structuredContent.executed.map((e) => e.step));
+    const onData = JSON.stringify(steps.map((e) => dataOf(e.result)));
+    const offData = JSON.stringify(off.structuredContent.executed.map((e) => dataOf(leanObject(e.result))));
+    expect(onData).toBe(offData);
+    for (const fig of ['$45/MWh', '$3.12/MMBtu', '$45.20/MWh', '$1.2B', '$25,000,000']) expect(onData, fig).toContain(fig);
+    // the same plan's wall copy is still made neutral
+    expect(JSON.stringify(on.structuredContent)).not.toMatch(/paid data tier|paid upgrade|\/pricing|checkout/i);
+  }, 120_000);
+
+  it('a fixture step: data fields and a data sentence in prose are untouched; only the CTA fields change', () => {
+    const data = { iso: 'ERCOT', ...PRICES, source_url: 'https://dchub.cloud/data-sources' };
+    const step = { ...data, human_message: PLANTED, for_your_human: { url: 'https://dchub.cloud/u/abc', text: PLANTED } };
+    const planObj = { _entity: 'plan_execution', human_url: 'https://dchub.cloud/u/abc', executed: [{ step: 1, tool: 'get_energy_prices', status: 'executed', result: step }] };
+    const result = { structuredContent: planObj, content: [{ type: 'text', text: JSON.stringify(planObj) },
+      { type: 'text', text: 'ERCOT: real-time LMP averaged $45/MWh and gas $3.12/MMBtu.' }] };
+    const out = neutralCtaStep(result, { env: {} });
+    const r = out.structuredContent.executed[0].result;
+    for (const k of Object.keys(data)) expect(JSON.stringify(r[k]), k).toBe(JSON.stringify(data[k]));
+    expect(JSON.parse(out.content[0].text).executed[0].result.price_note).toBe(PRICES.price_note);
+    expect(out.content[1].text).toBe('ERCOT: real-time LMP averaged $45/MWh and gas $3.12/MMBtu.');
+    expect(r.human_message).toBe(NEUTRAL_GATED);
+    expect(r.for_your_human.url).toBe(CONNECT_URL);
+    expect(out.structuredContent.human_url).toBe(CONNECT_URL);
+  });
 
   // The shapes the compare_isos builder (mcp#1460) reported on this intent, copied from their builders in server.mjs:
   // _subRungText's rung line (_SUB_RUNG_LABEL "a paid DC Hub plan for agents" -> a /go/c checkout link), the keyed

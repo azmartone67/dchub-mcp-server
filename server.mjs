@@ -28341,7 +28341,7 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
             + ' row(s) (truncation.rows_total gives the full counts) and text over '
             + strCap + ' characters is cut; call ' + name + ' directly for the full '
             + 'payload. The blocks that state what this answer does and does not '
-            + 'cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
+            + 'cover, and any relay, upgrade, unlock and payment fields, are kept whole.';
           return cand;
         }
       }
@@ -28350,7 +28350,7 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
     last.note = 'step result slimmed as far as it structurally goes (1 row per array, '
       + 'text cut at 100 characters) and is still over the step budget; call ' + name
       + ' directly for the full payload. The blocks that state what this answer does '
-      + 'and does not cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
+      + 'and does not cover, and any relay, upgrade, unlock and payment fields, are kept whole.';
     return last;
   } catch (_e) {
     return out;
