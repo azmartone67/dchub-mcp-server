@@ -1,6 +1,6 @@
 // noteN-save-key-first-answer.test.mjs — Grok note N item 5 (2026-11-16).
 //
-// install_artifact_30d: claude 1 minted / 1 called / 0 returned, claude-desktop 1 / 1 / 0. The
+// Install-page keys are called once and rarely come back. The
 // backend's /keys/validate answers save_notice_due=true on exactly one validate per new dch_live_
 // key (it stamps metadata.save_notice_at, only while the key has made no MCP call) and names the
 // key's metadata.client_name. Pinned here on the real /mcp path against a stub backend that

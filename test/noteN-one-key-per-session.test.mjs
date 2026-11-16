@@ -1,6 +1,6 @@
 // noteN-one-key-per-session.test.mjs — Grok note N item 3 (2026-11-16).
 //
-// Grok read 0 of 589 mature trial keys returned and 1.53 calls per key: a key per walled call.
+// Grok's funnel read: agents return, but rarely with the key they were given.
 // On this server the inline walled-call mint (mintAutoTrial -> POST /api/v1/keys/auto-mint) is off
 // by default (DCHUB_AUTO_TRIAL_MINT, owner 2026-10-20), and when it is on, F-1 skipped it only for
 // a key PRESENTED on the request. A key bound to the session by bind_email / claim_free_key arrives
