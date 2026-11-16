@@ -133,7 +133,7 @@ describe('decision 2: the free allowance is "a few", never a number, in agent te
       expect(typeof v, k).toBe('string');
       expect(v, k).not.toMatch(NUMERIC_ALLOWANCE);
     }
-    expect(ANALYZE_SITE_ACCESS_B2 + ANALYZE_SITE_ACCESS_PRE_B2).toContain('a few free full site reports each month');
+    expect(ANALYZE_SITE_ACCESS_B2 + ANALYZE_SITE_ACCESS_PRE_B2).toContain('a few full site reports each month');
     expect(SITE_NOSID_KEY_LINE).toContain('a few times each month');
   });
 });

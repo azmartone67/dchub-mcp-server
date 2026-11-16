@@ -77,14 +77,14 @@ describe('Land & Power descriptions match the keyless wall', () => {
 });
 
 describe('approved wording (spec A3)', () => {
-  it('get_grid_intelligence states the free-key and keyless split', () => {
+  it('get_grid_intelligence states the keyed and keyless split (no "free", Grok 2026-11-15)', () => {
     expect(descOf('get_grid_intelligence'))
-      .toContain('With a free key, a few full briefs a day; keyless gets a trimmed preview.');
+      .toContain('Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks a few full briefs a day.');
   });
   it('get_market_dcpi_rank: verdict and composite free, sub-scores and narrative Pro (owner 2026-10-31; no plan name, no price)', () => {
     expect(descOf('get_market_dcpi_rank')).not.toMatch(/paid plans|credit pack|\b(Pro|Developer|Starter)\b|\$\s?\d/);
     expect(descOf('get_market_dcpi_rank')).toContain(
-      'Verdict and composite score are free; numeric sub-scores and the narrative come with a full-access key.');   // owner listing rule 2026-11-14
+      'Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.');   // owner listing rule 2026-11-14; no "free" (Grok 2026-11-15)
   });
   it('no new copy carries a price or an em dash', () => {
     for (const n of ['compare_sites', 'get_grid_intelligence', 'get_market_dcpi_rank']) {

@@ -321,7 +321,9 @@ describe('the rebuilt worker carries no baked facility count', () => {
       // 2026-10-24 (second run): live why_dchub is now the coverage summary
       // ("Returns a factual coverage summary"), so anchor on "Free, no key." —
       // the one clause both the committed and the live description carry.
-      why_dchub: [/Free, no key\./, 'Covers 24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets. Free, no key.'],
+      // 2026-11-16 (mcp#1464): "Free, no key." became "No key needed.", so anchor on
+      // "Returns a factual coverage summary", which the old and new text both carry.
+      why_dchub: [/Returns a factual coverage summary/, 'Covers 24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets. Returns a factual coverage summary'],
     };
     for (const t of spec) {
       const inj = INJECT[t.name];

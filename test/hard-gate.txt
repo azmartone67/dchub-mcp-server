@@ -456,6 +456,7 @@ test/plan-caller-ip.test.mjs
 test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
+test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
 test/plan-neutral-cta.test.mjs
 test/plan-query-retirement-text.test.mjs
