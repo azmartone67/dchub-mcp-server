@@ -53,7 +53,7 @@ const ARGS = {
 };
 const DIRECT = ['get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices'];
 
-const writes = { track: [], consume: [], peek: [], loopback: [], backend: [] };
+const writes = { track: [], consume: [], peek: [], loopback: [], backend: [], funnel: [] };
 // J) the edge of a loopback step, in process: the step ctx the /mcp handler builds (loopback_step, and
 // plan_first_full only when the plan's token is live), the step's tool handler, a JSON-RPC answer.
 const loopback = { emulate: false, ip: null };
@@ -89,6 +89,7 @@ beforeAll(async () => {
     writes.backend.push({ path: p, headers: { ...((init && init.headers) || {}) } });
     let body = {}; try { body = JSON.parse((init && init.body) || '{}'); } catch { body = {}; }
     if (p === '/api/v1/mcp/track') { writes.track.push(body); return json({ ok: true }); }
+    if (p === '/api/v1/mcp/funnel-event') { writes.funnel.push(body); return json({ ok: true }); }   // L) the wall rows
     if (p === '/api/v1/mcp/full-cap/consume') { writes.consume.push(body); return json({ ok: false }); }
     if (p === '/api/v1/mcp/full-cap/peek') { writes.peek.push({ identity: u.searchParams.get('identity') }); return json({ ok: false }); }
     if (p.startsWith('/api/v1/mcp/credits/balance')) return json({ credits: 0, had_pack: false });
@@ -157,7 +158,7 @@ const isPreview = (r) => {
 const kffId = (ip) => F.KEYLESS_FIRST_FULL_ID_PREFIX + 'ip-' + createHash('sha256').update(ip).digest('hex');
 const kffConsumes = (ip) => writes.consume.filter((w) => w.identity === kffId(ip));
 const kffTracks = () => writes.track.filter((w) => w.status === F.KEYLESS_FIRST_FULL_STATUS || w.keyless_first_full_answer === true);
-const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; writes.loopback.length = 0; writes.backend.length = 0; };
+const resetWrites = () => { writes.track.length = 0; writes.consume.length = 0; writes.peek.length = 0; writes.loopback.length = 0; writes.backend.length = 0; writes.funnel.length = 0; };
 const settle = () => new Promise((r) => setTimeout(r, 25));
 
 describe('A) DCHUB_KEYLESS_FIRST_FULL=0: today\'s preview, nothing charged or tagged', () => {
@@ -650,4 +651,65 @@ describe('K) a plan that returned no data does not consume the first full answer
       { tool: 'find_sites', args: { state: 'TX' } },
     ]);
   });
+});
+
+// L) Grok note N item 2 (2026-11-15): note G (mcp#1451) live in 2.12.58, confirmed, not rebuilt. A fresh keyless session's
+// FIRST execute_plan is the full answer and walls nothing; its SECOND execute_plan from that seat is the preview, and
+// that wall carries the email line: the plan answer asks for the email (`bind_email`) and every wall row it sends is
+// tagged 'line' (live funnel 11-16: execute_plan 30 walled hits, 29 with an ask). The wall rows are read off what the
+// server POSTs to the backend (/api/v1/mcp/funnel-event quota_wall_hit), as production records them.
+describe('L) a fresh keyless session: the first execute_plan is full, the second execute_plan wall carries the email line', () => {
+  const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
+  afterEach(() => { loopback.emulate = false; loopback.ip = null; });
+  const walls = () => writes.funnel.filter((e) => e && e.event === 'quota_wall_hit');
+  const prose = (r) => (r.content || []).slice(1).filter((b) => b && b.type === 'text').map((b) => b.text).join('\n');
+  const EMAIL_LINE = /ask whether they want to share their email, then call `bind_email` with it\. Only use an address they gave you\./;
+  const fresh = (s) => Object.fromEntries(Object.entries(s).filter(([k]) => !k.startsWith('_')));   // the next call's ctx
+
+  it('call 1 full and unwalled; call 2 walled, with the email line in the answer and on every wall row', async () => {
+    resetWrites();
+    const ip = '198.18.80.10';
+    loopback.emulate = true; loopback.ip = ip;
+    const s1 = seat({ client_ip: ip });
+    const r1 = await call('execute_plan', s1, PLAN);
+    await settle(); await new Promise((r) => setTimeout(r, 150));
+    expect(head(r1).first_full_answer, 'call 1 is the first full answer').toMatchObject({ used: 1, limit: 1 });
+    expect(walls(), 'call 1 walls nothing').toEqual([]);
+    expect(prose(r1)).not.toMatch(EMAIL_LINE);
+
+    writes.funnel.length = 0;
+    const r2 = await call('execute_plan', fresh(s1), PLAN);
+    await settle(); await new Promise((r) => setTimeout(r, 150));
+    expect(head(r2).first_full_answer).toBeUndefined();
+    const rows = walls();
+    expect(rows.length, 'call 2 walled').toBeGreaterThan(0);
+    expect(rows.map((e) => e.email_ask), JSON.stringify(rows.map((e) => [e.tool, e.wall_status]))).toEqual(rows.map(() => 'line'));
+    for (const e of rows) expect(e.offers_shown).toContain('email_unlock');
+    expect(prose(r2)).toMatch(EMAIL_LINE);
+  }, 60_000);
+
+  // The live execute_plan rows (tool execute_plan) are the plan's OWN walls: an IP at the anonymous soft cap.
+  // Its first plan is still the full answer (no wall); its second is walled and that row carries an email ask.
+  it('at the anonymous soft cap: call 1 still full, call 2 is an execute_plan wall row carrying an email ask', async () => {
+    resetWrites();
+    const ip = '198.18.80.11';
+    loopback.emulate = true; loopback.ip = ip;
+    const s1 = seat({ client_ip: ip });
+    S._anonUsageCounts.set(ip, { at: Date.now(), count: 25 });
+    const r1 = await call('execute_plan', s1, PLAN);
+    await settle(); await new Promise((r) => setTimeout(r, 150));
+    expect(head(r1).first_full_answer).toMatchObject({ used: 1, limit: 1 });
+    expect(walls(), 'call 1 walls nothing').toEqual([]);
+    writes.funnel.length = 0;
+    S._anonUsageCounts.set(ip, { at: Date.now(), count: 25 });
+    const r2 = await call('execute_plan', fresh(s1), PLAN);
+    await settle(); await new Promise((r) => setTimeout(r, 150));
+    const own = walls().filter((e) => e.tool === 'execute_plan');
+    expect(own.map((e) => e.wall_status)).toEqual(['anon_daily_cap']);
+    expect(['line', 'link', 'link_exit']).toContain(own[0].email_ask);
+    expect(own[0].offer_floor).toBe('allowed');
+    // the email offer this wall carries: the answer's user_message (what the agent shows its person)
+    expect((r2.structuredContent || {}).user_message).toMatch(/50 MCP calls\/day with an email/);
+    expect((r2.structuredContent || {}).human_url).toBe('https://dchub.cloud/connect');
+  }, 60_000);
 });
