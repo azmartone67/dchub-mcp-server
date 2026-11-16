@@ -85,7 +85,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -9664,7 +9664,11 @@ function _keylessFirstFullSessionDayKey(c, tool) {
 }
 // Charged on the trial's store (in-process map, durable floor and mirror) under its own identity: the
 // IP bucket and, when there is one, the session bucket. Either one spent = today's preview.
-export async function _keylessFirstFullCharge(c, tool, cap) {
+// opts.defer (execute_plan, Grok note K item 2): the in-process buckets are held now, so a second call on
+// this replica already sees the seat taken, but the durable mirror is written only by
+// _keylessFirstFullSettle once the plan is known to have returned data; a plan with none gives the
+// buckets back and writes nothing durable.
+export async function _keylessFirstFullCharge(c, tool, cap, opts = {}) {
   try {
     if (!(cap > 0)) return false;
     const buckets = [_keylessFirstFullDayKey(c, tool), _keylessFirstFullSessionDayKey(c, tool)].filter(Boolean);
@@ -9673,11 +9677,27 @@ export async function _keylessFirstFullCharge(c, tool, cap) {
     if (buckets.some(({ key }) => (_trialDayCounts.get(key) || 0) >= cap)) return false;
     for (const { id, key } of buckets) {
       _trialDayCounts.set(key, (_trialDayCounts.get(key) || 0) + 1);
-      _fullCapConsume(id, tool, cap);
+      if (!(opts && opts.defer)) _fullCapConsume(id, tool, cap);
     }
+    if (opts && opts.defer && c && typeof c === 'object') c._kffPending = { tool, cap, buckets };
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
     return true;
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// Settle a deferred charge: `used` true writes the durable mirror; false gives the in-process buckets back
+// (the durable counter was never written). Returns 'committed' | 'refunded' | null (nothing pending).
+export function _keylessFirstFullSettle(c, used) {
+  try {
+    const p = c && c._kffPending;
+    if (!p || !Array.isArray(p.buckets)) return null;
+    c._kffPending = undefined;
+    for (const { id, key } of p.buckets) {
+      if (used) { _fullCapConsume(id, p.tool, p.cap); continue; }
+      const n = _trialDayCounts.get(key) || 0;
+      if (n > 0) _trialDayCounts.set(key, n - 1);
+    }
+    return used ? 'committed' : 'refunded';
+  } catch (_) { return null; }
 }
 // The email-bound free key's gate for this tool, when it is a plain answer this lane can serve:
 // allowed, not a paid taste, not capped by FREE_TIER_LIMITS. null otherwise.
@@ -19593,7 +19613,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     ..._ENVELOPE_SHAPE,
     ok: _oBool('true when the intent was routed'),
     intent: _oStr('The natural-language intent that was routed (echoed back)'),
-    intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | market_outlook | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | air_permits | power_timeline | changes_delta | facility_search | iso_comparison | dc_capacity | unknown)'),
+    intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | market_outlook | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | air_permits | power_timeline | changes_delta | facility_search | iso_comparison | dc_capacity | siting_search | unknown)'),
     routing_hint: _oObj({
       problem: _oStr('The matched intent class — the SAME closed enum as intent_class, so it is branchable, not free text'),
       best_path: _oStr('Where to start: `execute_plan` for a multi-capability question, or the one tool name for a single-capability lookup'),
@@ -19636,7 +19656,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / rank_markets instead of returning empty. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -20503,6 +20523,55 @@ export const _PLAN_CLASSES = [
     coverage_notes: 'get_retirement_headroom lists retiring generators below a paid plan too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below a paid plan, and below a paid plan target_mw is held at 50; a credit pack opens them per call, as paid-plan depth. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
+    // 5.29 (Grok note K, item 1, 2026-11-15): A SITING QUESTION OVER SEVERAL NAMED STATES.
+    // "Texas or Arizona, 100 MW by 2028" routed to power_timeline and its grid read minted ERCOT/SPP/MISO
+    // from the Texas timeline (Arizona, WECC with no RTO, was lost); "Find sites for a 100 MW data center
+    // in Texas or Arizona, energized by 2028" routed to capacity_search, whose DCPI step waits on ONE
+    // named market and was skipped; another phrasing went to fiber_power_pairing, whose four steps all
+    // wait on one metro slug, and ran 0 of 4. None of those classes has a step that takes a state AND a
+    // size AND a date. This one does: per named state (_planStateFanout), the DCPI-ranked markets within
+    // the size and the deadline (site_selection_canvas region=<ST>), the substation-anchored candidate
+    // search areas (find_sites state=<ST>), and the dated power timeline. The class never scores from
+    // its own words: _planQuery gives it the win only when two or more states are named with a size and
+    // a siting or deadline word, and the winning class would otherwise be one that cannot bind them
+    // (_SITING_STEALS). A one-state question keeps its class.
+    id: 'siting_search', recipe: 'market_selection',
+    patterns: [],
+    rationale: (d) => `A siting question for ${d.mw ? Math.round(d.mw) + ' MW' : 'a data center'}`
+      + (d.deadline && d.deadline.months ? ` energized within ${d.deadline.months} months` : '')
+      + ' is answered per state: the markets there that DCPI rates for that size and deadline, the candidate search areas around real substations, and the dated power timeline. Each read takes the state itself, so no market has to be guessed first.',
+    sequence: (d) => {
+      const st = d.state || d.stateFromPlace || null;
+      const steps = [
+        { step: 1, tool: 'site_selection_canvas', depends_on: [], estimated_calls: 1,
+          why: `DCPI-scored markets${st ? ' in ' + st : ''} with verdict, excess-power headroom and time to power, filtered to the size and deadline asked: the answer to "where" at market level.`,
+          args_hint: { region: st || 'us' } },
+      ];
+      if (st || d.coords) {
+        steps.push({ step: 2, tool: 'find_sites', depends_on: [], estimated_calls: 1,
+          why: `Candidate search areas${st ? ' in ' + st : ''} anchored on real substations, each with gas and fiber distance and its nearest tracked market. A search area is not a parcel.`,
+          args_hint: st ? { state: st } : { lat: d.coords.lat, lon: d.coords.lon } });
+      }
+      // Three states already fill the default six steps with the two reads above, so the timeline
+      // joins only when two or fewer states share the budget (__fanCount from _planStateFanout).
+      if (st && !(d.__fanCount > 2)) {
+        steps.push({ step: steps.length + 1, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
+          why: `Dated new generation and retirements for ${st} through the deadline: the supply side of "energized by". Generation is not deliverable load.`,
+          args_hint: { state: st } });
+      }
+      return steps;
+    },
+    alternatives: [
+      { tool: 'get_market_dcpi_rank', when: 'One market is already chosen and you want its BUILD/CAUTION/AVOID card.',
+        rejected_because: 'The question named states, not a market; the canvas returns the DCPI rows for each state\'s markets.' },
+      { tool: 'get_refined_queue', when: 'You want the queue survivors at the size floor in a state.',
+        rejected_because: 'The canvas and the timeline answer where and when first; the queue is the follow-up read for a chosen state.' },
+      { tool: 'rank_markets', when: 'Any US market is acceptable and the states do not matter.',
+        rejected_because: 'The question named its states; a national ranking would answer for other places.' },
+    ],
+    coverage_notes: 'US states only. site_selection_canvas and get_power_availability_timeline take the state; find_sites returns search areas, not parcels, and its depth follows the Land & Power lane. Non-RTO states (Arizona: APS, SRP, TEP; Nevada: NV Energy; the Southeast) have no ISO queue view, which the timeline says rather than estimates.',
+  },
+  {
     // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
     // this class routes a market HEAD-TO-HEAD to the symmetric DCPI reads. The two
     // market names are pulled from the intent (comparePair) when possible.
@@ -21334,6 +21403,7 @@ export const _CLASS_WHY_LIVE = {
   facility_search: 'requires_facility_registry_data',
   iso_comparison: 'requires_live_grid_telemetry',
   dc_capacity: 'requires_facility_registry_data',
+  siting_search: 'requires_current_market_scoring',
 };
 // Extract deterministic signals from intent + context (never throws).
 
@@ -21709,6 +21779,39 @@ export function _execStepAllowed(tool, profile) {
   if (profile === DIRECTORY_PROFILE) return !!_isDirectoryTool(tool);
   if (profile === CLAUDE_PROFILE) return !!_isClaudeTool(tool);
   return true;
+}
+
+// 5.29 (Grok note K, item 1): NEVER AN EMPTY PLAN. Grok saw a phrasing run 0 of 4 steps: every step waited
+// on a market the question never named. When no step of a plan reached a tool (nothing executed, nothing
+// came back as a preview), execute_plan runs these instead: per named state (up to the fan-out cap and
+// the step budget left) the first step this surface allows of find_sites state=<ST>,
+// site_selection_canvas region=<ST>, get_power_availability_timeline state=<ST>; with no state, the tool
+// navigator for the question (discover_tools), never a ranking: a ranking would answer for markets the
+// question did not name (the 5.16 rule for an untracked place). Pure; returns [{tool, args, why}].
+export function _execGuaranteedSteps(sig, profile, budget = 3, intent = '') {
+  try {
+    const d = (sig && typeof sig === 'object') ? sig : {};
+    const n = Math.max(1, Math.min(_PLAN_STATE_FANOUT_CAP, Number(budget) || 1));
+    const states = (Array.isArray(d.states) && d.states.length >= 2) ? d.states
+      : [d.state || d.stateFromPlace].filter((x) => typeof x === 'string' && /^[A-Z]{2}$/.test(x));
+    const mw = (typeof d.mw === 'number' && d.mw > 0) ? Math.min(5000, Math.max(1, Math.round(d.mw))) : null;
+    const pick = (cands) => cands.find((x) => _execStepAllowed(x.tool, profile)) || null;
+    const out = [];
+    for (const st of states.slice(0, n)) {
+      const p = pick([
+        { tool: 'find_sites', args: { state: st } },
+        { tool: 'site_selection_canvas', args: { region: st, ...(mw ? { capacity_mw: mw } : {}) } },
+        { tool: 'get_power_availability_timeline', args: { state: st, ...(mw ? { mw } : {}) } },
+      ]);
+      if (p) out.push({ ...p, why: `No planned step could run, so the plan reads ${st}, the state the question names.` });
+    }
+    if (!out.length) {
+      const q = String(intent || '').trim().slice(0, 80);
+      const p = pick([{ tool: 'discover_tools', args: q ? { query: q } : {} }]);
+      if (p) out.push({ ...p, why: 'No planned step could run and the question names no US state, so the plan returns the tools that can answer it instead of nothing; no other market is substituted.' });
+    }
+    return out;
+  } catch (_e) { return []; }
 }
 
 // ── _execDedupeUpsell (r-payload-diet, 2026-08-10) ─────────────────────────
@@ -22699,7 +22802,17 @@ export function _planWorkflowConfidence(seq, d) {
 //         one-ISO state queue read names the market's own grid when the queue is not it (Reno: WECC, the
 //         NV rows are CAISO's); get_grid_scoreboard gets 5 s inside a plan; and the plan's answer carries
 //         provenance once (each step keeps its as_of, completeness and cite_as).
-export const PLANNER_VERSION = '5.28';
+//  5.29 = SEVERAL STATES, NEVER EMPTY (Grok note K, 2026-11-15): a siting question naming two or more US states
+//         with a size ("Texas or Arizona, 100 MW by 2028") routes to the siting_search class, one set of
+//         site_selection_canvas / find_sites / power-timeline reads per state, instead of power_timeline
+//         (Arizona lost to Texas's minted ISOs), capacity_search (its DCPI step skipped) or fiber_power_pairing
+//         (0 of 4 steps); a state's "<ISO serving the state>" step reads that state's own grid (Arizona: AZPS);
+//         market steps with no market named read the nearest market find_sites names in each state; a plan none
+//         of whose steps reached a tool runs find_sites / rank_markets instead of returning empty; a bare place
+//         with a forward window ("Northern Virginia, next 18 months") is the data-center capacity question; a
+//         plan with no data does not consume the keyless first full answer, mints no Deal Desk brief, and
+//         names its manual calls in more_detail.calls.
+export const PLANNER_VERSION = '5.29';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -22767,6 +22880,9 @@ export function _resolutionGap(text, signals, intentClass) {
     const d = signals;
     // Geography DID bind — by any route. Nothing to report.
     if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.candidateId) return null;
+    // 5.29 (Grok note K): two or more named states DID bind (one set of steps per state, _planStateFanout);
+    // "texas or arizona by" is not a place outside the index.
+    if (Array.isArray(d.states) && d.states.length >= 2) return null;
 
     const m = String(text || '').match(_SPATIAL_PREP_RE);
     if (!m) return null;                                     // no place was named
@@ -23354,9 +23470,12 @@ export function _dealDeskHumanRelay(dd) {
     url,
     render: 'verbatim_link_required',
     markdown: '[Open the DC Hub Deal Desk Brief](' + url + ')',
-    _agent_instruction: 'Share the `markdown` field above with your user as a clickable link. '
-      + 'This PDF is not a reformat of what you just read: it was built from the FULL '
-      + 'step results, which do not fit in your context and are not in this envelope.',
+    // 5.29: the FULL-results sentence only when the brief says steps fed it (dd.steps, from the backend).
+    _agent_instruction: 'Share the `markdown` field above with your user as a clickable link.'
+      + ((dd.steps == null || Number(dd.steps) > 0 || (Array.isArray(dd.steps) && dd.steps.length))
+        ? ' This PDF is not a reformat of what you just read: it was built from the FULL '
+          + 'step results, which do not fit in your context and are not in this envelope.'
+        : ''),
   };
 }
 export function _dealDeskHumanLine(dd) {
@@ -23731,6 +23850,44 @@ export function _alternativesStep(text, d, considered) {
   } catch (_e) { return null; }
 }
 
+// ── 5.29 (Grok note K, item 1, 2026-11-15) ─────────────────────────────────────────────────
+// The grid one state's step reads when the class left "<ISO serving the state ...>" as a placeholder
+// (a placeholder for the ISO of a FINALIST market is a hand-off and stays one).
+// The state's first RTO (Texas: ERCOT) for every grid tool; a state on no RTO gets its largest
+// balancing authority, but only for the tools that take a BA code (get_grid_intelligence,
+// get_grid_data, get_retirement_headroom); the queue tools reject a BA code, so those get null and the
+// step is left out for that state. Pure.
+const _PLAN_NON_RTO_BA = Object.freeze({
+  AZ: 'AZPS', NV: 'NEVP', GA: 'SOCO', AL: 'SOCO', FL: 'FPL', TN: 'TVA', SC: 'DUK', CO: 'PSCO', OR: 'PGE',
+});
+const _PLAN_BA_TOOLS = new Set(['get_grid_intelligence', 'get_grid_data', 'get_retirement_headroom']);
+export function _planIsIsoPlaceholder(v) {
+  return typeof v === 'string' && /^<\s*iso\b[^>]*\bstate\b[^>]*>$/i.test(v.trim());
+}
+export function _planStateGridArg(tool, st) {
+  const code = String(st || '').toUpperCase();
+  const rto = (_STATE_ISO_META[code] || []).find((x) => _EXEC_IS_RTO(x));
+  if (rto) return rto;
+  if (_PLAN_BA_TOOLS.has(String(tool || '')) && _PLAN_NON_RTO_BA[code]) return _PLAN_NON_RTO_BA[code];
+  return null;
+}
+// 5.29: a siting question over several named states (the siting_search class above). Two or more
+// states, a size, and a siting or deadline word; no market, point or pair of grids already named.
+const _SITING_WORD_RE = /\b(?:sites?|siting|locate|location|where|energi[sz](?:e|ed|ation)|build|land|place)\b/i;
+// The classes siting_search may take a multi-state siting question from: none of them has a step that
+// takes a state, a size and a date together, so each one dropped a state or skipped its market step.
+export const _SITING_STEALS = new Set(['capacity_search', 'power_timeline', 'fiber_power_pairing', 'facility_search',
+  'site_analysis', 'hosting_capacity']);
+export function _planSitingEligible(text, d) {
+  try {
+    if (!d || typeof d !== 'object') return false;
+    const states = Array.isArray(d.states) ? d.states : [];
+    if (states.length < 2 || !(typeof d.mw === 'number' && d.mw > 0)) return false;
+    if (d.comparePair || (Array.isArray(d.isos) && d.isos.length >= 2) || d.market || d.coords || d.candidateId) return false;
+    return _SITING_WORD_RE.test(String(text || '')) || !!(d.deadline && d.deadline.months);
+  } catch (_e) { return false; }
+}
+
 // ── 5.26 (Grok live agent reviews 2026-11-13, item 1) ──────────────────────────────────────
 // ONE SET OF STEPS PER NAMED STATE. "Where should I build 100 MW: Texas, Ohio or Georgia?" planned
 // a Georgia canvas alone (stateFromPlace kept the longest name), so the answer covered one state of
@@ -23749,12 +23906,23 @@ export function _planStateFanout(build, d) {
     const byKey = new Map();
     let first = null;
     states.forEach((st, si) => {
-      const dk = { ...d, state: null, stateFromPlace: st, states: [st] };
+      const dk = { ...d, state: null, stateFromPlace: st, states: [st], __fanCount: states.length };
       if (!first) first = dk;
       const seqK = (build(dk) || []).filter(Boolean);
       const local = new Map();
       seqK.forEach((s, pos) => {
         const args = { ...(s.args_hint || {}) };
+        // 5.29 (Grok note K, item 1): a step waiting on "<ISO serving the state>" takes THIS state's grid,
+        // not whatever the first state's timeline mints (Texas minted ERCOT/SPP/MISO and Arizona was lost).
+        // A state on no RTO reads its largest balancing authority where the tool takes one (Arizona: AZPS);
+        // with no grid to name, the step is left out for that state (its timeline still covers it).
+        let dropForState = false;
+        for (const k of Object.keys(args)) {
+          if (!_planIsIsoPlaceholder(args[k])) continue;
+          const g = _planStateGridArg(s.tool, st);
+          if (g) args[k] = g; else dropForState = true;
+        }
+        if (dropForState) return;
         const spec = _EXEC_GEO_ARGS[s.tool];
         const geoBound = ['state', 'region', 'lat', 'lon', 'latitude', 'longitude', 'iso'].some((k) => args[k] != null);
         let perState = Object.values(args).some((v) => v === st);
@@ -23910,6 +24078,45 @@ export function _planPlaceFallback(seq, text, d) {
     }
     return { phrase: up.phrase, state: up.state, find_sites_step: fs.step,
       note: `"${up.phrase}" is not a market DC Hub tracks. The plan reads ${up.state} instead: find_sites returns candidate search areas in ${up.state}, and the market steps read the nearest tracked market those candidates name. Say the answer is for ${up.state} and that market, not for ${up.phrase} itself.` };
+  } catch (_e) { return null; }
+}
+
+// 5.29 (Grok note K, item 1): two or more named states and no market. A step waiting on "the market /
+// metro named in the intent" has nothing to bind: "fiber and power overlap in Texas or Arizona" planned four
+// such steps and ran 0 of 4. The states are the geography the question gave, so the plan searches each one
+// (find_sites state=<ST>: substation-anchored areas, each naming its nearest tracked market) and the market
+// steps read the market those candidates name, as the one-town fallback above does. A hand-off to a
+// finalist ("<slug from a step-1 finalist>") is not touched. In place; returns the block or null.
+const _MARKET_NAMED_PH_RE = /^<\s*(?:the\s+)?(?:metro|market)\b[^>]*>$|^<[^>]*\bnamed in the intent\b[^>]*>$/i;
+export function _planMultiStateFallback(seq, d) {
+  try {
+    if (!Array.isArray(seq) || !d || typeof d !== 'object') return null;
+    const all = Array.isArray(d.states) ? d.states : [];
+    if (all.length < 2 || d.market || d.coords || d.__citySlug || (d.__outlook && d.__outlook.slug)) return null;
+    const waiting = seq.filter((s) => s && s.args_hint && Object.values(s.args_hint).some((v) => typeof v === 'string' && _MARKET_NAMED_PH_RE.test(v.trim())));
+    if (!waiting.length) return null;
+    const states = all.slice(0, _PLAN_STATE_FANOUT_CAP);
+    const fsSteps = [];
+    for (const st of states) {
+      let fs = seq.find((s) => s && s.tool === 'find_sites' && s.args_hint && String(s.args_hint.state || '').toUpperCase() === st);
+      if (!fs) {
+        fs = { step: seq.length + 1, tool: 'find_sites', depends_on: [], estimated_calls: 1, constraint: 'state_fallback', state_fanout: st,
+          why: `The question names states, not a market, so the plan searches ${st}: candidate search areas anchored on real substations, each with gas and fiber distance and its nearest tracked market. A search area is not a parcel.`,
+          args_hint: { state: st } };
+        seq.push(fs);
+      }
+      fsSteps.push(fs.step);
+    }
+    for (const s of waiting) {
+      const args = { ...s.args_hint };
+      for (const [k, v] of Object.entries(args)) {
+        if (typeof v === 'string' && _MARKET_NAMED_PH_RE.test(v.trim())) args[k] = _PLACE_FALLBACK_SLUG;
+      }
+      s.args_hint = args;
+      s.depends_on = [...new Set([...(s.depends_on || []), ...fsSteps])].sort((x, y) => x - y);
+    }
+    return { states, find_sites_steps: fsSteps,
+      note: `The question names ${all.join(', ')} and no market, so the market steps read the nearest tracked market the find_sites candidates in ${states.join(', ')} name. Say which state each market is in.` };
   } catch (_e) { return null; }
 }
 
@@ -24189,6 +24396,7 @@ function _outlookUnresolvedNote(hit) {
     note: `The question names more than one market: ${list(hit.markets)}. An outlook reads one market.` + TAIL
         + ' Ask to compare them, or ask about one.' };
 }
+const _PLAN_FORWARD_WINDOW_RE = /\b(?:next|coming|upcoming)\s+(?:\d{1,3}|few|several|two|three|six|twelve|eighteen)\s*(?:months?|years?|quarters?)\b/i;
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
   const d = _planSignals(text, context);
@@ -24244,10 +24452,37 @@ export function _planQuery(intent, context) {
     }
     // 5.26: dc_capacity is DATA-CENTER supply. A question about power coming online (generation,
     // plants, transmission) that names no data-center noun is the power classes' question.
+    // 5.29 (Grok note K, re-check 3): "Northern Virginia, next 18 months" matched no class and ran
+    // discover_tools alone. A named place and a forward window with no other words is the question
+    // "what is coming online there in that window": data-center supply, the same plan as the full
+    // sentence. Only when NOTHING else matched (_anyTextMatch), so it never outvotes a class.
+    if (s.cls.id === 'dc_capacity' && !_anyTextMatch && _PLAN_FORWARD_WINDOW_RE.test(text)
+        && (d.state || d.stateFromPlace || d.__citySlug || (d.__outlook && d.__outlook.slug) || d.isoFromPlace)) {
+      s.score = 1; s.hits = ['a named place and a forward window'];
+    }
     if (s.cls.id === 'dc_capacity' && s.score > 0
         && /\b(?:power|generation|generating|generators?|plants?|solar|wind|nuclear|batter(?:y|ies)|storage|transmission|gas)\b/i.test(text)
         && !/\b(?:data\s*cent\w*|colo(?:cation)?|facilit\w*|campus\w*|hyperscal\w*|wholesale|lease|leasing)\b/i.test(text)) s.score = 0;
   }
+  // 5.29 (Grok note K, item 1): a siting question over several named states goes to siting_search when
+  // the class that would win cannot bind the states (_SITING_STEALS) or nothing matched. +1.5 over that
+  // class clears the 1-point ambiguity margin, so its lead step is not appended behind the siting steps.
+  try {
+    const sit = scored.find((s) => s.cls.id === 'siting_search');
+    if (sit) {
+      sit.score = 0;
+      if (_planSitingEligible(text, d)) {
+        let best = null;
+        for (const s of scored) if (s !== sit && (!best || s.score > best.score)) best = s;
+        if (!best || best.score <= 0 || _SITING_STEALS.has(best.cls.id)) {
+          sit.score = Math.max(best ? best.score : 0, 2) + 1.5;
+          sit.hits = ['several named states (' + d.states.join(', ') + ')', Math.round(d.mw) + ' MW',
+            ...(d.deadline && d.deadline.months ? ['deadline ' + d.deadline.by] : []),
+            ...(best && best.score > 0 ? ['over ' + best.cls.id] : [])];
+        }
+      }
+    }
+  } catch (_e) { /* routing must never throw */ }
   scored.sort((a, b) => b.score - a.score);
   const top = scored[0], second = scored[1];
   const matched_classes = scored.filter((s) => s.score > 0)
@@ -24272,6 +24507,17 @@ export function _planQuery(intent, context) {
     // 5.26: a town named beside its state still gets the state's candidate search areas.
     let fbPlace = null;
     try { fbPlace = _planPlaceFallback(fbSeq, text, d); } catch (_e) { fbPlace = null; }
+    // 5.29 (Grok note K): several named states and no class: each state's candidate search areas, so the
+    // plan reads the geography the question gave instead of the navigator alone.
+    try {
+      if (!fbPlace && Array.isArray(d.states) && d.states.length >= 2 && !d.market && !d.coords) {
+        for (const st of d.states.slice(0, _PLAN_STATE_FANOUT_CAP)) {
+          fbSeq.push({ step: fbSeq.length + 1, tool: 'find_sites', depends_on: [], estimated_calls: 1, constraint: 'state_fallback', state_fanout: st,
+            why: `No intent class matched, but the question names ${st}: candidate search areas there, anchored on real substations, each with its nearest tracked market.`,
+            args_hint: { state: st } });
+        }
+      }
+    } catch (_e) { /* routing must never throw */ }
     // Capacity Source (2026-09-14): the same buy/lease step as the routed path.
     try {
       const cp = _capacityProcurementStep(text, d, fbSeq.map((x) => x.tool));
@@ -24292,7 +24538,9 @@ export function _planQuery(intent, context) {
       planner_rationale: 'An unmatched question gets the navigator only. A server-side recommendation would pick its own market, which is a different answer from the one asked for.',
       unresolved: fbPlace
         ? { kind: 'market_not_matched', phrase: fbPlace.phrase, note: fbPlace.note }
-        : _planUnresolved(text, d, 'unknown'),
+        : (fbSeq.some((x) => x.constraint === 'state_fallback')
+          ? { kind: 'no_intent_match', note: 'No intent class matched, so the plan reads only the candidate search areas in the states the question names (find_sites per state). Use discover_tools to pick a tool for the rest, or rephrase naming the market, ISO or site.' }
+          : _planUnresolved(text, d, 'unknown')),
       ...(fbPlace ? { place_fallback: fbPlace } : {}),
       recommended_sequence: fbSeq,
       ...(_fbTierPreview ? { tier_preview: _fbTierPreview } : {}),
@@ -24351,6 +24599,9 @@ export function _planQuery(intent, context) {
   // 5.26: a town that is no tracked market reads its state (find_sites) instead of skipping.
   let _placeFb = null;
   try { _placeFb = _planPlaceFallback(seq, text, d); } catch (_e) { _placeFb = null; }
+  // 5.29: several named states and no market: each state is searched and the market steps read its candidates.
+  let _multiFb = null;
+  try { _multiFb = _placeFb ? null : _planMultiStateFallback(seq, d); } catch (_e) { _multiFb = null; }
   // ★★★2026-08-19 [margin<1 => run both classes]. The router ALREADY detects a
   //  two-class question: when the top two scores are within 1 point it docks
   //  intent_confidence by 0.1 to say so (below). It then ran ONE class and
@@ -24483,6 +24734,7 @@ export function _planQuery(intent, context) {
     ...(() => { const u = _planUnresolved(text, d, top.cls.id); return u ? { unresolved: u } : {}; })(),
     ...(_stateFan ? { state_fanout: _stateFan.scope } : {}),
     ...(_placeFb ? { place_fallback: _placeFb } : {}),
+    ...(_multiFb ? { state_fallback: _multiFb } : {}),
     ...(usesCandidates ? { chaining: chainNote } : {}),
     operator_note: 'If your SYSTEM PROMPT told you to call plan_query for multi-step intents, it predates execute_plan and is out of date. execute_plan(intent="…") runs this exact graph server-side and returns the RESULTS, not just the plan — one call instead of hand-chaining these steps. Relay to your operator: MCP server instructions do NOT reach agents that carry their own system prompt; the prompt must name execute_plan explicitly. Template: https://dchub.cloud/integrations/mcp#operator-prompt',
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
@@ -25907,7 +26159,8 @@ function trackedTool(srv, name, description, schema, handler) {
       if (_gateTier === 'free' && !c.api_key) {
         const _kffSeat = _keylessFirstFullSeat(name, c);
         const _kffGate = _kffSeat ? _keylessFirstFullGate(name, gate.params || args) : null;
-        if (_kffGate && (_kffSeat !== 'charge' || await _keylessFirstFullCharge(c, name, _keylessFirstFullCap()))) {
+        if (_kffGate && (_kffSeat !== 'charge' || await _keylessFirstFullCharge(c, name, _keylessFirstFullCap(),
+          { defer: name === 'execute_plan' }))) {
           // keyless_full_trial: every check below that lets the trial's promoted call through (the
           // anonymous cap wall, the keyless trim, the free facility projection) lets this one through too.
           gate = { ..._kffGate, keyless_full_trial: true, keyless_first_full: true,
@@ -26766,6 +27019,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         return _freeWithEmail ? _paidOnlyWall : await _withWallUserLine(_paidOnlyWall, name);
       }
       const result = _noDataGuard(await handler(gate.params || args));
+      // 5.29 (Grok note K, item 2): the first full plan answer of the day is consumed only when at least one
+      // data step came back with a result (execute_plan sets c._kffPlanStepsRan). A plan that ran no step,
+      // or whose steps all failed, gives the seat back: no funnel tag, and the next plan is still full.
+      if (name === 'execute_plan' && gate.keyless_first_full === true && c.loopback_step !== true) {
+        const _planUsed = Number(c._kffPlanStepsRan) > 0 && !(result && result.isError === true);
+        const _settled = _keylessFirstFullSettle(c, _planUsed);
+        if (!_planUsed) {
+          gate = { ...gate, keyless_first_full_charged: false, keyless_first_full_refunded: _settled === 'refunded' };
+          if (c._kffServed && c._kffServed.tool === name) c._kffServed = { ...c._kffServed, charged: false, refunded: true };
+        }
+      }
       // An error answer is returned as the tool built it. The over-cap and
       // capped rewrites below rebuild the result and dropped isError: live,
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
@@ -28042,6 +28306,7 @@ const _ROUTING_OUTPUTS = {
   facility_search:      ['matching facilities', 'coverage limits'],
   iso_comparison:       ['a side-by-side of the named grids', 'the same deep read for each grid'],
   dc_capacity:          ['data centers under construction and planned', 'facilities already built', 'listed capacity for sale or lease'],
+  siting_search:        ['DCPI-scored markets per named state for the size and deadline', 'candidate search areas per state', 'the dated power timeline per state'],
   unknown:              ['the tool families that could answer this', 'a suggested entry call'],
 };
 const _ROUTING_WHY = {
@@ -28065,6 +28330,7 @@ const _ROUTING_WHY = {
   facility_search:      'An inventory lookup is one round trip.',
   iso_comparison:       'A side-by-side of named grids needs the same read for each grid.',
   dc_capacity:          'Data-center capacity spans the construction pipeline, built facilities and listed supply.',
+  siting_search:        'Siting across several states needs the same market, land and power reads for each state.',
   unknown:              'The intent did not match a known class, so start by narrowing the catalog.',
 };
 
@@ -28137,6 +28403,7 @@ const _ROUTING_EXTERNAL = {
   facility_search:      ['operator_disclosure'],
   iso_comparison:       ['utility_or_iso_filing'],
   dc_capacity:          ['market_analytics', 'operator_disclosure'],
+  siting_search:        ['utility_or_iso_filing'],
   unknown:              [],
 };
 
@@ -28145,7 +28412,7 @@ export function _routingHint(intentClass, bestTool) {
   const cls = _ROUTING_OUTPUTS[intentClass] ? intentClass : 'unknown';
   // Multi-capability classes route to the planner; single-capability ones do not.
   const MULTI = new Set(['market_ranking', 'market_comparison', 'market_outlook', 'capacity_search',
-                         'site_analysis', 'grid_headroom', 'fiber_power_pairing', 'iso_comparison', 'dc_capacity']);
+                         'site_analysis', 'grid_headroom', 'fiber_power_pairing', 'iso_comparison', 'dc_capacity', 'siting_search']);
   return {
     problem: intentClass || 'unknown',
     best_path: MULTI.has(cls) ? 'execute_plan' : (bestTool || 'discover_tools'),
@@ -31240,6 +31507,26 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           }
         }
       }
+      // 5.29 (Grok note K, item 1): a plan none of whose steps reached a tool runs the guaranteed reads
+      // (_execGuaranteedSteps) instead of returning an empty plan.
+      try {
+        if (!executed.some((e) => e && (e.status === 'executed' || e.status === 'gated_preview'))
+            && (Date.now() - t0) < DEADLINE_MS) {
+          const _g = _execGuaranteedSteps(_sig, c && c.profile, Math.max(1, maxSteps - ran), a && a.intent);
+          let _gStep = Math.max(0, ...executed.map((e) => Number(e && e.step) || 0), ...seq.map((x) => Number(x && x.step) || 0));
+          const _gOut = await Promise.all(_g.map((g) => _execLoopbackCall(g.tool, { ...g.args }, c,
+            _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(g.tool))).then((out) => ({ g, out }))));
+          for (const { g, out: gout } of _gOut) {
+            ran += 1; calls += 1; _gStep += 1;
+            const ge = { step: _gStep, tool: g.tool, args: g.args, fallback: true, why: g.why,
+              status: gout.ok ? 'executed' : (gout.gated ? 'gated_preview' : (gout.timed_out ? 'timed_out' : 'failed')),
+              ...(gout.ok && _execStepPreview(gout.full, c) ? { depth: 'preview' } : {}),
+              ms: gout.ms, result: gout.result };
+            executed.push(ge);
+            if (gout.full) fullByEntry.set(ge, gout.full);
+          }
+        }
+      } catch (_e) { /* the fallback is additive; the plan's own entries stand */ }
       const replay = _planReplay(sc, _sig);
       try {
         // r-invariants: constraint_check decisions — 'completed without
@@ -31391,7 +31678,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _intentAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
-            requested_mw: _sig && _sig.mw }, executed, fullByEntry);
+            requested_mw: _sig && _sig.mw,
+            states: (_sig && Array.isArray(_sig.states)) ? _sig.states.slice(0, _PLAN_STATE_FANOUT_CAP) : [] }, executed, fullByEntry);
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
@@ -31508,7 +31796,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       let _dealDesk = null;
       try {
-        _dealDesk = await _execMintDealDesk(out, fullByEntry, c,
+        // 5.29 (Grok note K, item 3): a plan in which no step returned data has nothing to brief. The relay
+        // told the agent the PDF "was built from the FULL step results" on a plan that ran no step; no
+        // brief is minted, so there is no such sentence.
+        if (_planDataStepsRan(executed) > 0) _dealDesk = await _execMintDealDesk(out, fullByEntry, c,
           _execStepBudget(Date.now() - t0, DEADLINE_MS, _DEAL_DESK_TIMEOUT_MS));
       } catch (_e) { _dealDesk = null; }
       if (_dealDesk) {
@@ -31525,12 +31816,33 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const _fdTrimmed = executed.some((e) => e && e.result && typeof e.result === 'object' && e.result.truncated === true);
         if (c) c._frontDeskPlan = _frontDeskPlanFor({ intent: a && a.intent, intentClass: sc.intent_class, args: a, c, trimmed: _fdTrimmed }) || undefined;
       } catch (_e) { /* the line is optional; the answer is not */ }
+      // 5.29 (Grok note K, items 2 and 3): did any DATA step come back with a result? The dispatch reads
+      // c._kffPlanStepsRan to decide whether this plan consumed the keyless first full answer (none: the
+      // seat is given back). A plan with no data says so, and more_detail.calls names the calls to make by
+      // hand: each step's own arguments, then the concrete reads for the states the question named.
+      const _dataRan = _planDataStepsRan(executed);
+      if (c) c._kffPlanStepsRan = _dataRan;
+      const _hintOf = (e) => { const p = e && byStep.get(e.step); return p && p.tool === e.tool ? (p.args_hint || null) : null; };
+      if (_dataRan === 0) {
+        let _extra = [];
+        try { _extra = _execGuaranteedSteps(_sig, c && c.profile, maxSteps, a && a.intent); } catch (_e) { _extra = []; }
+        out.more_detail = {
+          note: 'No step returned data in this run, so this answer has no figures to report. Call these tools directly; `fill` names the one value no earlier step produced.',
+          calls: _manualNextCalls(executed, _extra, _hintOf),
+        };
+        // After an UNRESOLVED lead (it says why first), before anything else.
+        const _nd = 'NO DATA: no step returned data in this run. Do not compose an answer from executed[]; tell the user no figures came back and offer the calls in more_detail.calls.';
+        const _g0 = String(out.answer_guide || '');
+        const _ur = /^UNRESOLVED\b[^.]*\.(?:\s|$)/.exec(_g0);
+        out.answer_guide = _ur ? _g0.slice(0, _ur[0].length).trimEnd() + ' ' + _nd + ' ' + _g0.slice(_ur[0].length) : _nd + ' ' + _g0;
+      }
       // The caller's first full plan answer of the day (lib/keyless-first-full.mjs): the direct answer and its
       // as_of lead, each step keeps its key figures and first rows, and more_detail points at the full rows.
+      // A plan with no data is not compacted: it was not the day's full answer (the dispatch gives the seat back).
       let _final = out;
-      if (c && c._kffPlan === true && c.loopback_step !== true) {
+      if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
         try {
-          _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap() });
+          _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
           for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
