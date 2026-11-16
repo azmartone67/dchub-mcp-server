@@ -20,7 +20,7 @@ const show = (p) => JSON.stringify(p.recommended_sequence.map((s) => [s.step, s.
 const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 
 describe('planner 5.28: named towns (B1)', () => {
-  it('PLANNER_VERSION is 5.28 or later (5.29)', () => { expect(PLANNER_VERSION).toBe('5.29'); });
+  it('PLANNER_VERSION is 5.28 or later (5.29)', () => { expect(PLANNER_VERSION).toBe('5.30'); });
 
   it('_planUnmatchedPlace takes the capitalised run that ENDS at the state ("gas near Sweetwater TX")', () => {
     const t = 'Behind-the-meter gas near Sweetwater TX: what air permits apply?';
