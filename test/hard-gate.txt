@@ -360,6 +360,7 @@ test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/list-transactions-no-deal-floor.test.mjs
+test/listed-tools-callable-every-path.test.mjs
 test/listing-canon.test.mjs
 test/listing-copy.test.mjs
 test/listing-links-receipt.test.mjs
