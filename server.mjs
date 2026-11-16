@@ -133,6 +133,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -25351,6 +25352,11 @@ function _sourceLineCb(name, fn) {
       // (lib/plan-fact-header.mjs). Block 0 stays valid JSON. LAST, after every trim. Not on the directory / Claude /
       // core profiles or a clean platform; compact:false or DCHUB_PLAN_FACT_HEADER=0 returns the output without it.
       if (name === 'execute_plan') _final = _planFactHeaderStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), compact: _planCompactRequested(args) });
+      // Grok Note V item 1 / Note F M1 (2026-11-16): a keyless result names no plan, trial, upgrade or price and links
+      // no pricing page (lib/keyless-plan-wording.mjs). The LAST rewrite, for a caller with no key, on the canonical
+      // surfaces only (the directory / Claude / core profiles and clean platforms keep their own copy). Kill switch
+      // DCHUB_KEYLESS_NO_PLAN_WORDING=0.
+      _final = _keylessPlanWordingStep(_final, { skip: !!c.api_key || !!c.loopback_step || ownScrub || _isCleanPlatform() });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives

@@ -67,7 +67,7 @@ describe('keyless walls', () => {
       const r = await call(name, args);
       const sc = r.structuredContent;
       expect(sc._wall).toBe(true);
-      expect(sc.error).toBe('pro_required');
+      expect(sc.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
       expect(JSON.stringify(sc)).toMatch(/https:\/\/dchub\.cloud\//);
       expect('required_plan' in sc).toBe(false);
       for (const o of jsonBlocks(r)) expect('required_plan' in o).toBe(false);
