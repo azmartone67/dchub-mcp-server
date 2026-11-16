@@ -144,6 +144,45 @@ describe('the Source line never reads fresher than the answer (live 2026-10-18)'
   });
 });
 
+// Finding #118323 (Grok, live 2026-11-14, planner 5.27): "What is the data center power outlook for Kansas City
+// right now?" ran get_market_dcpi_rank (dated that day), get_market_intel (as_of 2026-09-26, the market's newest
+// facility discovery) and SPP grid. intent_answer.source is dated by the oldest input on purpose, and
+// execute_plan's dcpi_verdict block reused it, so the DCPI score was cited "as of 2026-09-26" while
+// /markets/kansas-city showed the score dated that day. The verdict carries its own DCPI read's Source line.
+describe('the DCPI verdict is cited with its own read, not the oldest input (#118323)', () => {
+  const kcDcpi = step('get_market_dcpi_rank', { market_slug: 'kansas-city' }, {
+    market_slug: 'kansas-city', verdict: 'BUILD', composite_score: 68.8,
+    provenance: { as_of: '2026-11-14T17:12:00Z' },
+    citation: { as_of: '2026-11-14T17:12:00Z', cite_as: 'DC Hub, dchub.cloud - PARTIAL preview (as of 2026-11-14)' } });
+  const kcIntel = step('get_market_intel', { market: 'kansas-city' }, {
+    market: 'kansas-city', as_of: '2026-09-26', provenance: { as_of: '2026-09-26' } });
+  const spp = step('get_grid_intelligence', { iso: 'SPP' }, {
+    iso: 'SPP', citation: { as_of: '2026-11-14T17:00:00Z' }, taste: { band: { constraint: 'BUILD' } } });
+  const dayOf = (src) => (/as of (\d{4}-\d{2}-\d{2})/.exec(src || '') || [])[1] || null;
+  const KC = 'is Kansas City a good market for a data center';
+
+  it('the answer keeps its oldest-input date; the verdict keeps the DCPI read date', () => {
+    const a = buildIntentAnswer(ctx(KC, 'market_outlook', { constraint_iso: ['SPP'] }), [kcDcpi, kcIntel, spp], null, NOW);
+    expect(a.kind).toBe('market_check');
+    expect(a.as_of).toBe('2026-09-26');                // rule 3 unchanged
+    expect(a.source).toContain('as of 2026-09-26');
+    expect(a.verdict).toMatchObject({ value: 'BUILD', scope: 'market', subject: 'kansas-city' });
+    expect(a.verdict.source).toBe('Source: DC Hub (dchub.cloud/markets/kansas-city), as of 2026-11-14');
+  });
+  it('invariant: in any step order, the verdict date equals its DCPI card date (never the older input)', () => {
+    for (const ex of [[kcDcpi, kcIntel, spp], [kcIntel, kcDcpi], [spp, kcIntel, kcDcpi], [kcDcpi]]) {
+      const a = buildIntentAnswer(ctx(KC, 'market_outlook', { constraint_iso: ['SPP'] }), ex, null, NOW);
+      expect(dayOf(a.verdict.source), JSON.stringify(ex.map((s) => s.tool))).toBe('2026-11-14');
+    }
+  });
+  it('an ISO band verdict carries no market Source line of its own', () => {
+    const a = buildIntentAnswer(ctx('how soon can I get 100 MW of power in SPP', 'capacity_search', { constraint_iso: ['SPP'] }),
+      [spp, queue('2026-08-31')], null, NOW);
+    expect(a.verdict).toMatchObject({ scope: 'iso' });
+    expect(a.verdict.source).toBeUndefined();
+  });
+});
+
 describe('relay + safety', () => {
   const base = { structuredContent: { human_url: 'https://dchub.cloud/upgrade/h/abc', human_message: 'm', intent_answer: { kind: 'siting', relay: null, source: 'Source: DC Hub (dchub.cloud)' } } };
   it('copies the existing link, keeps source last', () => {
