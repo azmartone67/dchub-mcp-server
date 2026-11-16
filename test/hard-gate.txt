@@ -481,6 +481,8 @@ test/planner-528-named-towns.test.mjs
 test/planner-529-e2e.test.mjs
 test/planner-529-note-k.test.mjs
 test/planner-530-one-state-ttp.test.mjs
+test/planner-531-e2e.test.mjs
+test/planner-531-non-us-region.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

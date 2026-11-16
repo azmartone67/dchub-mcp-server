@@ -13,7 +13,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const show = (p) => JSON.stringify(p.recommended_sequence.map((s) => [s.step, s.tool, s.args_hint]));
 
 describe('planner 5.30: one state, time to power', () => {
-  it('PLANNER_VERSION is 5.30', () => { expect(PLANNER_VERSION).toBe('5.30'); });
+  it('PLANNER_VERSION is 5.30 or later (5.31)', () => { expect(PLANNER_VERSION).toBe('5.31'); });
 
   it('the Utah prompt reads both named markets, the state canvas, search areas and the timeline', () => {
     const p = _planQuery(UT, {});
