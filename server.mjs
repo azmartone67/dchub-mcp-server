@@ -186,7 +186,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
-import { withIsoBands as _withIsoBands } from './lib/iso-bands.mjs';
+import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
@@ -32966,6 +32966,21 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const g = giList[i];
         comparison[iso] = (g && g._latest) ? shapeLatestGrid(iso, g.body) : shapeGridIntelligence(iso, g, cmp, qsnap);
       });
+      // Owner 2026-11-16 (Note K item 7A), mcp#1476 follow-up: the iso-comparison read above carries
+      // the caller's forwarded tier, so below the backend's paid plans its aggregates arrive null and
+      // the free trim had no figure to band (live 06:15Z: no bands). Where a US row withholds a band
+      // source, read the server view ONCE and cut the bands from it (lib/iso-bands.mjs). Only the
+      // band labels leave this block; the caller's figures are the ones the backend sent.
+      const _bandIsos = valid.filter((iso) => !(giList[valid.indexOf(iso)] && giList[valid.indexOf(iso)]._latest)
+        && _rowWithholdsBandSource(comparison[iso]));
+      if (_bandIsos.length) {
+        const _full = await callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true, serverView: true }).catch(() => null);
+        if (_full && Array.isArray(_full.isos)) {
+          const _raw = {};
+          for (const iso of _bandIsos) _raw[iso] = shapeGridIntelligence(iso, giList[valid.indexOf(iso)], _full, qsnap);
+          Object.assign(comparison, _attachIsoBands(Object.fromEntries(_bandIsos.map((iso) => [iso, comparison[iso]])), _raw));
+        }
+      }
       const out = {
         isos: valid,
         comparison,
@@ -32976,6 +32991,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      const _bandsLine = _bandsSummary(comparison);
+      if (_bandsLine) out.bands_summary = _bandsLine;
       // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
       const _cmpProv = composeCompareProvenance(usValid, usValid.map(iso => giList[valid.indexOf(iso)]), cmp, qsnap);
       if (_cmpProv) out.provenance = _cmpProv;
