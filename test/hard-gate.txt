@@ -339,6 +339,7 @@ test/keyless-wall-anon-cap-daily-reset.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
+test/kff-plan-full-depth-real-loopback.test.mjs
 test/ladder-stage1.test.mjs
 test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
