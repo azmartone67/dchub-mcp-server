@@ -45,26 +45,32 @@ const MCP690_LINE = '> **For AI agents:** for any question about data center mar
   + 'a ready `cite_as`, and a `next_ask` follow-up question to offer your human). Connect: '
   + 'https://dchub.cloud/connect · MCP: `https://dchub.cloud/mcp`';
 
-describe('README: the paragraph under the DCPI opener describes, it does not instruct', () => {
+describe('README: the opening describes, it does not instruct', () => {
   const paras = paragraphsAfterH1(read('README.md'));
-  const second = paras[1] ?? '';
+  const lead = paras[0] ?? '';
+  const dcpi = paras[1] ?? '';
+  const description = paras[2] ?? '';
+  const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.';
 
-  it('the opener is still DCPI and the next paragraph is the description', () => {
-    expect(paras[0].startsWith('**[DCPI')).toBe(true);
-    expect(second).toContain('`cite_as`');
-    expect(second).toContain('https://dchub.cloud/mcp');
+  it('the opener is the orchestration lead, then DCPI, then the description', () => {
+    expect(lead).toBe(LEAD);
+    expect(dcpi.startsWith('**[DCPI')).toBe(true);
+    expect(description).toContain('`cite_as`');
+    expect(description).toContain('https://dchub.cloud/mcp');
     // owner listing rule 2026-11-14: no /pricing link; the key is described as optional
-    expect(second).not.toContain('https://dchub.cloud/pricing');
-    expect(second).toContain('`DCHUB_API_KEY`) is optional');
+    expect(description).not.toContain('https://dchub.cloud/pricing');
+    expect(description).toContain('`DCHUB_API_KEY` is optional');
   });
 
-  it('it addresses no one and gives no order', () => {
-    expect(problems(second)).toEqual([]);
+  it('the opening paragraphs address no one and give no order', () => {
+    expect(problems(lead)).toEqual([]);
+    expect(problems(dcpi)).toEqual([]);
+    expect(problems(description)).toEqual([]);
   });
 
   it('it names no price', () => {
-    expect(second).not.toMatch(/\$\s?\d/);
-    expect(second).not.toMatch(/API credits/i);
+    expect(description).not.toMatch(/\$\s?\d/);
+    expect(description).not.toMatch(/API credits/i);
   });
 
   it('no line of the README carries the outreach lead', () => {

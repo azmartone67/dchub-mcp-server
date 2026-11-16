@@ -2,8 +2,8 @@
 //
 // The GitHub README (~28 KB) put Install at ~line 168, so a visitor had to scroll past the API,
 // licensing and endpoint sections to find the one command. A "Start" block now sits directly under
-// the badge row: the orchestration sentence, `npx -y dchub-mcp-server`, "No key needed for
-// previews. Start with execute_plan." and /connect. The npm README stays short. Neither names a
+// the badge row: the orchestration sentence, `npx -y dchub-mcp-server`, "DCHUB_API_KEY is optional.
+// Start with execute_plan." and /connect. The npm README stays short. Neither names a
 // plan, a price, or paid/upgrade/trial (owner notes F/G/M/N).
 import { describe, it, expect } from 'vitest';
 import { readFileSync, statSync } from 'node:fs';
@@ -53,7 +53,7 @@ describe('GitHub README: Start block under the badge row', () => {
   it('has the orchestration sentence, the npx one-liner, the previews line and /connect', () => {
     expect(block).toContain(ORCH);
     expect(block).toMatch(/```bash\nnpx -y dchub-mcp-server\n```/);
-    expect(block).toContain('No key needed for previews. Start with execute_plan.');
+    expect(block).toContain('`DCHUB_API_KEY` is optional. Start with execute_plan.');
     expect(block).toContain('https://dchub.cloud/connect');
   });
   it('the star line appears exactly once in the README', () => {
