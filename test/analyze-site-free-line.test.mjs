@@ -77,7 +77,7 @@ describe('the sentence', () => {
   });
   it('never joins the pinned rule', () => {
     expect(TC._freeTierRuleText()).not.toContain('site reports');
-    expect(TC._freeTierRuleText()).toMatch(/ Paid plans: dchub\.cloud\/pricing\.$/);
+    expect(TC._freeTierRuleText()).toMatch(/ Higher limits: dchub\.cloud\/pricing\.$/);
     expect(S._INSTR_FREE_TIER).not.toContain('site reports');
   });
   it('follows the monthly free runs switch', () => {

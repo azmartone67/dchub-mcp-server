@@ -31917,7 +31917,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
-                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth' : 'no key — steps returned preview depth; claim_free_key raises it') },
+                    : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth'
+                      // 2026-11-16 (owner, Grok Note K): a keyless plan that took today's first full answer ran its
+                      // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
+                      : (c && c._kffPlan === true
+                        ? 'no key — today\'s first full answer: steps ran at full depth; later keyless plans today return previews; an email raises the limit'
+                        : 'no key — steps returned preview depth (the first keyless plan each UTC day is a full answer); an email raises the limit')) },
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every

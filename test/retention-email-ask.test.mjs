@@ -244,7 +244,10 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.sc.daily_full_answers_per_tool).toBe(2);
     expect(r.sc.daily_limit_with_email).toBe(50);
     expect(r.sc.full_answers_per_tool_per_day_with_email).toBe(10);
-    expect(r.sc.free_tier_rule).toBe('Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.');
+    expect(r.sc.free_tier_rule).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
+      + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+      + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
+      + 'Higher limits: dchub.cloud/pricing.');
     expect(r.text).not.toMatch(/Free tier = 10 calls\/day/);
   });
 

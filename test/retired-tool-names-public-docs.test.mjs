@@ -104,7 +104,7 @@ describe('llms-install.md carries no plan-price table', () => {
     // test/free-tier-claims.test.mjs; this file must quote it whole.
     const { _freeTierRuleText } = await import('../lib/tier-canon.mjs');
     const rule = _freeTierRuleText();
-    expect(rule).toMatch(/^Anonymous: /);
+    expect(rule).toMatch(/^No key needed: /);   // 2026-11-16 (owner, Grok Note K)
     expect(doc).toContain(rule);
     expect(doc).toContain('https://dchub.cloud/pricing');
   });
