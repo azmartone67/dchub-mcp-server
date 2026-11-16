@@ -88,7 +88,7 @@ describe('1. wallOffers is the old composition, byte for byte, where eligibility
     for (const [ent, f] of matrix()) {
       const got = wallOffers(ent, { ...f, walled: true, env: ENV }).map((o) => ({ place: o.place, line: o.line, ask: o.ask }));
       const want = legacy(ent, f).map((o) => {
-        const digestFloor = o.place === 'floor' && o.ask === 'digest_line' && !ent.bound;
+        const digestFloor = o.place === 'floor' && o.ask === 'digest_line' && !ent.bound && !ent.paid;   // not a paid key
         if (!digestFloor) return o;
         changed += 1;
         const kind = floorOfferKind({ proOnly: f.proOnly, depth: f.depth, bound: ent.bound });

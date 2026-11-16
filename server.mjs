@@ -2362,6 +2362,10 @@ function _askOnceSeen(sid, kind, tool) {
   _HUMAN_LINE_SENT.add(k);
   return false;
 }
+// Peek, never record: whether (session, kind, tool) already had that ask (the reader _askOnceSeen records).
+function _askOnceHas(sid, kind, tool) {
+  return _isRealSession(sid) && !!tool && _HUMAN_LINE_SENT.has(sid + '\u0002' + kind + '\u0002' + tool);
+}
 function _markHumanLineSent(sid) {
   if (!_isRealSession(sid)) return;
   const tool = _ctxAskTool();
@@ -5171,18 +5175,23 @@ function _planFloor(result, c) {
 //   floor       the free email / digest offer (lib/wall-offer-floor.mjs), only when the answer has no free offer yet;
 //               its email-ask tag is marked on the call (the wall row's email_ask; a later email_entered names it).
 //   below_link  the depth trial (owner 2026-11-13; lib/wall-depth-trial.mjs), right below the block handing out the link.
+// The free-key line's once-per-(session, tool) memo (note N item 1): a direct call only. An execute_plan step (loopback,
+// the caller's session id) neither reads nor marks it, as _ctxAskTool keeps steps off the per-tool memo.
+const _keyLineOncePerTool = (c) => _askPerToolOn() && !!c && !c.loopback_step;
 function _placeWallOffers(out, offers, name, c) {
   let r = out;
   for (const o of offers) {
     if (o.place !== 'floor') continue;
     r = _withFloorLine(r, o.line);
     if (o.ask) _markEmailAsk(c, o.ask);
+    if (o.ask === 'key_line' && _keyLineOncePerTool(c)) _askOnceSeen(c.session_id, 'key_line', name);   // asked once per tool
   }
   // Note N item 1 (lib/wall-key-line.mjs): the free-key line, ahead of the digest offer the answer already carries.
   for (const o of offers) {
     if (o.place !== 'ahead_of_digest') continue;
     const placed = _withKeyLineAheadOfDigest(r, o.line);
     if (placed !== r && o.ask) _markEmailAsk(c, o.ask);
+    if (placed !== r && _keyLineOncePerTool(c)) _askOnceSeen(c.session_id, 'key_line', name);
     r = placed;
   }
   for (const o of offers) if (o.place === 'lead') r = _withOauthLeadLine(r, o.line);
@@ -5236,8 +5245,11 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     // (lib/offers-shown.mjs finalAskMark): read the mark the same way, so that ask counts here too.
     const shownOffers = _offersShown(out, c._emailAsk || _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result: out }));
     const freeOfferShown = _hasFreeOffer(shownOffers);
+    // Ask once per tool per session (owner 2026-11-09): the free-key line went out on this tool earlier in the session,
+    // so the same tool again reads the floor's one digest line only (test/ask-once-per-tool), never the key ask again.
+    const keyLineSent = _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
     return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
-      link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) }), name, c);
+      link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent }), name, c);
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read

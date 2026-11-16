@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork, GUESS_ARGS } from './helpers/claude-directory-harness.mjs';
-import { keyLine, keyLineAllowance, keyLineEligible, withKeyLineAheadOfDigest, KEY_LINE_RE, KEY_LINE_URL } from '../lib/wall-key-line.mjs';
+import { keyLine, keyLineAllowance, keyLineEligible, withKeyLineAheadOfDigest, KEY_LINE_RE, KEY_LINE_LEAD } from '../lib/wall-key-line.mjs';
 import { wallOffers, wallEntitlements, mintedOnly, statesOnlyCanonLimits, offerKinds } from '../lib/wall-offers.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
 import { markEmailAsk, quotaWallEventBody, WALL_ASK_KINDS } from '../lib/keyless-wall.mjs';
@@ -28,19 +28,23 @@ const FORBIDDEN = /\bpaid\b|upgrade|trial|\$\s?\d|\/pricing|\/checkout|stripe|\b
 const keyless = (over = {}) => ({ keyed: false, bound: false, signedIn: false, paid: false, held: '', ...over });
 
 describe('the key line (pure)', () => {
-  it('states canon figure in canon form, names /connect, and nothing forbidden', () => {
+  it('states canon figure in canon form, carries no link and no braces, and nothing forbidden', () => {
     expect(FREE_TIER.identified_calls_per_day).toBe(50);
     expect(keyLineAllowance()).toBe('50 MCP calls/day');
     expect(FREE_OFFER_EMAIL.startsWith(keyLineAllowance())).toBe(true);
     for (const keyed of [false, true]) {
       const l = keyLine({ keyed });
-      expect(l.startsWith('Add your email to get your free key (50 MCP calls/day) and keep going: https://dchub.cloud/connect\n')).toBe(true);
+      expect(l.startsWith('Add your email to get your free key (50 MCP calls/day) and keep going.\n')).toBe(true);
+      // One link per wall (test/anon-top-tools-snapshot, test/spent-cap-link-line): the wall's human_url is its link.
+      expect(l).not.toMatch(/https?:\/\/|dchub\.cloud/);
+      // Prose after block 0's JSON: a brace there would read as a second JSON object to a {...} slicer.
+      expect(l).not.toMatch(/[{}]/);
       expect(l).toMatch(/Only use an address they gave you\.$/);
-      expect(l).toMatch(keyed ? /`bind_email` \{api_key, email\}/ : /`bind_email` with it: with no key it returns an email-bound key.*`claim_free_key`/);
+      expect(l).toMatch(keyed ? /`bind_email` with this key and their email: the email is bound to this key\./ : /`bind_email` with it: with no key it returns an email-bound key.*`claim_free_key`/);
       expect(l).not.toMatch(FORBIDDEN);
       expect(BANNED.test(l)).toBe(false);                      // note K / L neutral-cta keeps every sentence of it
       expect(statesOnlyCanonLimits(l)).toBe(true);
-      expect(mintedOnly([{ line: l }], '')).toHaveLength(1);   // /connect is an allowed URL
+      expect(mintedOnly([{ line: l }], '')).toHaveLength(1);   // no URL to refuse
       expect(l.match(new RegExp(KEY_LINE_RE.source, 'g'))).toHaveLength(1);
     }
   });
@@ -52,6 +56,7 @@ describe('the key line (pure)', () => {
   it('eligibility: digest-only wall, no email on file, a digest offer, no unlock ask', () => {
     expect(keyLineEligible({ floorKind: 'digest', bound: false, digest: true })).toBe(true);
     expect(keyLineEligible({ floorKind: 'digest', bound: true, digest: true })).toBe(false);
+    expect(keyLineEligible({ floorKind: 'digest', bound: false, paid: true, digest: true })).toBe(false);   // a paid key
     expect(keyLineEligible({ floorKind: 'email', bound: false, digest: true })).toBe(false);
     expect(keyLineEligible({ floorKind: 'digest', bound: false, digest: false })).toBe(false);
     expect(keyLineEligible({ floorKind: 'digest', bound: false, digest: true, unlock: true })).toBe(false);
@@ -77,7 +82,7 @@ describe('wallOffers: one offer, the key line first', () => {
       expect(o[0].place).toBe('floor');
       expect(o[0].ask).toBe('key_line');
       expect(o[0].line.startsWith(keyLine({ keyed }) + '\n\n')).toBe(true);
-      expect(o[0].line.indexOf('`subscribe_digest`')).toBeGreaterThan(o[0].line.indexOf(KEY_LINE_URL));
+      expect(o[0].line.indexOf('`subscribe_digest`')).toBeGreaterThan(o[0].line.indexOf(KEY_LINE_LEAD));
       expect(offerKinds(o)).toEqual(keyed ? ['digest', 'email_key'] : ['digest', 'email_key', 'free_key']);
       expect(o[0].line.match(/claim_free_key/g) || []).toHaveLength(keyed ? 0 : 1);   // named once, by the key line
     }
@@ -89,6 +94,10 @@ describe('wallOffers: one offer, the key line first', () => {
     // The claim hand-off already asks for the email to mint a key: no second email-for-key line, either placement.
     expect(wallOffers(keyless(), { ...f, freeOfferShown: true, shownOffers: ['digest', 'free_key'], keyAsked: true })).toEqual([]);
     expect(wallOffers(keyless(), { ...f, keyAsked: true })[0].ask).toBe('digest_line');
+  });
+  it('a paid caller with no email on file: no key line (it holds more than the free allowance)', () => {
+    expect(wallOffers(keyless({ keyed: true, paid: true }), f).some((x) => x.ask === 'key_line')).toBe(false);
+    expect(wallOffers(keyless({ keyed: true, paid: true }), { ...f, freeOfferShown: true, shownOffers: ['digest'] })).toEqual([]);
   });
   it('a caller with an email on file: today\'s digest line, unchanged; Grok: unchanged', () => {
     const o = wallOffers(keyless({ keyed: true, bound: true }), f);
@@ -202,11 +211,11 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
     const delivered = prose.match(new RegExp(KEY_LINE_RE.source, 'g'));
     expect(delivered).toHaveLength(1);   // once
     // The exact text the agent receives (a prose block: note K's neutral-cta allowlist does not police it), checked
-    // here: canon's figure in canon's form, the one /connect link, no plan, no price, no paid / upgrade / trial.
+    // here: canon's figure in canon's form, no link of its own, no plan, no price, no paid / upgrade / trial.
     expect(delivered[0]).toContain('(50 MCP calls/day)');
     expect(delivered[0]).not.toMatch(FORBIDDEN);
     expect(BANNED.test(delivered[0])).toBe(false);
-    expect(delivered[0].match(/https?:\/\/\S+/g)).toEqual(['https://dchub.cloud/connect']);
+    expect(delivered[0]).not.toMatch(/https?:\/\//);
     for (const e of rows) {
       expect(e.email_ask).toBe('key_line');
       expect(e.offers_shown).toEqual(expect.arrayContaining(['digest', 'email_key']));
