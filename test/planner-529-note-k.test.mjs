@@ -9,7 +9,7 @@
 //   that reaches no tool runs _execGuaranteedSteps. Items 2 and 3 are in test/keyless-first-full.test.mjs
 //   (section K) and the execute_plan runs in test/planner-529-e2e.test.mjs.
 import { describe, it, expect } from 'vitest';
-import { _planQuery, _planSignals, _planNamedStates, _planStateGridArg, _planSitingEligible,
+import { _planQuery, _planPipelinePlace, _execWidenedLine, _planSignals, _planNamedStates, _planStateGridArg, _planSitingEligible,
   _planMultiStateFallback, _execGuaranteedSteps, _resolutionGap, PLANNER_VERSION } from '../server.mjs';
 import { buildIntentAnswer } from '../lib/intent-answers.mjs';
 
@@ -68,6 +68,43 @@ describe('planner 5.29: the three re-check prompts', () => {
     expect(tools(bare)).toEqual(tools(full));
     expect(bare.recommended_sequence.map((s) => s.args_hint)).toEqual(full.recommended_sequence.map((s) => s.args_hint));
     expect(bare.unresolved ?? null).toBe(null);
+    // get_pipeline is held to the resolved market, with the completion cutoff "next 18 months" gives
+    // (the first day of the month after the deadline month).
+    const pipe = bare.recommended_sequence.find((s) => s.tool === 'get_pipeline').args_hint;
+    const now = new Date();
+    const after = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 19, 1));
+    expect(pipe).toEqual({ country: 'US', market: 'northern-virginia',
+      expected_completion_before: `${after.getUTCFullYear()}-${String(after.getUTCMonth() + 1).padStart(2, '0')}-01` });
+  });
+
+  it('get_pipeline place: the market slug, else the state; a town reads its state (cut after the call)', () => {
+    const pipe = (t) => _planQuery(t, {}).recommended_sequence.find((s) => s.tool === 'get_pipeline').args_hint;
+    expect(pipe('What data center capacity is under construction in Dallas?')).toMatchObject({ market: 'dallas', status: 'construction' });
+    expect(pipe('data center pipeline in Texas by 2028')).toEqual({ country: 'US', state: 'TX', expected_completion_before: '2029-01-01' });
+    const ash = pipe('How much data center capacity is coming online in Ashburn?');
+    expect(ash).toEqual({ country: 'US', state: 'VA', limit: 100 });
+    expect(pipe('data center pipeline')).toEqual({});
+    expect(_planPipelinePlace({ __outlook: { unresolved: { kind: 'market_ambiguous' } } }, null, null)).toEqual({});
+  });
+
+  it('_execWidenedLine: names the state-wide steps, relays the server note, and is silent when nothing widened', () => {
+    const vaSteps = [
+      { step: 2, tool: 'search_facilities', status: 'executed', args: { state: 'VA' }, result: {} },
+      { step: 3, tool: 'source_capacity', status: 'executed', args: { state: 'VA' }, result: {} },
+      { step: 4, tool: 'find_sites', status: 'failed', args: { state: 'VA' }, result: null },
+    ];
+    expect(_execWidenedLine({ widened_from: 'Northern Virginia', to: 'PJM' }, vaSteps))
+      .toBe('Widened Northern Virginia to Virginia: search_facilities, source_capacity read all of Virginia, not Northern Virginia alone; say so when quoting them.');
+    const note = 'Widened Northern Virginia to Virginia: 3 more projects are labelled only with the state.';
+    const withPipe = [{ step: 1, tool: 'get_pipeline', status: 'executed', args: { market: 'northern-virginia' }, result: { scope: { note } } }, ...vaSteps];
+    const line = _execWidenedLine({ widened_from: 'Northern Virginia', to: 'PJM' }, withPipe);
+    expect(line.startsWith(note + ' Also: search_facilities, source_capacity read all of Virginia')).toBe(true);
+    // A server note alone is relayed even without a plan-level widening.
+    expect(_execWidenedLine(null, withPipe.slice(0, 1))).toBe(note);
+    // A step held to a market, city or point is not widened; no scope_widened and no note: ''.
+    expect(_execWidenedLine({ widened_from: 'Dallas', to: 'ERCOT' }, [{ step: 1, tool: 'search_facilities', status: 'executed', args: { state: 'TX', city: 'Dallas' } }])).toBe('');
+    expect(_execWidenedLine(null, vaSteps)).toBe('');
+    expect(_execWidenedLine({ widened_from: 'Dallas', to: 'ERCOT' }, 'junk')).toBe('');
   });
 
   it('the forward-window rescue needs a place and never outvotes a class that matched', () => {
