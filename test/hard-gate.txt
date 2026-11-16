@@ -130,6 +130,7 @@ test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/compare-isos-array-arg.test.mjs
+test/compare-isos-bands-forwarded-tier.test.mjs
 test/compare-isos-coarse-bands.test.mjs
 test/compare-isos-consistency.test.mjs
 test/compare-isos-note-l-e2e.test.mjs
