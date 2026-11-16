@@ -79,6 +79,7 @@
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
+import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
 import { AGENT_DEMAND_TOOL, AGENT_DEMAND_PATH, AGENT_DEMAND_DESCRIPTION, agentDemandEnabled, agentDemandPayload } from './lib/agent-demand.mjs';
 import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLooksWalled, boundPlaces, stripHandoffIfPointered } from './lib/handoff.mjs';
@@ -19651,7 +19652,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
 
   get_market_dcpi_rank: z.looseObject({
     ..._ENVELOPE_SHAPE,
-    narrative: _oAny('~100-word analyst read on the market, quote directly with attribution to DC Hub (CC-BY-4.0)'),
+    narrative: _oAny('~100-word analyst read on the market when DC Hub has written one (often absent); quote directly with attribution to DC Hub'),
     market_slug: _oStr('Market slug'),
     market_name: _oStr('Market display name'),
     state: _oStr('US state / region code'),
@@ -19677,7 +19678,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     computed_at: _oStr('When the score row was computed'),
     published: _oBool('Whether the score is published'),
     tier_required: _oStr('Tier required for the full row'),
-  }).describe('DCPI rank for ONE market: BUILD/CAUTION/AVOID verdict, component scores, time-to-power, and analyst narrative — alongside the DC Hub envelope keys.'),
+  }).describe('DCPI rank for ONE market: BUILD/CAUTION/AVOID verdict, component scores, time-to-power, and an analyst narrative when one exists — alongside the DC Hub envelope keys.'),
 
   hyperscaler_deals: z.looseObject({
     ..._ENVELOPE_SHAPE,
@@ -32105,6 +32106,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         }
       } catch (_e) { /* the fallback is additive; the plan's own entries stand */ }
       const replay = _planReplay(sc, _sig);
+      // Grok live proof 2026-11-16 item 8: a stable id for the plan (lib/plan-replay-id.mjs).
+      try { const _pid = _planIdOf({ intent: a && a.intent, context: a && a.context, intentClass: sc.intent_class, plannerVersion: replay.planner_version }); if (_pid) replay.plan_id = _pid; } catch (_e) { /* optional */ }
       try {
         // r-invariants: constraint_check decisions — 'completed without
         // invariant violations' is what completion-rate can't see.
@@ -32319,6 +32322,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                       : (c && c._kffPlan === true
                         ? 'no key — today\'s first full answer: steps ran at full depth; later keyless plans today return previews; an email raises the limit'
                         : 'no key — steps returned preview depth (the first keyless plan each UTC day is a full answer); an email raises the limit')) },
+        ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
         // answer for a market nobody asked about. The sentence reaches every
@@ -32440,9 +32444,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
         try {
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
-          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff']) {
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'plan_id']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
+          // Grok live proof 2026-11-16 item 8: the description promises a replay on every envelope; the compact
+          // first answer dropped it. It keeps the decisions and their status (lib/plan-replay-id.mjs).
+          if (out.replay && _final.replay === undefined) { const _cr = _compactReplay(out.replay); if (_cr) _final.replay = _cr; }
         } catch (_e) { _final = out; }   // never lose the answer to its own shortening
       }
       // r-endburst (2026-08-15): the planner's final assembly IS the
@@ -32530,7 +32537,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word analyst read on the market, quote it directly with attribution to DC Hub. Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
+    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
