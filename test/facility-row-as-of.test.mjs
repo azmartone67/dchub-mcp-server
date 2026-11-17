@@ -22,7 +22,7 @@ const prevEnv = {};
 const BASIS = 'the record was last refreshed from its sources on this date (discovered_facilities.last_updated). It dates the DC Hub record, not the physical facility';
 const rows = [
   { id: 1, name: 'Rowasof DC 1', slug: 'rowasof-dc-1', provider: 'Rowasof Provider', city: 'Ashburn', state: 'VA', country: 'US',
-    as_of: '2026-09-07', as_of_basis: BASIS, verified_at: '2026-10-21', v: 'verified', verification: 'verified',
+    as_of: '2026-09-07', as_of_basis: BASIS, as_of_kind: 'refreshed', verified_at: '2026-10-21', v: 'verified', verification: 'verified',
     power_mw: 48.5, jv_partners: 'Rowasof JV Partner', first_seen: '2026-03-18T03:29:40', last_updated: '2026-09-07T09:10:34' },
   { id: 2, name: 'Rowasof DC 2', slug: 'rowasof-dc-2', provider: 'Rowasof Provider', city: 'Ashburn', state: 'VA', country: 'US',
     as_of: null, as_of_basis: 'UNMEASURED - this row carries no usable refresh date, so there is no as_of to cite. Do not substitute today\'s date',
@@ -108,6 +108,7 @@ function expectRowsCarryTheirDate(out, label) {
   expect(a.as_of, `${label}: row as_of dropped by the mask`).toBe('2026-09-07');
   expect(a.as_of_basis, `${label}: row as_of_basis dropped`).toContain('last refreshed from its sources');
   expect(a.verified_at, `${label}: verified_at dropped`).toBe('2026-10-21');
+  expect(a.as_of_kind, `${label}: as_of_kind dropped`).toBe('refreshed');
   expect(b && b.name).toBe('Rowasof DC 2');
   expect(b.as_of, `${label}: an undated row must stay null, never gain a date`).toBeNull();
   expect(b.as_of_basis).toMatch(/^UNMEASURED/);

@@ -60,7 +60,7 @@ describe('plan-step-facts: dated facts from what a step returned', () => {
     const f = factsFromExecuted([ex(1, 'get_metro_fiber', { market: 'chicago' }, CHI_METRO_FIBER),
       ex(2, 'get_fiber_readiness', { lat: 41.853, lon: -87.618 }, CHI_READINESS)], null, { address: '350 E Cermak Rd' });
     expect(f.map((x) => x.text)).toEqual([
-      "350 E Cermak Rd is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's fiber profile (DC Hub metro fiber, as of 2026-03-17).",
+      "350 E Cermak Rd is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's curated carrier profiles (DC Hub baseline as of 2026-03-17, not a live feed).",
       'Fiber at 350 E Cermak Rd: on-net, nearest carrier 0.05 km (PeeringDB carrier presence + FCC fiber coverage).',
     ]);
     // no address asked: the metro profile is not turned into an address claim
@@ -101,12 +101,12 @@ describe('Q-d: "Fastest grid power in Texas" leads with dated supply facts', () 
 
 describe('Q-c: colocation price ask says "doesn\'t publish" and shows a dated driver figure', () => {
   it('the note and one driver figure lead; the incentive status is evidence', () => {
-    expect(COLO_PRICING_NOTE.startsWith("DC Hub doesn't publish colocation prices.")).toBe(true);
+    expect(COLO_PRICING_NOTE.startsWith("DC Hub doesn't publish colocation pricing.")).toBe(true);
     const cs = coloSignals('What does 1 MW of colocation cost per kW per month in Phoenix?', {});
     const a = buildColocationAnswer({ intent: 'x', intent_class: 'pricing_out_of_scope', metro: cs.metro, metros: [], kw: cs.kw },
       [ex(1, 'get_market_dcpi_rank', { market_slug: 'phoenix' }, PHX_DCPI), ex(2, 'get_energy_prices', { state: 'AZ' }, AZ_ENERGY),
         ex(3, 'get_tax_incentives', { state: 'AZ' }, AZ_TAX)], null);
-    expect(a.headline).toMatch(/^DC Hub doesn't publish colocation prices\. .* AZ all-sector average retail electricity rate: 10\.03 cents\/kWh \(2026 average, EIA, as of 2026-08-31\)\. Data Center Power Index \(DCPI\) for Phoenix: CAUTION/);
+    expect(a.headline).toMatch(/^DC Hub doesn't publish colocation pricing\. .* AZ all-sector average retail electricity rate: 10\.03 cents\/kWh \(2026 average, EIA, as of 2026-08-31\)\. Data Center Power Index \(DCPI\) for Phoenix: CAUTION/);
     expect(a.evidence).toContain('Arizona data-center tax incentive: paused new applicants (as of 2026-07-01).');
     expect(JSON.stringify(a)).not.toMatch(/\$\s?\d|doesn't quote/);
   });
@@ -145,7 +145,7 @@ describe('Q-f: a named address is the facility asked about; fiber facts lead', (
     const gf = seq.filter((s) => s.tool === 'get_facility');
     expect(gf).toHaveLength(1);
     expect(gf[0].depends_on).toEqual([addr.step]);
-    expect(seq.map((s) => s.tool)).toEqual(expect.arrayContaining(['get_metro_fiber', 'get_fiber_readiness']));
+    expect(seq.map((s) => s.tool)).toEqual(expect.arrayContaining(['get_metro_fiber', 'get_peering_intel']));
   });
   it('the headline is the key-endpoint and on-net facts, then the DCPI verdict', () => {
     const cs = coloSignals(q, {});
@@ -155,7 +155,7 @@ describe('Q-f: a named address is the facility asked about; fiber facts lead', (
       ex(5, 'get_fiber_readiness', { lat: 41.853, lon: -87.618 }, CHI_READINESS),
       ex(7, 'get_facility', { slug: 'dlr-350-e-cermak' }, { data: { name: 'Digital Realty 350 E Cermak', provider: 'Digital Realty' } }),
     ], null);
-    expect(a.headline.startsWith("350 E Cermak is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's fiber profile")).toBe(true);
+    expect(a.headline.startsWith("350 E Cermak is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's curated carrier profiles")).toBe(true);
     expect(a.headline).toContain('Fiber at 350 E Cermak: on-net, nearest carrier 0.05 km');
     expect(a.headline).toMatch(/Data Center Power Index \(DCPI\) for Chicago: AVOID/);
     expect(a.not_established.join(' ')).not.toMatch(/No facility profile at 350 E Cermak/);
