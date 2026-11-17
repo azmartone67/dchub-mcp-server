@@ -23,6 +23,7 @@ process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 export const BANNED = /paid upgrade|paid data tier|paid (plan|tier|key)|upgrade page|\/pricing|\/upgrade|checkout|stripe|\$\d|\b(Pro|Developer|Enterprise|Starter) plan/i;
 // A URL that asks the person to do something: sign up, claim, pay, unlock, sign in, upgrade.
 const CTA_LIKE = /\/(?:u|go|upgrade|pricing|checkout|signup|claim|redeem|unlock|connect)\b|\/mcp\/(?:grok\/)?oauth|\/keys\/claim|stripe\.com/i;
+const OPTION_A = [/\d[\d,]*\s+(?:API\s+)?credits?\b/i, /calls?\/day/i, /free key/i, /free Land & Power/i, /fee only on close/i];
 const URL_RE = /https?:\/\/[^\s"'<>)\]`\\]+/g;
 const INTENT = 'compare ERCOT vs PJM vs MISO for 100 MW by 2028';
 const FREE_KEY = 'dch_live_FREEgatewaykey0123456789abcd';
@@ -139,6 +140,9 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
     expect(r && r.structuredContent && r.structuredContent._entity).toBe('plan_execution');
     expect(r.structuredContent.executed.length).toBeGreaterThan(1);
     expect(violations(r)).toEqual([]);
+    // Option A (owner 2026-11-16, lib/neutral-connect.mjs): no credit, calls-per-day, free-key or listing-fee wording.
+    const all = JSON.stringify([r.content, r.structuredContent]);
+    expect(OPTION_A.filter((re) => re.test(all)).map(String)).toEqual([]);
   }, 120_000);
 
   it('CONTROL: DCHUB_PLAN_NEUTRAL_CTA=0 brings the wording and the relay / pricing links back', async () => {
@@ -237,13 +241,13 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
     expect(neutralString('PJM demand is 93,825 MW. ' + PLANTED + ' Queue is 373.6 GW.'))
       .toBe('PJM demand is 93,825 MW. ' + NEUTRAL_GATED + ' Queue is 373.6 GW.');
     expect(neutralString('Open https://dchub.cloud/u/abc to see what it found and how to unlock it.'))
-      .toBe('Open https://dchub.cloud/connect to connect a free key (50 MCP calls/day with an email; 1 free Land & Power map search a month).');
+      .toBe('Open https://dchub.cloud/connect for more detail.');   // option A (owner 2026-11-16): no allowance wording
     expect(neutralString('Grid data: https://dchub.cloud/data-sources')).toBe('Grid data: https://dchub.cloud/data-sources');
     expect(neutralString('available with a paid upgrade')).toBe(NEUTRAL_GATED);
     // an allowance is stated in canon's words
     expect(neutralString('One email unlocks 50 calls a day and the full answer to this question.'))
-      .toBe('Free: 50 MCP calls/day with an email and the full answer to this question.');
+      .toBe('More detail is available at dchub.cloud/connect and the full answer to this question.');
     expect(neutralString('A keyed caller is not subject to this limit, and an email-bound key gets 50 calls a day, free.'))
-      .toBe('A keyed caller is not subject to this limit, and the free offer is 50 MCP calls/day with an email.');
+      .toBe('A keyed caller is not subject to this limit, and more detail is available at dchub.cloud/connect.');
   });
 });

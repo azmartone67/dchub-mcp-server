@@ -33,7 +33,7 @@ const SHORT = 'https://dchub.cloud/u/abcdef';
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // C's first-wall line as it was before D (keyless-wall-email-first.test.mjs FIRST_LINE).
 const C_FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
-  + esc(link) + '\\. One email unlocks \\d+ calls a day and the full answer to this question\\.$');
+  + esc(link) + '\\. One email unlocks the full answer to this question\\.$');   // option A: no calls-per-day figure
 const D_LINE = (market, link) => 'Your human can get the full answer and an alert when ' + market + ' moves: ' + link;
 
 let H, fence, anonCount = 0, ipN = 0;

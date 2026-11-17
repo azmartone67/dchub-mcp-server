@@ -334,13 +334,13 @@ describe('the offer is truthful per tool', () => {
     });
   });
 
-  it('a pack-class tool describes the credit pack as API capacity (v14: no amount), never as an unlock', async () => {
+  // Option A (owner 2026-11-16): the pack-class line names no pack or credit count, only its one link.
+  it('a pack-class tool line names no pack, credit count or price, never an unlock', async () => {
     const r = await S._ctxALS.run(seat(), () => wall('get_market_intel'));
     const line = firstLine(r);
-    expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
+    expect(line).toMatch(/^.*For the full .+, your user can open https:\/\/\S+\.$/);
     expect(line).not.toMatch(/\$\d/);
-    expect(line).toContain('1,000 API credits');
-    expect(line).toMatch(/usage capacity/);
+    expect(line).not.toMatch(/credits|one-time pack/i);
     expect(line).not.toMatch(/unlock/i);
     expect(line).not.toContain("DC Hub's paid plan");
     expect(line).not.toMatch(/\bPro\b/);
@@ -386,7 +386,7 @@ describe('the other walls', () => {
   it('a tool that needs a bound email, not a payment, keeps its bind_email wall unchanged', async () => {
     const r = await call('list_transactions', {}, seat());
     expect(r.structuredContent.error).toBe('paid_only');
-    expect(r.content[0].text).toMatch(/^## .*needs a free key, not a payment/);
+    expect(r.content[0].text).toMatch(/^## .*needs a key, not a payment/);   // option A: "free key" reads "key"
     expect(r.structuredContent.user_message).toBeUndefined();
     expect(shortPosts.length).toBe(0);
   });
@@ -404,9 +404,10 @@ describe('the other walls', () => {
     expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/[2-9a-hj-km-np-z]{6}$)/);
     expect(r.structuredContent.human_url).not.toBe(SHORT);   // not a /u/ short of the /go/c checkout
     expect(r.structuredContent.for_your_human.url).toBe(r.structuredContent.human_url);
-    expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
+    // Option A (owner 2026-11-16): the line names no pack or credit count; it ends on its one link.
+    expect(line).not.toMatch(/credits|one-time pack/i);
     expect(line).not.toMatch(/\$\d/);
-    expect(line).toMatch(/usage capacity/);
+    expect(line).toMatch(/your user can open https:\/\/\S+\.$/);
     expect(line).not.toMatch(/unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.copy_version).toBe('v14');

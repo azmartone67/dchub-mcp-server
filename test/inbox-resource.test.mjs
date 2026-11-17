@@ -152,7 +152,7 @@ describe('over HTTP: keyed vs keyless session', () => {
     expect(instructions).not.toContain('dchub://inbox');
     // 2026-11-11 (capacity item 5): /mcp adds the buy/RFP clause after the routing sentence.
     // 2026-11-13 (front desk item 4): and the welcome after its lead.
-    expect(instructions).toBe(S._withWelcome(S._withCapacityIntroClause(S._capacityInstructions(S._INSTRUCTIONS_LEAN))));
+    expect(instructions).toBe(S._withWelcome(S._capacityInstructions(S._INSTRUCTIONS_LEAN)));
     const list = (await post(h, { jsonrpc: '2.0', id: 2, method: 'resources/list' })).msg.result.resources.map((r) => r.uri);
     expect(list).not.toContain('dchub://inbox');
     expect(list).toContain('dchub://instructions');

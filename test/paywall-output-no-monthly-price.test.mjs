@@ -106,7 +106,9 @@ describe('the plans line in server.mjs', () => {
     expect(desc[0][1]).not.toContain('_paidPlansOutputLine()');
     const instr = CODE.filter(([, l]) => /^const _INSTR_TAIL = /.test(l));
     expect(instr).toHaveLength(1);
-    expect(instr[0][1]).toContain("' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay");
+    // Option A (owner 2026-11-16): the partial-results line names no pack and reads the neutral connect line.
+    expect(instr[0][1]).toContain("a link to relay to your human. ' + INSTR_CONNECT_LINE + ' ' + RELAY_CONTRACT");
+    expect(instr[0][1]).not.toContain('_creditRuleText()');
   });
 
   it('the upgrade_instructions both read the output line', () => {
@@ -244,7 +246,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     expect(live).toBe(committed);
   });
 
-  it('/mcp instructions keep the $10 pack and point at the pricing page', async () => {
+  it('/mcp instructions: no price, no pack, no pricing page (option A, owner 2026-11-16)', async () => {
     // 2026-10-06 (item 7): the pack line and plans pointer moved to the long form, served as the
     // resource dchub://instructions; the lean handshake states no price at all.
     const init = await H.init('/mcp');
@@ -253,9 +255,9 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, sh);
     const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
       params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
-    expect(instr).toContain('a one-time pack of 1,000 API credits');   // v14: no amount either; owner GO 2026-10-20: no card emoji
+    expect(instr).not.toContain('one-time pack');
     expect(instr).not.toMatch(/\$\d/);
-    expect(instr).toContain('; Full-access options: on the page behind the human_url link) to relay to your human');   // owner 2026-11-15
+    expect(instr).toContain('a link to relay to your human. More detail is available at dchub.cloud/connect.');
     expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
   });
 });

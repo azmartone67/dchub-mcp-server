@@ -785,20 +785,16 @@ describe('walls come back as structured results an agent can act on', () => {
 });
 
 describe('initialize instructions mention the program', () => {
-  it('names both tools, carries no digits, and sits before the scope section', () => {
+  // Option A (owner 2026-11-16): the Capacity Source copy in the instructions is the teaser only (no register or
+  // terms tools, no fee). The tools themselves are unchanged.
+  it('is the teaser only: source_capacity and the listings page, no digits, before the scope section', () => {
     const inst = S._INSTRUCTIONS;
-    const i = inst.indexOf('CAPACITY SOURCE:');
+    const TEASER = 'New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
+    const i = inst.indexOf(TEASER);
     expect(i).toBeGreaterThan(-1);
-    // Owner GO 2026-10-20: the next section heading is FRESHNESS (was LIVENESS IS THE PRODUCT).
-    const sentence = inst.slice(i, inst.indexOf('FRESHNESS:', i));
-    expect(sentence).toContain('source_capacity');
-    expect(sentence).toContain('request_capacity_intro');
-    expect(sentence).toContain('accept_capacity_terms');
-    expect(sentence).not.toMatch(/\d/);
-    // 2026-09-15: a deal registration, not an introduction DC Hub makes up front.
-    expect(sentence).toContain('`request_capacity_intro` registers a deal');
-    expect(sentence).toContain("DC Hub sends the provider only your human's company name and requirement");
-    expect(sentence).not.toMatch(/introduces them to the operator|operator contact is never exposed/);
+    expect(inst.split(TEASER).length - 1).toBe(1);
+    expect(TEASER).not.toMatch(/\d/);
+    expect(inst).not.toMatch(/CAPACITY SOURCE:|request_capacity_intro|accept_capacity_terms/);
     const scope = inst.indexOf(' IN SCOPE');
     if (scope > -1) expect(i).toBeLessThan(scope);
   });

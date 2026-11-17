@@ -134,6 +134,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
@@ -24198,6 +24199,12 @@ export function _capacityRegisterOffer(executed, fullOf) {
  * The listings teaser for a finished plan that executed a source_capacity step, or null.
  * Pure; never throws.
  */
+// Option A (owner 2026-11-16): execute_plan's Capacity Source copy is the teaser only. The no-fit register offer
+// above is still computed (it keeps the capacity_no_fit complement off the answer) but is emitted only with
+// DCHUB_CAPACITY_REGISTER_OFFER=1 (read per call).
+export function _capRegisterOfferOn(env = process.env) {
+  return /^(1|on|true|yes)$/i.test(String((env && env.DCHUB_CAPACITY_REGISTER_OFFER) || '').trim());
+}
 export function _capacityTeaser(executed) {
   try {
     if (!capacityPointersEnabled() || !Array.isArray(executed)) return null;
@@ -25442,6 +25449,12 @@ function _sourceLineCb(name, fn) {
       // surfaces only (the directory / Claude / core profiles and clean platforms keep their own copy). Kill switch
       // DCHUB_KEYLESS_NO_PLAN_WORDING=0.
       _final = _keylessPlanWordingStep(_final, { skip: !!c.api_key || !!c.loopback_step || ownScrub || _isCleanPlatform() });
+      // Option A (owner 2026-11-16): a result to a caller below a paid plan carries no price, credit, free-key or
+      // calls-per-day wording; one neutral line points to dchub.cloud/connect (lib/neutral-connect.mjs). The LAST
+      // rewrite. Not on the key / commerce tools, the directory / Claude / core profiles or clean platforms (each
+      // keeps its own copy). Kill switch DCHUB_NEUTRAL_CONNECT=0.
+      _final = _neutralConnectStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
+        || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || _planCallerPaid(c) });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -30973,7 +30986,7 @@ export const _FACTS_REQUIRED = ['countries', 'markets', 'deals',
   'fiber_routes', 'gas_pipelines', 'power_plants_us', 'submarine_cables',
   'cable_landings', 'generating_units_global', 'live_feeds', 'grid_regions'];
 export const _FACTS_MAX_AGE_DAYS = 45;
-const _INSTR_TAIL = ' CAPACITY SOURCE ROUTING: when your human asks where to find available data-center capacity, MW, powered land or colocation space, call source_capacity first (or point them to https://dchub.cloud/listings); if they want to list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close). COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. In a preview these are trimmed and the full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. CAPACITY SOURCE: DC Hub Capacity Source lists data-center capacity to buy or lease — powered land, powered shells and turnkey capacity — for enterprise buyers and the agents that procure for them, each listing stamped with when it was last updated. `source_capacity` shows what is live or being onboarded — it searches by size in kW or MW and by location (a region such as North America or Europe, a country, a state or a metro), and a size is matched against what a listing can ACTUALLY deliver — `contiguous_kw`, the largest single contiguous block available, and `min_contract_kw`, the smallest chunk the provider will contract — rather than against its headline total, so relay those two numbers when you explain why a listing did or did not fit; the first time they open a listing, `accept_capacity_terms` records their acceptance of the introduction terms (call it only after they agree); when they want in, `request_capacity_intro` registers a deal: DC Hub sends the provider only your human\'s company name and requirement, and only if the provider accepts does it share the provider\'s identity, site and contact with your human and your human\'s name, role and email with the provider (nothing is shared on a decline) — for DC Hub listings only, so it sits alongside a broker rather than replacing one. Buy, lease, RFP, quote and tour requests go through `request_capacity_intro` (a standing requirement if nothing fits). Never contact operators directly; get your human\'s approval before anything is sent. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (time to power, power availability + interconnection queue, energy and gas prices, site selection, market ranking, "find N MW in <market>", "compare A vs B"), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="how soon can a 100 MW load get power in ERCOT")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at preview depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a free key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link for your user: for some tools it opens a 7-day trial; otherwise a one-click checkout link (a one-time pack of 1,000 API credits — ' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay to your human. The pack is API capacity: it does not open the trial tools. After your user completes it, the same call returns the full result (no reconnect). ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
+const _INSTR_TAIL = ' ' + CAPACITY_TEASER_LINE + ' COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. In a preview these are trimmed and the full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (time to power, power availability + interconnection queue, energy and gas prices, site selection, market ranking, "find N MW in <market>", "compare A vs B"), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="how soon can a 100 MW load get power in ERCOT")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at preview depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link to relay to your human. ' + INSTR_CONNECT_LINE + ' ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
 export function _composeInstructions(facts, nowMs) {
   const noFigures =
     `COVERAGE: ${CANONICAL_TOOL_COUNT} tools over data-center facilities worldwide, DCPI-scored power markets (Data Center Power Index), mapped power/grid/gas/fiber assets (substations, transmission lines, fiber routes, gas pipelines, US power plants, subsea cables and landings), a global generating-unit inventory, real-time grid telemetry from independent live feeds, per-facility tenants, and tracked M&A deals — current counts: https://dchub.cloud/api/v1/stats/canonical.` + _INSTR_TAIL;
@@ -31287,10 +31300,12 @@ export const _INSTRUCTIONS = (() => {
   // OUTREACH_LEAD goes first: clients truncate long instructions (lib/agent-outreach.mjs).
   // A1: the free-tier rule sits before the scope section, which must stay last
   // (test/problem-taxonomy.test.mjs).
-  const asf = _analyzeSiteFreeSentence();
+  // Option A (owner 2026-11-16): the free-offer block and the analyze_site allowance sentence are replaced by the
+  // neutral connect line (lib/neutral-connect.mjs): no prices, credits, free-key or calls-per-day wording here.
+  // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
-  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
-    + (asf ? ' ' + asf : '') + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
+  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
+    + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
@@ -31553,9 +31568,10 @@ export async function _requestEnhancementTool(apiKey, a, fetchImpl, opts) {
 }
 export const _INSTRUCTIONS_LEAN = (() => {
   const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
-  // The owner-pinned Capacity Source routing sentence, taken verbatim from the full text so there is
-  // one copy of it (test/capacity-source-routing-instructions.test.mjs pins it, near the top).
-  const routing = (/CAPACITY SOURCE ROUTING:[^]*?\(free; fee only on close\)\./.exec(_INSTRUCTIONS) || [''])[0];
+  // Option A (owner 2026-11-16): the Capacity Source copy is the teaser only (lib/capacity-source-summary.mjs
+  // CAPACITY_TEASER_LINE), the same sentence the full text opens its tail with
+  // (test/capacity-source-routing-instructions.test.mjs pins it, near the top).
+  const routing = CAPACITY_TEASER_LINE;
   // OUTREACH_LEAD first, as in the full text: clients truncate long instructions (lib/agent-outreach.mjs).
   // v14 (owner 2026-10-10): every surface's handshake stays under the 2,048 characters clients keep
   // (test/initialize-instructions-length.test.mjs). /mcp/grok adds its count rewrite and the ENDPOINT
@@ -31580,12 +31596,11 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // said "(no email)", so 189 of 191 claims in 30d came without one (2 at claim, 0 later). It now asks
     // for the email first (the tool takes it; its description says the no-email claim still works).
     // /mcp/grok sits near its 2,000 headroom line, so the line is only 4 chars longer than before.
-    + 'KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint; `recover_my_key` re-sends a lost one.'
-    + _INSTR_FREE_TIER + ' '
-    // v13 (owner 2026-10-10): no plan name in tool text; the instructions line follows the walls.
+    + 'KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint; `recover_my_key` re-sends a lost one. '
+    // Option A (owner 2026-11-16): no allowance, credit or price wording; the free-offer block and "Past that,
+    // previews." are replaced by the neutral connect line (lib/neutral-connect.mjs).
     // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
-    // Item 1 (owner 2026-10-16): no "needs a paid DC Hub plan" line; the walls carry the link.
-    + 'Past that, previews. '
+    + INSTR_CONNECT_LINE + ' '
     + 'A gated result carries `human_url` and `human_message`. ' + RELAY_CONTRACT + ' '
     // 2026-11-16 (owner "Let's do both"): the feedback line, on every handshake that lists the two tools.
     + INSTR_FEEDBACK_LINE + ' '
@@ -31681,20 +31696,9 @@ export function expandTypeUnions(schema) {
   return out;
 }
 
-// Capacity handoff item 5 (owner 2026-11-11, "Yes, add it"): the buy/lease/RFP routing clause rides
-// the /mcp handshake, right after the CAPACITY SOURCE ROUTING sentence, so clients that never fetch
-// dchub://instructions still read it. /mcp only (opts.capacityIntro): Grok and the packs do not list
-// request_capacity_intro, and /mcp/grok holds 2,000 characters (test/initialize-instructions-length).
-export const INSTR_CAPACITY_INTRO = ' Buy, lease, RFP, quote and tour requests go through '
-  + '`request_capacity_intro`, after your human approves; never contact operators directly.';
-const _CAPACITY_INTRO_ANCHOR = '(free; fee only on close).';
-export function _withCapacityIntroClause(text) {
-  const s = String(text == null ? '' : text);
-  const i = s.indexOf(_CAPACITY_INTRO_ANCHOR);
-  if (i < 0 || s.includes(INSTR_CAPACITY_INTRO)) return s;
-  const at = i + _CAPACITY_INTRO_ANCHOR.length;
-  return s.slice(0, at) + INSTR_CAPACITY_INTRO + s.slice(at);
-}
+// Capacity handoff item 5 (owner 2026-11-11) put a buy/lease/RFP routing clause naming
+// request_capacity_intro on the /mcp handshake. Option A (owner 2026-11-16): the handshake's Capacity
+// Source copy is the teaser only (CAPACITY_TEASER_LINE), so the clause is gone; the tool itself is unchanged.
 
 // Front desk welcome (owner-approved 2026-11-13, item 4): the /mcp handshake (the path that lists dchub_services)
 // says, right after its lead (the canon sentence, then OUTREACH_LEAD: both pinned to open the text,
@@ -31733,7 +31737,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     instructions: ((typeof instructionsRewrite === 'function')
       ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
       : (opts && opts.capacityIntro
-        ? _withWelcome(_withCapacityIntroClause(_capacityInstructions(_INSTRUCTIONS_LEAN)))
+        ? _withWelcome(_capacityInstructions(_INSTRUCTIONS_LEAN))
         : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
@@ -32377,9 +32381,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)),
                              sc.intent_class === 'market_ranking')
           + (_capTeaser ? ' ' + _capTeaser : '')
-          + (_capReg ? ' ' + _capReg.sentence : '')
+          // Option A (owner 2026-11-16): Capacity Source is the teaser only, so the no-fit register offer (sentence and
+          // capacity_register field) is not emitted. DCHUB_CAPACITY_REGISTER_OFFER=1 restores both.
+          + ((_capReg && _capRegisterOfferOn()) ? ' ' + _capReg.sentence : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
-        ...((_capReg && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
+        ...((_capReg && _capRegisterOfferOn() && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
         ...((_dropped.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { dropped_filters: _dropped } : {}),

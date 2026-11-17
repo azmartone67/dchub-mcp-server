@@ -50,9 +50,10 @@ describe('anon_hard_wall', () => {
     expect(line).toMatch(/https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/hwr234)/);   // the relay page, as its /u/ short (wall-to-paid P1)
     expect(line).toContain(r.structuredContent.human_url);
     expect(line).not.toContain(SHORT);
-    expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
+    // Option A (owner 2026-11-16): the line names no pack or credit count; it ends on its one link.
+    expect(line).not.toMatch(/credits|one-time pack/i);
     expect(line).not.toMatch(/\$\d/);
-    expect(line).toMatch(/usage capacity/);
+    expect(line).toMatch(/your user can open https:\/\/\S+\.$/);
     expect(line).not.toMatch(/unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);

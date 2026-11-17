@@ -314,7 +314,9 @@ describe('E) the published clause', () => {
     // it still rides on the claim/bind siblings (free_tier_siting_tools).
     expect(S._INSTRUCTIONS_LEAN).not.toContain(clause);
     expect(S._INSTRUCTIONS).not.toContain(clause);
-    expect(S._INSTRUCTIONS_LEAN).toContain('1 free Land & Power map search a month');
+    // Option A (owner 2026-11-16): the offers are the neutral connect line.
+    expect(S._INSTRUCTIONS_LEAN).not.toContain('1 free Land & Power map search a month');
+    expect(S._INSTRUCTIONS_LEAN).toContain('More detail is available at dchub.cloud/connect.');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('need a paid DC Hub plan');
     expect(S._sitingFreeClause({ DCHUB_NOEMAIL_PREVIEW_ONLY: '0' })).toBe('');
   });

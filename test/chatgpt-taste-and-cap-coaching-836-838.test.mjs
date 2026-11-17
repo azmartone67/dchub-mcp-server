@@ -305,7 +305,8 @@ describe('#836 — /mcp/chatgpt and /mcp/chatgpt/oauth: the directory scrub keep
 
 // ── #838 ──────────────────────────────────────────────────────────────────────
 // v14 (owner 2026-10-10): the pack is "a one-time pack of 1,000 API credits", no amount; the old "$10" still counts.
-const PACK_RE = /\$10|one-time pack/i;
+// Option A (owner 2026-11-16, lib/neutral-connect.mjs): live output names the pack "full access" (no price, no credit count).
+const PACK_RE = /\$10|one-time pack|\bfull access\b/i;
 describe('#838 — the anonymous over-cap coaching sells the pack only where a credit buys the next call', () => {
   it('predicate: depth-teased tools never sell the pack; capacity-class tools do; the switch restores the old copy', () => {
     for (const t of ['get_gas_intelligence', 'get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel',
@@ -369,8 +370,9 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     const sc = r.structuredContent;
     expect(sc._upgrade && sc._upgrade.tier, 'the anon_daily_cap branch did not fire').toBe('anon_daily_cap');
     expect(sc._upgrade.credits_pitch).toMatch(PACK_RE);
-    expect(sc._upgrade.message).toMatch(PACK_RE);
-    expect(sc._upgrade.message).toContain('goes through');
+    // Option A (owner 2026-11-16): the pack sentence in the message is the neutral connect line.
+    expect(sc._upgrade.message).toContain('More detail is available at dchub.cloud/connect.');
+    expect(sc._upgrade.message).not.toMatch(/\$\d|\/day|calls\/day/);
     expect(sc._upgrade.pack_opens).toBeUndefined();
     expect(sc._upgrade.binding_limit).toBe('anon_ip_daily');
     if (typeof sc.human_url === 'string') {

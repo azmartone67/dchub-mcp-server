@@ -21,6 +21,7 @@
 // Pure functions are tested directly; the end-to-end half runs the REAL server.mjs on loopback against a
 // stub backend (clean full-depth bodies for the Pro key, the twin registry with urls).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { CAPACITY_TEASER_LINE } from '../lib/capacity-source-summary.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -484,9 +485,24 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
 
   // 2026-11-12 (owner via Grok, item 4): with the register offer there, a no-fit carries no
   // procurement/brokerage complement. DCHUB_NOFIT_COMPLEMENT=on brings it back, after the offer.
-  it('capacity_search with no fit -> the register offer, and no procurement or brokerage complement', async () => {
+  // Option A (owner 2026-11-16): execute_plan's Capacity Source copy is the teaser only; the register offer is emitted
+  // only with DCHUB_CAPACITY_REGISTER_OFFER=1, and the complement stays off either way.
+  it('option A default: a no-fit carries the teaser only, no register offer, and no complement', async () => {
     listings = { ok: true, items: [], total: 0, as_of: AS_OF };
     const r = await plan(NOFIT);
+    expect(r.out.executed.some((e) => e.tool === 'source_capacity' && e.status === 'executed')).toBe(true);
+    expect('capacity_register' in r.out).toBe(false);
+    expect(r.out.answer_guide).toContain(CAPACITY_TEASER_LINE);
+    expect(r.out.answer_guide).not.toContain('request_capacity_intro');
+    expect(r.out.answer_guide).not.toContain('register the requirement');
+    expect('handoff' in r.out).toBe(false);
+  }, 120_000);
+
+  it('capacity_search with no fit -> the register offer (DCHUB_CAPACITY_REGISTER_OFFER=1), and no procurement or brokerage complement', async () => {
+    listings = { ok: true, items: [], total: 0, as_of: AS_OF };
+    process.env.DCHUB_CAPACITY_REGISTER_OFFER = '1';
+    let r;
+    try { r = await plan(NOFIT); } finally { delete process.env.DCHUB_CAPACITY_REGISTER_OFFER; }
     expect(r.out.intent_class).toBe('capacity_search');
     expect(r.out.executed.some((e) => e.tool === 'source_capacity' && e.status === 'executed')).toBe(true);
     expect(r.out.capacity_register && r.out.capacity_register.tool, 'control: the register offer is there').toBe('request_capacity_intro');
@@ -500,6 +516,7 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
   it('DCHUB_NOFIT_COMPLEMENT=on: the complement comes back, after the register offer', async () => {
     listings = { ok: true, items: [], total: 0, as_of: AS_OF };
     process.env.DCHUB_NOFIT_COMPLEMENT = 'on';
+    process.env.DCHUB_CAPACITY_REGISTER_OFFER = '1';
     try {
       const r = await plan(NOFIT);
       expect(r.out.handoff && r.out.handoff.basis).toBe('capacity_no_fit');
@@ -509,7 +526,7 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
       const reg = g.indexOf('Offer your human to register the requirement');
       expect(reg).toBeGreaterThan(-1);
       expect(reg).toBeLessThan(g.indexOf(renderHandoffSentence(r.out.handoff)));
-    } finally { delete process.env.DCHUB_NOFIT_COMPLEMENT; }
+    } finally { delete process.env.DCHUB_NOFIT_COMPLEMENT; delete process.env.DCHUB_CAPACITY_REGISTER_OFFER; }
   }, 120_000);
 
   // 2026-11-12 (owner via Grok): a capacity ask ends with source_capacity, and a no-fit closes on the
@@ -518,9 +535,11 @@ describe('execute_plan end to end (real server.mjs, stub backend)', () => {
   const BINDING = ['request_capacity_intro', 'accept_capacity_terms'];
   const bindingHits = (hits) => hits.filter((h) => /^\/api\/v1\/listings\/(?:interest|terms\/accept)|\/intro$/.test(h.path));
 
-  it('where-can-I-get no fit: source_capacity runs last with the asked size, place and date; the close offers request_capacity_intro and calls nothing', async () => {
+  it('where-can-I-get no fit (DCHUB_CAPACITY_REGISTER_OFFER=1): source_capacity runs last with the asked size, place and date; the close offers request_capacity_intro and calls nothing', async () => {
     listings = { ok: true, items: [], total: 0, as_of: AS_OF };
-    const r = await plan(WHERE);
+    process.env.DCHUB_CAPACITY_REGISTER_OFFER = '1';
+    let r;
+    try { r = await plan(WHERE); } finally { delete process.env.DCHUB_CAPACITY_REGISTER_OFFER; }
     const ran = r.out.executed.filter((e) => e.status === 'executed');
     const last = r.out.executed[r.out.executed.length - 1];
     expect(ran.length, 'control: other steps ran before it').toBeGreaterThan(1);

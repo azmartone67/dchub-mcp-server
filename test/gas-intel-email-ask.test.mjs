@@ -174,7 +174,7 @@ describe('gasEmailClause (pure)', () => {
   it('opens with the shared email-ask lead the lean step keeps; names what it opens; no plan or price', () => {
     expect(ask.startsWith(RANK_EMAIL_ASK_LEAD)).toBe(true);
     expect(ask).toContain('gas-to-grid $/MWh');
-    expect(ask).toContain('any free DC Hub key');
+    expect(ask).toContain('any DC Hub key');   // option A (owner 2026-11-16): the key is not called free
     expect(ask).not.toMatch(/\bPro\b|\bDeveloper\b|\$\d|subscribe_digest/);
   });
 });
@@ -244,7 +244,7 @@ describe('get_gas_intelligence on the anonymous daily cap (real handler)', () =>
   it('one email ask: the person\'s link line, no gas line beside it', async () => {
     const r = await (await session('Claude Code', 'get_gas_intelligence', CAP_NET))({ region: 'TX' });
     expect(r.sc._upgrade && r.sc._upgrade.tier).toBe('anon_daily_cap');
-    expect(r.text).toContain('One email unlocks 50 calls a day');
+    expect(r.text).toContain('One email unlocks the full answer to this question.');   // option A: no calls-per-day figure
     expect(r.text).toContain('https://dchub.cloud/u/');
     expect(count(r.text, RANK_EMAIL_ASK_LEAD)).toBe(0);
     expect(count(r.text, '`bind_email`')).toBe(0);

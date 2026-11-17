@@ -89,9 +89,13 @@ describe('the sentence', () => {
 });
 
 describe('instructions', () => {
-  it('the full text carries it right after the FREE TIER block', () => {
+  // Option A (owner 2026-11-16): the instructions carry the neutral connect line instead of the free offers and this
+  // allowance sentence; _analyzeSiteFreeSentence (above) is unchanged for its other readers.
+  it('the full text no longer carries it (option A): the neutral connect line instead', () => {
     expect(S._INSTR_FREE_TIER.length).toBeGreaterThan(40);
-    expect(S._INSTRUCTIONS).toContain(S._INSTR_FREE_TIER + ' ' + OWNER_LINE);
+    expect(S._INSTRUCTIONS).not.toContain(OWNER_LINE);
+    expect(S._INSTRUCTIONS).not.toContain(S._INSTR_FREE_TIER.trim());
+    expect(S._INSTRUCTIONS).toContain('More detail is available at dchub.cloud/connect.');
   });
   it('dchub://instructions serves it, as read over /mcp', async () => {
     const { session } = await rpc('/mcp', 'initialize', INIT);
@@ -100,7 +104,8 @@ describe('instructions', () => {
     const r = (await rpc('/mcp', 'resources/read', { uri: S.INSTRUCTIONS_RESOURCE_URI }, session)).json;
     const text = (r?.result?.contents || []).map((c) => c.text || '').join('');
     expect(text.length, JSON.stringify(r).slice(0, 300)).toBeGreaterThan(1000);
-    expect(text).toContain(S._INSTR_FREE_TIER + ' ' + OWNER_LINE);
+    expect(text).not.toContain(OWNER_LINE);
+    expect(text).toContain('More detail is available at dchub.cloud/connect.');
   });
   it('the frozen directory profiles do not carry it', async () => {
     for (const p of ['/mcp/chatgpt', '/mcp/claude', '/mcp/core']) {

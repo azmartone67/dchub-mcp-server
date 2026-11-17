@@ -1,4 +1,5 @@
-// capacity-intro-handshake.test.mjs — capacity handoff item 5 (owner 2026-11-11, "Yes, add it").
+// capacity-intro-handshake.test.mjs — capacity handoff item 5 (owner 2026-11-11, "Yes, add it"), retired by
+// option A (owner 2026-11-16): the handshake's Capacity Source copy is the teaser only.
 //
 // The buy/lease/RFP routing clause rides the /mcp initialize handshake (the text clients keep),
 // right after the CAPACITY SOURCE ROUTING sentence. /mcp only: /mcp/grok and the packs do not
@@ -41,30 +42,22 @@ afterAll(async () => {
   if (prevBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevBase;
 });
 
-describe('/mcp handshake carries the capacity intro clause', () => {
-  it('/mcp says it once, right after the routing sentence, under the 2,048 budget', () => {
-    const t = served['/mcp'];
+// Option A (owner 2026-11-16): the clause is gone. The served /mcp, /mcp/grok and pack handshakes carry the
+// Capacity Source teaser only, no register prompt, and no price / credit / free-key / calls-per-day wording.
+const BANNED = [/\d[\d,]*\s+(?:API\s+)?credits?\b/i, /calls?\/day/i, /free key/i, /free Land & Power/i, /fee only on close/i, /\$\d/];
+describe('/mcp handshake: Capacity Source teaser only, neutral connect line (option A)', () => {
+  it.each(['/mcp', '/mcp/grok', '/mcp/site'])('%s: teaser, no register clause, no banned wording, under the 2,048 budget', (p) => {
+    const t = served[p];
     expect(typeof t).toBe('string');
-    expect(t.split(S.INSTR_CAPACITY_INTRO).length - 1).toBe(1);
-    expect(t).toContain('(free; fee only on close).' + S.INSTR_CAPACITY_INTRO);
+    expect(t).toContain('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
+    expect(t).toContain('More detail is available at dchub.cloud/connect.');
+    expect(t).not.toMatch(/request_capacity_intro|listings#list-capacity|CAPACITY SOURCE ROUTING/);
+    expect(BANNED.filter((re) => re.test(t)).map(String)).toEqual([]);
     expect(t.length).toBeLessThanOrEqual(2048);
   });
 
-  it('names the tool, the human gate and no operator contact', () => {
-    expect(S.INSTR_CAPACITY_INTRO).toMatch(/`request_capacity_intro`/);
-    expect(S.INSTR_CAPACITY_INTRO).toMatch(/after your human approves/);
-    expect(S.INSTR_CAPACITY_INTRO).toMatch(/never contact operators directly/);
-    expect(S.INSTR_CAPACITY_INTRO).not.toMatch(/\$|\bPro\b|\bplan\b/);
-  });
-
-  it.each(['/mcp/grok', '/mcp/site', '/mcp/claude', '/mcp/chatgpt'])('%s is unchanged (no clause)', (p) => {
-    expect(typeof served[p]).toBe('string');
-    expect(served[p]).not.toContain(S.INSTR_CAPACITY_INTRO);
-  });
-
-  it('the insert is idempotent and a no-op without its anchor', () => {
-    const once = S._withCapacityIntroClause('A (free; fee only on close). B');
-    expect(S._withCapacityIntroClause(once)).toBe(once);
-    expect(S._withCapacityIntroClause('no anchor here')).toBe('no anchor here');
+  it('the old clause exports are gone', () => {
+    expect(S.INSTR_CAPACITY_INTRO).toBeUndefined();
+    expect(S._withCapacityIntroClause).toBeUndefined();
   });
 });

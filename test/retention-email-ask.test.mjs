@@ -350,8 +350,9 @@ describe('returning-key nudge', () => {
     const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
     const r = await s.call(TOOL, { since: '7d' });
     expect(_rungNum('identified')).toBeGreaterThan(0);
-    expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable, raise it to '
-      + _rungNum('identified') + ' calls a day, and tell you when the markets you ask about change."');
+    // Option A (owner 2026-11-16): the line names no calls-per-day figure.
+    expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable'
+      + ' and tell you when the markets you ask about change."');
     expect(tellCount(r.text)).toBe(1);
     expect(r.first).toContain('"ok":true');
     const again = await s.call(TOOL, { since: '7d' });
@@ -578,12 +579,12 @@ describe('nudgeDecision (pure)', () => {
     expect(R.nudgeDecision({ standing: seen9, email: 'a@b.co', movers: [{ market_slug: 'phoenix', delta_7d: 2 }], now }).line)
       .toBe('Tell the user: "Welcome back. Since your last check 9 days ago, Phoenix\'s DCPI score moved +2 points. Want an email next time it moves?"');
   });
-  it('no-email line names the market when known, and the bound rung when given', () => {
+  it('no-email line names the market when known, and no calls-per-day figure even when the rung is given (option A)', () => {
     const phx = { ...base, top_market: { slug: 'phoenix', name: 'Phoenix' } };
     expect(R.nudgeDecision({ standing: phx, now }).line)
       .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
     expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: 50 }).line)
-      .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable, raise it to 50 calls a day, and tell you when Phoenix changes."');
+      .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
     for (const bad of [null, 0, -5, 'n/a', NaN]) {
       expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: bad }).line, String(bad)).not.toMatch(/calls a day/);
     }

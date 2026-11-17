@@ -196,7 +196,7 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     // The person's line, on the arms that write one (the paywall-contract arm leads with its own
     // "Tell the user:" sentence instead).
     if (sc.user_message !== undefined) {
-      expect(sc.user_message).toMatch(/This preview leaves out the full site analysis for this location: .+\. Open https:\/\/\S+ to see what your agent found(?:, or reply with your email for a free DC Hub key)?\.$/);
+      expect(sc.user_message).toMatch(/This preview leaves out the full site analysis for this location: .+\. Open https:\/\/\S+ to see what your agent found(?:\. More detail is available at dchub\.cloud\/connect)?\.$/);
       expect(sc.user_message).toContain('Open ' + link + ' to see what your agent found');
     }
     // Keyless: the wall leads with the person's line (r-wall-user-line).
@@ -251,14 +251,16 @@ describe('initialize instructions name no plan for the paid tools', () => {
       // v14: the human_url description went (RELAY_CONTRACT, which follows, says what to do with it).
       // Item 1 (owner 2026-10-16): the PAID line is replaced by one neutral line, no plan named.
       expect(served[path], path).not.toContain('need a paid DC Hub plan');
-      expect(served[path], path).toMatch(/Past that, previews\. A gated result carries `human_url` and `human_message`\. When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\. /);
+      // Option A (owner 2026-11-16): "Past that, previews." is replaced by the neutral connect line.
+      expect(served[path], path).toMatch(/More detail is available at dchub\.cloud\/connect\. A gated result carries `human_url` and `human_message`\. When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\. /);
     }
   });
 
-  it('/mcp carries the two free offers without a plan name or tier label', () => {
-    // Owner decision 2026-11-15: the labelled free-tier paragraph (and its grid/queue clause, item 3 of
-    // 2026-10-16) is replaced by the two offers in plain words.
-    expect(served['/mcp']).toContain('50 MCP calls/day with an email. 1 free Land & Power map search a month.');
+  it('/mcp carries the neutral connect line, no free offers, plan name or tier label', () => {
+    // Owner decision 2026-11-15 put the two free offers here in plain words; option A (owner 2026-11-16) replaces
+    // them with the neutral connect line (no allowance, credit or price wording).
+    expect(served['/mcp']).toContain('More detail is available at dchub.cloud/connect.');
+    expect(served['/mcp']).not.toContain('50 MCP calls/day with an email');
     expect(served['/mcp']).not.toMatch(/FREE TIER|previews on free/);
   });
 

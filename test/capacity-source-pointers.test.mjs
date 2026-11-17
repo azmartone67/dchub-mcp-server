@@ -655,13 +655,12 @@ describe('outputSchema', () => {
 
 // ── 3. session instructions ──────────────────────────────────────────────────
 describe('session instructions', () => {
-  it('the anchor sits exactly once, inside the CAPACITY SOURCE sentence', () => {
-    const i = S._INSTRUCTIONS.indexOf('CAPACITY SOURCE:');
-    const j = S._INSTRUCTIONS.indexOf(L.CAPACITY_INSTR_ANCHOR);
-    expect(i).toBeGreaterThan(-1);
-    expect(S._INSTRUCTIONS.split(L.CAPACITY_INSTR_ANCHOR).length - 1).toBe(1);
-    expect(j).toBeGreaterThan(i);
-    expect(S._INSTRUCTIONS.slice(i, j)).not.toMatch(/[.!?]\s/);
+  // Option A (owner 2026-11-16): the instructions carry the Capacity Source teaser only, so the CAPACITY SOURCE
+  // paragraph and its live-clause anchor are gone; withCapacityLiveClause leaves the text unchanged without it.
+  it('the teaser is there once and the live-clause anchor is not', () => {
+    expect(S._INSTRUCTIONS.split(L.CAPACITY_TEASER_LINE).length - 1).toBe(1);
+    expect(S._INSTRUCTIONS).not.toContain(L.CAPACITY_INSTR_ANCHOR);
+    expect(S._INSTRUCTIONS).not.toContain('CAPACITY SOURCE:');
   });
 
   for (const [label, arrange] of DORMANT) {
@@ -675,15 +674,16 @@ describe('session instructions', () => {
     });
   }
 
-  it('live: the sentence gains the clause, and removing it restores the original exactly', async () => {
+  it('live: option A (teaser only) leaves the instructions byte for byte; no live clause, no inventory numbers', async () => {
     await withSummary(LIVE);
     const client = await connect(S.createServer(null, ' TAIL'));
-    // 2026-10-06 (item 7): the handshake is the lean text, which has no CAPACITY SOURCE sentence to
-    // carry the live clause; the long form is the resource, and it carries it exactly as before.
     expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS_LEAN} TAIL`);
     const ins = (await client.readResource({ uri: 'dchub://instructions' })).contents[0].text + ' TAIL';
-    expect(ins).toContain(`each listing stamped with when it was last updated (${L.CAPACITY_INSTR_LIVE_CLAUSE}).`);
-    expect(ins.replace(` (${L.CAPACITY_INSTR_LIVE_CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
+    expect(ins).not.toContain(L.CAPACITY_INSTR_LIVE_CLAUSE);
+    expect(ins).toBe(`${S._INSTRUCTIONS} TAIL`);
+    // the splice itself still works where its anchor exists
+    const a = 'X ' + L.CAPACITY_INSTR_ANCHOR + ' Y';
+    expect(L.withCapacityLiveClause(a, S._capacitySummary.peek())).toContain(L.CAPACITY_INSTR_LIVE_CLAUSE);
     // ★2026-09-29: the clause names where the numbers are, never the numbers.
     expect(ins).not.toContain(CLAUSE);
     expect(capacityInventoryViolations(ins)).toEqual([]);
@@ -1090,7 +1090,8 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
     delete process.env[KILL];
     S._capacitySummary.disarm();
     expect(pointerOf(await call('find_sites', { state: 'TX' }))).toBeTruthy();
-    expect((await (await connect(S.createServer())).readResource({ uri: 'dchub://instructions' })).contents[0].text).toContain('(live now: ');
+    // option A: the instructions carry no live clause either way; the pointer above is the control
+    expect((await (await connect(S.createServer())).readResource({ uri: 'dchub://instructions' })).contents[0].text).toContain(L.CAPACITY_TEASER_LINE);
   });
 
   it('reads the usual spellings of off, and anything else as on', () => {

@@ -26,11 +26,11 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 // Wall email option C (owner 2026-10-26): an identity's first cap wall of the UTC day carries the
 // email link alone; the no-email claim_free_key exit returns from its second wall that day.
 const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
-  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day and the full answer to this question\\.$');
+  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks the full answer to this question\\.$');   // option A: no calls-per-day figure
 // A tool an email does not open in full (server.mjs _emailOpensTool, 2026-11-10): the line names the daily
 // calls only, never "the full answer".
 const FREE_TIER_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
-  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day on the free tier\\.$');
+  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks more answers\\.$');   // option A: no calls-per-day figure
 const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `claim_free_key` (one call, no email).';
 // The anonymous-cap walls reset with the daily per-IP count (platform review 2026-11-14).
 import { nextUtcDayStart } from '../lib/keyless-wall.mjs';

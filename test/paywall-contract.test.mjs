@@ -170,8 +170,9 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     // hid, and the offer is the lowest rung that returns it — the pack, because
     // a free key still gets the facility-field mask on this tool.
     // v14 (owner 2026-10-10): the pack offer states no amount.
-    expect(said).toMatch(/^This answer hid .+, and \d+ more facilities\. The full answer is available with a one-time pack of 1,000 credits/);
-    expect(said).not.toMatch(/\$\d/);
+    // Option A (owner 2026-11-16, lib/neutral-connect.mjs): the pack offer states no credit count ("full access").
+    expect(said).toMatch(/^This answer hid .+, and \d+ more facilities\. The full answer is available with full access/);
+    expect(said).not.toMatch(/\$\d|credits/);
     const urls = ctaUrls(r.body);
     expect(urls, JSON.stringify(urls)).toHaveLength(1);
     expect(urls[0]).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?pc=v2$/);
@@ -227,7 +228,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     // copy v11: the band (owner 2026-09-30) plus ONE measured count (MCP-1: nearby.substations_50km, a
     // count the free preview keeps) — never a score. The weakest factor stays in
     // structuredContent.limiting_factor below, not in the line a person reads.
-    expect(said).toMatch(/^DC Hub names gas pipeline access as the weakest factor on this site; 12 substations within 50 km\. This preview leaves out the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Open https:\/\/\S+ to see what your agent found(?:, or reply with your email for a free DC Hub key)?\.$/);
+    expect(said).toMatch(/^DC Hub names gas pipeline access as the weakest factor on this site; 12 substations within 50 km\. This preview leaves out the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Open https:\/\/\S+ to see what your agent found(?:\. More detail is available at dchub\.cloud\/connect)?\.$/);
     expect(said).not.toMatch(/paid|trial|\bplan\b/i);
     expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
@@ -250,7 +251,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     const r = await callAs('claude-ai', 'compare_sites', { locations: '33.45,-112.07;39.04,-77.48' });
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
-    expect(said).toMatch(/^DC Hub rates site 1 \(weakest: [^)]+\), site 2 \(weakest: [^)]+\)\. This preview leaves out the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Open https:\/\/\S+ to see what your agent found(?:, or reply with your email for a free DC Hub key)?\.$/);
+    expect(said).toMatch(/^DC Hub rates site 1 \(weakest: [^)]+\), site 2 \(weakest: [^)]+\)\. This preview leaves out the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Open https:\/\/\S+ to see what your agent found(?:\. More detail is available at dchub\.cloud\/connect)?\.$/);
     expect(ctaUrls(r.body)).toHaveLength(1);
   });
 });

@@ -717,7 +717,9 @@ describe('L) a fresh keyless session: the first execute_plan is full, the second
     expect(['line', 'link', 'link_exit']).toContain(own[0].email_ask);
     expect(own[0].offer_floor).toBe('allowed');
     // the email offer this wall carries: the answer's user_message (what the agent shows its person)
-    expect((r2.structuredContent || {}).user_message).toMatch(/50 MCP calls\/day with an email/);
+    // Option A (owner 2026-11-16): the offer names no allowance; it is the email line with the one /connect route.
+    expect((r2.structuredContent || {}).user_message).toMatch(/email/i);
+    expect((r2.structuredContent || {}).user_message).not.toMatch(/calls\/day|calls a day|free key|credits/i);
     expect((r2.structuredContent || {}).human_url).toBe('https://dchub.cloud/connect');
   }, 60_000);
 });

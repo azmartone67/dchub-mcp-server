@@ -267,7 +267,8 @@ describe('option A line on a keyless free-key wall, production transport', () =>
       const r = await wallCall('get_grid_data');
       const lines = humanLines(r.text);
       expect(lines.length).toBe(1);
-      expect(lines[0]).toMatch(/free DC Hub key/);
+      expect(lines[0]).toMatch(/\bDC Hub key/);   // option A (owner 2026-11-16): "free DC Hub key" reads "DC Hub key"
+      expect(lines[0]).not.toMatch(/free DC Hub key/);
       expect(r.text).not.toMatch(/held back part of this answer/);
       const g = await wallCall('get_grid_intelligence');
       expect(humanLines(g.text)).toEqual([HUMAN + ' ' + R.wallEmailLineText(g.sc.human_url)]);
