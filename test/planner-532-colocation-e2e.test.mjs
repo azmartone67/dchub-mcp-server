@@ -162,7 +162,7 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
         const ia = o.intent_answer;
         expect(ia, 'intent_answer').toBeTruthy();
         expect(ia.kind).toBe('colocation');
-        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't publish colocation pricing\./);
+        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't publish colocation prices\./);
         else if (q.pair) {
           // Grok re-run 2026-11-17 (Q-b): a named pair leads side by side, then the market's DCPI.
           expect(ia.headline).toMatch(/^Equinix DC2 \(.*\) vs CoreSite VA1 \(/);

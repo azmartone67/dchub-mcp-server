@@ -54,7 +54,22 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
   it('a fiber/carrier colocation ask adds metro fiber and the connectivity read at the metro core', () => {
     const p = _planQuery('Carrier-neutral colocation with strong fiber in Chicago', {});
     expect(step(p, 'get_metro_fiber').args_hint).toEqual({ market: 'chicago' });
+    expect(step(p, 'get_fiber_readiness').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
+    expect(tools(p)).not.toContain('get_peering_intel');
+  });
+
+  it('a carrier-hotel / IX / cross-connect ask reads peering at the core instead, in the same number of steps', () => {
+    const q = 'Which Chicago carrier hotels have the most internet exchange peering for a cross-connect?';
+    const p = _planQuery(q, {});
     expect(step(p, 'get_peering_intel').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
+    expect(tools(p)).not.toContain('get_fiber_readiness');
+    expect(p.recommended_sequence).toHaveLength(_planQuery('Carrier-neutral colocation with strong fiber in Chicago', {}).recommended_sequence.length);
+  });
+
+  it('a carrier-hotel ask at a named address keeps the on-net read that leads it (Q-f), not peering', () => {
+    const p = _planQuery('Carrier hotel, cross-connect and fiber options at 350 E Cermak in Chicago.', {});
+    expect(tools(p)).toContain('get_fiber_readiness');
+    expect(tools(p)).not.toContain('get_peering_intel');
   });
 
   it('two named facilities: each resolved by its own search, get_facility x2 from those rows', () => {
@@ -80,7 +95,7 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
     const p = _planQuery('What does colocation cost per kW in Dallas?', {});
     expect(p.intent_class).toBe('pricing_out_of_scope');
     expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_energy_prices', 'get_grid_intelligence', 'get_tax_incentives']);
-    expect(p.planner_rationale).toMatch(/doesn't publish colocation pricing/);
+    expect(p.planner_rationale).toMatch(/doesn't publish colocation prices/);
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d/);
   });
 
@@ -200,9 +215,9 @@ describe('5.32 the colocation answer leads with the asked market', () => {
     expect(ia.evidence.join(' ')).toMatch(/facility records as of 2026-03-30/);
     expect(ia.evidence.join(' ')).toMatch(/PJM average time to power: 44\.9 months/);
   });
-  it('a price ask says DC Hub does not publish colocation pricing, with no figure, plan or credit wording', () => {
+  it('a price ask says DC Hub does not publish colocation prices, with no figure, plan or credit wording', () => {
     const p = buildColocationAnswer({ intent: 'colocation cost per kW in Northern Virginia', intent_class: 'pricing_out_of_scope', metro: NOVA }, executed.slice(0, 1), null);
-    expect(p.headline).toMatch(/^DC Hub doesn't publish colocation pricing\./);
+    expect(p.headline).toMatch(/^DC Hub doesn't publish colocation prices\./);
     expect(p.out_of_scope).toBe('colocation_pricing');
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d|credits?|free key|per day|\/day|higher limits|free tier|\bPro\b/i);
   });
