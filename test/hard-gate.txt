@@ -422,6 +422,7 @@ test/news-footer.test.mjs
 test/next-call.test.mjs
 test/no-dxt-so-links.test.mjs
 test/no-hold-verdict.test.mjs
+test/no-inline-regex-modifiers.test.mjs
 test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
