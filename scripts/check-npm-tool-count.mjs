@@ -31,11 +31,35 @@ async function liveCount() {
   });
   if (!res.ok) throw new Error(`${CARD} -> HTTP ${res.status}`);
   const card = await res.json();
-  const n = Array.isArray(card.tools) ? card.tools.length : null;
-  if (!n) throw new Error(`${CARD}: no tools[] to count`);
+  // 2026-11-16 (be worker 4.9.139, owner 'Yes, keep tools_count'): the card is
+  // light — no tools[], only tools_count and tools_list {method, endpoint}. Count
+  // the live catalog through tools_list rather than trusting the card's own
+  // number, and still flag a tools_count that disagrees with it.
+  let n = Array.isArray(card.tools) && card.tools.length ? card.tools.length : null;
+  let source = 'tools[]';
+  if (!n && card.tools_list?.method === 'tools/list' && card.tools_list?.endpoint) {
+    n = await toolsListCount(card.tools_list.endpoint);
+    source = `tools/list at ${card.tools_list.endpoint}`;
+  }
+  if (!n) throw new Error(`${CARD}: no tools[] and no tools_list endpoint to count`);
   if (Number.isInteger(card.tools_count) && card.tools_count !== n)
-    warn(`${CARD} disagrees with itself: tools_count ${card.tools_count} vs tools[] ${n}`);
-  return { n, version: card.version || card.serverInfo?.version || '?' };
+    warn(`${CARD} disagrees with the live catalog: tools_count ${card.tools_count} vs ${source} ${n}`);
+  return { n, source, version: card.version || card.serverInfo?.version || '?' };
+}
+
+async function toolsListCount(endpoint) {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'user-agent': 'dchub-qa-readonly', 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) throw new Error(`${endpoint} tools/list -> HTTP ${res.status}`);
+  const text = await res.text();
+  // Plain JSON, or one SSE `data:` frame carrying it.
+  const body = text.trimStart().startsWith('{') ? text : (text.split('\n').find((l) => l.startsWith('data:')) || '').slice(5);
+  const tools = JSON.parse(body)?.result?.tools;
+  return Array.isArray(tools) && tools.length ? tools.length : null;
 }
 
 function npmDescription() {
@@ -49,7 +73,7 @@ try { live = await liveCount(); } catch (e) { warn(`could not read the live coun
 try { npm = npmDescription(); } catch (e) { warn(`could not read npm ${PKG}: ${e.message}`); process.exit(2); }
 
 const stated = [...npm.description.matchAll(CLAIM)].map((m) => Number(m[1]));
-console.log(`live server card : v${live.version}, ${live.n} tools (${CARD})`);
+console.log(`live server card : v${live.version}, ${live.n} tools via ${live.source} (${CARD})`);
 console.log(`npm ${PKG}@${npm.version}: ${stated.length ? `states ${stated.join(', ')} tools` : 'states no tool count'}`);
 console.log(`  "${npm.description}"`);
 
