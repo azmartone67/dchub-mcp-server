@@ -181,8 +181,9 @@ async function plan(intent) {
     { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name: 'execute_plan', arguments: { intent } } });
   return { raw: r.raw, result: r.msg && r.msg.result };
 }
+// execute_plan's block 0 is the plain-language lead since 2026-11-17 (lib/plan-lead-text.mjs); the JSON is block 1.
 const block0Json = (result) => {
-  const t = result.content[0].text;
+  const t = result.content.map((b) => b.text).find((x) => typeof x === 'string' && x.trimStart().startsWith('{'));
   return t.slice(t.indexOf('{'));
 };
 

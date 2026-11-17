@@ -92,7 +92,9 @@ async function session(ip) {
 }
 
 const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
-const block0 = (r) => { try { return JSON.parse(r.content[0].text); } catch (_) { return null; } };
+// execute_plan's block 0 is a plain-language lead since 2026-11-17 (lib/plan-lead-text.mjs) and its JSON is block 1;
+// every other tool's block 0 is still JSON. So: the first block that parses.
+const block0 = (r) => { for (const b of (r && r.content) || []) { try { return JSON.parse(b.text); } catch (_) { /* the lead */ } } return null; };
 
 describe('pure: what a preview plan held back', () => {
   const executed = [

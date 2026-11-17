@@ -85,7 +85,8 @@ async function session(ip) {
   return async (args = PLAN) => {
     const { body } = await post(h, { jsonrpc: '2.0', id: rpc++, method: 'tools/call', params: { name: 'execute_plan', arguments: args } });
     const r = JSON.parse(body).result;
-    return { sc: r.structuredContent || {}, block0: r.content[0].text };
+    // execute_plan's block 0 is the plain-language lead since 2026-11-17 (lib/plan-lead-text.mjs); the JSON is block 1.
+    return { sc: r.structuredContent || {}, block0: r.content.map((b) => b.text).find((t) => typeof t === 'string' && t.trimStart().startsWith('{')) };
   };
 }
 

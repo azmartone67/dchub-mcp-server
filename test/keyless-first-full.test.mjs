@@ -136,8 +136,11 @@ function norm(r, s) {
   return t.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'TS')
     .replace(/\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]+/g, '/upgrade/h/TOKEN');
 }
+// execute_plan's block 0 is a plain-language lead since 2026-11-17 (lib/plan-lead-text.mjs) and its JSON is block 1;
+// every other tool's block 0 is still JSON. So: the first block that parses.
 function head(r) {
-  const t = (r.content || [])[0]?.text || '';
+  const blocks = (r.content || []).map((b) => (b && typeof b.text === 'string' ? b.text : ''));
+  const t = blocks.find((x) => x.trimStart().startsWith('{')) || blocks[0] || '';
   try { return JSON.parse(t); } catch { /* fallthrough */ }
   try { return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { return null; }
 }
@@ -670,7 +673,8 @@ describe('L) a fresh keyless session: the first execute_plan is full, the second
   const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
   afterEach(() => { loopback.emulate = false; loopback.ip = null; });
   const walls = () => writes.funnel.filter((e) => e && e.event === 'quota_wall_hit');
-  const prose = (r) => (r.content || []).slice(1).filter((b) => b && b.type === 'text').map((b) => b.text).join('\n');
+  // every text block but the plan's JSON (block 1 since the plain-language lead, lib/plan-lead-text.mjs, 2026-11-17)
+  const prose = (r) => (r.content || []).filter((b) => b && b.type === 'text' && !String(b.text).trimStart().startsWith('{')).map((b) => b.text).join('\n');
   const EMAIL_LINE = /ask whether they want to share their email, then call `bind_email` with it\. Only use an address they gave you\./;
   const fresh = (s) => Object.fromEntries(Object.entries(s).filter(([k]) => !k.startsWith('_')));   // the next call's ctx
 

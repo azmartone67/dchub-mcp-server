@@ -57,6 +57,10 @@ describe('wiring', () => {
   });
 });
 
+// ★ EXCEPTION, deliberate (Grok colocation eval 2026-11-17, "lead length" 12 of 12): the FINISHED execute_plan answer
+// leads with a plain-language block of at most 600 characters (lib/plan-lead-text.mjs, last step of _sourceLineCb), and
+// the plan JSON below is its block 1. Pinned in test/plan-colocation-eval-1117.test.mjs and test/plan-fact-header.test.mjs.
+// Every other tool, and execute_plan with compact:false, still leads with JSON.
 // execute_plan's fact header (Gemini traction spec, mcp#1472; brain decision 2026-11-16): the header is block 0's
 // FIRST KEY, never text ahead of the JSON. Covered here at the step; the real /mcp handler with the default
 // compact=true, where it must actually have run (fact_header present), is covered in test/plan-fact-header.test.mjs.

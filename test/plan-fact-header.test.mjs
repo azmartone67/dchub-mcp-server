@@ -227,9 +227,13 @@ describe('through the real handler', () => {
   const INTENT = 'compare ERCOT vs PJM for a 100 MW campus';
   const plan = async (args) => (await rpc('/mcp', { method: 'tools/call', params: { name: 'execute_plan', arguments: { intent: INTENT, ...args } } })).result;
 
-  it('/mcp: block 0 is JSON whose first key is fact_header; structuredContent leads with the same', async () => {
+  // 2026-11-17 (Grok colocation eval, lead length): block 0 is now a plain-language lead of at most 600 characters
+  // (lib/plan-lead-text.mjs) and the plan JSON, fact_header first, is block 1. compact:false keeps block 0 as JSON.
+  it('/mcp: block 1 is JSON whose first key is fact_header, after the plain lead; structuredContent leads with the same', async () => {
     const r = await plan({});
-    const t = r.content[0].text;
+    expect(r.content[0].text.length).toBeLessThanOrEqual(600);
+    expect(r.content[0].text.startsWith('{')).toBe(false);
+    const t = r.content[1].text;
     expect(t.startsWith('{')).toBe(true);
     const b0 = JSON.parse(t);
     expect(b0._entity).toBe('plan_execution');

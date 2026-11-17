@@ -451,7 +451,10 @@ describe('D) /mcp e2e keyless (real server.mjs, stub backend): the 5.29 re-check
       const r = await callAs('execute_plan', { intent });
       const res = r.msg && r.msg.result;
       expect(res && res.structuredContent, 'control: an answer').toBeTruthy();
-      return { res, sc: res.structuredContent, j: splitLeadingJson(res.content[0].text).json, b0: res.content[0].text };
+      // execute_plan's block 0 is the plain-language lead since 2026-11-17 (lib/plan-lead-text.mjs); its JSON is block 1.
+      const jb = res.content.find((b) => b && typeof b.text === 'string' && splitLeadingJson(b.text));
+      expect(res.content[0].text.length, 'the lead is short').toBeLessThanOrEqual(600);
+      return { res, sc: res.structuredContent, j: splitLeadingJson(jb.text).json, b0: jb.text };
     } finally {
       for (const [k, v] of [['DCHUB_PLAN_BUDGET_DEDUPE', prev.d], ['DCHUB_PLAN_BUDGET_BYTES', prev.b]]) {
         if (v === undefined) delete process.env[k]; else process.env[k] = v;
