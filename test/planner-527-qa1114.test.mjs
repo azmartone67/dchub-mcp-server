@@ -25,7 +25,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 
 describe('planner 5.27', () => {
-  it('PLANNER_VERSION is 5.27 or later (5.29)', () => { expect(PLANNER_VERSION).toBe('5.34'); });
+  it('PLANNER_VERSION is 5.27 or later (5.29)', () => { expect(PLANNER_VERSION).toBe('5.35'); });
 });
 
 describe('bug 1: an AI-campus ranking leads with rank_markets criteria=ai_ready', () => {
