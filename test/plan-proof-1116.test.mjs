@@ -173,7 +173,7 @@ describe('item 8: planId is stable for the same question; compactReplay keeps de
     expect(planId({ ...base, intent: 'how soon can a 200 MW load get power in PJM' })).not.toBe(a);
     expect(planId({ ...base, context: { iso: 'ERCOT', capacity_mw: 100 } })).not.toBe(a);
     expect(planId({ ...base, intentClass: 'interconnection_queue' })).not.toBe(a);
-    expect(planId({ ...base, plannerVersion: '5.32' })).not.toBe(a);
+    expect(planId({ ...base, plannerVersion: '5.33' })).not.toBe(a);
   });
   it('compactReplay keeps id, step, kind, status and decision for every decision, and the plan id', () => {
     const replay = { schema_version: 1, planner_version: '5.31', intent_class: 'grid_headroom', plan_id: 'plan_0123456789abcdef',

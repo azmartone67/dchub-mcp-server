@@ -558,7 +558,8 @@ describe('J) execute_plan end to end with its steps run: call 1 is full depth wi
     expect(h1.answer).not.toMatch(/\(preview\)/);
     // 2026-11-16 (Grok Note K): totals.tier_note said "steps returned preview depth" on this full-depth plan
     const tn1 = ((r1.structuredContent && r1.structuredContent.totals) || h1.totals || {}).tier_note;
-    expect(tn1).toMatch(/first full answer: steps ran at full depth/);
+    // Grok re-run 2026-11-17 (option A): the depth only, no daily-allowance clause.
+    expect(tn1).toBe('no key — steps ran at full depth');
     expect(tn1).not.toMatch(/preview depth|claim_free_key/);
     // the backend heard the full-depth tier on every step read
     const stepReads = writes.backend.filter((w) => w.path.startsWith('/api/v1/grid/') || w.path.startsWith('/api/v1/interconnection-queue/'));

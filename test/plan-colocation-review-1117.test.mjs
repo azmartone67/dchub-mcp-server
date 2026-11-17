@@ -221,10 +221,12 @@ describe('the real /mcp handler (keyless, stub backend)', () => {
     const metroScoped = sf.args.city != null || sf.args.market != null || sf.args.lat != null;
     const widened = sc.replay && sc.replay.scope_widened;
     expect(metroScoped || !!widened).toBe(true);
-    expect(widened).toEqual({ widened_from: 'Ashburn', to: 'VA' });
-    expect(sc.answer_guide).toMatch(/Widened Ashburn to Virginia: search_facilities/);
-    // The Northern Virginia phrasing already disclosed it; unchanged.
-    expect(res.nova.structuredContent.replay.scope_widened).toEqual({ widened_from: 'Northern Virginia', to: 'VA' });
+    // Grok re-run 2026-11-17 (Q-a): the search reads the METRO (query "Northern Virginia"), not the state. Ashburn is
+    // disclosed as read at the metro grain, and no step is said to have read all of Virginia.
+    expect(widened).toEqual({ widened_from: 'Ashburn', to: 'Northern Virginia metro', grain: 'metro' });
+    expect(sc.answer_guide).not.toMatch(/Widened Ashburn to Virginia/);
+    // Asked as "Northern Virginia": the search is the metro asked, nothing was widened.
+    expect(res.nova.structuredContent.replay.scope_widened).toBeUndefined();
   });
 
   it.each(Object.keys(INTENTS))('%s, fix 3: content[0] is plain language of at most 600 characters; the JSON is content[1]', (k) => {
@@ -240,12 +242,28 @@ describe('the real /mcp handler (keyless, stub backend)', () => {
 });
 
 describe('the scope helper', () => {
-  it('only for a colocation metro whose geography bound a point, never for a facility pair', () => {
+  it('metro-first: a suburb reads at the metro grain, the metro name is not widened, a state only where a step reads it', () => {
     const S = H.S;
-    const metro = { id: 'northern-virginia', state: 'VA' };
-    expect(S._coloScopeWidened({ metro, metro_matched: 'sterling' }, { lat: 1, lon: 2 })).toEqual({ widened_from: 'Sterling', to: 'VA' });
-    expect(S._coloScopeWidened({ metro, metro_matched: 'ashburn' }, null)).toBeNull();
-    expect(S._coloScopeWidened({ metro, metro_matched: 'ashburn', pair: { a: 'x', b: 'y' } }, { lat: 1 })).toBeNull();
+    const nova = { id: 'northern-virginia', label: 'Northern Virginia', query: 'Northern Virginia', state: 'VA', iso: 'PJM' };
+    const atl = { id: 'atlanta', label: 'Atlanta', query: 'Atlanta', state: 'GA', iso: null };
+    expect(S._coloScopeWidened({ metro: nova, metro_matched: 'sterling' }, { lat: 1, lon: 2 }))
+      .toEqual({ widened_from: 'Sterling', to: 'Northern Virginia metro', grain: 'metro' });
+    expect(S._coloScopeWidened({ metro: nova, metro_matched: 'northern virginia' }, { lat: 1 }, { widened_from: 'Northern Virginia', to: 'VA' })).toBeNull();
+    // A named pair is searched by name: the text-based widening (Dallas -> TX) does not apply either.
+    expect(S._coloScopeWidened({ metro: nova, metro_matched: 'ashburn', pair: { a: 'x', b: 'y' } }, null, { widened_from: 'Dallas', to: 'TX' })).toBeNull();
+    // No RTO: the power read is the state's timeline, so the state is disclosed.
+    expect(S._coloScopeWidened({ metro: atl, metro_matched: 'atlanta' }, null)).toEqual({ widened_from: 'Atlanta', to: 'GA' });
+    // A price ask: the drivers are state-grain.
+    expect(S._coloScopeWidened({ metro: nova, metro_matched: 'ashburn', price: true }, null)).toEqual({ widened_from: 'Ashburn', to: 'VA' });
     expect(S._coloScopeWidened(null, { lat: 1 })).toBeNull();
+    expect(S._coloScopeWidened(null, null, { widened_from: 'Fulton County', to: 'GA' })).toEqual({ widened_from: 'Fulton County', to: 'GA' });
+  });
+  it('a metro facility search with a query is never said to have read the whole state', () => {
+    const S = H.S;
+    const line = S._execWidenedLine({ widened_from: 'Atlanta', to: 'GA' }, [
+      { step: 2, tool: 'search_facilities', status: 'executed', args: { query: 'Atlanta', state: 'GA', limit: 10 } },
+      { step: 3, tool: 'get_power_availability_timeline', status: 'executed', args: { state: 'GA' } },
+    ]);
+    expect(line).toBe('Widened Atlanta to Georgia: get_power_availability_timeline read all of Georgia, not Atlanta alone; say so when quoting them.');
   });
 });

@@ -14241,7 +14241,9 @@ const _FACILITY_FREE_FIELDS = new Set([
   // dropped one. verified_at is PeeringDB rows only. The collection-level
   // provenance.as_of stays null (lib/attribution.mjs: per-record dates are not
   // promoted); an agent cites the row's own as_of.
-  'as_of', 'as_of_basis', 'verified_at',
+  // 2026-11-17 (backend util/facility_as_of): as_of_kind says what that date is ("verified" against PeeringDB or
+  // OpenStreetMap, "refreshed" by a loader that re-reads the source, or "last_written" for a source nothing re-checks).
+  'as_of', 'as_of_basis', 'as_of_kind', 'verified_at',
 ]);
 
 // r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_
@@ -22994,21 +22996,34 @@ export function _planSignals(intent, context) {
   // null, yet the metro facility search takes no point: it reads query + state (search_facilities has no radius
   // and one `city`, and Northern Virginia is eight). Say so the way "Northern Virginia", Dallas, Atlanta and
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
-  const scopeWidenedOut = scopeWidened || _coloScopeWidened(__colo, coords);
+  const scopeWidenedOut = _coloScopeWidened(__colo, coords, scopeWidened);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
     __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro };
 }
-// The colocation scope disclosure above: { widened_from, to } or null. Only for a colocation ask whose metro was
-// named and whose geography bound a point (a point-less ask already gets scopeWidened from the text), and never
-// for a named facility pair (that search reads the two names, not the metro). Pure; never throws.
-export function _coloScopeWidened(colo, coords) {
+// The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
+// would carry without a colocation read. Pure; never throws.
+// Grok re-run 2026-11-17 (Q-a, Q-b): "Northern Virginia" -> "VA" and "Dallas" -> "TX" were disclosed although the
+// facility search read the METRO (query "Northern Virginia" covers Ashburn, Sterling, Manassas, Herndon) or two
+// named facilities, and the rows were Ashburn's. Now:
+//   * a named facility pair: null (the searches read the two names);
+//   * a price ask: the state (its energy-price and incentive drivers are state-grain);
+//   * a metro on an RTO: no state step runs; a suburb named ("Ashburn") is disclosed as read at the metro grain;
+//   * a metro on no RTO: its power read is the state's timeline, so the state is disclosed.
+export function _coloScopeWidened(colo, coords, generic = null) {
   try {
-    if (!colo || !colo.metro || colo.pair || !coords) return null;
-    const from = typeof colo.metro_matched === 'string' ? colo.metro_matched.trim() : '';
-    const to = typeof colo.metro.state === 'string' ? colo.metro.state : '';
-    if (!from || !to) return null;
-    return { widened_from: from.replace(/\b\w/g, (ch) => ch.toUpperCase()), to };
-  } catch (_e) { return null; }
+    if (!colo || !colo.metro) return generic || null;
+    if (colo.pair) return null;
+    const m = colo.metro;
+    const matched = typeof colo.metro_matched === 'string' ? colo.metro_matched.trim() : '';
+    const from = (matched || m.label).replace(/\b\w/g, (ch) => ch.toUpperCase());
+    const isMetroName = !matched || [m.label, m.query, m.id].some((x) => typeof x === 'string' && x.toLowerCase() === matched.toLowerCase());
+    if (colo.price || !m.iso) {
+      if (generic) return generic;
+      return m.state ? { widened_from: from, to: m.state } : null;
+    }
+    if (isMetroName) return null;
+    return { widened_from: from, to: m.label + ' metro', grain: 'metro' };
+  } catch (_e) { return generic || null; }
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -23267,7 +23282,11 @@ export function _planWorkflowConfidence(seq, d) {
 //         (market=<slug>) or state, with expected_completion_before from the window; a metro the plan reads
 //         state-wide says "Widened <metro> to <state>" in answer_guide, and the server's own get_pipeline
 //         widening note (scope.note) is relayed there too.
-export const PLANNER_VERSION = '5.32';
+// 5.33 (Grok colocation re-run 2026-11-17): a named facility pair searches the names alone ("two Dallas colocation
+//         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
+//         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
+//         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
+export const PLANNER_VERSION = '5.33';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -23608,7 +23627,8 @@ export function _execWidenedLine(scopeWidened, executed, fullByEntry = null) {
       for (const e of ran) {
         const a = e.args;
         if (!a || typeof a.state !== 'string' || !/^[A-Z]{2}$/.test(a.state)) continue;
-        if (a.market != null || a.city != null || a.lat != null) continue;
+        // A free-text query (search_facilities "Northern Virginia", "Equinix DA11") scopes the step below the state.
+        if (a.market != null || a.city != null || a.lat != null || a.query != null) continue;
         if (!byState.has(a.state)) byState.set(a.state, []);
         if (!byState.get(a.state).includes(e.tool)) byState.get(a.state).push(e.tool);
       }
@@ -32463,7 +32483,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             metro: _sig && _sig.__colo ? _sig.__colo.metro : null,
             metros: (_sig && _sig.__colo && _sig.__colo.compare && !_sig.__colo.pair ? _sig.__colo.metros_named : [])
               .map((id) => _COLO_METROS.find((m) => m.id === id)).filter(Boolean),
-            kw: _sig && _sig.__colo ? _sig.__colo.kw : null }, executed, fullByEntry);
+            kw: _sig && _sig.__colo ? _sig.__colo.kw : null,
+            pair: _sig && _sig.__colo ? _sig.__colo.pair : null,
+            address: _sig && _sig.__colo ? _sig.__colo.address : null }, executed, fullByEntry);
       const _intentAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _coloAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
@@ -32515,9 +32537,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                     : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth'
                       // 2026-11-16 (owner, Grok Note K): a keyless plan that took today's first full answer ran its
                       // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
+                      // Grok re-run 2026-11-17 (option A): the allowance clauses ("the first keyless plan each UTC day is
+                      // a full answer", "an email raises the limit") are gone; the note says only the depth the steps ran at.
                       : (c && c._kffPlan === true
-                        ? 'no key — today\'s first full answer: steps ran at full depth; later keyless plans today return previews; an email raises the limit'
-                        : 'no key — steps returned preview depth (the first keyless plan each UTC day is a full answer); an email raises the limit')) },
+                        ? 'no key — steps ran at full depth'
+                        : 'no key — steps returned preview depth')) },
         ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
