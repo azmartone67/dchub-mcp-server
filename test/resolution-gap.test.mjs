@@ -67,3 +67,13 @@ describe('the assert must not cry wolf', () => {
     expect('resolution_gap' in (p.replay || {})).toBe(false);
   });
 });
+
+describe('a US state named in full binds (Grok re-test 2026-11-17)', () => {
+  it('reports no gap when the state bound as stateFromPlace', () => {
+    expect(gapFor('how soon can I get 100 MW in Pennsylvania')).toBeNull();
+    expect(gapFor('interconnection queue in Ohio for 200 MW')).toBeNull();
+  });
+  it('still reports a place that is not tracked', () => {
+    expect(gapFor('what is the grid headroom in Oslo')).toBeTruthy();
+  });
+});

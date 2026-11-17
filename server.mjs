@@ -23424,7 +23424,10 @@ export function _resolutionGap(text, signals, intentClass) {
     if (!signals || typeof signals !== 'object') return null;
     const d = signals;
     // Geography DID bind — by any route. Nothing to report.
-    if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.candidateId) return null;
+    // Grok re-test 2026-11-17: a state named in full ("in Pennsylvania") binds as stateFromPlace, which
+    // every step reads as d.state || d.stateFromPlace; the answer said "pennsylvania is outside the tracked
+    // geography index" over steps run with state=PA.
+    if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.stateFromPlace || d.candidateId) return null;
     // 5.29 (Grok note K): two or more named states DID bind (one set of steps per state, _planStateFanout);
     // "texas or arizona by" is not a place outside the index.
     if (Array.isArray(d.states) && d.states.length >= 2) return null;
