@@ -86,7 +86,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock } from './lib/keyless-first-full.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -9919,6 +9919,19 @@ export function _keylessFirstFullSettle(c, used) {
     }
     return used ? 'committed' : 'refunded';
   } catch (_) { return null; }
+}
+// Item 9 (Grok proof run 2026-11-16): a keyless execute_plan that is the preview BECAUSE today's first full
+// plan answer was used says so, and names what each step held back (lib/keyless-first-full.mjs
+// withFirstFullUsedBlock). Only when the lane applies to this seat and its quota stamp reads USED; not on the
+// directory / Claude / core profiles (each keeps its own copy) or a clean platform.
+function _kffUsedPlanStep(out, c) {
+  try {
+    if (!c || c.api_key || c.loopback_step || _isCleanPlatform()) return out;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return out;
+    const q = _keylessFirstFullQuota(c, 'execute_plan');
+    if (!q || q.full_answers_remaining_today !== 0 || !/^USED:/.test(String(q.full_answers_unavailable_reason || ''))) return out;
+    return _withFirstFullUsedBlock(out, q.full_answers_cap_today);
+  } catch (_) { return out; }
 }
 // The email-bound free key's gate for this tool, when it is a plain answer this lane can serve:
 // allowed, not a paid taste, not capped by FREE_TIER_LIMITS. null otherwise.
@@ -25493,6 +25506,7 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
     // never rides beside a human_url, a for_your_human relay or a wall.
     if (name === 'execute_plan') out = stripHandoffIfPointered(out, { isWall: (sc) => _isRelayWall(sc, c) });
     if (name === 'execute_plan' && c._kffPlan === true && !c.loopback_step) out = _kffLeadWithAnswer(out);
+    if (name === 'execute_plan' && c._kffPlan !== true && !c.loopback_step) out = _kffUsedPlanStep(out, c);
     return out;
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
