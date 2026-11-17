@@ -49,12 +49,20 @@ beforeAll(async () => {
       }
       if (p === '/api/v1/facilities') {
         const q = u.searchParams.get('q') || u.searchParams.get('query') || '';
-        const rows = FAC[q] || [];
+        // A city search answers with the metro's rows, Sterling included, as a backend that does not filter on city
+        // would: the plan cuts them to the town (item 2, 2026-11-17).
+        const city = u.searchParams.get('city') || '';
+        const rows = q ? (FAC[q] || []) : (city === 'Ashburn' ? FAC['Northern Virginia'] : []);
         return send({ success: true, total_matching: rows.length ? 600 + rows.length : 0, data: rows });
       }
       if ((m = /^\/api\/v1\/facilit(?:y|ies)\/([^/]+)$/.exec(p))) {
         const f = ALL_FAC.get(decodeURIComponent(m[1]));
-        return f ? send({ data: { ...f, operator: f.name.split(' ')[0], fiber_carrier_count: 12 } }) : send({ error: 'Facility not found' }, 404);
+        // Item 1 (2026-11-17): the record carries specs, and also a street address and power the keyless answer must not show.
+        const specs = f && f.slug === 'equinix-dc2-ashburn-0a1b2c3d'
+          ? { floor_space_sqft: 216000, tier_level: 3, certifications: ['SOC 2', 'ISO 27001'], operator_url: 'https://www.equinix.com/dc2',
+            specs_not_on_record: ['facility_type'], address: '21715 Filigree Ct', power_mw: 30 }
+          : { specs_not_on_record: ['floor_space_sqft', 'facility_type', 'tier_level', 'certifications', 'source_url', 'operator_url'] };
+        return f ? send({ data: { ...f, operator: f.name.split(' ')[0], fiber_carrier_count: 12, ...specs } }) : send({ error: 'Facility not found' }, 404);
       }
       if (p.startsWith('/api/v1/grid/intelligence/')) return send({ iso: p.split('/').pop().toUpperCase(), avg_time_to_power_months: 44.9, as_of: '2026-11-16T00:00:00Z' });
       if (p === '/api/v1/dcpi/iso-comparison') {
@@ -69,6 +77,8 @@ beforeAll(async () => {
   });
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   process.env.DCHUB_INTERNAL_KEY = SECRET;
+  // The town search's rows are read from the step body; execute_plan's compact default (mcp#1518) leaves bodies out.
+  process.env.DCHUB_PLAN_COMPACT = '0';
   process.env.PORT = String(await freePort());
   const S = await import('../server.mjs');
   await new Promise((resolve) => { httpServer = S.app.listen(Number(process.env.PORT), '127.0.0.1', resolve); });
@@ -106,7 +116,7 @@ async function plan(args) {
 
 const H2H = [
   { args: { intent: 'Colocation options in Northern Virginia (Ashburn) for about 500 kW', context: { market: 'Northern Virginia', state: 'VA' } },
-    cls: 'colocation', lead: 'Northern Virginia', query: 'Northern Virginia', kw: 0.5 },
+    cls: 'colocation', lead: 'Northern Virginia', city: 'Ashburn', kw: 0.5 },
   { args: { intent: 'Compare colocation in Dallas vs Northern Virginia for 1 MW' }, cls: 'colocation', lead: 'Dallas-Fort Worth', dcpiName: 'Dallas', query: 'Dallas', kw: 1 },
   { args: { intent: 'Colocation space available now in Atlanta for 300 kW' }, cls: 'colocation', lead: 'Atlanta', query: 'Atlanta', kw: 0.3 },
   { args: { intent: 'Carrier-neutral colocation with strong fiber in Chicago' }, cls: 'colocation', lead: 'Chicago', query: 'Chicago' },
@@ -141,10 +151,41 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
         });
       }
 
+      if (q.city) {
+        it('the town asked is the search, not the metro or the state', () => {
+          const sf = o.executed.filter((e) => e.tool === 'search_facilities');
+          expect(sf.map((e) => e.args.city)).toEqual([q.city]);
+          for (const e of sf) expect(e.args.state).toBeTruthy();
+        });
+        it('only rows in that town come back, each with a fit note when the size could not be checked', () => {
+          const sf = o.executed.find((e) => e.tool === 'search_facilities');
+          const body = sf.result || sf.figures;
+          const rows = body.data;
+          // The stub answers the city search with an Ashburn row and a Sterling row; the Sterling row is cut.
+          expect(rows.map((r) => r.city)).toEqual([q.city]);
+          expect(body.submarket_scope).toMatchObject({ submarket: q.city, dropped_outside_submarket: 1 });
+          for (const r of rows) expect(r.fit_note, r.name).toMatch(/^Size not checked: .*500 kW asked/);
+          const gf = o.executed.find((e) => e.tool === 'get_facility' && e.status === 'executed');
+          expect(gf.args.slug).toBe('ntt-ashburn-va7-data-center-ashburn-0809b12f');
+        });
+      }
+
       if (q.pair) {
         it('each named facility is read from its own search row', () => {
           const gf = o.executed.filter((e) => e.tool === 'get_facility' && e.status === 'executed').map((e) => e.args.slug);
           expect(gf).toEqual(['equinix-dc2-ashburn-0a1b2c3d', 'coresite-va1-reston-4e5f6a7b']);
+        });
+        it('item 1: the profile carries the specs and the answer says them, and which are not on record; no street address', () => {
+          // This harness's loopback reads at full depth (power shows); the keyless allowlist is pinned in
+          // colocation-city-fit-1117.test.mjs. The step summary keeps scalar figures, so lists are read from the answer.
+          const e = o.executed.find((x) => x.tool === 'get_facility' && x.args.slug === 'equinix-dc2-ashburn-0a1b2c3d');
+          const d = (e.result || e.figures).data;
+          expect(d).toMatchObject({ floor_space_sqft: 216000, tier_level: 3, operator_url: 'https://www.equinix.com/dc2' });
+          expect(d.address).toBeUndefined();
+          const ia = JSON.stringify(o.intent_answer);
+          expect(ia).toContain('Equinix DC2: 216,000 sq ft; tier level 3 (as the source records it); certifications SOC 2, ISO 27001; operator page https://www.equinix.com/dc2.');
+          expect(ia).toContain('CoreSite VA1: floor space, facility type, tier level, certifications, source page, operator website not on record in DC Hub.');
+          expect(ia).not.toContain('21715 Filigree');
         });
       }
 
