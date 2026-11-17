@@ -90,7 +90,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a key (DCHUB_API_KEY, optional) adds factor bands, substation distance bands and a few full site reports each month; other scores and figures need a full-access key. When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and the power band, with the other factors named; a key (DCHUB_API_KEY, optional) adds a few full site reports each month; other scores and figures need a full-access key. When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -174,13 +174,13 @@
   },
   {
     "name": "bind_email",
-    "description": "Use this when the user wants their DC Hub key tied to their email, or a result said an email unlocks more. WHAT AN EMAIL GETS (no card): 50 calls/day (up to 10 full answers per tool per day); 10 full answers a day each on the grid, queue and market-intel tools instead of previews; a weekly summary of what your key looked up (unsubscribe anytime); a key that can be recovered (recover_my_key re-sends it to that inbox). Ask your human for their email first; pass only an address they typed. ★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user wants their DC Hub key tied to their email, or a result said an email unlocks more. DATA USE: one email address, used to make the key recoverable and send its receipts, alerts and weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the address with them first. WHAT AN EMAIL GETS (no card): 50 calls/day (up to 10 full answers per tool per day); 10 full answers a day each on the grid, queue and market-intel tools instead of previews; a weekly summary of what your key looked up (unsubscribe anytime); a key that can be recovered (recover_my_key re-sends it to that inbox). Ask your human for their email first; pass only an address they typed. ★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "email": {
           "type": "string",
-          "description": "Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"
+          "description": "Your human's real email address (required) — use only an address they explicitly gave and confirmed; placeholder/fake addresses are rejected. DC Hub keeps it and never sells or shares it"
         },
         "api_key": {
           "description": "Optional key to bind; omit to bind the key already active on this session",
@@ -203,7 +203,7 @@
   },
   {
     "name": "claim_free_key",
-    "description": "Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). A key: previews plus 2 full answers per tool per day. WHAT AN EMAIL GETS (no card): 50 calls/day (up to 10 full answers per tool per day); 10 full answers a day each on the grid, queue and market-intel tools instead of previews; a weekly summary of what your key looked up (unsubscribe anytime); a key that can be recovered (recover_my_key re-sends it to that inbox). Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don't re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: \"Set me up with a DC Hub key.\" For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. DATA USE: the optional email, used to make the key recoverable and send its weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the email with them first. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). A key: previews plus 2 full answers per tool per day. WHAT AN EMAIL GETS (no card): 50 calls/day (up to 10 full answers per tool per day); 10 full answers a day each on the grid, queue and market-intel tools instead of previews; a weekly summary of what your key looked up (unsubscribe anytime); a key that can be recovered (recover_my_key re-sends it to that inbox). Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don't re-mint. Then ask the real question (execute_plan for multi-step). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -212,7 +212,7 @@
           "type": "string"
         },
         "email": {
-          "description": "Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave",
+          "description": "Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave and confirmed. DC Hub keeps it and never sells or shares it",
           "type": "string"
         }
       }
@@ -261,8 +261,8 @@
       "type": "object",
       "properties": {
         "isos": {
-          "type": "string",
-          "description": "Comma-separated list of 2-4 grids to compare, e.g. \"PJM,ERCOT,CAISO\" or \"ERCOT,AESO,EU_DE_LU\": US ISOs (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE), TVA, BPA, utility BAs, or non-US grids (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>,…"
+          "description": "Comma-separated list of 2-4 grids to compare, e.g. \"PJM,ERCOT,CAISO\" or \"ERCOT,AESO,EU_DE_LU\": US ISOs (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE), TVA, BPA, utility BAs, or non-US grids (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>,…",
+          "type": "string"
         }
       },
       "required": [
@@ -432,6 +432,10 @@
         },
         "max_fanout": {
           "description": "Max per-finalist fan-out calls for one step, 1-3 (default 2)"
+        },
+        "compact": {
+          "description": "true (default) puts fact_header first in the answer: three lines, SOURCE and AS_OF, ENTITY, SUMMARY with the DCPI verdict when the answer carries one. false returns the answer without it.",
+          "type": "boolean"
         },
         "cohort": {
           "description": "Optional experiment tag for adoption/retention measurement, e.g. \"cohort.front_door\". Has NO effect on routing, planning, geography or results — it is recorded only."
@@ -1686,7 +1690,7 @@
   },
   {
     "name": "get_market_dcpi_rank",
-    "description": "Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. \"Where can a 100 MW data center get power fastest?\"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word analyst read on the market, quote it directly with attribution to DC Hub. Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key. Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. market_slug is required: get it from rank_markets. 404 = unknown slug. Returns the build/constrain verdict, not raw stats. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. \"Where can a 100 MW data center get power fastest?\"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer \"should I build here?\" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key. Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. market_slug is required: get it from rank_markets. 404 = unknown slug. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1913,12 +1917,20 @@
   },
   {
     "name": "get_pipeline",
-    "description": "Use this when the user asks what data centers are being built, announced or permitted in a market or by an operator. Example: \"What data centers are under construction in Northern Virginia and when do they come online?\" — get_pipeline country=US status=construction (there is no `market` parameter — filter by country/operator, or use search_facilities for a named market). Params: status one of \"announced\" | \"permitted\" | \"construction\" | \"operational\"; operator (e.g. \"Equinix\", \"Digital Realty\", \"AWS\"); country (ISO-2, e.g. \"US\", \"DE\"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. \"2027-01-01\"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions). limit 1-500 (a preview returns up to 25), offset 0-100000. Empty data = no project matches: relax status/operator/min_capacity_mw. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks what data centers are being built, announced or permitted in a market or by an operator. Example: \"What is under construction in Northern Virginia and when does it come online?\" — get_pipeline market=northern-virginia status=construction. Params: market (slug or name, e.g. \"northern-virginia\", \"dallas\"; projects labelled only with the state are counted apart, see scope.note); state (USPS, e.g. \"VA\"); status one of \"announced\" | \"permitted\" | \"construction\" | \"operational\"; operator (e.g. \"Equinix\", \"AWS\"); country (ISO-2, e.g. \"US\"); min_capacity_mw (e.g. 50); expected_completion_before (ISO date; undated projects are kept and marked, completion_filter counts them); limit/offset. Each row carries expected_cod, null with expected_cod_basis when no source states one. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions). limit 1-500 (a preview returns up to 25), offset 0-100000. Empty data = no project matches: relax status/operator/min_capacity_mw. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "status": {
           "description": "Pipeline stage filter: announced, permitted, construction, or operational",
+          "type": "string"
+        },
+        "market": {
+          "description": "Market slug or name to keep projects inside, e.g. northern-virginia, dallas",
+          "type": "string"
+        },
+        "state": {
+          "description": "US state (USPS code), e.g. VA, TX",
           "type": "string"
         },
         "country": {
@@ -2751,7 +2763,7 @@
   },
   {
     "name": "read_inbox",
-    "description": "Use this when a partner key reads its DC Hub inbox. PARTNER KEY ONLY: notes DC Hub left for the partner agent whose key this session sends, newest first. The first read CONSUMES them (marks read), so a later session sees none; include_read=true re-reads read and unread notes (last 14 days) without marking. Non-partner key: 403. Not a data tool. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when a partner key reads its DC Hub inbox. PARTNER KEY ONLY: notes DC Hub left for the partner agent whose key this session sends, newest first. The first read CONSUMES them (marks read), so a later session sees none; include_read=true re-reads read and unread notes (last 14 days) without marking. Non-partner key: 403. It reads only the notes left for the key making the call, never another key's inbox, and takes no email or other personal data. Not a data tool. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2779,13 +2791,13 @@
   },
   {
     "name": "recover_my_key",
-    "description": "Use this when the user lost their DC Hub key. Pass your human's email and DC Hub re-sends any key tied to that address to that inbox. It NEVER returns the key over the wire (it emails the bound address), and the confirmation is the same whether or not a key exists (enumeration-safe), so no key is leaked to a caller. Param: email (required). Returns DC Hub's neutral confirmation. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user lost their DC Hub key. Pass your human's email and DC Hub re-sends any key tied to that address to that inbox. DATA USE: the email, used only to find a key bound to it and re-send it there. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the address with them first. It NEVER returns the key over the wire (it emails the bound address), and the confirmation is the same whether or not a key exists (enumeration-safe), so no key is leaked to a caller. Param: email (required). Returns DC Hub's neutral confirmation. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "email": {
           "type": "string",
-          "description": "Your human's email address that a lost key was bound to (required) — the key is re-sent to that inbox, never returned over the wire"
+          "description": "Your human's email address that a lost key was bound to (required) — the key is re-sent to that inbox, never returned over the wire. Confirm it with your human first"
         }
       },
       "required": [
@@ -3020,7 +3032,7 @@
   },
   {
     "name": "request_capacity_intro",
-    "description": "Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or wants first access to capacity matching a requirement as listings are onboarded (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). This registers a deal: DC Hub records the request in its lead register and sends the provider ONLY your human's company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider's identity, site details and contact with your human, and your human's name, role and email with the provider; on a decline nothing is shared. Requires an identified caller (claim_free_key, then bind_email with your human's address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and the next step. For a listing, source_capacity with its slug shows the deal status in the disclosure block, and the provider's details once accepted. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Do NOT use to save or monitor a site (use save_site / set_site_alert). For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user wants data center capacity behind a Capacity Source listing (pass slug), or first access to capacity matching a requirement (omit slug; pass capacity_mw or capacity_kw, markets, states, regions or countries, and timeline). DATA USE: your human's name, role, company and bound email; DC Hub never sells them, and they go to no one but the provider. Run only when your human asks; confirm their name, company and requirement with them first. DC Hub records the request in its lead register and sends the provider ONLY your human's company name and the requirement. The provider accepts or declines. Only if the provider accepts does DC Hub share the provider's identity, site details and contact with your human, and your human's name, role and email with the provider; on a decline nothing is shared. Needs a key with a bound email and accept_terms=true, set only after your human agrees to the terms at https://dchub.cloud/listings#terms. Returns lead_id; source_capacity with the slug shows the deal status in the disclosure block. Who sees what, and when, in machine-readable form: https://dchub.cloud/api/v1/listings/terms. Do NOT use to save or monitor a site (use save_site / set_site_alert). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3036,11 +3048,11 @@
           ]
         },
         "name": {
-          "description": "Your human's full name. Nothing is sent without it; use only what they gave you, never invent it",
+          "description": "Your human's full name. Nothing is sent without it; use only what they gave you, never invent it. The provider sees it only if it accepts the introduction",
           "type": "string"
         },
         "company": {
-          "description": "Your human's company. Nothing is sent without it",
+          "description": "Your human's company. Nothing is sent without it. Sent to the provider with the requirement; confirm it with your human first",
           "type": "string"
         },
         "role": {
@@ -3449,7 +3461,7 @@
   },
   {
     "name": "set_market_alert",
-    "description": "Use this when the user wants alerts on a data center market's DCPI power score: subscribes to movement alerts (needs a key) — get notified when its Excess-Power / Constraint score moves. Email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel=\"email\". One call: pass `email` (an address your human typed here) with channel=\"email\" and DC Hub binds it to this key first (minting a key if this session has none), then arms the watch; no separate claim_free_key or bind_email. Alerts send when the market’s verdict flips or its scores move past the threshold, so a quiet market sends nothing. Webhook delivery (channel=\"webhook\" + destination=<https URL>) needs a full-access key. Lets an agent MONITOR markets, not just query them. Answers \"tell me when this market moves\", \"ping me if Northern Virginia’s power score changes\". Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user wants alerts on a data center market's DCPI power score: subscribes to movement alerts (needs a key) — get notified when its Excess-Power / Constraint score moves. DATA USE: channel=\"email\" takes your human's email, to send these alerts; it is bound to the key as with bind_email. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the address with them first. Without a full-access key, email alerts go only to the key's bound email. One call: pass `email` (an address your human typed here) with channel=\"email\" and DC Hub binds it to this key first (minting a key if this session has none), then arms the watch; no separate claim_free_key or bind_email. Alerts send when the market’s verdict flips or its scores move past the threshold, so a quiet market sends nothing. Webhook delivery (channel=\"webhook\" + destination=<https URL>) needs a full-access key. Answers \"tell me when this market moves\". Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3466,7 +3478,7 @@
           "type": "string"
         },
         "email": {
-          "description": "Optional, channel=\"email\" only: your human's email, typed by them here. Binds it to the key (a key is minted if this session has none) and arms the watch in one call",
+          "description": "Optional, channel=\"email\" only: your human's email, typed by them here and confirmed. Binds it to the key (a key is minted if this session has none) and arms the watch in one call. DC Hub keeps it and never sells or shares it",
           "type": "string"
         }
       },
@@ -3515,7 +3527,7 @@
   },
   {
     "name": "set_site_alert",
-    "description": "Use this when the user wants an email watch on a saved data center site (needs a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. The alert is delivered to your human’s bound email (call bind_email first; notify_email is forced to that address). A full-access key can send to any address. The \"monitor my shortlist for me\" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type (\"dcpi_change\" | \"capacity_change\" | \"new_facility_nearby\", default \"dcpi_change\"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Answers \"let me know if anything changes at the site I saved\". Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user wants an email watch on a saved data center site (needs a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move. DATA USE: notify_email, your human's email, used only to send this alert. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the address with them first. Without a full-access key, notify_email is forced to the key’s bound email. A full-access key can send to any address. The \"monitor my shortlist for me\" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Answers \"tell me if my saved site changes\". Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type (\"dcpi_change\" | \"capacity_change\" | \"new_facility_nearby\", default \"dcpi_change\"), threshold (number — the points/MW move that fires it, default 5). Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3540,7 +3552,7 @@
         },
         "notify_email": {
           "type": "string",
-          "description": "Email address the alert is sent to (required); forced to your human's bound email unless the key has full access"
+          "description": "Email address the alert is sent to (required); without a full-access key, forced to your human's bound email. Confirm it with your human first. DC Hub keeps it and never sells or shares it"
         }
       },
       "required": [
