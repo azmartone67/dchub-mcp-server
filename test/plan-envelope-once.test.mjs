@@ -17,6 +17,13 @@ import net from 'node:net';
 import http from 'node:http';
 import { planEnvelopeOnceObject, planProvenanceOnceStep, mergeCapacitySource, STEP_ENVELOPE_KEYS } from '../lib/plan-provenance-once.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 // The envelope pass alone: the later note L1 + L2 step (lib/neutral-cta.mjs) also drops step offer lists, which
 // would make this file's switch-off control pass for the wrong reason. It only removes keys, never adds one.

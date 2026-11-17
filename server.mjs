@@ -134,6 +134,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
@@ -23443,7 +23444,10 @@ export function _resolutionGap(text, signals, intentClass) {
     if (!signals || typeof signals !== 'object') return null;
     const d = signals;
     // Geography DID bind — by any route. Nothing to report.
-    if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.candidateId) return null;
+    // Grok re-test 2026-11-17: a state named in full ("in Pennsylvania") binds as stateFromPlace, which
+    // every step reads as d.state || d.stateFromPlace; the answer said "pennsylvania is outside the tracked
+    // geography index" over steps run with state=PA.
+    if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.stateFromPlace || d.candidateId) return null;
     // 5.29 (Grok note K): two or more named states DID bind (one set of steps per state, _planStateFanout);
     // "texas or arizona by" is not a place outside the index.
     if (Array.isArray(d.states) && d.states.length >= 2) return null;
@@ -25786,6 +25790,12 @@ function _sourceLineCb(name, fn) {
       // every rewrite, so nothing above re-reads block 0. Same skips as the fact header; compact:false or
       // DCHUB_PLAN_LEAD_TEXT=0 keeps block 0 as JSON.
       if (name === 'execute_plan') _final = _planLeadStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), compact: _planCompactRequested(args) });
+      // Grok colocation head-to-head 2026-11-17 midday, item 3 (owner-approved): structuredContent and the plan's JSON
+      // block are compact by default (lead, dated facts, citations, replay ids; no step bodies), and detail:"full" returns
+      // every step's result (lib/plan-compact.mjs). LAST, after the lead text, so block 0 is built from the full plan.
+      // Paid callers keep the full answer unless they ask for detail:"compact". Kill switch DCHUB_PLAN_COMPACT=0.
+      if (name === 'execute_plan') _final = _planCompactStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(),
+        detail: _planDetailRequested(args), paid: _planCallerPaid(c) });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -32197,6 +32207,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // not rejected by zod, because a rejection would fail the user's real
       // question over a telemetry label. Normalized in trackedTool.
       compact: z.boolean().optional().describe('true (default) puts fact_header first in the answer: three lines, SOURCE and AS_OF, ENTITY, SUMMARY with the DCPI verdict when the answer carries one. false returns the answer without it.'),
+      detail: z.string().optional().describe('"compact": the answer, each step\'s status, dated facts, citations and replay ids, without step bodies. "full": every step\'s full result.'),
       cohort: z.any().optional().describe('Optional experiment tag for adoption/retention measurement, e.g. "cohort.front_door". Has NO effect on routing, planning, geography or results — it is recorded only. Put your user\'s question in `intent` and the tag HERE; never inside the intent string, which would break classification. Max 64 chars, [a-z0-9._-]; a malformed tag is ignored, never an error.') },
     async (a) => {
       const t0 = Date.now();

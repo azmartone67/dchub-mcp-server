@@ -416,12 +416,14 @@ test/named-absence.test.mjs
 test/named-constraint-routing.test.mjs
 test/neiso-alias.test.mjs
 test/neutral-connect-free-tier.test.mjs
+test/neutral-connect-key-fields-1117.test.mjs
 test/neutral-connect-option-a.test.mjs
 test/neutral-connect-plan-steps.test.mjs
 test/news-footer.test.mjs
 test/next-call.test.mjs
 test/no-dxt-so-links.test.mjs
 test/no-hold-verdict.test.mjs
+test/no-inline-regex-modifiers.test.mjs
 test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
@@ -473,6 +475,7 @@ test/place-name-iso.test.mjs
 test/plan-answer-budget.test.mjs
 test/plan-caller-ip.test.mjs
 test/plan-colocation-review-1117.test.mjs
+test/plan-compact-1117.test.mjs
 test/plan-dcpi-lead.test.mjs
 test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs

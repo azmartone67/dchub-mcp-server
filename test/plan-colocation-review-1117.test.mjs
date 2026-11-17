@@ -18,6 +18,13 @@ import { planLeadText, planLeadStep, PLAN_LEAD_MAX } from '../lib/plan-lead-text
 import { CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE } from '../lib/capacity-source-summary.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 const TEASER = 'New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 const isJson = (t) => { try { JSON.parse(t); return true; } catch (_) { return false; } };
 
