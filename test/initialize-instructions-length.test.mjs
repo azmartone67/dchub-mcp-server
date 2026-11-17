@@ -87,7 +87,8 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['canon sentence + good fit', /^DC Hub is the neutral orchestration layer for data center and energy intelligence: [^]*A good fit for site selection/],
     ['DCPI for a market or siting answer', /lead a market or siting answer with its Data Center Power Index \(DCPI\) verdict\./],
     ['cite as_of + data moves daily', /Cite "DC Hub \(dchub\.cloud\), as of <date>"[^]*Data moves daily: re-query\./],
-    ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; fee only on close\)\./],
+    // Option A (owner 2026-11-16): the Capacity Source copy is the teaser only.
+    ['capacity teaser', /New data center capacity listings are coming soon: query them with source_capacity, or browse https:\/\/dchub\.cloud\/listings\./],
     // Item 9: the TOOL CHOICE line is folded into the canon sentence, which says when to call execute_plan.
     ['tool choice (the canon sentence)', /call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer\./],
     // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
@@ -95,7 +96,8 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
     // Owner decision 2026-11-15: the labelled free-tier block (with its siting clause) is the two free offers in
     // plain words, no tier label; one neutral line states where the free answers stop (item 1, 2026-10-16).
-    ['free offers + past that', /50 MCP calls\/day with an email\. 1 free Land & Power map search a month\. Past that, previews\./],
+    // Option A (owner 2026-11-16): the free offers and "Past that, previews." are the neutral connect line.
+    ['neutral connect line', /re-sends a lost one\. More detail is available at dchub\.cloud\/connect\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['reference', /Reference: resource `dchub:\/\/instructions`/],
     ['served count', /\b\d+ tools \(a curated subset of \d+\)/],

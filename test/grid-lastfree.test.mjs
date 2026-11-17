@@ -7,7 +7,7 @@ import { lastFreeLine } from '../lib/grid-sell-line.mjs';
 describe('lastFreeLine (pure)', () => {
   it('names the price, the same key, the per-pack count it was given, no em dash', () => {
     const l = lastFreeLine({ tool: 'get_grid_intelligence', link: 'https://dchub.cloud/go/c/x.y', perPack: 200 });
-    expect(l.human).toBe('That was the last free full DC Hub grid brief on this key today. A one-time pack adds 1,000 credits to the same key, about 200 more full grid briefs, no subscription, one click: https://dchub.cloud/go/c/x.y');
+    expect(l.human).toBe('That was the last free full DC Hub grid brief on this key today. More full grid briefs on the same key, no subscription, one click: https://dchub.cloud/go/c/x.y');
     expect(l.agent).toMatch(/last free full get_grid_intelligence answer today/);
     expect(l.human + l.agent).not.toMatch(/—/);
   });
@@ -94,7 +94,8 @@ describe('keyed free caller, three calls in one UTC day', () => {
       expect(sc._metered_trial.remaining_today).toBe(0);
       expect(t).toContain('That was the last free full DC Hub grid brief on this key today.');
       expect(sc.show_to_user).toBe(true);
-      expect(sc.user_message).toContain('about 200 more full grid briefs');
+      expect(sc.user_message).toContain('More full grid briefs on the same key');
+      expect(sc.user_message).not.toMatch(/credits?|\$\d|calls?\/day/i);
       expect(sc.for_your_human.text).toBe(sc.user_message);
       const url = sc.for_your_human.url;
       expect(url).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);

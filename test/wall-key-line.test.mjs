@@ -34,7 +34,9 @@ describe('the key line (pure)', () => {
     expect(FREE_OFFER_EMAIL.startsWith(keyLineAllowance())).toBe(true);
     for (const keyed of [false, true]) {
       const l = keyLine({ keyed });
-      expect(l.startsWith('Add your email to get your free key (50 MCP calls/day) and keep going.\n')).toBe(true);
+      // Option A (owner 2026-11-16): no allowance figure and no "free key" in the line.
+      expect(l.startsWith('Add your email to get your DC Hub key and keep going.\n')).toBe(true);
+      expect(l).not.toMatch(/calls\/day|free key/i);
       // One link per wall (test/anon-top-tools-snapshot, test/spent-cap-link-line): the wall's human_url is its link.
       expect(l).not.toMatch(/https?:\/\/|dchub\.cloud/);
       // Prose after block 0's JSON: a brace there would read as a second JSON object to a {...} slicer.
@@ -111,7 +113,7 @@ describe('wallOffers: one offer, the key line first', () => {
   it('kill switch DCHUB_WALL_KEY_LINE=0: the digest floor as before', () => {
     const o = wallOffers(keyless(), { ...f, env: { DCHUB_WALL_KEY_LINE: '0' } });
     expect(o[0].ask).toBe('digest_line');
-    expect(o[0].line).not.toMatch(/free key \(/);
+    expect(o[0].line).not.toMatch(/get your DC Hub key/);
   });
 });
 
@@ -212,7 +214,7 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
     expect(delivered).toHaveLength(1);   // once
     // The exact text the agent receives (a prose block: note K's neutral-cta allowlist does not police it), checked
     // here: canon's figure in canon's form, no link of its own, no plan, no price, no paid / upgrade / trial.
-    expect(delivered[0]).toContain('(50 MCP calls/day)');
+    expect(delivered[0]).not.toMatch(/calls\/day|free key/i);   // option A (owner 2026-11-16)
     expect(delivered[0]).not.toMatch(FORBIDDEN);
     expect(BANNED.test(delivered[0])).toBe(false);
     expect(delivered[0]).not.toMatch(/https?:\/\//);
@@ -227,7 +229,7 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
   it.each(['get_pipeline', 'compare_sites'])('%s, a caller with an email on file: no key line, the digest offer unchanged', async (name) => {
     const { prose, rows } = await walled(name, { 'x-api-key': BOUND_KEY });
     expect(rows.length, 'the call walled').toBeGreaterThan(0);
-    expect(prose).not.toMatch(/get your free key/);
+    expect(prose).not.toMatch(/get your DC Hub key/);
     expect(prose).toMatch(/`subscribe_digest`/);
     for (const e of rows) expect(e.email_ask).not.toBe('key_line');
   });
@@ -237,7 +239,7 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
     for (const name of ['get_pipeline', 'compare_sites']) {
       const { prose, rows } = await walled(name);
       expect(rows.length).toBeGreaterThan(0);
-      expect(prose).not.toMatch(/get your free key/);
+      expect(prose).not.toMatch(/get your DC Hub key/);
       for (const e of rows) expect(e.email_ask).toBe('digest_line');
     }
   });

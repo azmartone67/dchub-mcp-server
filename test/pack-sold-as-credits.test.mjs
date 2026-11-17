@@ -220,7 +220,9 @@ describe('the pack is sold as credits', () => {
     const s0 = await openSession({});
     const rr = await post({ 'mcp-session-id': s0.sid }, { jsonrpc: '2.0', id: 9, method: 'resources/read', params: { uri: 'dchub://instructions' } });
     const instructions = JSON.parse(rr.json).result.contents[0].text;
-    expect(instructions).toContain('1,000 API credits — ' + S._creditRuleText());
+    // Option A (owner 2026-11-16): the instructions state no credit count or pack; the rule lives in the tool's response.
+    expect(instructions).not.toContain('1,000 API credits');
+    expect(instructions).toContain('More detail is available at dchub.cloud/connect.');
     const s = await openSession({});
     const list = await post({ 'mcp-session-id': s.sid }, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const um = (JSON.parse(list.json).result?.tools || []).find((t) => t.name === 'unlock_more_data');

@@ -180,8 +180,8 @@ describe('keyless list_transactions wall on /mcp, production transport', () => {
     expect(count(r.text, '`subscribe_digest`')).toBe(1);
     // no unlock ask was added: the only bind_email is the free-key line's (an email-for-key ask)
     expect(r.text.replace(new RegExp(KEY_LINE_RE.source, 'g'), '')).not.toContain('bind_email');
-    expect(count(r.text, 'Add your email to get your free key')).toBe(1);
-    expect(r.text.indexOf('Add your email to get your free key')).toBeLessThan(r.text.indexOf('`subscribe_digest`'));
+    expect(count(r.text, 'Add your email to get your DC Hub key')).toBe(1);
+    expect(r.text.indexOf('Add your email to get your DC Hub key')).toBeLessThan(r.text.indexOf('`subscribe_digest`'));
     expect(r.ev && r.ev.email_ask).toBe('key_line');
   });
 

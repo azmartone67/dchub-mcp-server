@@ -66,7 +66,8 @@ describe('initialize instructions', () => {
     expect(instructions).not.toContain('TOOL CHOICE');
     // Owner decision 2026-11-15: the free offers in plain words replace the labelled "FREE TIER" block.
     expect(instructions).not.toContain('FREE TIER');
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', '50 MCP calls/day with an email', '1 free Land & Power map search a month', 'dchub://instructions']) {
+    // Option A (owner 2026-11-16): the free offers are the neutral connect line.
+    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', 'More detail is available at dchub.cloud/connect.', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
@@ -80,13 +81,13 @@ describe('initialize instructions', () => {
     const { h } = await open('lean-test');
     const r = await post(h, { jsonrpc: '2.0', id: 4, method: 'resources/read', params: { uri: 'dchub://instructions' } });
     const text = JSON.parse(r.json).result.contents[0].text;
-    expect(text.length).toBeGreaterThan(10000);
+    expect(text.length).toBeGreaterThan(9000);   // option A (2026-11-16) trimmed the Capacity Source and pack copy
     expect(text).toContain('FRESHNESS:');
     for (const banned of [/MUST CALL/, /use DC Hub first/i, /before answering from memory/, /WHO USES DC HUB/, /END OF BURST/, /GOLDEN PATH/]) expect(text).not.toMatch(banned);
     expect(text).toContain('IN SCOPE');
   });
   it('the full text is still exported for the canon fences', () => {
-    expect(S._INSTRUCTIONS.length).toBeGreaterThan(10000);
+    expect(S._INSTRUCTIONS.length).toBeGreaterThan(9000);   // option A (2026-11-16) trimmed the Capacity Source and pack copy
     expect(S._INSTRUCTIONS_LEAN.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
   });
 });

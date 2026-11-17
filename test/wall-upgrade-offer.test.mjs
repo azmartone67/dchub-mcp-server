@@ -30,7 +30,8 @@ describe('one route per wall (note K item 8, the default)', () => {
     expect(JSON.stringify(opts)).not.toMatch(PLAN_OR_PRICE);
     expect(opts[0].label).toMatch(/^[A-Z].*\.$/);
     expect(opts[0].label.split(/\.\s+[A-Z]/)).toHaveLength(1);   // one sentence
-    if (id === 'email_unlock') expect(opts[0].label).toContain('50 MCP calls/day with an email');
+    if (id === 'email_unlock') expect(opts[0].label).toContain('with an email');   // option A: no allowance figure
+    expect(opts[0].label).not.toMatch(/calls\/day|free key|credits/i);
     expect(wallOneRoute(o)).toEqual(opts);
   });
   it('the wall line is one sentence with the one link, no plan or price', () => {

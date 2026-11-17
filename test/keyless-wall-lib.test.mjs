@@ -172,7 +172,8 @@ describe('option C: the no-email exit waits for the second cap wall of the day (
   });
   it('the first-wall line: the approved copy, the per-day number from the caller, no plan or price', () => {
     const l = keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', 50);
-    expect(l).toBe('Keep going free: show your human this link → https://dchub.cloud/u/abc. One email unlocks 50 calls a day and the full answer to this question.');
+    // Option A (owner 2026-11-16): no calls-per-day figure in the line.
+    expect(l).toBe('Keep going free: show your human this link → https://dchub.cloud/u/abc. One email unlocks the full answer to this question.');
     expect(keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', null)).not.toMatch(/\d+ calls/);
     expect(l).not.toMatch(/\$|\/mo|Developer|\bPro\b|claim_free_key/);
   });

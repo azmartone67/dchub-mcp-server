@@ -340,7 +340,7 @@ describe('the renders are what they claim to be (non-vacuous)', () => {
     }
     const c = sc(R['compare_sites@cursor'].first);
     expect(c.error).toBe(K.WITHHELD_ERROR);
-    expect(c.user_message).toMatch(/^This preview leaves out the full side-by-side comparison: .+\. Open https:\/\/dchub\.cloud\/u\/\w{6} to see what your agent found, or reply with your email for a free DC Hub key\.$/);
+    expect(c.user_message).toMatch(/^This preview leaves out the full side-by-side comparison: .+\. Open https:\/\/dchub\.cloud\/u\/\w{6} to see what your agent found\. More detail is available at dchub\.cloud\/connect\.$/);
     expect(c.copy_version).toBe(K.KEYLESS_COPY_VERSION);
   });
   it('deal_autopsy carries the locked line and analyze_site the broker-rate block, reworded', () => {
