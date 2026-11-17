@@ -318,7 +318,8 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
         expect(prose.split('\n').filter((l) => l.includes('bind_email')), 'bind_email only on the claim line').toEqual([line]);
         expect(line.indexOf('bind_email'), 'bind_email before claim_free_key').toBeLessThan(line.indexOf('claim_free_key'));
         expect(line).toContain(EMAIL_ASK);
-        expect(line).toContain('10 full `' + tool + '` answers a day');
+        expect(line).toContain('gets full `' + tool + '` answers');   // option A (2026-11-17): no daily allowance
+        expect(line).not.toMatch(/answers a day/);
       } else {
         expect(line).toContain('their email first');
         expect(line, 'market intel: the key does not deepen it, so nothing is promised').not.toMatch(/full .* answers/);
@@ -473,7 +474,8 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
       expect(r.data.taste && r.data.taste.headline, key).toBeTruthy();
       expect(dataOutsideEnvelope(r.data)).not.toContain('"constraint_score"');
       expect(r.text).toContain('call `bind_email` with your human');
-      expect(r.text).toContain('10 full `get_grid_intelligence` answers a day');
+      expect(r.text).toContain('full `get_grid_intelligence` answers');
+      expect(r.text).not.toMatch(/answers a day/);
     }
   });
   it('CONTROL: DCHUB_EMAIL_FULL_DECISION_TOOLS=0 gives the email-bound key the 10-08 preview again', async () => {

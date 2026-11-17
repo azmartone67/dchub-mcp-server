@@ -28,8 +28,8 @@ describe('neutral connect: the free-tier and daily-allowance shapes', () => {
   it('"for the full free tier" (unlock-line) is offer wording', () => {
     expect(connectNeutralString('Call `claim_free_key` (no email) for the full free tier.')).toBe(NEUTRAL_CONNECT_LINE);
   });
-  it('a daily allowance in any other wording is offer wording', () => {
-    expect(connectNeutralString('An email-bound key gets up to 10 full answers a day.')).toBe(NEUTRAL_CONNECT_LINE);
+  it('a daily allowance in any other wording loses its count and its day', () => {
+    expect(connectNeutralString('An email-bound key gets up to 10 full answers a day.')).toBe('An email-bound key gets full answers.');
   });
   it('a data cadence is not an allowance', () => {
     for (const s of ['The feed updates 4 times a day.', 'ERCOT publishes the queue once a day.', 'Average 3.2 outages per year.']) {
@@ -56,5 +56,30 @@ describe('the sources say what the email opens, with no allowance or plan name',
     expect(i).toBeGreaterThan(0);
     expect(src.slice(i, i + 300)).not.toMatch(/free tier|claim_free_key/);
     expect(src).not.toContain("'Free tier preview — up to '");
+  });
+});
+
+// Read live after #1506 (execute_plan, keyless): "A key with a bound email gets 10 full answers a day." About ten
+// writers say the same allowance without "up to" (server.mjs, keyless-first-full, claim-handoff, free-decision-taste,
+// retention); the count and the day go and the bind_email ask stays.
+describe('neutral connect: "N full answers a day" in any writer', () => {
+  const cases = [
+    ['A key with a bound email gets 10 full answers a day.', 'A key with a bound email gets full answers.'],
+    ['A key with a bound email gets 10 full `get_grid_intelligence` answers a day: call `bind_email` with your human\u2019s email (no card).',
+     'A key with a bound email gets full `get_grid_intelligence` answers: call `bind_email` with your human\u2019s email (no card).'],
+    ['Grid read; with an email it gets 10 full answers a day on this tool, free.', 'Grid read; with an email it gets full answers on this tool, free.'],
+    ['An email adds 10 full answers a day each on the grid, queue and market-intel tools instead of previews.',
+     'An email adds full answers on the grid, queue and market-intel tools instead of previews.'],
+    ['Quota: 0 of 2 left; an email gets a free key with 10 full answers a day on it.', 'Quota: 0 of 2 left; an email gets a key with full answers on it.'],
+  ];
+  for (const [inp, want] of cases) {
+    it(inp.slice(0, 60), () => {
+      const out = connectNeutralString(inp);
+      expect(out).toBe(want);
+      expect(out).not.toMatch(OFFER);
+    });
+  }
+  it('a rewritten allowance is not replaced by the connect line (nothing is dropped)', () => {
+    expect(connectNeutralString('A key with a bound email gets 10 full answers a day.')).not.toContain(NEUTRAL_CONNECT_LINE);
   });
 });

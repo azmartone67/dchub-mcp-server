@@ -44,7 +44,7 @@ const ARGS = {
   get_energy_prices: { iso: 'CAISO' },
 };
 const OLD_REASON = (tool) => 'NOT APPLICABLE: `' + tool + '` is a preview for anonymous callers and keys without a bound '
-  + 'email; no daily full-answer budget is charged here. A key with a bound email gets 10 full answers a day.';
+  + 'email; no daily full-answer budget is charged here. A key with a bound email gets full answers.';   // option A: no daily allowance
 
 const writes = { track: [], consume: [] };
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -188,14 +188,14 @@ describe('K) the quota stamp says what the lane does', () => {
       const q1 = quotaOf(r1);
       expect(q1).toMatchObject({ tier: 'anonymous', full_answers_cap_today: 1, full_answers_remaining_today: 0 });
       expect(q1.full_answers_unavailable_reason).toBeUndefined();
-      expect(q1.full_answers_basis).toMatch(/^1 full `[a-z_]+` answer per caller network \(IP\) and per session, per UTC day, without a key; resets next 00:00 UTC\. A key with a bound email gets 10 full answers a day\.$/);
+      expect(q1.full_answers_basis).toMatch(/^1 full `[a-z_]+` answer per caller network \(IP\) and per session, per UTC day, without a key; resets next 00:00 UTC\. A key with a bound email gets full answers\.$/);
       const r2 = await call(tool, seat({ name: 'cursor', ua: 'cursor/1.0', ip }));
       expect(isFirstFull(r2)).toBe(false);
       const q2 = quotaOf(r2);
       expect(q2.full_answers_remaining_today).toBe(0);
       expect(q2.full_answers_unavailable_reason).toBe('USED: today’s full `' + tool + '` answer without a key on this '
         + 'network (IP) or in this session was used, so this call is the preview. The next one is after 00:00 UTC. A key with a bound '
-        + 'email gets 10 full answers a day.');
+        + 'email gets full answers.');
       for (const q of [q1, q2]) {
         expect(JSON.stringify(q)).not.toMatch(/NOT APPLICABLE|no daily full-answer budget/);
         expect(JSON.stringify(q)).not.toMatch(PLAN_OR_PRICE);
