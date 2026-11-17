@@ -214,7 +214,7 @@ Or add to `.cursor/mcp.json`:
 }
 ```
 
-Optional: set header `X-API-Key` from https://dchub.cloud/connect for higher daily limits. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
+Optional: set header `X-API-Key` from https://dchub.cloud/connect. Cursor Marketplace listing: submit/re-index at https://cursor.com/marketplace/publish (publisher account).
 
 ### ChatGPT
 

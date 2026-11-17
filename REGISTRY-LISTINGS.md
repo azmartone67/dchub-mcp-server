@@ -290,7 +290,7 @@ Why agents pick it: DC Hub adds live, dated power, grid and queue data that comp
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
 ## Pricing line (paste wherever a form asks for pricing)
-Free tier, no signup — No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Higher limits: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. Developer, Pro and
+Free tier, no signup — No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. Developer, Pro and
 Enterprise plans: see https://dchub.cloud/pricing
 
 > Keep this block in sync with `tier_registry.py` in dchub-backend, which is
@@ -459,7 +459,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 >
 > **Why agents choose it:** live, dated power, grid and queue data, and every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It complements broker research, market-data providers and trade publications: use it alongside them for current figures, and cite the as-of date.
 >
-> **Access:** Streamable HTTP at `https://dchub.cloud/mcp`. Free tier with no signup; free email-verified dev key for higher limits; paid tiers for full data volume.
+> **Access:** Streamable HTTP at `https://dchub.cloud/mcp`. No signup needed. With an email: 50 MCP calls/day.
 **Categories:** data-center, energy, natural-gas, electricity-grid, infrastructure, sustainability, market-intelligence, real-estate, M&A
 
 ### PulseMCP — audience: broad MCP discovery directory

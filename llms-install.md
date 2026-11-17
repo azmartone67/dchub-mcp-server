@@ -6,7 +6,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
 - **Server URL:** `https://dchub.cloud/mcp`
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
-- **Auth:** none required for the free anonymous tier (previews, no key needed). For higher limits,
+- **Auth:** none required (previews, no key needed). Optionally,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
 - **Tools exposed:** 97 (facility search, market intelligence, grid + interconnection,
   site analysis and site-risk scoring, M&A deals, infrastructure).
@@ -97,9 +97,9 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 }
 ```
 
-## Optional: API key (higher limits)
+## Optional: API key
 
-The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Higher limits: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. To raise limits, get a free key
+The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: a free key gets a few free full site reports each month; after that, previews. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 
@@ -160,7 +160,7 @@ A healthy server card is also published at
 
 - **No tools appear:** make sure the entry uses a `url` (remote), not a `command`. DC Hub
   is not an npm/stdio server — there is no local process to spawn.
-- **429 / rate-limited:** you have hit the free-tier limit (No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Higher limits: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.) Add an `X-API-Key` header
+- **429 / rate-limited:** you have hit the free-tier limit (No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.) Add an `X-API-Key` header
   (free at https://dchub.cloud/signup) with an email bound for 50/day, or a paid tier for more.
 - **Transport type:** if your client supports it, prefer `streamableHttp` /
   `streamable-http`. Older clients can use plain `http`.
