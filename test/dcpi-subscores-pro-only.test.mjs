@@ -187,7 +187,9 @@ async function call(key, name, args) {
   return { result, texts, text: texts.join('\n'), lead };
 }
 
-const LINE = /\u{1F512} This answer hid .*They come with the DC Hub plan that includes every tool/u;
+// Note V keyed follow-up (owner 2026-11-16): the Pro rung reads as the neutral partial line on /mcp (was "They come with the
+// DC Hub plan that includes every tool").
+const LINE = /\u{1F512} This answer hid .*This result is partial: some fields are not included at this access level/u;
 const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
   ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
   : hay.includes(needle));

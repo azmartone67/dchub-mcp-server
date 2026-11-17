@@ -149,7 +149,10 @@ function strippedPaths(full, gated) {
 }
 const leaf = (p) => p.replace(/\[\d+\]/g, '').split('.').pop();
 function parseClause(line) {
-  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:a paid DC Hub plan|the DC Hub plan with every tool|a free DC Hub key)) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
+  // Note V keyed follow-up (owner 2026-11-16): on /mcp the clause no longer names a plan. It says either
+  // "a free DC Hub key returns them" (the free_key rung) or "those fields are withheld from this answer"
+  // (a rung above the free key); the legacy plan-naming clauses are kept for the directory copy.
+  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:a paid DC Hub plan|the DC Hub plan with every tool|a free DC Hub key)|a free DC Hub key returns them|those fields are withheld from this answer) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
   if (!m) return null;
   const parts = m[1].replace(/ and (?=[^,]*$)/, ', ').split(', ');
   let others = 0;
@@ -157,6 +160,12 @@ function parseClause(line) {
   return { named: parts, others, plan: m[2].replace(/^the lowest plan that returns them is /, ''), url: m[3] };
 }
 const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the plans that return them are on the page behind the link': 'pack', 'a paid DC Hub plan': 'developer', 'the DC Hub plan with every tool': 'pro' };   // v14: the rungs, unnamed
+// The neutral clauses: the free key is still named (it is free); every rung above it reads "withheld", so the
+// rung is the LOWEST paid seat whose answer carries every stripped figure (found below), and the free key's
+// seat must still fall back to the preview (the rung-below check), which is what makes "withheld" true.
+const NEUTRAL_FREE = 'a free DC Hub key returns them';
+const NEUTRAL_WITHHELD = 'those fields are withheld from this answer';
+PLAN_RUNG[NEUTRAL_FREE] = 'free_key';
 const seatKey = (rung, tool) => ({ free_key: keyFor('FREE', tool), pack: keyFor('PACK', tool), developer: DEV_KEY, pro: PRO_KEY })[rung];
 
 // ── the four tools, keyless ──────────────────────────────────────────────────
@@ -194,7 +203,14 @@ describe('the relay line names what THIS response stripped and the gate\'s own r
       expect(c.named.length + c.others, `${tool}: every stripped field is named or counted (${want.join(' | ')})`).toBe(want.length);
 
       // 2. PLAN — the named rung's seat gets every stripped figure back ...
-      const rung = PLAN_RUNG[c.plan];
+      let rung = PLAN_RUNG[c.plan];
+      if (c.plan === NEUTRAL_WITHHELD) {
+        for (const r of ['pack', 'developer', 'pro']) {
+          const o = figures(payloadOf(await H.call('/mcp', tool, ARGS[tool], { 'x-api-key': seatKey(r, tool) })));
+          if (stripped.every((p) => o.has(p))) { rung = r; break; }
+        }
+      }
+      expect(rung, `${tool}: "${c.plan}" maps to a rung`).toBeTruthy();
       const opened = payloadOf(await H.call('/mcp', tool, ARGS[tool], { 'x-api-key': seatKey(rung, tool) }));
       const back = figures(opened);
       for (const p of stripped) expect(back.has(p), `${tool}: ${c.plan} should return ${p}`).toBe(true);
@@ -271,6 +287,15 @@ describe('relayMissedClause', () => {
     expect(relayMissedClause(mu(['gas prices'], 'pro'))).toBe('this answer hid gas prices; the lowest plan that returns them is the DC Hub plan with every tool');
     expect(relayPlanName('free_key')).toBe('a free DC Hub key');
   });
+  it('neutral (/mcp, Note V 2026-11-16): names the fields, never a plan; the free key alone is named', () => {
+    const n = { neutral: true };
+    expect(relayMissedClause(mu(['MW'], 'free_key'), n)).toBe('this answer hid MW; a free DC Hub key returns them');
+    for (const r of ['pack', 'developer', 'pro']) {
+      const t = relayMissedClause(mu(['MW', 'scores'], r), n);
+      expect(t).toBe('this answer hid MW and scores; those fields are withheld from this answer');
+      expect(t).not.toMatch(/\bplan|paid|trial|upgrade|pricing/i);
+    }
+  });
   it('four labels are all named; five or more name three and count the rest', () => {
     expect(hiddenFieldsPhrase({ labels: ['a', 'b', 'c', 'd'] })).toBe('a, b, c and d');
     expect(hiddenFieldsPhrase({ labels: ['a', 'b', 'c', 'd', 'e'] })).toBe('a, b, c and 2 other fields');
@@ -283,10 +308,10 @@ describe('relayMissedClause', () => {
   });
   it('treatment arm: with a clause, its own field names are dropped (no field named twice); without, untouched', () => {
     const locked = { shown: 3, total: 10, field: 'results', fields: ['score'] };
-    const full = 'your agent got 3 of 10 `results` rows here — DC Hub\'s paid layer has the other 7 rows (plus `score`)';
+    const full = 'your agent got 3 of 10 `results` rows here — the full DC Hub answer has the other 7 rows (plus `score`)';
     expect(continuationHumanText(locked)).toBe(full);   // what the treatment arm sends today
     expect(H.S._relaySpecific(full, { locked }, 'this answer hid scores; the plans that return them are on the page behind the link'))
-      .toBe('your agent got 3 of 10 `results` rows here — DC Hub\'s paid layer has the other 7 rows');
+      .toBe('your agent got 3 of 10 `results` rows here — the full DC Hub answer has the other 7 rows');
     expect(H.S._relaySpecific(full, { locked }, null)).toBe(full);
     expect(H.S._relaySpecific(null, { locked }, 'x')).toBeNull();          // control arm stays control
   });

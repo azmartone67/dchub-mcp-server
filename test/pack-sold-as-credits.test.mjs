@@ -260,8 +260,10 @@ describe('a Developer on a Pro-only tool', () => {
     const t = textOf(await s.call('get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }));
     // v14 (owner 2026-10-10): neither plan is named; the line says the caller's plan does not open it.
     expect(t).toContain('🔒 **This result is partial: some fields are not included at this access level.**');   // item 1 leftover (2026-10-17): the neutral line on /mcp
-    expect(t).toContain('On your current plan this is the same preview a free key gets');
-    expect(t).toContain('the DC Hub plan that includes every tool');
+    // Note V keyed follow-up (owner 2026-11-16): on /mcp the line names no plan, the caller's or the one that opens it.
+    expect(t).toContain('At your current access this is the same preview a free key gets');
+    expect(t).toMatch(/the full answer is behind this link → https:\/\/|Your key keeps its own depth on every other tool/);
+    expect(t).not.toMatch(/the DC Hub plan that includes every tool|paid-plan tools|current plan/);
     expect(t.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     expect(t).not.toContain('free tier');
     expect(t).not.toContain('1,000 API credits');

@@ -16,10 +16,13 @@ describe('unlock_more_data after a Pro-only wall', () => {
     _noteProWall('sess-trigger-1', 'analyze_site');
     const r = run('sess-trigger-1', {});
     const first = r.content[0].text.split('\n')[0];
-    expect(first).toContain("DC Hub's paid plan has the full site analysis");
-    expect(first).toContain('Start a 7-day trial: https://');
+    // Note V keyed follow-up (owner 2026-11-16): the person line is the Pro wall's own neutral line (it was
+    // "DC Hub's paid plan has the full site analysis… Start a 7-day trial: <link>").
+    expect(first).toContain('This preview leaves out the full site analysis');
+    expect(first).toMatch(/Open https:\/\/\S+ to see what your agent found\./);
+    expect(first.replace(/https:\/\/\S+/g, '<link>')).not.toMatch(/paid plan|7-day|trial/i);   // the link's own ?offer= is a machine tag
     const sc = r.structuredContent;
-    expect(sc.user_message).toContain('Start a 7-day trial');
+    expect(sc.user_message).toContain('This preview leaves out the full site analysis');
     expect(sc.human_message).toContain('paid-plan tools not included');
     // No plan name in the lead, the person line, the pack line or the plans list.
     expect(sc.human_message).not.toMatch(/\bPro\b/);
@@ -30,13 +33,13 @@ describe('unlock_more_data after a Pro-only wall', () => {
     expect(sc.human_message).not.toMatch(/\bunlock/i);
     expect(sc.human_message).not.toMatch(/\$99|\$49/);
     // the pack line says API capacity and sits AFTER the Pro line
-    expect(sc.human_message.indexOf('Start a 7-day trial')).toBeGreaterThan(-1);
-    expect(sc.human_message.indexOf('Start a 7-day trial')).toBeLessThan(sc.human_message.indexOf('API capacity'));
+    expect(sc.human_message.indexOf('This preview leaves out')).toBeGreaterThan(-1);
+    expect(sc.human_message.indexOf('This preview leaves out')).toBeLessThan(sc.human_message.indexOf('API capacity'));
   });
   it('a Pro-only tool named in reason is enough, with no prior wall in the session', () => {
     expect(_proTriggerTool('fresh-sid', 'I was running compare_sites')).toBe('compare_sites');
     const r = run('fresh-sid', { reason: 'analyze_site returned a preview' });
-    expect(r.content[0].text.split('\n')[0]).toContain('Start a 7-day trial');
+    expect(r.content[0].text.split('\n')[0]).toContain('This preview leaves out the full site analysis');
   });
   it('no Pro trigger: the pack still leads, described as capacity, never as an unlock', () => {
     const r = run('no-wall-sid', {});

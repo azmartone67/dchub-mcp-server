@@ -141,7 +141,7 @@ async function call(name, args, s) {
   if (!parsed.success) throw new Error('zod rejected ' + name);
   const r = await S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
   const text = (r.content || []).map((c) => c.text || '').join('\n');
-  return { r, text, all: text + '\n' + JSON.stringify(r.structuredContent || {}) };
+  return { r, s, text, all: text + '\n' + JSON.stringify(r.structuredContent || {}) };
 }
 
 // ── reading the prompt ──────────────────────────────────────────────────────
@@ -151,8 +151,12 @@ const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\
 // / "DC Hub Pro" are not parsed, so a wall that brought them back has no prompt and fails as vacuous.
 // Item 1 leftover (2026-10-17): on /mcp the developer rung states the neutral partial line in place of
 // "They come with a paid DC Hub plan"; the old sentence is not parsed either, for the same reason.
+// Note V keyed follow-up (owner 2026-11-16): on /mcp the pack and pro rungs state that same neutral line too, so
+// the line no longer tells the three paid rungs apart ('paid' below). The rung is then read from the gate's own
+// computation for THIS call (S._missedUpgradeFor in the call's context), and the checks after it still prove it:
+// that rung's seat returns every named field and the rung below it does not.
 const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack',
-  'This result is partial: some fields are not included at this access level': 'developer', 'They come with the DC Hub plan that includes every tool': 'pro',
+  'This result is partial: some fields are not included at this access level': 'paid', 'They come with the DC Hub plan that includes every tool': 'pro',
   'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
 function prompts(all) {
   const out = [];
@@ -259,7 +263,23 @@ function family({ tool, args, backend, seats, keysOf, expectRung }) {
         const ps = expectNamesOnlyWithheld(res, backend, `${tool}@${kind}`);
         const rungs = new Set(ps.map((p) => p.rung));
         expect([...rungs], `${tool}@${kind}: one rung per response`).toHaveLength(1);
-        const rung = [...rungs][0];
+        let rung = [...rungs][0];
+        if (rung === 'paid') {
+          // The gate's own rung for this call; when the wall came from a path that records none, the lowest
+          // paid seat above the caller whose answer carries every withheld figure.
+          const mu = S._ctxALS.run(res.s, () => S._missedUpgradeFor(res.r.structuredContent || null));
+          rung = mu && mu.rung;
+          if (!rung) {
+            const ks = keysOf(responsePayload(res));
+            for (const r of ['pack', 'developer', 'pro']) {
+              if (RUNG_RANK[r] <= RANK[kind]) continue;
+              const o = await call(tool, args, seat(RUNG_SEAT[r]));
+              const w = withheldKeys(backend, responsePayload(o));
+              if (ks.length && !ks.some((k) => w.has(k))) { rung = r; break; }
+            }
+          }
+          expect(['pack', 'developer', 'pro'], `${tool}@${kind}: the neutral line stands for a paid rung`).toContain(rung);
+        }
         expect(rung, `${tool}@${kind}`).toBe(expectRung[kind]);
         expect(RUNG_RANK[rung], `${tool}@${kind}: the rung named is one the caller already holds`)
           .toBeGreaterThan(RANK[kind]);
@@ -324,7 +344,7 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     const res = await call('get_interconnection_queue', { iso: 'ERCOT' }, seat('free'));
     const [p] = prompts(res.all);
     expect(p.labels).toEqual(expect.arrayContaining(['projects']));
-    expect(p.rung).toBe('developer');
+    expect(p.rung).toBe('paid');   // the neutral line (Note V); the family above proves Developer is the rung
     expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* This result is partial: some fields are not included at this access level → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
     expect(res.text).not.toMatch(/\$10 one-time/);
   });

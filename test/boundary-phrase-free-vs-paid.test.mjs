@@ -29,11 +29,15 @@ describe('_boundaryPhrase', () => {
     const code = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
     const hits = code.match(/paid data boundary/g) || [];
     expect(hits.length).toBe(1);                                  // the helper's own return
+    // Note V keyed follow-up (owner 2026-11-16): the token is internal; a paid boundary reads as the end of the
+    // preview, so the helper's value never reaches the person's line.
+    expect(code).toMatch(/if \(_bp !== 'free-tier limit'\) return 'Your AI assistant reached the end of the DC Hub preview'/);
     // Grok QA 2026-11-12: the wall line lives once in _relayLead (execute_plan has its own line there);
     // the relay builder and both relay steps call it.
     // Owner 2026-11-15: the person reads no tier label, so the internal 'free-tier limit' token is shown as "limit";
     // the line still reads the helper exactly once.
-    expect((code.match(/const _bp = _boundaryPhrase\(tool\);\n\s*return 'Your AI assistant hit DC Hub\\u2019s ' \+ \(_bp === 'free-tier limit' \? 'limit' : _bp\)/g) || []).length).toBe(1);
+    expect((code.match(/const _bp = _boundaryPhrase\(tool\);\n/g) || []).length).toBe(1);
+    expect((code.match(/return 'Your AI assistant hit DC Hub\\u2019s limit'/g) || []).length).toBe(1);
     expect(code).toMatch(/message: _relayLead\(toolName\) \+/);
     expect((code.match(/= _relayLead\(name, sc0\) \+ '\. Open '/g) || []).length).toBe(2);
   });

@@ -136,7 +136,7 @@ describe('item 1: a wall below Developer carries ONE dchub.cloud page link, huma
     expect(sc.for_your_human).toBeTruthy();
     expect(sc.agent_instruction).toBe(S.RELAY_CONTRACT);
     // the pack rung's label no longer names the $10 pack beside a page that may sell Developer
-    expect(textOf(r)).toContain('**the plans that include the full answer** → ' + base(sc.human_url));
+    expect(textOf(r)).toContain('**the full answer** → ' + base(sc.human_url));
     expect(textOf(r)).not.toMatch(/\$10 one-time = 1,000 API credits\*\*, credits don’t expire → https/);
   });
 
@@ -201,7 +201,7 @@ describe('item 1: a wall below Developer carries ONE dchub.cloud page link, huma
     expect(t).not.toContain(goc);
     expect(t).not.toContain('$0.50');
     // the link is written once in the PROSE (the JSON head is data and keeps its own copies)
-    expect(t).toContain('**the plans that include the full answer** → ' + relay);
+    expect(t).toContain('**the full answer** → ' + relay);
     expect(t.split(relay).length - 1).toBe(3);   // _upgrade.upgrade_url + _upgrade.message (data) + the rung (prose)
     expect(t).not.toMatch(/\*\*Developer\*\*/);
     const head = JSON.parse(t.split('\n')[0]);

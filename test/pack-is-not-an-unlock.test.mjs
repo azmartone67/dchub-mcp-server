@@ -87,7 +87,7 @@ describe('the $10 pack is never called an unlock', () => {
   it('_rungsText on get_grid_intelligence: pack rung, then Developer — and no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('get_grid_intelligence', 'free', SID));
     expect(r).toContain('a one-time pack of 1,000 API credits');
-    expect(r).toContain('**a paid DC Hub plan for agents**');   // v14: the Developer rung, unnamed
+    expect(r).toContain('**full depth for agents**');   // Note V 11-16: the Developer rung, by what it returns
     expect(r).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(r).not.toMatch(UNLOCK);
@@ -95,7 +95,7 @@ describe('the $10 pack is never called an unlock', () => {
 
   it('_rungsText on a Pro-only tool: Pro alone — no pack rung, no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('compare_sites', 'free', SID));
-    expect(r).toContain('**the DC Hub plan with every tool**');   // v14: the Pro rung, unnamed
+    expect(r).toContain('**every DC Hub tool**');   // Note V 11-16: the Pro rung, by what it returns
     expect(r).not.toContain('one-time pack');
     expect(r).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);

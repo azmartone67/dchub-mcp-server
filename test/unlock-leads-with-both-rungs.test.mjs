@@ -70,7 +70,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     const PACK = '**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**';
     expect(at(PACK)).toBeGreaterThanOrEqual(0);
     // v14 (owner 2026-10-10): the two subscription rungs are described, not named.
-    const DEV = '**a paid DC Hub plan for agents**', PRO = '**the DC Hub plan with every tool**';
+    const DEV = '**full depth for agents**', PRO = '**every DC Hub tool**';
     expect(at(DEV)).toBeGreaterThan(-1);
     expect(at(PACK)).toBeLessThan(at(DEV));
     expect(first).not.toContain('$');

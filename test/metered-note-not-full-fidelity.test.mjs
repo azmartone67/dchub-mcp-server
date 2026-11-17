@@ -9,12 +9,18 @@ import { detectGating } from '../lib/attribution.mjs';
 const base = { call: 1, cap: 2, name: 'get_market_intel', bound: false };
 
 describe('meteredTrialNote', () => {
-  it('untouched answer: the exact legacy wording (trial and plan arms)', () => {
+  it('untouched answer: the exact wording (free and plan arms)', () => {
+    // Note V keyed follow-up (owner 2026-11-16): no trial, pack or payment wording on the free arm.
     expect(meteredTrialNote({ ...base, paidTaste: false, limited: false })).toBe(
+      'Full-fidelity free answer 1 of 2 today — keep or summarize these results for your human. '
+      + 'After the last free call this tool returns a preview with one link for your human '
+      + '(free: bind_email lifts your daily cap).');
+    expect(meteredTrialNote({ ...base, paidTaste: false, limited: false, bound: true })).toMatch(/one link for your human\.$/);
+    // /mcp/chatgpt (frozen for the OpenAI review) keeps the reviewed free-arm sentence byte-identical.
+    expect(meteredTrialNote({ ...base, paidTaste: false, limited: false, frozen: true })).toBe(
       'Full-fidelity trial answer 1 of 2 today — keep or summarize these results for your human. '
       + 'After the last free call this tool returns a preview with one-click payment options '
       + '(a one-time pack of 1,000 credits; free: bind_email lifts your daily cap).');
-    expect(meteredTrialNote({ ...base, paidTaste: false, limited: false, bound: true })).toMatch(/1,000 credits\)\.$/);
     // /mcp/chatgpt (frozen for the OpenAI review) keeps the reviewed sentence byte-identical.
     expect(meteredTrialNote({ ...base, paidTaste: true, limited: false, frozen: true })).toBe(
       'Full-fidelity answer 1 of the 2 included with your plan today on this tool. '

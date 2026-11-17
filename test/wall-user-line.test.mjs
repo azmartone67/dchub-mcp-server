@@ -132,8 +132,10 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     const line = firstLine(r);
     expect(line).toContain(RELAY_SHORT);
     expect(line).not.toMatch(RELAY);
-    expect(line).toContain("DC Hub's paid plan");
-    expect(line).toContain('Start a 7-day trial: ');
+    // Note V keyed follow-up (owner 2026-11-16): no plan or trial in the line (was "DC Hub's paid plan has X. Start a 7-day trial: <link>").
+    expect(line).toContain('This preview leaves out');
+    expect(line).toMatch(/\. Open https:\/\/\S+ to see what your agent found\./);
+    expect(line).not.toMatch(/paid|plan\b|trial/i);
     expect(line).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(sc.user_message).toBe(line);
@@ -244,7 +246,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
     const r = await call('analyze_site', LOC, seat({ platform: 'grok', client_name_raw: 'grok' }));
     const line = firstLine(r);
     expect(line).toContain(RELAY_SHORT);
-    expect(line).toContain("DC Hub's paid plan");
+    expect(line).toContain('This preview leaves out');
     expect(line).not.toMatch(/\bPro\b/);
     expect(line).toMatch(/names .+ as the weakest factor on this site/);      // the weakest factor, no verdict, no figure
     expect(r.structuredContent.user_message).toBe(line);
@@ -263,7 +265,7 @@ describe('the one-number preview (MCP-1)', () => {
   it('a contract-arm wall carries the MEASURED substations_50km count in the person line, never a score or MW', async () => {
     const r = await call('analyze_site', LOC, seat({ platform: 'grok', client_name_raw: 'grok' }));
     const line = firstLine(r);
-    expect(line).toMatch(/names market conditions as the weakest factor on this site; 212 substations within 50 km\. DC Hub's paid plan has the full site analysis/);
+    expect(line).toMatch(/names market conditions as the weakest factor on this site; 212 substations within 50 km\. This preview leaves out the full site analysis/);
     expect(r.structuredContent.user_message).toBe(line);
     for (const f of ['83.7', '5123.9']) expect(JSON.stringify(r)).not.toContain(f);
   });
@@ -274,7 +276,7 @@ describe('the one-number preview (MCP-1)', () => {
     process.env.DCHUB_B2_SITE_HEADLINE = '0';
     try {
       const r = await call('analyze_site', LOC, seat());      // cursor: no contract arm, handler not run
-      expect(firstLine(r)).toMatch(/^DC Hub's paid plan has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day trial: https:\/\/\S+$/);
+      expect(firstLine(r)).toMatch(/^This preview leaves out the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Open https:\/\/\S+ to see what your agent found\.$/);
     } finally { delete process.env.DCHUB_B2_SITE_HEADLINE; }
   });
 
@@ -285,7 +287,7 @@ describe('the one-number preview (MCP-1)', () => {
     expect(mk({ value: 7, label: W.COUNT_LABEL })).toContain('BUILD overall; 7 substations within 50 km.');
     for (const bad of [{ value: 7.5, label: W.COUNT_LABEL }, { value: -1, label: W.COUNT_LABEL },
                        { value: 7, label: 'free text' }, { value: '7', label: W.COUNT_LABEL }, null]) {
-      expect(mk(bad), JSON.stringify(bad)).toContain("BUILD overall. DC Hub's paid plan has");
+      expect(mk(bad), JSON.stringify(bad)).toContain('BUILD overall. This preview leaves out');
     }
   });
 });
@@ -302,7 +304,8 @@ describe('the offer is truthful per tool', () => {
       const r = await S._ctxALS.run(seat(), () => wall(name));
       const line = firstLine(r);
       if (!S.PRO_ONLY_TOOLS.has(name) && !S.LP_TOOLS.has(name)) continue;   // measured below
-      expect(line, name).toContain("DC Hub's paid plan");
+      expect(line, name).toContain('This preview leaves out');
+      expect(line, name).not.toMatch(/paid|trial/i);
       expect(line, name).not.toMatch(/\bPro\b/);
       expect(line, name).not.toMatch(/\$\d|credit|unlock/i);
       if (['analyze_site', 'compare_sites', 'get_dchub_recommendation'].includes(name)) {
@@ -370,7 +373,7 @@ describe('the other walls', () => {
     const line = firstLine(r);
     expect(line).toContain(RELAY_SHORT);   // MCP-1: the Pro-only wall leads with the /upgrade/h relay (F5: via /u)
     expect(r.structuredContent.for_your_human.url).toBe(RELAY_SHORT);
-    expect(line).toContain("DC Hub's paid plan");
+    expect(line).toContain('This preview leaves out');
     expect(line).not.toMatch(/\bPro\b/);
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(r.structuredContent.user_message).toBe(line);

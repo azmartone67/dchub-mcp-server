@@ -250,7 +250,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
+import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, proWallLine as _proWallUserLine, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS } from './lib/country-scope.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
@@ -763,14 +763,16 @@ function _signRelayPayload(raw) {
 // (DCHUB_OAUTH_CHALLENGE_DISABLE) and must not move under it. No "unlock": the
 // $10 pack is paid per call, never an unlock (r-sku-wall).
 // v14 (owner 2026-10-10): no price and no plan name in tool text; the page behind the link shows both.
-export const GROK_RELAY_LABEL = '[Get the full DC Hub numbers behind this answer — one-time credit pack, no subscription]';
+// Note V keyed follow-up (owner 2026-11-16): no offer wording in the label either; it names what the link opens.
+export const GROK_RELAY_LABEL = '[Get the full DC Hub numbers behind this answer]';
 // ★ r-grok-label-per-offer (2026-10-02, Grok audit F10): the $10 label above was put
 // on EVERY Grok relay, including Land & Power and Pro-only tools the $10 pack does not
 // open (_paywallOffer sells Pro there). On those tools the label names Pro, unpriced
 // (owner rule 09-27: the only price DC Hub states is the $10 pack), with the trial the
 // contract's own offer line already names.
 // v13 (owner 2026-10-10): no plan name in tool text.
-export const GROK_RELAY_LABEL_PRO = '[Get the full DC Hub analysis behind this answer — paid plan, 7-day trial]';
+// Note V keyed follow-up (owner 2026-11-16): no plan or trial in the label, for every caller (was "— paid plan, 7-day trial").
+export const GROK_RELAY_LABEL_PRO = '[Get the full DC Hub analysis behind this answer]';
 // Owner 2026-10-08: the decision tools' taste sells Developer (the pack is not what
 // returns these fields), so the Grok label names that rung and no price.
 // 2026-11-15 (owner): no plan wording in a result; the label names what the link opens.
@@ -793,7 +795,9 @@ export function _liftDcgiAsOf(data) {
   return out;
 }
 // Owner 2026-10-20: no emoji in agent-facing link labels (the panel read them as sales copy).
-export const RELAY_LABEL_PRO = '[Start a 7-day DC Hub trial]';
+// Note V keyed follow-up (owner 2026-11-16): was '[Start a 7-day DC Hub trial]'; every caller now reads the label
+// mcp#1491 gave keyless callers.
+export const RELAY_LABEL_PRO = '[Open DC Hub: see what I found]';
 export const RELAY_LABEL_DEFAULT = '[Open DC Hub: see what I found]';
 export function _relayLinkLabel(platform, tool) {
   let p = platform;
@@ -863,8 +867,11 @@ export function _relayLead(tool, sc) {
       return 'Your AI assistant got a preview of ' + tool + ' from DC Hub' + _relayEmailGets(tool, false);
     }
     // Owner 2026-11-15: the person reads no tier label; the internal 'free-tier limit' token reads as "limit" (a cap can be daily or monthly).
+    // Note V keyed follow-up (owner 2026-11-16): the paid boundary reads as the end of the preview, for every caller
+    // (mcp#1491 rewrote it for keyless callers only); 'paid data boundary' stays an internal token of _boundaryPhrase.
     const _bp = _boundaryPhrase(tool);
-    return 'Your AI assistant hit DC Hub\u2019s ' + (_bp === 'free-tier limit' ? 'limit' : _bp) + (tool ? ' on ' + tool : '') + _relayEmailGets(tool, limitHit);
+    if (_bp !== 'free-tier limit') return 'Your AI assistant reached the end of the DC Hub preview' + (tool ? ' on ' + tool : '') + _relayEmailGets(tool, limitHit);
+    return 'Your AI assistant hit DC Hub\u2019s limit' + (tool ? ' on ' + tool : '') + _relayEmailGets(tool, limitHit);
   }
   const ex = sc && Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : null;
   if (!ex) return 'Your AI assistant ran DC Hub lookups for your question; some returned previews at your access level';
@@ -930,7 +937,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
       render: 'verbatim_link_required',
       markdown: _relayLinkLabel(undefined, toolName) + '(' + _url + ')',
       _agent_instruction: 'Share this link with your user: the `markdown` field above is a '
-        + 'ready clickable link to it. A sentence like "you need to upgrade" '
+        + 'ready clickable link to it. A sentence like "the data is locked" '
         + 'without this URL is a dead end: your human cannot reach the data, and cannot '
         + 'act on what you found.',
       ...(_offer ? { offer: _offer } : {}),
@@ -1355,7 +1362,9 @@ function _unlockUrl(toolName, sessionId) {
 
 // One subscription rung, priced from the tier canon. A rung the canon cannot
 // price, or whose link was not minted, is dropped — never guessed.
-export const _SUB_RUNG_LABEL = Object.freeze({ developer: 'a paid DC Hub plan for agents', pro: 'the DC Hub plan with every tool' });
+// Note V keyed follow-up (owner 2026-11-16): the rung says what it returns, not that it is a paid plan (was 'a paid DC Hub
+// plan for agents' / 'the DC Hub plan with every tool'); the checkout page behind the link names it.
+export const _SUB_RUNG_LABEL = Object.freeze({ developer: 'full depth for agents', pro: 'every DC Hub tool' });
 function _subRungText(plan, url, what) {
   // ★2026-10 (owner rule 09-27): the rung is named, never priced — the only
   // price DC Hub states is the $10 pack. A rung the canon does not carry is
@@ -1387,11 +1396,11 @@ const _PACK_RUNG = _UNLOCK_PACK_RUNG;
 function _rungsText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
   if (_proOnlyTool(toolName)) {
-    const proOnly = _subRungText('pro', r.pro, 'includes the paid-plan tools');
+    const proOnly = _subRungText('pro', r.pro, 'includes the site-analysis tools');
     if (proOnly) return proOnly;
   }
   const sub = _proOnlyTool(toolName)
-    ? _subRungText('pro', r.pro, 'includes the paid-plan tools')
+    ? _subRungText('pro', r.pro, 'includes the site-analysis tools')
     : _subRungText('developer', r.developer, 'full depth, cancel anytime');
   const heavy = _creditCost(toolName) > 1
     ? ' (`' + toolName + '` uses ' + _creditCost(toolName) + ' credits per call)' : '';
@@ -1409,7 +1418,7 @@ function _ladderText(toolName, tier, sessionId, offer) {
   const o = offer || { pack: true, developer: true, pro: true };
   const r = _unlockRungs(toolName, tier, sessionId);
   const dev = o.developer ? _subRungText('developer', r.developer, 'full depth, cancel anytime') : '';
-  const pro = o.pro ? _subRungText('pro', r.pro, 'paid-plan tools + site-grade coordinates') : '';
+  const pro = o.pro ? _subRungText('pro', r.pro, 'site-analysis tools + site-grade coordinates') : '';
   if (!o.pack) {
     const parts = [dev, pro].filter(Boolean);
     return parts.join(' · or ');
@@ -1782,7 +1791,8 @@ function _gridDeclutterOn(env = process.env) {
 const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z_0-9]+\)\.\s*/g;
 // Both forms of lib/paywall-contract.mjs buildAgentHints: the purchase form, and the Pro-rung form a
 // preview takes once a withheld field opens only at Pro (the DCPI sub-scores, owner 2026-10-31).
-const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)) Multi-step question: execute_plan\.\)\s*/g;
+// Note V keyed follow-up (2026-11-16): the Pro-rung form names no plan now; the old spelling is still matched.
+const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)|this call returns no more at this access level, so do not retry it now; (?:use the free headline above and )?show your user the link in human_url\.) Multi-step question: execute_plan\.\)\s*/g;
 export function _gridDeclutterStep(result, name) {
   try {
     if ((name !== 'get_grid_intelligence' && name !== 'get_fiber_intel') || !_gridDeclutterOn()) return result;
@@ -1858,7 +1868,7 @@ function _swapUrl(v, from, to) {
 }
 // A repeat call's header ends the text with no blank line after it, so accept either.
 const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
-const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; those fields are in a paid DC Hub plan|; those fields are withheld from this answer|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
+const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; a free DC Hub key returns them|; those fields are in a paid DC Hub plan|; those fields are withheld from this answer|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
 // ── r-paid-sell-line (2026-10-04, owner-approved; DCHUB_PAID_SELL_LINE, default OFF) ──
 // The grid sentence for the other keyless paid tools. get_market_intel, compare_isos and
 // rank_markets: the $10 pack opens them, so the sentence says $10 and links ?buy=1.
@@ -2520,7 +2530,7 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 function _relayClauseFor(payload) {
   try {
     const st = (getCtx() || {})._mu;
-    return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true }), { planless: _agentDepthWallPlanless(st && st.tool) });
+    return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true }), { planless: _agentDepthWallPlanless(st && st.tool), neutral: !_legacyWallCopy() });
   }
   catch (_) { return null; }
 }
@@ -3054,7 +3064,12 @@ const SERVER_VERSION = { version: '2.12.59' }.version;  // 2.12.59 (2026-11-16):
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
-const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/ai#pricing';
+// Note V keyed follow-up (owner 2026-11-16): /ai has no #pricing anchor any more (fe#2337), so the old default
+// https://dchub.cloud/ai#pricing was a dead link. No wall composes from this constant (every wall link is the signed
+// relay, _unlockUrl / buildHumanRelay; test/gated-unlock-is-tokenized.test.mjs), so it is the neutral front door,
+// /connect, the page every neutral line links (lib/neutral-cta.mjs CONNECT_URL). A caller that adds attribution
+// (?via=…&src=…) adds it to a path with no fragment, so the query reaches the server.
+const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/connect';
 // ★ r-signup-default (2026-09-19): this default USED to be
 // 'https://dchub.cloud/ai' — the exact URL
 // test/gated-unlock-is-tokenized.test.mjs bans, embedded as `signup_url` in
@@ -10229,9 +10244,10 @@ function _planTierPreview(seq) {
     agent_quotable: free > 0
       ? 'I can answer ' + free + ' of ' + steps.length + ' step' + (steps.length === 1 ? '' : 's')
         + " of this on DC Hub's free tier. The remaining " + gated.length
-        + ' (' + names.join(', ') + ') need' + (gated.length === 1 ? 's' : '') + ' the paid layer.'
+        // Note V keyed follow-up (owner 2026-11-16): "need the paid layer" became the access-level wording.
+        + ' (' + names.join(', ') + ') return' + (gated.length === 1 ? 's a preview' : ' previews') + ' at this access level.'
       : 'All ' + steps.length + ' step' + (steps.length === 1 ? '' : 's') + ' of this plan ('
-        + names.join(', ') + ') need the paid layer.',
+        + names.join(', ') + ') return previews at this access level.',
   };
 }
 
@@ -10424,8 +10440,9 @@ function _freeDecisionRungText(name, tier, sessionId) {
   let keyed = false;
   try { keyed = !!(getCtx() && getCtx().api_key); } catch (_) { keyed = false; }
   const link = (u) => (keyed ? u : 'the "For your human" link below');
-  return (r.developer ? 'a paid DC Hub plan → ' + link(r.developer) : 'a paid DC Hub plan')
-    + (r.pro ? ' · or the DC Hub plan with every tool → ' + link(r.pro) : '');
+  // Note V keyed follow-up (owner 2026-11-16): the rungs say what they return, no plan wording.
+  return (r.developer ? 'full depth → ' + link(r.developer) : 'full depth')
+    + (r.pro ? ' · or every DC Hub tool → ' + link(r.pro) : '');
 }
 // Depth-wall copy for the taste-shaped tools (agent-facing, owner 10-08): no plan
 // name, no price, no "after they pay" - the page behind the one link shows the options.
@@ -11429,7 +11446,7 @@ export async function _withWallUserLine(result, name, opts = {}) {
 // reports it so the call is logged as status 'pro_wall'. Full Pro answers are untouched
 // (no required_plan marker). No price in the copy.
 export function proWallUserMessage(name, link) {
-  return "DC Hub's paid plan has " + proWhat(name) + '. Start a 7-day trial: ' + link;
+  return _proWallUserLine(name, link);   // Note V keyed follow-up: no plan or trial (lib/wall-user-line.mjs proWallLine)
 }
 export function proWallAgentMessage(name) {
   return _wallCopy(_WALL_NEUTRAL_LINE + ' ', name + ' needs a paid DC Hub plan; this response is a preview. ') + RELAY_CONTRACT;
@@ -11451,8 +11468,9 @@ export function _stampProWall(result, name, c) {
     // own line is pinned by its own tests); anything else is replaced, so every gated Pro answer
     // carries a compliant line for both readers (Grok audit 2026-10-06, item 2). v13 (owner
     // 2026-10-10): no plan name in tool text, so a line that still says "Pro" is replaced too.
-    const _ok = (t) => typeof t === 'string' && /paid DC Hub plan|DC Hub's paid plan/.test(t)
-      && /7-day (free )?trial/.test(t) && !/\bPro\b/.test(t);
+    // Note V keyed follow-up (2026-11-16): the kept line is the neutral one (proWallLine), no plan or trial.
+    const _ok = (t) => typeof t === 'string' && /^(?:.*\. )?This preview leaves out .+\. Open \S+ to see what your agent found\.$/.test(t)
+      && !/\bPro\b|paid|trial/i.test(t);
     // The keyless analyze_site email unlock (owner 2026-10-10) is not a trial ask: its line and
     // its one link stay as _lpWallEmailResult wrote them.
     const _email = _isSiteUnlockKind(sc.unlock_kind) && typeof sc.user_message === 'string' && !!(fyh && fyh.url);
@@ -12172,11 +12190,15 @@ export function _paidPlanProPreview(name, result, planWord, sessionId) {
   const mu = _missedUpgradeFor(preview);
   const lead = (mu && mu.rung === 'pro') ? mu.what + ' ' : '';
   // v14 (owner 2026-10-10): neither the caller's plan nor the one that opens the tool is named.
-  const line = '\n\n🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE, '`' + name + '` needs a different paid DC Hub plan.') + '** ' + lead + 'On your current plan'
+  const line = '\n\n🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE, '`' + name + '` needs a different paid DC Hub plan.') + '** ' + lead + (_legacyWallCopy() ? 'On your current plan' : 'At your current access')
     + ' this is the same preview a free key gets'
-    + (proUrl ? '; the full answer comes with the DC Hub plan that includes every tool → ' + proUrl
-      : '; the full answer comes with the DC Hub plan that includes every tool')
-    + '. Your plan keeps its own depth on every tool outside the paid-plan tools.';
+    // Note V keyed follow-up (owner 2026-11-16): on /mcp the line names no plan; the directory profiles keep theirs.
+    + (_legacyWallCopy()
+      ? (proUrl ? '; the full answer comes with the DC Hub plan that includes every tool → ' + proUrl
+        : '; the full answer comes with the DC Hub plan that includes every tool')
+        + '. Your plan keeps its own depth on every tool outside the paid-plan tools.'
+      : (proUrl ? '; the full answer is behind this link → ' + proUrl : '')
+        + '. Your key keeps its own depth on every other tool.');
   const envelope = (Array.isArray(preview) || !preview || typeof preview !== 'object')
     ? { data: preview } : preview;
   const sc = {
@@ -14022,7 +14044,7 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       : _stillPreview
       ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. The complete answer is paid per call (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
       : stillPro
-      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) for get_market_intel and 18+ more tools (not the paid-plan tools). ' + _wallCopy(_WALL_NEUTRAL_LINE + ' Or the owner pays per call', name + ' needs a paid DC Hub plan, or the owner pays per call') + ' (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
+      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) for get_market_intel and 18+ more tools (' + _wallCopy('a few tools stay previews', 'not the paid-plan tools') + '). ' + _wallCopy(_WALL_NEUTRAL_LINE + ' Or the owner pays per call', name + ' needs a paid DC Hub plan, or the owner pays per call') + ' (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
       : _exhausted
       ? ('Today’s free full ' + name + ' answers are used. \u{1F4B3} a one-time pack of 1,000 credits (' + _meteredUrl + ' — or relay the link in human_url to your human) returns complete answers the moment your human pays. Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
       // r-coherence (2026-07-27, shell #38 lane 3): ONE instruction, true under
@@ -14812,8 +14834,10 @@ export function _missedUpgradeFor(payload, extraGates, opts) {
     const mu = _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '',
       strict: !!(opts && opts.strict) });
     // Item 1 leftover: the developer rung's "They come with a paid DC Hub plan" becomes the
-    // neutral line on /mcp (the rung, the evidence and the link are unchanged).
-    if (mu && mu.rung === 'developer' && !_legacyWallCopy(c)) {
+    // neutral line on /mcp (the rung, the evidence and the link are unchanged). Note V keyed follow-up
+    // (owner 2026-11-16): the pack and pro rungs too ("The plans that return them are listed behind the link",
+    // "They come with the DC Hub plan that includes every tool"), for every caller on /mcp.
+    if (mu && (mu.rung === 'developer' || mu.rung === 'pack' || mu.rung === 'pro') && !_legacyWallCopy(c)) {
       const how = _WALL_NEUTRAL_LINE.replace(/\.$/, '');
       return { ...mu, how, text: mu.what + ' ' + how + '.' };
     }
@@ -15556,8 +15580,9 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   // The directory / Claude / core profiles keep their fixed wall copy (/mcp/chatgpt is frozen for
   // OpenAI's review, /mcp/claude strips links): the fields are withheld there too, with no line.
   if (c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) return gated;
+  // Note V keyed follow-up (owner 2026-11-16): no plan named (mu.text is the neutral line on /mcp too).
   const what = (mu && mu.rung === 'pro') ? mu.text
-    : 'This answer hid the DCPI sub-scores. They come with the DC Hub plan that includes every tool.';
+    : 'This answer hid the DCPI sub-scores. ' + _WALL_NEUTRAL_LINE;
   const line = '\n\n\u{1F512} ' + what.replace(/\.$/, '') + (url ? ' → ' + url : '.')
     + ' The verdict, composite score and bands are not withheld.';
   return { ...gated, content: [...(Array.isArray(gated.content) ? gated.content : []), { type: 'text', text: line }] };
@@ -20746,7 +20771,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -20827,7 +20852,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below a paid plan too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below a paid plan, and below a paid plan target_mw is held at 50; a credit pack opens them per call, as paid-plan depth. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // 5.29 (Grok note K, item 1, 2026-11-15): A SITING QUESTION OVER SEVERAL NAMED STATES.
@@ -20936,7 +20961,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     // 5.26 (Grok live agent reviews 2026-11-13): TWO OR MORE NAMED GRIDS. "Compare ERCOT and PJM
@@ -21111,7 +21136,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_dchub_recommendation', when: 'You want a one-call siting recommendation across markets.',
         rejected_because: 'A recommendation picks its own market, which may not be the one asked about.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. A metro outside the tracked index is reported as unresolved, never replaced.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. A metro outside the tracked index is reported as unresolved, never replaced.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -21142,7 +21167,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
@@ -21168,7 +21193,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -21361,10 +21386,10 @@ export const _PLAN_CLASSES = [
       { tool: 'compare_sites', when: 'You have 2+ specific sites to compare head-to-head.' },
       { tool: 'rank_sites', when: 'You have MANY candidates and want a deterministic constrained ranking (accepts candidate_id entries from get_refined_queue).' },
       { tool: 'analyze_parcel', when: 'You have a polygon/parcel GEOMETRY, not just a point.' },
-      { tool: 'generate_site_analysis', when: 'You need the branded Site Analysis PDF for the point (paid plan).' },
+      { tool: 'generate_site_analysis', when: 'You need the branded Site Analysis PDF for the point (full access).' },   // Note V keyed follow-up: was "(paid plan)"
       { tool: 'find_alternatives', when: 'You want DC Hub to surface OTHER sites matching a target profile.' },
     ],
-    coverage_notes: 'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is paid. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates. The get_hosting_capacity step is CONDITIONAL — it appears only when the point falls inside a utility that publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus). It is free + full at every tier, and outside those footprints it returns an explicit not-published answer with the nearest covered markets rather than a zero.',
+    coverage_notes: 'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates. The get_hosting_capacity step is CONDITIONAL — it appears only when the point falls inside a utility that publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus). It is free + full at every tier, and outside those footprints it returns an explicit not-published answer with the nearest covered markets rather than a zero.',
   },
   {
     id: 'deals_ma', recipe: 'hyperscaler_activity',
@@ -21392,7 +21417,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
         rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
-    coverage_notes: 'hyperscaler_deals: no key or a free key gets a trimmed preview; a credit pack or a paid DC Hub plan gets the full answer. list_transactions: no key or a free key gets a trimmed preview; a paid DC Hub plan gets the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
+    coverage_notes: 'hyperscaler_deals: no key or a free key gets a trimmed preview; a credit pack or full access gets the full answer. list_transactions: no key or a free key gets a trimmed preview; full access gets the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
     // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
@@ -21442,7 +21467,7 @@ export const _PLAN_CLASSES = [
       { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
         rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
     ],
-    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a paid DC Hub plan gets the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
   },
   {
     id: 'fiber', recipe: null,
@@ -21469,7 +21494,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a paid DC Hub plan gets the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -21496,7 +21521,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; a paid DC Hub plan gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a paid DC Hub plan gets the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below the DC Hub plan with every tool (lower paid plans included).',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below the access level that includes every tool.',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -21679,7 +21704,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_pipeline', when: 'You want the forward CONSTRUCTION pipeline, not existing facilities.',
         rejected_because: 'The intent read as existing facilities, not the forward pipeline.' },
     ],
-    coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs need a paid DC Hub plan.',
+    coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access.',
   },
 ];
 
@@ -27567,7 +27592,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             } : {
               tier: 'anon_daily_cap',
               message: _coachHead + ' ' + (_coachMissed ? _coachMissed.text : _wallCopy(_WALL_NEUTRAL_LINE, 'The full `' + name + '` depth comes with a paid DC Hub plan.'))
-                + ' A credit pack does not deepen `' + name + '`. For the full answer, relay the link in human_url to your human — that page lists the plans that include it.',
+                + ' A credit pack does not deepen `' + name + '`. For the full answer, relay the link in human_url to your human — that page shows how to get it.',
               next_tool: 'claim_free_key',
               wall: 'depth',
               pack_opens: false,
@@ -30025,8 +30050,10 @@ export function _relayContractStep(result, name) {
     const all = content.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
     const hasAsk = all.includes(HUMAN_FIRST_MARKER) || /Tell the user:/.test(all)
       || /https:\/\/dchub\.cloud\/go\/c\//.test(all) || /sent the full ask earlier/.test(all)
-      // v13 dropped "Pro" from the wall line; the v12 spelling is still accepted.
-      || /Start a 7-day (Pro )?trial:|your user can open /.test(all) || _RELAY_URL_RE.test(all);
+      // v13 dropped "Pro" from the wall line; the v12 spelling is still accepted. Note V keyed follow-up: the neutral
+      // Pro-wall line (lib/wall-user-line.mjs proWallLine) is an ask too.
+      || /Start a 7-day (Pro )?trial:|your user can open |This preview leaves out [^\n]*?\. Open https:\/\/\S+ to see what your agent found/.test(all)
+      || _RELAY_URL_RE.test(all);
     if (!hasAsk) content.push({ type: 'text', text: HUMAN_FIRST_MARKER + ' ' + relayLine });
     // Text with no parseable JSON head has nowhere to carry agent_instruction as data, so the
     // contract rides as one paragraph. The human line stays the LAST thing the agent reads: the
@@ -30213,14 +30240,16 @@ export function _wallKindStep(result, name) {
 // nothing changes for them. Kill switch DCHUB_WALL_ONE_LINK=0 restores the 2026-10-07
 // responses byte for byte.
 const _ONE_LINK_RE_G = /https:\/\/(?:www\.)?dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*]/g;
-const _ONE_LINK_RUNG_SEG_RE_G = /\s*·\s*(?:or|for a human screening sites:)\s*\*\*(?:Developer|Pro|a paid DC Hub plan for agents|the DC Hub plan with every tool)\*\*(?:\s*\([^)\n]*\))?\s*→\s*https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*/g;
+const _ONE_LINK_RUNG_SEG_RE_G = /\s*·\s*(?:or|for a human screening sites:)\s*\*\*(?:Developer|Pro|a paid DC Hub plan for agents|the DC Hub plan with every tool|full depth for agents|every DC Hub tool)\*\*(?:\s*\([^)\n]*\))?\s*→\s*https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*/g;
 // "**$10 one-time = 1,000 API credits**, credits don’t expire → <go/c> (… credits per call)" — _PACK_RUNG
 // as _rungsText / _ladderText render it, URL captured; the trailing parenthetical is the heavy-tool
 // clause or the credit rule.
 // Also unlock_more_data's unpriced rung (_UNLOCK_PACK_RUNG, owner 2026-10-10), so its ladder line still
 // converges on the one link.
 const _ONE_LINK_PACK_RUNG_RE_G = /\*\*(?:\$10 one-time = 1,000 API credits|a one-time pack of 1,000 API credits \(usage capacity, not a subscription\))\*\*, credits don’t expire → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
-const _ONE_LINK_PLANS_LABEL = '**the plans that include the full answer** → ';
+// Note V keyed follow-up (owner 2026-11-16): the label names what the link opens, not plans (was "the plans that
+// include the full answer"), for every caller.
+const _ONE_LINK_PLANS_LABEL = '**the full answer** → ';
 const _ONE_LINK_POINT_KEYS = new Set(['upgrade_url', 'unlock_url', 'human_url']);
 // Provenance is not a pointer (the projection doctrine: citation and provenance are never opted
 // out of), so those keys are left alone; docs_url and the like ARE pointers and go.
