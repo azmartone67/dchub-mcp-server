@@ -14241,7 +14241,9 @@ const _FACILITY_FREE_FIELDS = new Set([
   // dropped one. verified_at is PeeringDB rows only. The collection-level
   // provenance.as_of stays null (lib/attribution.mjs: per-record dates are not
   // promoted); an agent cites the row's own as_of.
-  'as_of', 'as_of_basis', 'verified_at',
+  // 2026-11-17 (backend util/facility_as_of): as_of_kind says what that date is ("verified" against PeeringDB or
+  // OpenStreetMap, "refreshed" by a loader that re-reads the source, or "last_written" for a source nothing re-checks).
+  'as_of', 'as_of_basis', 'as_of_kind', 'verified_at',
 ]);
 
 // r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_

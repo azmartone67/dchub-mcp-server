@@ -60,7 +60,7 @@ describe('plan-step-facts: dated facts from what a step returned', () => {
     const f = factsFromExecuted([ex(1, 'get_metro_fiber', { market: 'chicago' }, CHI_METRO_FIBER),
       ex(2, 'get_fiber_readiness', { lat: 41.853, lon: -87.618 }, CHI_READINESS)], null, { address: '350 E Cermak Rd' });
     expect(f.map((x) => x.text)).toEqual([
-      "350 E Cermak Rd is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's fiber profile (DC Hub metro fiber, as of 2026-03-17).",
+      "350 E Cermak Rd is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's curated carrier profiles (DC Hub baseline as of 2026-03-17, not a live feed).",
       'Fiber at 350 E Cermak Rd: on-net, nearest carrier 0.05 km (PeeringDB carrier presence + FCC fiber coverage).',
     ]);
     // no address asked: the metro profile is not turned into an address claim
@@ -155,7 +155,7 @@ describe('Q-f: a named address is the facility asked about; fiber facts lead', (
       ex(5, 'get_fiber_readiness', { lat: 41.853, lon: -87.618 }, CHI_READINESS),
       ex(7, 'get_facility', { slug: 'dlr-350-e-cermak' }, { data: { name: 'Digital Realty 350 E Cermak', provider: 'Digital Realty' } }),
     ], null);
-    expect(a.headline.startsWith("350 E Cermak is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's fiber profile")).toBe(true);
+    expect(a.headline.startsWith("350 E Cermak is a key fiber endpoint for Zayo, Lumen and a key carrier hotel in Chicago's curated carrier profiles")).toBe(true);
     expect(a.headline).toContain('Fiber at 350 E Cermak: on-net, nearest carrier 0.05 km');
     expect(a.headline).toMatch(/Data Center Power Index \(DCPI\) for Chicago: AVOID/);
     expect(a.not_established.join(' ')).not.toMatch(/No facility profile at 350 E Cermak/);
