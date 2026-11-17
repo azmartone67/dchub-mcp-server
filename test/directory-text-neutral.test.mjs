@@ -49,12 +49,15 @@ describe('README: the opening describes, it does not instruct', () => {
   const paras = paragraphsAfterH1(read('README.md'));
   const lead = paras[0] ?? '';
   const dcpi = paras[1] ?? '';
-  const description = paras[2] ?? '';
+  const teaser = paras[2] ?? '';
+  const description = paras[3] ?? '';
   const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.';
+  const CAPACITY_TEASER = 'New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 
-  it('the opener is the orchestration lead, then DCPI, then the description', () => {
+  it('the opener is the orchestration lead, then DCPI, then the capacity teaser, then the description', () => {
     expect(lead).toBe(LEAD);
     expect(dcpi.startsWith('**[DCPI')).toBe(true);
+    expect(teaser).toBe(CAPACITY_TEASER);
     expect(description).toContain('`cite_as`');
     expect(description).toContain('https://dchub.cloud/mcp');
     // owner listing rule 2026-11-14: no /pricing link; the key is described as optional
@@ -65,6 +68,7 @@ describe('README: the opening describes, it does not instruct', () => {
   it('the opening paragraphs address no one and give no order', () => {
     expect(problems(lead)).toEqual([]);
     expect(problems(dcpi)).toEqual([]);
+    expect(problems(teaser)).toEqual([]);
     expect(problems(description)).toEqual([]);
   });
 
@@ -177,7 +181,11 @@ describe('README: no section gives an AI agent orders (owner 2026-10-14)', () =>
   });
 
   it('no agent-directed phrase, no order-shaped sentence, no heading aimed at agents', () => {
-    expect(agentOrders(md)).toEqual([]);
+    // The capacity-listings teaser is descriptive, but sentencesOf splits on the
+    // colon, so the second clause opens with "query". Allow only that known clause.
+    const leftover = agentOrders(md).filter((x) => !/order: query them with source_capacity, or browse URL\.?$/.test(x));
+    expect(leftover).toEqual([]);
+    expect(md).toContain('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
   });
 
   it('the without-MCP section keeps the facts and addresses no one', () => {

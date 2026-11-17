@@ -3,7 +3,8 @@
 // lead with the orchestration / execute_plan sentence (electricity prices and
 // power grid). The DCPI paragraph follows immediately and must still name
 // Data Center Power Index (DCPI), carry the canon "300+ markets", and have
-// no "$", no em dash.
+// no "$", no em dash. A teaser for new capacity listings (source_capacity /
+// /listings) follows DCPI; it names no partner, MW figure, date, or price.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -23,6 +24,11 @@ describe('README opening', () => {
     expect(dcpiPara).toContain('Data Center Power Index');
     expect(dcpiPara).toContain('300+ markets');
     expect(dcpiPara).toContain('https://dchub.cloud/dcpi');
+  });
+  it('the third paragraph teases new capacity listings, unnamed and without figures or dates', () => {
+    expect(paras[2]).toBe('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
+    expect(paras[2]).not.toMatch(/\$/);
+    expect(paras[2]).not.toMatch(/\bMW\b/);
   });
   it('DCPI paragraph has no price and no em dash', () => {
     expect(dcpiPara).not.toMatch(/\$/);
