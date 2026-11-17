@@ -135,10 +135,10 @@ const withEnv = async (k, v, fn) => {
 const count = (t, s) => t.split(s).length - 1;
 
 describe('aiCapacityEmailClause (pure)', () => {
-  it('names every market, their scores and the cap; the rank_markets wording is unchanged', () => {
-    expect(aiCapacityEmailClause({ total: 20, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 20 markets in this index with their scores, free, up to 10 full answers a day.');
+  it('names every market and their scores, no allowance (option A); the rank_markets wording matches', () => {
+    expect(aiCapacityEmailClause({ total: 20, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 20 markets in this index with their scores.');
     expect(aiCapacityEmailClause({ total: 20, perDay: 10 }).startsWith(RANK_EMAIL_ASK_LEAD)).toBe(true);   // the lead the lean step keeps
-    expect(rankEmailClause({ total: 10, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 10 markets in this ranking, free, up to 10 full rankings a day. The fields the next line names stay on the paid plans.');
+    expect(rankEmailClause({ total: 10, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 10 markets in this ranking.');
   });
   it('unknown count or cap: null', () => {
     for (const total of [undefined, null, 0, 'x']) expect(aiCapacityEmailClause({ total, perDay: 10 })).toBeNull();
@@ -158,7 +158,7 @@ describe('keyless ai_capacity_index wall on /mcp, production transport', () => {
     const k = r.texts.findIndex((t) => t.startsWith(HUMAN));
     expect(k).toBeGreaterThan(0);
     expect(r.texts[k - 1].split('\n\n').at(-1)).toBe(line(20));        // "the next line" is the human's
-    expect(r.text).toContain('shows all 20 markets in this index with their scores, free, up to 10 full answers a day.');
+    expect(r.text).toContain('shows all 20 markets in this index with their scores.');
     expect(count(r.text, RANK_EMAIL_ASK_LEAD)).toBe(1);
     expect(count(r.text, 'bind_email')).toBe(1);
     expect(r.ev && r.ev.email_ask).toBe('line');

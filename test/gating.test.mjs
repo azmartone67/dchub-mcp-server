@@ -123,7 +123,8 @@ describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)
     expect(out._data_total_in_pro).toBe(5);    // honest side field still stamped
     expect(out.count).toBe(null);              // count nulled by the metric mask
     expect(out.note).not.toMatch(/showing\s+5\s+of\s+41/i);  // the stale claim is gone
-    expect(out.note).toMatch(/claim_free_key/);              // still an honest CTA
+    expect(out.note).toMatch(/human_url/);                   // option A (2026-11-17): the relay stays, no free-tier offer
+    expect(out.note).not.toMatch(/free tier|claim_free_key/);
   });
 
   it('leaves a "showing N of M" note untouched when NOTHING was trimmed', () => {
