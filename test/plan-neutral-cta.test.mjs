@@ -18,6 +18,13 @@ import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL, CTA_KEYS, COMMERCE_KEY } from '../lib/neutral-cta.mjs';
 import { leanObject } from '../lib/lean-response.mjs';
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 export const BANNED = /paid upgrade|paid data tier|paid (plan|tier|key)|upgrade page|\/pricing|\/upgrade|checkout|stripe|\$\d|\b(Pro|Developer|Enterprise|Starter) plan/i;

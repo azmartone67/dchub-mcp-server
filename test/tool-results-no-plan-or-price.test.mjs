@@ -24,6 +24,13 @@ import { createServer } from 'node:http';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 import { FREE_OFFER_EMAIL, FREE_OFFER_LAND_POWER, TIER_CANON } from '../lib/tier-canon.mjs';
 
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 // ── what is banned ───────────────────────────────────────────────────────────────────────────────────
 // Case-insensitive wording.
 export const BANNED_WORDING = new RegExp([
