@@ -16,6 +16,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as L from '../lib/siting-email-seat.mjs';
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.

@@ -20,6 +20,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as L from '../lib/siting-email-seat.mjs';
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 // The lean step trims inner copy on /mcp; off so these read the plan envelope the handler built.
 process.env.DCHUB_LEAN_RESPONSES = '0';
 

@@ -18,6 +18,13 @@ import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
+
+// This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
+// The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
+const _compactWas = process.env.DCHUB_PLAN_COMPACT;
+beforeAll(() => { process.env.DCHUB_PLAN_COMPACT = '0'; });
+afterAll(() => { if (_compactWas === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compactWas; });
+
 process.env.DCHUB_TOP_METROS_FREE = '0';
 process.env.DCHUB_LEAN_RESPONSES = '0';
 
