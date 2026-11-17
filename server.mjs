@@ -32490,11 +32490,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : 'all hand-offs resolved' });
         replay.decisions = [...(replay.decisions || []), ...cchecks];
         const statusByStep = new Map();
+        const noteByStep = new Map();
         for (const e of executed) {
           if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
+          if (e.status === 'not_run' && e.note) noteByStep.set(e.step, e.note);
         }
         for (const d of (replay.decisions || [])) {
           if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
+          // Grok midday re-run 2026-11-17, Q-f: the rationale is the plan's (e.g. "skipped when no facility row"); a
+          // step the budget cut says so beside it.
+          if (d.kind === 'step' && noteByStep.has(d.step)) d.status_note = noteByStep.get(d.step);
         }
       } catch (_e) {}
       // Move 3: fingerprint what this caller received, diff it against a presented rerun token.
@@ -32643,6 +32648,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         : _mixAnswer || _coloAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
+            state: (_sig && (_sig.state || _sig.stateFromPlace)) || null,
             states: (_sig && Array.isArray(_sig.states)) ? _sig.states.slice(0, _PLAN_STATE_FANOUT_CAP) : [] }, executed, fullByEntry);
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
