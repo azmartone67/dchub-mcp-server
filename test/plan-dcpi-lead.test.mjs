@@ -210,9 +210,17 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     const r = await callAs(null, 'execute_plan', ASK, 'claude-code', opts);
     expect(r.result.isError).not.toBe(true);
     const blocks = (r.result.content || []).map((b) => b.text || '');
-    // 1) the verdict is the first thing in the answer: block 0 is JSON whose first key, fact_header, names it in its
-    //    SUMMARY line (lib/plan-fact-header.mjs, 2026-11-16), and dcpi_verdict is the first data key after it
-    const json = blocks[0];
+    // 1) the verdict is the first thing in the answer: block 0 is the plain-language lead (lib/plan-lead-text.mjs,
+    //    2026-11-17), which names it, then the plan JSON whose first key, fact_header, names it in its SUMMARY line
+    //    (lib/plan-fact-header.mjs, 2026-11-16), and dcpi_verdict is the first data key after it
+    const jsonAt = blocks[0].trimStart().startsWith('{') ? 0 : 1;
+    if (opts.sessionless) expect(jsonAt).toBe(0);   // a plan step: no lead
+    else {
+      expect(jsonAt).toBe(1);
+      expect(blocks[0]).toMatch(/Phoenix[^.]*CAUTION/);
+      expect(blocks[0].length).toBeLessThanOrEqual(600);
+    }
+    const json = blocks[jsonAt];
     const d = JSON.parse(json);
     // (sessionless over this harness's loopback socket reads as a plan step, which carries no header)
     if (opts.sessionless) expect(d).not.toHaveProperty('fact_header');
@@ -236,8 +244,8 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     expect(d.intent_answer.as_of).toBe('2026-09-26');
     // 3) the offer (the plan's email ask, or the wall's one-link line) comes after it, in a later block
     // (Note L1 + L2, 2026-11-15: a keyless plan wall's one link is https://dchub.cloud/connect, lib/neutral-cta.mjs)
-    const offerAt = blocks.findIndex((t, i) => i > 0 && (t.includes(EMAIL_ASK) || /dchub\.cloud\/(?:upgrade\/|connect\b)/.test(t)));
-    expect(offerAt, blocks.map((t) => t.slice(0, 80)).join(' | ')).toBeGreaterThan(0);
+    const offerAt = blocks.findIndex((t, i) => i > jsonAt && (t.includes(EMAIL_ASK) || /dchub\.cloud\/(?:upgrade\/|connect\b)/.test(t)));
+    expect(offerAt, blocks.map((t) => t.slice(0, 80)).join(' | ')).toBeGreaterThan(jsonAt);
     // the verdict is the first key; the offer prose is not ahead of it inside block 0 either
     const at = json.indexOf(EMAIL_ASK);
     expect(at === -1 || at > json.indexOf('"dcpi_verdict"')).toBe(true);
@@ -247,7 +255,9 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     try {
       // in a session: over this harness's loopback socket a sessionless call reads as a plan step
       const r = await callAs(null, 'execute_plan', ASK, 'claude-code');
-      const d = JSON.parse((r.result.content || [])[0].text);
+      // block 0 is the plain-language lead (lib/plan-lead-text.mjs); the plan JSON is block 1
+      expect((r.result.content || [])[0].text).toMatch(/Phoenix[^.]*CAUTION/);
+      const d = JSON.parse((r.result.content || [])[1].text);
       expect(d.first_full_answer).toMatchObject({ used: 1, limit: 1 });
       // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer;
       // the fact header (in a session) is the one key ahead of the answer
@@ -259,7 +269,7 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
   });
   it('a market the index does not track gets no verdict block (never a substitute)', async () => {
     const r = await callAs(null, 'execute_plan', { intent: 'Is Timbuktu a good place to build?' }, 'claude-code');
-    const d = JSON.parse(r.result.content[0].text);
+    const d = JSON.parse(r.result.content[1].text);   // block 0 is the plain-language lead (lib/plan-lead-text.mjs)
     expect(d.dcpi_verdict).toBeUndefined();
     expect(String(d.fact_header || '')).not.toMatch(/Verdict/);   // no substitute in the fact header either
   });

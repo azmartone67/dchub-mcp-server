@@ -287,6 +287,8 @@ import { listingSrcFromRequest as _listingSrcFromRequest, rememberListingSrc as 
 import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
+import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
+import { planLeadStep as _planLeadStep } from './lib/plan-lead-text.mjs';
 import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPriceIntent as _coloPriceIntent,
   colocationSequence as _colocationSequence, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
   guardPlanFacilitySteps as _guardPlanFacilitySteps, facilitySlugGuard as _facilitySlugGuard,
@@ -22988,8 +22990,25 @@ export function _planSignals(intent, context) {
   // colocation word is in the text (lib/colocation-plan.mjs).
   const __colo = _coloSignals(text, { market, mw });
   const __facMetro = _facilityMetroArgs(text, market);
+  // Grok colocation review (2026-11-17): "colocation in Ashburn" binds a corridor POINT, so scopeWidened above stays
+  // null, yet the metro facility search takes no point: it reads query + state (search_facilities has no radius
+  // and one `city`, and Northern Virginia is eight). Say so the way "Northern Virginia", Dallas, Atlanta and
+  // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
+  const scopeWidenedOut = scopeWidened || _coloScopeWidened(__colo, coords);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro };
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro };
+}
+// The colocation scope disclosure above: { widened_from, to } or null. Only for a colocation ask whose metro was
+// named and whose geography bound a point (a point-less ask already gets scopeWidened from the text), and never
+// for a named facility pair (that search reads the two names, not the metro). Pure; never throws.
+export function _coloScopeWidened(colo, coords) {
+  try {
+    if (!colo || !colo.metro || colo.pair || !coords) return null;
+    const from = typeof colo.metro_matched === 'string' ? colo.metro_matched.trim() : '';
+    const to = typeof colo.metro.state === 'string' ? colo.metro.state : '';
+    if (!from || !to) return null;
+    return { widened_from: from.replace(/\b\w/g, (ch) => ch.toUpperCase()), to };
+  } catch (_e) { return null; }
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -24180,10 +24199,7 @@ export function _capacityProcurementStep(text, d, considered) {
          + 'capacity for this geography and size, or the program status while listings are onboarded. The size is '
          + 'matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous '
          + 'block, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total. '
-         + 'It runs last, after the plan\'s other reads, so the answer closes on the listings or, when none fits '
-         + 'yet, on the offer to register the requirement. A listing is reached through a DC Hub '
-         + 'deal registration: the provider sees only the buyer\'s company name and requirement, and identities '
-         + 'and contact are exchanged only if the provider accepts.',
+         + 'It runs last, after the plan\'s other reads, so the answer closes on the listings or on the program status.',
     };
   } catch (_e) {
     return null;   // routing must never throw
@@ -25554,6 +25570,12 @@ function _sourceLineCb(name, fn) {
       // keeps its own copy). Kill switch DCHUB_NEUTRAL_CONNECT=0.
       _final = _neutralConnectStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
         || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || _planCallerPaid(c) });
+      // Grok colocation review (2026-11-17, "lead length" 12 of 12): execute_plan's block 0 is a plain-language answer
+      // of at most 600 characters, and the plan's JSON moves to block 1 unchanged (structuredContent unchanged too).
+      // A deliberate change to the block-0-is-JSON contract, for execute_plan only (lib/plan-lead-text.mjs). After
+      // every rewrite, so nothing above re-reads block 0. Same skips as the fact header; compact:false or
+      // DCHUB_PLAN_LEAD_TEXT=0 keeps block 0 as JSON.
+      if (name === 'execute_plan') _final = _planLeadStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), compact: _planCompactRequested(args) });
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -32628,6 +32650,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (out.replay && _final.replay === undefined) { const _cr = _compactReplay(out.replay); if (_cr) _final.replay = _cr; }
         } catch (_e) { _final = out; }   // never lose the answer to its own shortening
       }
+      // Option A (owner 2026-11-16; Grok colocation review 2026-11-17, 12 of 12): no register call, register_interest
+      // or "registers this requirement" rides the plan through its steps either; each capacity_source block carries
+      // the teaser instead (lib/plan-capacity-teaser.mjs). Before the stringify, so both copies match.
+      _final = _planCapacityTeaserOnly(_final);
       // r-endburst (2026-08-15): the planner's final assembly IS the
       // end-of-burst moment — append the ONE return-hook line.
       const _content = [{ type: 'text', text: JSON.stringify(_final) }];
