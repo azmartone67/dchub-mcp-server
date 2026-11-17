@@ -16,7 +16,10 @@ jobs:
     # 5 (set 2026-05-03) became the edge: on 2026-10-10 the unit gate alone took
     # 221s and whole jobs ran 257-301s, so runs were cancelled after every step
     # had passed (run 38077603074: live suite 49/49, job killed 5s later).
-    timeout-minutes: 10
+    # 10 became the edge on 2026-11-17: the unit gate alone took 9m16s (run
+    # 44198455153), so the informational live suite was cut off and the job
+    # reported cancelled on mcp#1518, #1521 and main (run 44196893717).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
