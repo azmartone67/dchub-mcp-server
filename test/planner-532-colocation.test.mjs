@@ -54,7 +54,7 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
   it('a fiber/carrier colocation ask adds metro fiber and the connectivity read at the metro core', () => {
     const p = _planQuery('Carrier-neutral colocation with strong fiber in Chicago', {});
     expect(step(p, 'get_metro_fiber').args_hint).toEqual({ market: 'chicago' });
-    expect(step(p, 'get_fiber_readiness').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
+    expect(step(p, 'get_peering_intel').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
   });
 
   it('two named facilities: each resolved by its own search, get_facility x2 from those rows', () => {
@@ -64,7 +64,7 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
     expect(s.filter((x) => x.tool === 'search_facilities').map((x) => x.args_hint.query)).toEqual(['Equinix DC2', 'CoreSite VA1']);
     const gf = s.filter((x) => x.tool === 'get_facility');
     expect(gf.map((x) => x.args_hint.slug)).toEqual(['<facility slug from step 1 search_facilities row>', '<facility slug from step 2 search_facilities row>']);
-    expect(tools(p)).toEqual(expect.arrayContaining(['get_market_dcpi_rank', 'get_fiber_readiness']));
+    expect(tools(p)).toEqual(expect.arrayContaining(['get_market_dcpi_rank', 'get_peering_intel']));
     expect(tools(p)).not.toContain('get_market_intel');
   });
 
@@ -80,7 +80,7 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
     const p = _planQuery('What does colocation cost per kW in Dallas?', {});
     expect(p.intent_class).toBe('pricing_out_of_scope');
     expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_energy_prices', 'get_grid_intelligence', 'get_tax_incentives']);
-    expect(p.planner_rationale).toMatch(/doesn't quote colocation prices/);
+    expect(p.planner_rationale).toMatch(/doesn't publish colocation pricing/);
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d/);
   });
 
@@ -200,13 +200,46 @@ describe('5.32 the colocation answer leads with the asked market', () => {
     expect(ia.evidence.join(' ')).toMatch(/facility records as of 2026-03-30/);
     expect(ia.evidence.join(' ')).toMatch(/PJM average time to power: 44\.9 months/);
   });
-  it('a price ask says DC Hub does not quote colocation prices, with no figure, plan or credit wording', () => {
+  it('a price ask says DC Hub does not publish colocation pricing, with no figure, plan or credit wording', () => {
     const p = buildColocationAnswer({ intent: 'colocation cost per kW in Northern Virginia', intent_class: 'pricing_out_of_scope', metro: NOVA }, executed.slice(0, 1), null);
-    expect(p.headline).toMatch(/^DC Hub doesn't quote colocation prices\./);
+    expect(p.headline).toMatch(/^DC Hub doesn't publish colocation pricing\./);
     expect(p.out_of_scope).toBe('colocation_pricing');
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d|credits?|free key|per day|\/day|higher limits|free tier|\bPro\b/i);
   });
   it('another class gets nothing from this builder', () => {
     expect(buildColocationAnswer({ intent: 'x', intent_class: 'market_outlook', metro: NOVA }, executed, null)).toBeNull();
+  });
+});
+
+describe('owner 2026-11-17: get_peering_intel runs inside execute_plan', async () => {
+  const S = await import('../server.mjs');
+  const CHI = { label: 'Chicago', dcpi_slug: 'chicago' };
+  const dcpi = { step: 1, tool: 'get_market_dcpi_rank', status: 'executed', args: { market_slug: 'chicago' },
+    result: { market_slug: 'chicago', verdict: 'CAUTION', composite_score: 55 } };
+  const peer = (connectivity) => ({ step: 4, tool: 'get_peering_intel', status: 'executed', args: { lat: 41.85, lon: -87.62 },
+    result: { source: 'PeeringDB', connectivity } });
+  const ask = { intent: 'Carrier hotel and cross-connect options at 350 E Cermak in Chicago', intent_class: 'colocation', metro: CHI };
+
+  it('is on the read-only allowlist and allowed on the default, Claude and ChatGPT directory profiles', async () => {
+    expect(S._EXEC_ALLOWED_TOOLS).toContain('get_peering_intel');
+    expect(S._execStepAllowed('get_peering_intel', undefined)).toBe(true);
+    const { isClaudeTool } = await import('../lib/claude-directory.mjs');
+    const { isDirectoryTool } = await import('../lib/chatgpt-directory.mjs');
+    expect(!!isClaudeTool('get_peering_intel')).toBe(true);
+    expect(!!isDirectoryTool('get_peering_intel')).toBe(true);
+  });
+  it('keyless preview: facilities nearby and the leading facility names; withheld counts are left out, not zero', () => {
+    const ia = buildColocationAnswer(ask, [dcpi, peer({ facilities_nearby: 50, level: 'Excellent', score: null, _score_withheld: true,
+      total_ix_presence: null, total_networks: null,
+      top_facilities: [{ name: 'Equinix CH1/CH2/CH4 - Chicago', ix_count: null }, { name: 'Digital Realty CHI (350 E Cermak)' }] })], null);
+    const line = ia.evidence.find((e) => /get_peering_intel/.test(e));
+    expect(line).toBe('Peering at the metro core (PeeringDB): 50 facilities nearby; led by Equinix CH1/CH2/CH4 - Chicago, Digital Realty CHI (350 E Cermak) (get_peering_intel).');
+    expect(line).not.toMatch(/\bnull\b|\b0 (IX|networks)/);
+  });
+  it('full read: PeeringDB counts are cited, never the derived score', () => {
+    const ia = buildColocationAnswer(ask, [dcpi, peer({ facilities_nearby: 50, score: 92, total_ix_presence: 12, total_networks: 410, top_facilities: [] })], null);
+    const line = ia.evidence.find((e) => /get_peering_intel/.test(e));
+    expect(line).toBe('Peering at the metro core (PeeringDB): 50 facilities nearby, 12 IX presences, 410 networks (get_peering_intel).');
+    expect(line).not.toMatch(/92/);
   });
 });

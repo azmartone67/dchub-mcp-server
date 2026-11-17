@@ -162,7 +162,7 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
         const ia = o.intent_answer;
         expect(ia, 'intent_answer').toBeTruthy();
         expect(ia.kind).toBe('colocation');
-        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't quote colocation prices\./);
+        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't publish colocation pricing\./);
         else expect(ia.headline.startsWith(`Data Center Power Index (DCPI) for ${q.lead}:`)).toBe(true);
         expect(ia.headline).not.toMatch(/Culpeper|Aldie|Chester|Fayetteville|Social Circle|Marietta/);
         if (q.cls === 'colocation' && !q.pair) expect(o.dcpi_verdict && o.dcpi_verdict.text).toMatch(new RegExp(`^Data Center Power Index \\(DCPI\\): ${q.dcpiName || q.lead}`));
