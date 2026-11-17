@@ -54,7 +54,22 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
   it('a fiber/carrier colocation ask adds metro fiber and the connectivity read at the metro core', () => {
     const p = _planQuery('Carrier-neutral colocation with strong fiber in Chicago', {});
     expect(step(p, 'get_metro_fiber').args_hint).toEqual({ market: 'chicago' });
+    expect(step(p, 'get_fiber_readiness').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
+    expect(tools(p)).not.toContain('get_peering_intel');
+  });
+
+  it('a carrier-hotel / IX / cross-connect ask reads peering at the core instead, in the same number of steps', () => {
+    const q = 'Which Chicago carrier hotels have the most internet exchange peering for a cross-connect?';
+    const p = _planQuery(q, {});
     expect(step(p, 'get_peering_intel').args_hint).toMatchObject({ lat: expect.any(Number), lon: expect.any(Number) });
+    expect(tools(p)).not.toContain('get_fiber_readiness');
+    expect(p.recommended_sequence).toHaveLength(_planQuery('Carrier-neutral colocation with strong fiber in Chicago', {}).recommended_sequence.length);
+  });
+
+  it('a carrier-hotel ask at a named address keeps the on-net read that leads it (Q-f), not peering', () => {
+    const p = _planQuery('Carrier hotel, cross-connect and fiber options at 350 E Cermak in Chicago.', {});
+    expect(tools(p)).toContain('get_fiber_readiness');
+    expect(tools(p)).not.toContain('get_peering_intel');
   });
 
   it('two named facilities: each resolved by its own search, get_facility x2 from those rows', () => {
