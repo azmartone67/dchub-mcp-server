@@ -218,8 +218,8 @@ describe('over the real app (stub backend, no network)', () => {
     expect(up && up.next_tool, '_upgrade.next_tool agrees with next_call').toBe('bind_email');
     expect(b0._upgrade ? b0._upgrade.next_tool : 'bind_email', 'block 0 _upgrade agrees too').toBe('bind_email');
     const prose = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    expect(prose.indexOf('Give your user this free answer first: '), 'the free figure comes first in the prose').toBeGreaterThan(-1);
-    expect(prose.indexOf('Give your user this free answer first: ')).toBeLessThan(prose.indexOf('`bind_email`'));
+    expect(prose.indexOf('Give your user this answer first: '), 'the free figure comes first in the prose').toBeGreaterThan(-1);
+    expect(prose.indexOf('Give your user this answer first: ')).toBeLessThan(prose.indexOf('`bind_email`'));
     // every copy agrees: one distinct relay link in the whole reply
     if (sc.for_your_human && sc.for_your_human.url) expect(sc.for_your_human.url).toBe(sc.human_url);
     if (typeof sc.user_message === 'string') expect(sc.user_message).toContain(sc.human_url);

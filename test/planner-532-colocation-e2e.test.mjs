@@ -121,7 +121,7 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
       let o;
       beforeAll(async () => { o = await plan(q.args); }, 120_000);
 
-      it(`intent_class is ${q.cls}`, () => { expect(o.intent_class).toBe(q.cls); expect(o.planner_version).toBe('5.32'); });
+      it(`intent_class is ${q.cls}`, () => { expect(o.intent_class).toBe(q.cls); expect(o.planner_version).toBe('5.33'); });
 
       it('no step failed (no 404 step) and get_facility never ran on a market slug', () => {
         const bad = o.executed.filter((e) => e.status === 'failed');
@@ -162,8 +162,13 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
         const ia = o.intent_answer;
         expect(ia, 'intent_answer').toBeTruthy();
         expect(ia.kind).toBe('colocation');
-        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't quote colocation prices\./);
-        else expect(ia.headline.startsWith(`Data Center Power Index (DCPI) for ${q.lead}:`)).toBe(true);
+        if (q.cls === 'pricing_out_of_scope') expect(ia.headline).toMatch(/^DC Hub doesn't publish colocation prices\./);
+        else if (q.pair) {
+          // Grok re-run 2026-11-17 (Q-b): a named pair leads side by side, then the market's DCPI.
+          expect(ia.headline).toMatch(/^Equinix DC2 \(.*\) vs CoreSite VA1 \(/);
+          expect(ia.headline).toContain(`Data Center Power Index (DCPI) for ${q.lead}:`);
+          expect(ia.side_by_side.map((x) => x.name)).toEqual(['Equinix DC2', 'CoreSite VA1']);
+        } else expect(ia.headline.startsWith(`Data Center Power Index (DCPI) for ${q.lead}:`)).toBe(true);
         expect(ia.headline).not.toMatch(/Culpeper|Aldie|Chester|Fayetteville|Social Circle|Marietta/);
         if (q.cls === 'colocation' && !q.pair) expect(o.dcpi_verdict && o.dcpi_verdict.text).toMatch(new RegExp(`^Data Center Power Index \\(DCPI\\): ${q.dcpiName || q.lead}`));
       });

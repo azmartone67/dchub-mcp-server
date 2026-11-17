@@ -68,7 +68,7 @@ function checkPlan(entry) {
 }
 
 describe('planner 5.26', () => {
-  it('PLANNER_VERSION is 5.27 (was 5.26)', () => { expect(PLANNER_VERSION).toBe('5.32'); });
+  it('PLANNER_VERSION is 5.27 (was 5.26)', () => { expect(PLANNER_VERSION).toBe('5.33'); });
 });
 
 describe('review prompts (test/fixtures/planner-review-prompts.mjs)', () => {

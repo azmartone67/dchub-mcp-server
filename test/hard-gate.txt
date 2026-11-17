@@ -131,6 +131,7 @@ test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/colocation-answer-preview-count.test.mjs
+test/colocation-h2h-round2-1117.test.mjs
 test/compare-isos-array-arg.test.mjs
 test/compare-isos-bands-forwarded-tier.test.mjs
 test/compare-isos-coarse-bands.test.mjs
