@@ -101,12 +101,12 @@ describe('Q-d: "Fastest grid power in Texas" leads with dated supply facts', () 
 
 describe('Q-c: colocation price ask says "doesn\'t publish" and shows a dated driver figure', () => {
   it('the note and one driver figure lead; the incentive status is evidence', () => {
-    expect(COLO_PRICING_NOTE.startsWith("DC Hub doesn't publish colocation prices.")).toBe(true);
+    expect(COLO_PRICING_NOTE.startsWith("DC Hub doesn't publish colocation pricing.")).toBe(true);
     const cs = coloSignals('What does 1 MW of colocation cost per kW per month in Phoenix?', {});
     const a = buildColocationAnswer({ intent: 'x', intent_class: 'pricing_out_of_scope', metro: cs.metro, metros: [], kw: cs.kw },
       [ex(1, 'get_market_dcpi_rank', { market_slug: 'phoenix' }, PHX_DCPI), ex(2, 'get_energy_prices', { state: 'AZ' }, AZ_ENERGY),
         ex(3, 'get_tax_incentives', { state: 'AZ' }, AZ_TAX)], null);
-    expect(a.headline).toMatch(/^DC Hub doesn't publish colocation prices\. .* AZ all-sector average retail electricity rate: 10\.03 cents\/kWh \(2026 average, EIA, as of 2026-08-31\)\. Data Center Power Index \(DCPI\) for Phoenix: CAUTION/);
+    expect(a.headline).toMatch(/^DC Hub doesn't publish colocation pricing\. .* AZ all-sector average retail electricity rate: 10\.03 cents\/kWh \(2026 average, EIA, as of 2026-08-31\)\. Data Center Power Index \(DCPI\) for Phoenix: CAUTION/);
     expect(a.evidence).toContain('Arizona data-center tax incentive: paused new applicants (as of 2026-07-01).');
     expect(JSON.stringify(a)).not.toMatch(/\$\s?\d|doesn't quote/);
   });

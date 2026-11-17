@@ -95,7 +95,7 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
     const p = _planQuery('What does colocation cost per kW in Dallas?', {});
     expect(p.intent_class).toBe('pricing_out_of_scope');
     expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_energy_prices', 'get_grid_intelligence', 'get_tax_incentives']);
-    expect(p.planner_rationale).toMatch(/doesn't publish colocation prices/);
+    expect(p.planner_rationale).toMatch(/doesn't publish colocation pricing/);
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d/);
   });
 
@@ -215,9 +215,9 @@ describe('5.32 the colocation answer leads with the asked market', () => {
     expect(ia.evidence.join(' ')).toMatch(/facility records as of 2026-03-30/);
     expect(ia.evidence.join(' ')).toMatch(/PJM average time to power: 44\.9 months/);
   });
-  it('a price ask says DC Hub does not publish colocation prices, with no figure, plan or credit wording', () => {
+  it('a price ask says DC Hub does not publish colocation pricing, with no figure, plan or credit wording', () => {
     const p = buildColocationAnswer({ intent: 'colocation cost per kW in Northern Virginia', intent_class: 'pricing_out_of_scope', metro: NOVA }, executed.slice(0, 1), null);
-    expect(p.headline).toMatch(/^DC Hub doesn't publish colocation prices\./);
+    expect(p.headline).toMatch(/^DC Hub doesn't publish colocation pricing\./);
     expect(p.out_of_scope).toBe('colocation_pricing');
     expect(JSON.stringify(p)).not.toMatch(/\$\s?\d|credits?|free key|per day|\/day|higher limits|free tier|\bPro\b/i);
   });
