@@ -13,8 +13,8 @@ const text = (r) => r.content.map((c) => c.text).join('\n');
 const setEnv = (k, v) => { const p = process.env[k]; if (v === undefined) delete process.env[k]; else process.env[k] = v; return () => { if (p === undefined) delete process.env[k]; else process.env[k] = p; }; };
 
 describe('rankEmailClause (pure)', () => {
-  it('names every market and the daily cap, never a hidden field', () => {
-    expect(rankEmailClause({ total: 10, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 10 markets in this ranking, free, up to 10 full rankings a day. The fields the next line names stay on the paid plans.');
+  it('names every market, never a hidden field, an allowance or a plan (option A)', () => {
+    expect(rankEmailClause({ total: 10, perDay: 10 })).toBe('Then ask your user for their email (only use an address they gave you): `bind_email` with it shows all 10 markets in this ranking.');
     expect(rankEmailClause({ total: 10, perDay: 10 })).not.toMatch(/score|MW|claim_free_key/);
   });
   it('nothing honest to say: null', () => {
@@ -35,7 +35,7 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
     try {
       const c = ctx();
       const r = run(mk('rank_markets'), 'rank_markets', c), t = text(r), sc = r.structuredContent;
-      expect(t).toContain('`bind_email` with it shows all 10 markets in this ranking, free, up to ');
+      expect(t).toContain('`bind_email` with it shows all 10 markets in this ranking.');
       expect(t.indexOf('bind_email')).toBeLessThan(t.indexOf('After they pay'));
       expect(sc.user_message).not.toMatch(/email/);                  // human sentence unchanged
       expect(t).not.toMatch(/claim_free_key/);

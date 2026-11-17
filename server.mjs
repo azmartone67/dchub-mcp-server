@@ -16242,10 +16242,10 @@ function trimForTrial(parsed, toolName, _inRate = false) {
   if (typeof out.note === 'string'
       && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
       && Object.keys(out).some((k) => k.endsWith('_total_in_pro'))) {
-    out.note = 'Free tier preview — up to ' + TRIAL_PREVIEW_ROWS + ' rows shown per '
+    // option A (2026-11-17): no "free tier" / claim_free_key offer in the note; the relay instruction stays.
+    out.note = 'Preview — up to ' + TRIAL_PREVIEW_ROWS + ' rows shown per '
       + 'list; each list\'s full length is in its _<field>_total_in_pro sibling. '
-      + 'Call claim_free_key (no email) for the free tier, or relay the link in '
-      + 'human_url to your human for full results.';
+      + 'Relay the link in human_url to your human for full results.';
   }
   _keylessGridDataHonesty(out, toolName);
   return _alignReturnedCount(parsed, out, 'pro');

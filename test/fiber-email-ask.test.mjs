@@ -174,12 +174,12 @@ async function keyed(key, tool, args) {
 const line = AICAP_EMAIL_LINE_HEAD + fiberEmailClause({ perDay: CAP });
 
 describe('fiberEmailClause (pure)', () => {
-  it('asks for the email with bind_email, names the routes, their complete paths and the cap; no plan or price', () => {
+  it('asks for the email with bind_email, names the routes and their complete paths; no allowance, plan or price', () => {
     const c = fiberEmailClause({ perDay: CAP });
     expect(c.startsWith(RANK_EMAIL_ASK_LEAD)).toBe(true);           // the lead the lean step keeps
     expect(c).toContain('`bind_email`');
     expect(c).toContain('complete paths');
-    expect(c).toContain('up to ' + CAP + ' full answers a day');
+    expect(c).not.toMatch(/\ba day\b|free,/);   // option A (2026-11-17): no daily allowance
     expect(c).not.toMatch(/\bPro\b|\bDeveloper\b|\$\d/);
   });
   it('unknown cap: null', () => {

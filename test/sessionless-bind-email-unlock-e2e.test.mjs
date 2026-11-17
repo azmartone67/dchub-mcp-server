@@ -92,7 +92,7 @@ describe('sessionless keyless: wall -> bind_email -> X-API-Key retry -> full ans
     const wall = await call('rank_markets', {}, h);
     expect(wall.data.results.length).toBe(3);                                   // a real preview
     expect(wall.data._results_total_available).toBe(10);
-    expect(wall.text).toContain('`bind_email` with it shows all 10 markets in this ranking, free, up to 10 full rankings a day.');
+    expect(wall.text).toContain('`bind_email` with it shows all 10 markets in this ranking.');
 
     const bind = await call('bind_email', { email: EMAIL }, h);
     expect(claimBodies.map((b) => b && b.email)).toEqual([EMAIL]);              // the mint carried the email
@@ -115,7 +115,7 @@ describe('sessionless keyless: wall -> bind_email -> X-API-Key retry -> full ans
     const h = hdr();
     const wall = await call('ai_capacity_index', {}, h);
     expect(wall.data.markets.length).toBeLessThan(20);
-    expect(wall.text).toContain('`bind_email` with it shows all 20 markets in this index with their scores, free, up to 10 full answers a day.');
+    expect(wall.text).toContain('`bind_email` with it shows all 20 markets in this index with their scores.');
 
     const bind = await call('bind_email', { email: EMAIL }, h);
     expect(keyFrom(bind)).toBe(MINTED);
