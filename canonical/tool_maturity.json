@@ -5,7 +5,7 @@
     "coverage": "https://dchub.cloud/api/v1/canon/coverage",
     "capture_evidence": "https://dchub.cloud/api/v1/reports/canonical-benchmarks"
   },
-  "retrieved_at": "2026-11-09T13:42:57.941Z",
+  "retrieved_at": "2026-11-17T13:42:41.084Z",
   "contract_hash": "a4f6fc226ffb14c8",
   "version": 6,
   "source": "dchub-backend routes/problem_taxonomy.py",
@@ -534,9 +534,8 @@
     "source": "https://dchub.cloud/api/v1/reports/canonical-benchmarks",
     "captures_measured": 7,
     "captures_contracted": 7,
-    "last_successful_execution": "2026-11-09T07:27:51Z",
+    "last_successful_execution": "2026-11-16T07:47:21Z",
     "deferred_tools": [
-      "get_fiber_readiness",
       "plan_fiber_leadin"
     ],
     "means": "tools a real keyed capture RECORDED as a planned step and could not execute. Used only to DEMOTE a declared maturity, never to raise one."
