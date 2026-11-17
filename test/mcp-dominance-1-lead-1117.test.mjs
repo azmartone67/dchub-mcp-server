@@ -32,7 +32,7 @@ const EU_SHARES = { iso: 'EU_DE_LU', family: 'entsoe', demand_mw: null, newest_a
 const DE_SCOPE = { name: 'Germany', not_covered: 'grid headroom, interconnection queues and time-to-power' };
 
 describe('5.34: the planner version', () => {
-  it('is 5.34', () => { expect(PLANNER_VERSION).toBe('5.35'); });
+  it('is 5.34', () => { expect(PLANNER_VERSION).toBe('5.36'); });
 });
 
 describe('gap 2: one line per entity, never "ran N lookups" when a step returned a headline', () => {
