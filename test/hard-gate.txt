@@ -411,6 +411,7 @@ test/named-constraint-routing.test.mjs
 test/neiso-alias.test.mjs
 test/neutral-connect-free-tier.test.mjs
 test/neutral-connect-option-a.test.mjs
+test/neutral-connect-plan-steps.test.mjs
 test/news-footer.test.mjs
 test/next-call.test.mjs
 test/no-dxt-so-links.test.mjs
