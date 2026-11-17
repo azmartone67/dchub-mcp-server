@@ -20001,7 +20001,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it → 5.36 REGIONS AND TIME TO POWER: a region of one state (western Pennsylvania / western PA, read as Pittsburgh on PJM, and the corridor regions of 50 km or more such as Southern Nevada) asked with time to power routes to siting_search, reading the region\'s market card and find_sites over the region; time-to-power words after the size ("300 MW ... and how soon", "how soon can I get 100 MW") count as the ask; a market step left on its unbound placeholder covers no constraint, so a state ask adds the power timeline. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -20918,7 +20918,10 @@ export const _PLAN_CLASSES = [
       if (st || d.coords) {
         steps.push({ step: steps.length + 1, tool: 'find_sites', depends_on: [], estimated_calls: 1,
           why: `Candidate search areas${st ? ' in ' + st : ''} anchored on real substations, each with gas and fiber distance and its nearest tracked market. A search area is not a parcel.`,
-          args_hint: st ? { state: st } : { lat: d.coords.lat, lon: d.coords.lon } });
+          // 5.36: a region of the state ("western Pennsylvania") searches the region, not the state.
+          args_hint: (_planRegionScope(d) && !(d.__fanCount > 1))
+            ? { lat: d.placeScope.lat, lon: d.placeScope.lon, radius_km: d.placeScope.radius_km }
+            : (st ? { state: st } : { lat: d.coords.lat, lon: d.coords.lon }) });
       }
       // Three states already fill the default six steps with the two reads above, so the timeline
       // joins only when two or fewer states share the budget (__fanCount from _planStateFanout).
@@ -22020,6 +22023,11 @@ export const _CITY_ISO_META = {
   // DCPI market and led with "Enterprise". The regions name their metro.
   'southern nevada': { iso: 'WECC', slug: 'las-vegas-nv' },
   'northern nevada': { iso: 'WECC', slug: 'reno-nv' },
+  // 5.36 (Grok QA 2026-11-17): "where in western Pennsylvania can I get 300 MW ... and how soon" minted
+  // iso PJM alone; the market step ran skipped_unresolved and the answer listed eastern-PA markets.
+  // Pittsburgh is the one published DCPI market in western Pennsylvania, so the region names it.
+  'western pennsylvania': { iso: 'PJM', slug: 'pittsburgh-pa' },
+  'western pa': { iso: 'PJM', slug: 'pittsburgh-pa', re: /\bwestern\s+pa\b/i },
   'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
   sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
   'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
@@ -22631,6 +22639,9 @@ export const _PLAN_CORRIDOR_META = {
   'apex industrial park':  { label: 'Apex Industrial Park, NV',  state: 'NV', lat: 36.3600, lon: -114.9200, radius_km: 12, needs: 'NV' },
   'clark county':          { label: 'Clark County, NV',          state: 'NV', lat: 36.1716, lon: -115.1391, radius_km: 50, needs: 'NV' },
   'northern nevada':       { label: 'Northern Nevada (Reno-Sparks), NV', state: 'NV', lat: 39.5300, lon: -119.6200, radius_km: 50 },
+  // 5.36: western Pennsylvania (Pittsburgh west to Erie, east to Indiana County / Homer City).
+  'western pennsylvania':  { label: 'Western Pennsylvania, PA',  state: 'PA', lat: 40.7000, lon: -79.7000, radius_km: 150 },
+  'western pa':            { label: 'Western Pennsylvania, PA',  state: 'PA', lat: 40.7000, lon: -79.7000, radius_km: 150 },
   'reno':                  { label: 'Reno, NV',                  state: 'NV', lat: 39.5296, lon: -119.8138, radius_km: 20 },
   'sparks':                { label: 'Sparks, NV',                state: 'NV', lat: 39.5349, lon: -119.7527, radius_km: 10, needs: 'NV' },
   'tahoe reno industrial center': { label: 'Tahoe Reno Industrial Center, NV', state: 'NV', lat: 39.5450, lon: -119.4400, radius_km: 15 },
@@ -23347,7 +23358,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.35';
+export const PLANNER_VERSION = '5.36';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -24217,7 +24228,7 @@ const _CONSTRAINT_NOUNS = [
   // class that merely WEIGHED a verdict tool does not count as covering it (the Abilene plan's runner-up
   // led with one, so the ask was "considered" and never run).
   // B1 (2026-11-14): "how fast / how soon / how quickly can I get N MW of power" is the same ask in words.
-  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b|\bhow\s+(?:fast|soon|quickly)\b[^.?!]{0,60}\b(?:power|energi[sz]e|interconnect\w*)\b/i,
+  { key: 'dcpi_time_to_power', plannedOnly: true, re: /\b(dcpi|power\s+index|time[-\s]to[-\s]power|speed[-\s]to[-\s]power)\b|\bhow\s+(?:fast|soon|quickly)\b[^.?!]{0,60}(?:\b(?:power|energi[sz]e|interconnect\w*)\b|\d\s*(?:mw|gw)\b)|(?:\b(?:power|energi[sz]e|interconnect\w*)\b|\d\s*(?:mw|gw)\b)[^.?!]{0,80}\bhow\s+(?:fast|soon|quickly)\b/i,
     tools: ['get_market_dcpi_rank', 'get_power_availability_timeline', 'site_selection_canvas', 'rank_markets',
       'ai_capacity_index', 'grid_transition_radar', 'get_grid_intelligence', 'get_market_context',
       'get_iso_context', 'compare_isos', 'deal_autopsy', 'get_dchub_recommendation', 'simulate_scenario',
@@ -24521,6 +24532,10 @@ export const _SITING_STEALS = new Set(['capacity_search', 'power_timeline', 'fib
 // A one-market timing question ("how fast can 300 MW near Abilene TX get power") keeps its class.
 const _SITING_TTP_RE = /\b(?:time[-\s]to[-\s]power|how\s+(?:soon|fast|quickly|long)|energi[sz](?:e|ed|ation))\b/i;
 const _SITING_FASTER_RE = /\b(?:faster|fastest|quicker|quickest|sooner)\b/i;
+export function _planRegionScope(d) {
+  const ps = d && d.placeScope;
+  return !!(ps && ps.basis === 'corridor_table' && Number(ps.radius_km) >= 50);
+}
 export function _planOneStateTtpSiting(text, d) {
   try {
     const states = Array.isArray(d.states) ? d.states : [];
@@ -24528,7 +24543,9 @@ export function _planOneStateTtpSiting(text, d) {
     const one = states.length === 1 ? states[0] : (states.length === 0 ? (d.state || d.stateFromPlace || null) : null);
     if (!one || !_SITING_TTP_RE.test(String(text || ''))) return false;
     const named = Array.isArray(d.__namedMarkets) ? d.__namedMarkets : [];
-    return named.length >= 2 || _SITING_FASTER_RE.test(String(text || ''));
+    // 5.36: a region of the state ("western Pennsylvania", "Southern Nevada": a corridor-table area of
+    // 50 km or more) is a search over several places, like two named markets.
+    return named.length >= 2 || _planRegionScope(d) || _SITING_FASTER_RE.test(String(text || ''));
   } catch (_e) { return false; }
 }
 export function _planSitingEligible(text, d) {
@@ -24537,7 +24554,9 @@ export function _planSitingEligible(text, d) {
     const states = Array.isArray(d.states) ? d.states : [];
     if (!(typeof d.mw === 'number' && d.mw > 0)) return false;
     if (states.length < 2 && !_planOneStateTtpSiting(text, d)) return false;
-    if (d.comparePair || (Array.isArray(d.isos) && d.isos.length >= 2) || d.market || d.coords || d.candidateId) return false;
+    // 5.36: the centroid a region's place scope set is not a site the user gave.
+    const regionPoint = d.coords && _planRegionScope(d) && d.coords.lat === d.placeScope.lat && d.coords.lon === d.placeScope.lon;
+    if (d.comparePair || (Array.isArray(d.isos) && d.isos.length >= 2) || d.market || (d.coords && !regionPoint) || d.candidateId) return false;
     return _SITING_WORD_RE.test(String(text || '')) || !!(d.deadline && d.deadline.months);
   } catch (_e) { return false; }
 }
@@ -25374,7 +25393,14 @@ export function _planQuery(intent, context) {
         if (ru && ru.tool) consideredTools.push(ru.tool);
       } catch (_e) { /* an unbuildable runner-up simply is not considered */ }
     }
-    for (const cs of _constraintLeadSteps(text, d, consideredTools, seq.map((x) => x.tool))) {
+    // 5.36: a market step whose slug is still the "<the market named in the intent ...>" placeholder,
+    // on an intent that named no market, runs skipped_unresolved; it covers no constraint (live
+    // 2026-11-17: "300 MW in Pennsylvania, time to power?" ran no time-to-power step).
+    const unboundMarket = (x) => x && x.tool === 'get_market_dcpi_rank'
+      && /^<the market named/.test(String((x.args_hint || {}).market_slug || ''))
+      && !(d.__outlook && d.__outlook.slug) && !d.__citySlug
+      && !(Array.isArray(d.__namedMarkets) && d.__namedMarkets.length);
+    for (const cs of _constraintLeadSteps(text, d, consideredTools, seq.filter((x) => !unboundMarket(x)).map((x) => x.tool))) {
       seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
     }
   } catch (_e) { /* routing must never throw */ }
@@ -32498,11 +32524,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : 'all hand-offs resolved' });
         replay.decisions = [...(replay.decisions || []), ...cchecks];
         const statusByStep = new Map();
+        const noteByStep = new Map();
         for (const e of executed) {
           if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
+          if (e.status === 'not_run' && e.note) noteByStep.set(e.step, e.note);
         }
         for (const d of (replay.decisions || [])) {
           if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
+          // Grok midday re-run 2026-11-17, Q-f: the rationale is the plan's (e.g. "skipped when no facility row"); a
+          // step the budget cut says so beside it.
+          if (d.kind === 'step' && noteByStep.has(d.step)) d.status_note = noteByStep.get(d.step);
         }
       } catch (_e) {}
       // Move 3: fingerprint what this caller received, diff it against a presented rerun token.
@@ -32651,6 +32682,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         : _mixAnswer || _coloAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
+            state: (_sig && (_sig.state || _sig.stateFromPlace)) || null,
             states: (_sig && Array.isArray(_sig.states)) ? _sig.states.slice(0, _PLAN_STATE_FANOUT_CAP) : [] }, executed, fullByEntry);
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,

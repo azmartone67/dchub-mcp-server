@@ -17,7 +17,7 @@ const args = (p, tool) => p.recommended_sequence.filter((s) => s.tool === tool).
 const ex = (step, tool, a, result) => ({ step, tool, args: a, status: 'executed', result });
 
 describe('5.35', () => {
-  it('PLANNER_VERSION is 5.35', () => { expect(PLANNER_VERSION).toBe('5.35'); });
+  it('PLANNER_VERSION is 5.35 or later (5.36)', () => { expect(PLANNER_VERSION).toBe('5.36'); });
 });
 
 describe('gap 1: generation mix', () => {
