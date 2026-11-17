@@ -1,4 +1,4 @@
-// plan-colocation-eval-1117.test.mjs — three fixes from Grok's colocation eval of execute_plan (2026-11-17), live
+// plan-colocation-review-1117.test.mjs — three fixes from Grok's colocation review of execute_plan (2026-11-17), live
 // on 2.12.59 keyless:
 //   1. Capacity Source (failed 12 of 12): block 0's JSON and structuredContent still carried
 //      capacity_source.register_call -> request_capacity_intro, "Registers this requirement (no slug) ...", and a

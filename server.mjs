@@ -22990,7 +22990,7 @@ export function _planSignals(intent, context) {
   // colocation word is in the text (lib/colocation-plan.mjs).
   const __colo = _coloSignals(text, { market, mw });
   const __facMetro = _facilityMetroArgs(text, market);
-  // Grok colocation eval (2026-11-17): "colocation in Ashburn" binds a corridor POINT, so scopeWidened above stays
+  // Grok colocation review (2026-11-17): "colocation in Ashburn" binds a corridor POINT, so scopeWidened above stays
   // null, yet the metro facility search takes no point: it reads query + state (search_facilities has no radius
   // and one `city`, and Northern Virginia is eight). Say so the way "Northern Virginia", Dallas, Atlanta and
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
@@ -25570,7 +25570,7 @@ function _sourceLineCb(name, fn) {
       // keeps its own copy). Kill switch DCHUB_NEUTRAL_CONNECT=0.
       _final = _neutralConnectStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
         || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || _planCallerPaid(c) });
-      // Grok colocation eval (2026-11-17, "lead length" 12 of 12): execute_plan's block 0 is a plain-language answer
+      // Grok colocation review (2026-11-17, "lead length" 12 of 12): execute_plan's block 0 is a plain-language answer
       // of at most 600 characters, and the plan's JSON moves to block 1 unchanged (structuredContent unchanged too).
       // A deliberate change to the block-0-is-JSON contract, for execute_plan only (lib/plan-lead-text.mjs). After
       // every rewrite, so nothing above re-reads block 0. Same skips as the fact header; compact:false or
@@ -32650,7 +32650,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (out.replay && _final.replay === undefined) { const _cr = _compactReplay(out.replay); if (_cr) _final.replay = _cr; }
         } catch (_e) { _final = out; }   // never lose the answer to its own shortening
       }
-      // Option A (owner 2026-11-16; Grok colocation eval 2026-11-17, 12 of 12): no register call, register_interest
+      // Option A (owner 2026-11-16; Grok colocation review 2026-11-17, 12 of 12): no register call, register_interest
       // or "registers this requirement" rides the plan through its steps either; each capacity_source block carries
       // the teaser instead (lib/plan-capacity-teaser.mjs). Before the stringify, so both copies match.
       _final = _planCapacityTeaserOnly(_final);
