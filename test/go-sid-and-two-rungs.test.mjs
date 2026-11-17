@@ -132,14 +132,14 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       // v14 (owner 2026-10-10): the rungs are described, never named, priced or given a call count;
       // the checkout page shows all three.
       expect(text).toContain('**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**');
-      expect(text).toContain('**a paid DC Hub plan for agents**');
+      expect(text).toContain('**full depth for agents**');
       expect(text).not.toMatch(/\$\d/);
       expect(text).not.toMatch(/\b(Developer|Pro|Starter)\b/);
       expect(text).not.toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
       // The plan with every tool is not the agent default: a tool the agent plan opens never names it.
-      expect(text).not.toContain('**the DC Hub plan with every tool**');
+      expect(text).not.toContain('**every DC Hub tool**');
       expect(text.indexOf('a one-time pack')).toBeLessThan(text.indexOf(go[0]));
-      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**a paid DC Hub plan for agents**'));
+      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**full depth for agents**'));
     });
   });
 
@@ -175,7 +175,7 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
         const go = text.match(GO_RE);
         expect(go, tool).toHaveLength(1);
         expect(fields(go[0], GO).parts, tool).toEqual(['pro', SID]);
-        expect(text, tool).toContain('**the DC Hub plan with every tool**');   // v14: the Pro rung, unnamed
+        expect(text, tool).toContain('**every DC Hub tool**');   // Note V 11-16: the Pro rung, by what it returns
         expect(text, tool).not.toMatch(/\b(Developer|Pro)\b/);
         expect(text, tool).not.toContain('one-time pack');
       });

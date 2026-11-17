@@ -200,12 +200,14 @@ describe('the constants that used to be typed as CTAs', () => {
       .toHaveLength(1);
   });
 
-  it('UPGRADE_URL is still a fragment link — which is why it is not a CTA', () => {
-    // Pinned so the reason stays legible: everything after '#' is the
-    // fragment, so ?ref= glued after it never reaches a server. The constant
-    // survives as the fail-open of last resort and as the informational
-    // pricing anchor; it must not come back as an unlock.
-    expect(UPGRADE_URL).toContain('#');
+  it('UPGRADE_URL is the neutral front door, not the dead /ai#pricing anchor', () => {
+    // Note V keyed follow-up (owner 2026-11-16): /ai has no #pricing anchor
+    // (fe#2337), so the old default was a dead link. The constant is now
+    // /connect with no fragment, so a ?via=/src= query appended to it reaches
+    // the server. It must still not come back as an unlock (next test).
+    expect(UPGRADE_URL).toBe('https://dchub.cloud/connect');
+    expect(UPGRADE_URL).not.toContain('#');
+    expect(UPGRADE_URL).not.toMatch(/\/ai\b|pricing/);
   });
 
   it('no gated composer emits it', () => {

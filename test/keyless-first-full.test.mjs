@@ -380,10 +380,11 @@ describe('G) the relay line says "free-tier limit" only when a limit was hit', (
       expect(line).toMatch(/^Your AI assistant hit DC Hub’s limit on get_grid_data; free: 50 MCP calls\/day with an email$/);   // owner 2026-11-15
     });
   }
-  it('a caller with an email on file is not told to add one; a paid boundary is unchanged', () => {
+  it('a caller with an email on file is not told to add one; a paid boundary reads as the end of the preview', () => {
     expect(S._ctxALS.run(seat({ api_key: 'k', email: 'a@example.com' }), () => S._relayLead('get_grid_intelligence', {})))
       .toBe('Your AI assistant got a preview of get_grid_intelligence from DC Hub');
-    expect(S._ctxALS.run(seat(), () => S._relayLead('analyze_site', {}))).toBe('Your AI assistant hit DC Hub’s paid data boundary on analyze_site');
+    // Note V keyed follow-up (owner 2026-11-16): the paid boundary reads as the end of the preview, no "paid".
+    expect(S._ctxALS.run(seat(), () => S._relayLead('analyze_site', {}))).toBe('Your AI assistant reached the end of the DC Hub preview on analyze_site');
   });
 });
 

@@ -28,7 +28,7 @@ describe('continuationHumanText — the content half of the human line', () => {
   it('leads with what the human ALREADY got, then the offer', () => {
     const line = continuationHumanText(FULL);
     expect(line).toMatch(/^your agent got 5 of 47/);
-    expect(line.indexOf('got 5 of 47')).toBeLessThan(line.indexOf('paid layer'));
+    expect(line.indexOf('got 5 of 47')).toBeLessThan(line.indexOf('full DC Hub answer'));
   });
 
   it('carries the numbers that make it worth repeating verbatim', () => {

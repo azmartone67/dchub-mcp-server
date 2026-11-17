@@ -159,7 +159,7 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     r = await analyzeSite(c.path, { key: c.key, ua: c.path === '/mcp/grok' ? 'Grok/1.0' : 'claude-user' });
   });
 
-  it('is the Pro-only wall, carrying the trial link (the check below is not vacuous)', () => {
+  it('is the Pro-only wall, carrying its one link (the check below is not vacuous)', () => {
     const sc = r.structuredContent;
     if (c.email === '1') {
       // Keyless with the email unlock on: the gated_preview (conversion panel 2026-10-11), a
@@ -186,17 +186,18 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     const link = sc.human_url || (sc.for_your_human && sc.for_your_human.url);
     expect(link).toMatch(c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
       : /^https:\/\/dchub\.cloud\/u\/abcdef$/);
-    // The text an agent reads offers the trial with that link.
+    // The text an agent reads carries that link. Note V keyed follow-up (owner 2026-11-16): no trial and no plan
+    // wording, keyless and keyed alike (was "offers the trial with that link").
     const text = r.content.map((b) => b.text || '').join('\n');
     expect(text).toContain(link);
-    expect(text).toMatch(/7-day (free )?trial/);
+    expect(text).not.toMatch(/7-day|\btrial\b|paid plan|paid DC Hub/i);
     // Item 1 leftover (2026-10-17): the neutral partial line on /mcp and the pack paths.
     expect(sc.agent_message.startsWith('This result is partial: some fields are not included at this access level. When a result is partial')).toBe(true);
     // The person's line, on the arms that write one (the paywall-contract arm leads with its own
     // "Tell the user:" sentence instead).
     if (sc.user_message !== undefined) {
-      expect(sc.user_message).toMatch(/DC Hub's paid plan has the full site analysis for this location: .+\. Start a 7-day trial: https:\/\/\S+$/);
-      expect(sc.user_message.endsWith(link)).toBe(true);
+      expect(sc.user_message).toMatch(/This preview leaves out the full site analysis for this location: .+\. Open https:\/\/\S+ to see what your agent found(?:, or reply with your email for a free DC Hub key)?\.$/);
+      expect(sc.user_message).toContain('Open ' + link + ' to see what your agent found');
     }
     // Keyless: the wall leads with the person's line (r-wall-user-line).
     if (!c.key) {

@@ -121,7 +121,7 @@ describe.each(CASES.map((c) => [label(c), c]))('unlock_more_data response, %s', 
     // With the relay on, the one-link step still folds the unpriced pack rung into the plans page
     // (its regex knows both spellings), so the ladder line carries one link.
     if (c.relay === '1' && !c.reason) {
-      expect(sc.user_message).toMatch(/^\*\*the plans that include the full answer\*\* → https:\/\/dchub\.cloud\/upgrade\/h\//);
+      expect(sc.user_message).toMatch(/^\*\*the full answer\*\* → https:\/\/dchub\.cloud\/upgrade\/h\//);
       expect(sc.human_message).not.toContain('credits don’t expire →');
     }
   });

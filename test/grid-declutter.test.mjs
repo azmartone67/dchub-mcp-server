@@ -89,7 +89,7 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       expect(t).not.toContain('Next question to offer the user');
       expect(sc.optin_cta).toBeUndefined();
       if (pc) expect(sc.next_ask && sc.next_ask.tool).toBeTruthy();   // stays in structuredContent (v1's stub is error-flagged, so no outreach)
-      expect(sc.user_message).toMatch(/plans that include the full/);
+      expect(sc.user_message).toMatch(/ is not in this preview; see what your agent found: /);
       // Item 8 (owner 2026-10-16): the free answer's closing Source line is a bare citation line too.
       // Item 9 (owner 2026-11-11): the identity footer is a bare closing line too (no link, no ask), one line after the citation.
       expect(r.content[r.content.length - 1].text).toBe(PREVIEW_FOOTER);

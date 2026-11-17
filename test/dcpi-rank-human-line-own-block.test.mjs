@@ -81,12 +81,14 @@ describe('keyless get_market_dcpi_rank', () => {
     const up = JSON.parse(r.content[0].text)._upgrade.message;
     expect(up).toMatch(/^This answer hid /);                       // control: the missed-field sentence is there
     expect(up).not.toMatch(/\$10 pack|1,000 API credits/);          // and does not tie the pack to those fields
-    // Owner 2026-10-31 ("Pro only"): the pack no longer opens these fields, so the rung named is
-    // Pro by its link ("the DC Hub plan that includes every tool"), never the pack.
-    expect(up).toMatch(/the DC Hub plan that includes every tool/);
+    // Owner 2026-10-31 ("Pro only"): the pack no longer opens these fields, never the pack. Note V keyed follow-up
+    // (owner 2026-11-16): the rung reads as the neutral partial line on /mcp, no plan named.
+    expect(up).toMatch(/This result is partial: some fields are not included at this access level/);
+    expect(up).not.toMatch(/\bplans?\b|paid|trial/i);
     const line = r.content.find((b) => b.text.includes('→ **For your human:**')).text;
     expect(line, 'the line names what was hidden (control that the clause path ran)').toMatch(/this answer hid/);
-    expect(line).toMatch(/the plans that return them are on the page behind the link|the lowest plan that returns them is DC Hub (Developer|Pro)|the lowest plan that returns them is the DC Hub plan with every tool|a free DC Hub key/);
+    expect(line).toMatch(/; those fields are withheld from this answer|; a free DC Hub key returns them/);
+    expect(line).not.toMatch(/\bplans?\b|paid|trial/i);
   });
 
   it('the relay line and _upgrade.message name the same hidden fields (a marker with no figure behind it is counted by neither)', async () => {

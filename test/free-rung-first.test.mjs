@@ -85,7 +85,7 @@ describe('siteHeadlineHeader — the order an agent reads', () => {
   it('keeps the ladder that opens the tool — free, then Pro, and no $10 rung', () => {
     const h = withCtx({ session_id: SID }, () => siteHeadlineHeader('analyze_site', SID));
     const free = h.indexOf('claim_free_key');
-    const pro = h.indexOf('**the DC Hub plan with every tool**');   // v14: the Pro rung, unnamed
+    const pro = h.indexOf('**every DC Hub tool**');   // Note V 11-16: the Pro rung, by what it returns
     expect(pro, 'the Pro rung vanished').toBeGreaterThan(-1);
     expect(h, 'the pack does not open a Pro-only tool').not.toContain('one-time pack');
     expect(free).toBeLessThan(pro);

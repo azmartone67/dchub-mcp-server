@@ -312,7 +312,8 @@ describe('kill switch DCHUB_SITE_EMAIL_UNLOCK=0: the earlier wall', () => {
     expect(r.sc.site_teaser).toBeUndefined();
     expect(r.sc.unlock_kind).toBeUndefined();
     expect(r.text).not.toContain('free by email');
-    expect(r.sc.user_message).toMatch(/^DC Hub's paid plan has the full site analysis for this location.*Start a 7-day trial: /);
+    // Note V keyed follow-up (2026-11-16): the Pro wall line names no plan or trial.
+    expect(r.sc.user_message).toMatch(/^This preview leaves out the full site analysis for this location.*\. Open \S+ to see what your agent found/);
     expect(r.signals.map((s) => s.message_shown)).toContain('lp_wall');
     expect(r.signals.map((s) => s.message_shown)).not.toContain('lp_wall_email');
     expect(r.siteHits).toBe(0);

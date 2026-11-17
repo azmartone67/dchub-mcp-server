@@ -179,7 +179,9 @@ describe('tools/call OUTPUT: no monthly price on any /mcp tool', () => {
         const body = String(r.body || '');
         seen.calls++;
         if (body.includes(PLANTED_BACKEND_NOTE)) seen.plant++;
-        if (/behind this link, with a 7-day free trial/.test(body)) seen.relayArm++;   // offerText('pro'), note K item 8 (was v13's "on a paid DC Hub plan ...")
+        // Note V keyed follow-up (2026-11-16): offerText('pro') no longer names a trial; the Pro arm is the one whose
+        // agent hint says not to retry (proRetryHint, lib/paywall-contract.mjs).
+        if (/this call returns no more at this access level, so do not retry it now/.test(body)) seen.relayArm++;   // offerText('pro'), note K item 8 (was v13's "on a paid DC Hub plan ...")
         if (/\/go\/c\/|\/upgrade\/h\//.test(body)) seen.walls++;
         const m = body.split(PLANTED_BACKEND_NOTE).join('').match(MONTHLY);
         if (m) {

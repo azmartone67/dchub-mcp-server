@@ -152,7 +152,7 @@ describe('F7: no content text carries the VERBATIM directive; the line rides as 
     expect(contentText(r)).not.toMatch(DIRECTIVE);
     expect(r.structuredContent.user_message).toBe(humanLine(r.structuredContent.human_message));
     // Grok audit 2026-10-08 (one link per wall): the ladder line points at the page.
-    expect(r.structuredContent.user_message).toMatch(/the plans that include the full answer/);
+    expect(r.structuredContent.user_message).toMatch(/the full answer\*\* →/);
     expect(r.structuredContent.show_to_user).toBe(true);
   });
 

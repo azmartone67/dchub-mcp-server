@@ -19,9 +19,9 @@ describe('_stampProWall', () => {
     const sc = result.structuredContent;
     expect(sc._wall).toBe(true);
     expect(sc.required_plan).toBe('pro');
-    expect(sc.user_message).toContain("DC Hub's paid plan");
-    expect(sc.user_message).toContain('7-day trial');
-    expect(sc.user_message).not.toMatch(/\bPro\b/);
+    // Note V keyed follow-up (owner 2026-11-16): the line names no plan and no trial.
+    expect(sc.user_message).toMatch(/^This preview leaves out .+\. Open https:\/\/dchub\.cloud\/upgrade\/h\/abc to see what your agent found\.$/);
+    expect(sc.user_message).not.toMatch(/\bPro\b|paid|trial|\bplan\b/i);
     expect(sc.agent_message.startsWith('This result is partial: some fields are not included at this access level. ')).toBe(true);   // item 1 leftover (2026-10-17)
     expect(sc.agent_message).not.toMatch(/\bPro\b/);
     expect(sc.user_message).toContain('https://dchub.cloud/upgrade/h/abc');
@@ -29,14 +29,19 @@ describe('_stampProWall', () => {
     expect(JSON.parse(result.content[0].text)._wall).toBe(true);
     expect(JSON.stringify(sc)).not.toMatch(/\$\d/);
   });
-  it('keeps a compliant user_message and for_your_human, replaces one that names neither the paid plan nor the trial', () => {
-    const good = "DC Hub's paid plan has the report. Start a 7-day trial: https://u.test/1";
+  it('keeps a compliant user_message and for_your_human, replaces one that is not the neutral line', () => {
+    const good = 'This preview leaves out the report. Open https://u.test/1 to see what your agent found.';
     const keep = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: good,
       for_your_human: { text: good, url: 'https://u.test/1' } }), 'analyze_site', {}).result.structuredContent;
     expect(keep.user_message).toBe(good); expect(keep.for_your_human.text).toBe(good);
     const fix = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: 'open the link',
       for_your_human: { text: 'see what I found', url: 'https://u.test/2' } }), 'analyze_site', {}).result.structuredContent;
-    expect(fix.user_message).toContain("DC Hub's paid plan"); expect(fix.user_message).toContain('7-day trial: https://u.test/2');
+    expect(fix.user_message).toBe('This preview leaves out the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost. Open https://u.test/2 to see what your agent found.');
+    // the pre-Note-V line (paid plan + trial) is no longer compliant: it is replaced too
+    const old = "DC Hub's paid plan has the report. Start a 7-day trial: https://u.test/4";
+    const fix2 = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: old,
+      for_your_human: { text: old, url: 'https://u.test/4' } }), 'analyze_site', {}).result.structuredContent;
+    expect(fix2.user_message).toMatch(/^This preview leaves out .+\. Open https:\/\/u\.test\/4 to see what your agent found\.$/);
     expect(fix.for_your_human.url).toBe('https://u.test/2'); expect(fix.for_your_human.text).toBe(fix.user_message);
   });
   it('v13: replaces a line that still names the plan (the v12 spelling), even though it names the trial', () => {
@@ -44,7 +49,7 @@ describe('_stampProWall', () => {
     const fix = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: v12,
       for_your_human: { text: v12, url: 'https://u.test/3' } }), 'analyze_site', {}).result.structuredContent;
     expect(fix.user_message).not.toBe(v12);
-    expect(fix.user_message).toMatch(/^DC Hub's paid plan has .+\. Start a 7-day trial: https:\/\/u\.test\/3$/);
+    expect(fix.user_message).toMatch(/^This preview leaves out .+\. Open https:\/\/u\.test\/3 to see what your agent found\.$/);
     expect(fix.for_your_human.text).toBe(fix.user_message);
   });
   it('leaves a full Pro answer alone', () => {
@@ -62,10 +67,11 @@ describe('_stampProWall', () => {
     expect(result.content[0].text).toBe('{"a":1}\n\nprose');
     expect(result.structuredContent._wall).toBe(true);
   });
-  it('copy names the paid plan and the 7-day trial, with no plan name and no price', () => {
+  it('copy names no plan, no trial and no price (Note V keyed follow-up)', () => {
     for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation', 'generate_site_analysis', 'export_dataset']) {
       const m = proWallUserMessage(t, 'https://x.test/l') + ' ' + proWallAgentMessage(t);
-      expect(m).toContain("DC Hub's paid plan"); expect(m).toContain('This result is partial: some fields are not included at this access level.'); expect(m).toContain('7-day trial');
+      expect(m).toContain('This preview leaves out '); expect(m).toContain('This result is partial: some fields are not included at this access level.');
+      expect(m).not.toMatch(/paid|trial|\bplan\b/i);
       expect(m).not.toMatch(/\$\d/); expect(m).not.toMatch(/\bPro\b/);
     }
   });
@@ -77,22 +83,23 @@ describe('handler wiring', () => {
   });
 });
 
-describe('item 2: every Pro wall arm names the paid plan and the 7-day trial, with no plan name or price (v13)', () => {
+describe('item 2: every Pro wall arm says what the preview leaves out, with no plan, trial or price (Note V keyed follow-up)', () => {
   it('the person line, for each Pro-only tool', async () => {
     const W = await import('../lib/wall-user-line.mjs');
     for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation', 'generate_site_analysis', 'export_dataset']) {
       const line = W.userLineText({ tool: t, offer: 'pro', link: 'https://dchub.cloud/u/abc234', headline: null });
-      expect(line, t).toContain("DC Hub's paid plan has ");
-      expect(line, t).toContain('Start a 7-day trial: https://dchub.cloud/u/abc234');
+      expect(line, t).toContain('This preview leaves out ');
+      expect(line, t).toContain('. Open https://dchub.cloud/u/abc234 to see what your agent found.');
+      expect(line, t).not.toMatch(/paid|trial|\bplan\b/i);
       expect(line, t).not.toMatch(/\bPro\b/);
       expect(line, t).not.toMatch(/\$\d|unlock/i);
     }
   });
-  it('the relay link label on a Pro tool names the paid plan and the trial for Claude and Grok alike, no plan name', async () => {
+  it('the relay link label on a Pro tool names no plan and no trial for Claude and Grok alike', async () => {
     const S = await import('../server.mjs');
     for (const p of ['claude', 'grok', 'chatgpt', '']) {
       const l = S._relayLinkLabel(p, 'analyze_site');
-      expect(l, p).toMatch(/DC Hub|paid plan/); expect(l, p).toMatch(/7-day (DC Hub |free )?trial/); expect(l, p).not.toMatch(/\$\d/);
+      expect(l, p).toMatch(/DC Hub/); expect(l, p).not.toMatch(/paid|trial|\bplan\b/i); expect(l, p).not.toMatch(/\$\d/);
       expect(l, p).not.toMatch(/\bPro\b/);
     }
   });

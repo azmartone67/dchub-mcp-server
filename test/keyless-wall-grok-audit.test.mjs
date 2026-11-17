@@ -120,7 +120,9 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
     const md = r.structuredContent.for_your_human.markdown;
     expect(typeof md, 'no markdown: the check below would be vacuous').toBe('string');
     expect(md).not.toContain('$10');
-    expect(md).toContain('paid plan, 7-day trial');
+    // Note V keyed follow-up (owner 2026-11-16): the label names what the link opens, no plan or trial.
+    expect(md).toContain('[Get the full DC Hub analysis behind this answer]');
+    expect(md).not.toMatch(/paid|trial|plan/i);
     expect(md).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
   });
 
@@ -153,8 +155,10 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
     expect(S.GROK_RELAY_LABEL_DEV).not.toContain('$');
     expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('grok')).toBe(S.GROK_RELAY_LABEL);
-    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[Start a 7-day DC Hub trial]');
-    expect(S.GROK_RELAY_LABEL_PRO).toBe('[Get the full DC Hub analysis behind this answer — paid plan, 7-day trial]');
+    // Note V keyed follow-up (owner 2026-11-16): no plan or trial in any label.
+    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[Open DC Hub: see what I found]');
+    expect(S.GROK_RELAY_LABEL_PRO).toBe('[Get the full DC Hub analysis behind this answer]');
+    expect(S.GROK_RELAY_LABEL).toBe('[Get the full DC Hub numbers behind this answer]');
     expect(S._relayLinkLabel('claude', 'get_facility')).toBe('[Open DC Hub: see what I found]');
   });
 });
@@ -165,7 +169,8 @@ describe('F8: the keyless Pro hint says who acts first', () => {
     const r = await call('analyze_site', LOC, seat(GROK));
     const h = r.structuredContent.agent_hints.summary;
     expect(h.startsWith('Pro opens this tool; retry')).toBe(false);
-    expect(h).toMatch(/^after your user starts a paid DC Hub plan, retry the same call; until then use the free headline above\./);
+    // Note V keyed follow-up (owner 2026-11-16): the hint names no plan; it still says do not retry now.
+    expect(h).toMatch(/^this call returns no more at this access level, so do not retry it now; use the free headline above and show your user the link in human_url\./);
     expect(contentText(r)).toContain('(agent: ' + h + ')');
     expect(contentText(r)).toMatch(/Free headline: weakest factor /);   // the headline it points at is there
   });
@@ -173,7 +178,7 @@ describe('F8: the keyless Pro hint says who acts first', () => {
   it('a Pro wall with no headline does not point at one', async () => {
     const r = await call('get_dchub_recommendation', {}, seat(GROK));
     const h = r.structuredContent.agent_hints.summary;
-    expect(h).toMatch(/^after your user starts a paid DC Hub plan, retry the same call\. /);
+    expect(h).toMatch(/^this call returns no more at this access level, so do not retry it now; show your user the link in human_url\. /);
     expect(h).not.toContain('headline');
   });
 });

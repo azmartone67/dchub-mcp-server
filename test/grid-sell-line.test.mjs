@@ -34,7 +34,7 @@ describe('gridSellLine (pure)', () => {
     'grid_emergencies_30d', 'retail_price_cents_kwh'];
   it('never quotes a sub-score band as a rating (verdicts come from the DCPI composite only)', () => {
     const exp = 'This free DC Hub preview of ERCOT hides queue depth, time to power, '
-      + 'the constraint and excess power scores and 30-day grid emergencies. The plans that include the full ERCOT brief are on this page: ' + URL1;
+      + 'the constraint and excess power scores and 30-day grid emergencies. The full ERCOT brief is not in this preview; see what your agent found: ' + URL1;
     for (const bands of [{ constraint: 'BUILD', excess: 'BUILD' }, { constraint: 'CAUTION', excess: 'BUILD' }, {}, undefined]) {
       const s = gridSellLine({ iso: 'ERCOT', bands, withheld: ALL.slice(0, 5), url: URL1 });
       expect(s).toBe(exp);
@@ -68,14 +68,14 @@ describe('gridSellLine (pure)', () => {
     const u = 'https://dchub.cloud/upgrade/h/x.y?buy=1';
     const s = fiberSellLine({ place: 'ashburn', hid: 'the total', url: u, shown: 3, total: 500, truncated: true, geom: true });
     expect(s).toBe('This free DC Hub fiber preview of Ashburn shows 3 of at least 500 routes, each with its path cut short. '
-      + 'The full fiber answer returns all of them with complete route geometry. The plans that include it are on this page: ' + u);
+      + 'The full fiber answer returns all of them with complete route geometry. It is not in this preview; see what your agent found: ' + u);
     expect(s).not.toMatch(/—|carrier|capacity/i);
     expect(fiberSellLine({ place: 'ashburn', hid: 'x', url: u, shown: 3, total: 12, truncated: false, geom: false }))
-      .toContain('shows 3 of 12 routes. The full fiber answer returns all of them. The plans that include it are on this page: ');
+      .toContain('shows 3 of 12 routes. The full fiber answer returns all of them. It is not in this preview; see what your agent found: ');
     expect(fiberSellLine({ place: 'ashburn', hid: 'x', url: u, shown: 3, total: 3, geom: true })).toContain('shows only some routes, each with its path cut short');
     // No markers: the old sentence, unchanged.
     expect(fiberSellLine({ place: 'ashburn', hid: 'the total', url: u }))
-      .toBe('This free DC Hub fiber preview of Ashburn hides the total. The plans that include the full fiber answer are on this page: ' + u);
+      .toBe('This free DC Hub fiber preview of Ashburn hides the total. The full fiber answer is not in this preview; see what your agent found: ' + u);
     expect(fiberSellLine({ place: 'ashburn', url: u })).toBeNull();
   });
   it('agent line: no free-allowance claim, no em dash', () => {
@@ -148,7 +148,7 @@ describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])
       const r = await grid(seat());
       const t = text(r), sc = r.structuredContent;
       const s = sc.user_message;
-      expect(s).toMatch(/ERCOT/); expect(s).toContain('The plans that include the full ERCOT brief are on this page: '); expect(s).not.toMatch(/\$10/);
+      expect(s).toMatch(/ERCOT/); expect(s).toContain('The full ERCOT brief is not in this preview; see what your agent found: '); expect(s).not.toMatch(/\$10/);
       expect(s).toMatch(/constraint/); expect(s).not.toMatch(/—/);
       expect(s).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s]+[?&]buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
       expect(sc.for_your_human.text).toBe(s);
@@ -314,7 +314,7 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     await S._ctxALS.run(s, () => S._goToolMark('get_fiber_intel', { metro: 'ashburn' }));
     const r = await callTool('get_fiber_intel', { metro: 'ashburn' }, s);
     const t = text(r), um = r.structuredContent.user_message;
-    expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The plans that include the full fiber answer are on this page: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
+    expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The full fiber answer is not in this preview; see what your agent found: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
     // Item 9 (owner 2026-11-11): the wall's own copy has no em dash; the fixed identity footer that closes it does.
     expect(um + t.slice(t.indexOf('get_fiber_intel returned')).replace(PREVIEW_FOOTER, '')).not.toMatch(/—/);
     expect(t).not.toMatch(/the lowest plan that returns them|payer checks out|Developer|claim_free_key/);
@@ -336,19 +336,21 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
       structuredContent: { preview_is_partial: true, metro: 'ashburn', features: [feat, feat, feat], _features_total_in_pro: 500, _truncated: true,
         for_your_human: { url: 'https://dchub.cloud/upgrade/h/a.b' } } }, 'get_fiber_intel');
     expect(T.structuredContent.user_message).toBe('This free DC Hub fiber preview of Ashburn shows 3 of at least 500 routes, each with its path cut short. '
-      + 'The full fiber answer returns all of them with complete route geometry. The plans that include it are on this page: https://dchub.cloud/upgrade/h/a.b?buy=1');
+      + 'The full fiber answer returns all of them with complete route geometry. It is not in this preview; see what your agent found: https://dchub.cloud/upgrade/h/a.b?buy=1');
   });
   it('when the gate names nothing it hid, the sentence says only that it is a preview', async () => {
     const T = S._gridSellStep({ content: [{ type: 'text', text: '{}\n\n→ **For your human:** open https://dchub.cloud/upgrade/h/a.b to see what your agent found.\n\n' }],
       structuredContent: { preview_is_partial: true, metro: 'ashburn', for_your_human: { url: 'https://dchub.cloud/upgrade/h/a.b' } } }, 'get_fiber_intel');
-    expect(T.structuredContent.user_message).toBe('This free DC Hub fiber preview of Ashburn hides part of the full answer. The plans that include the full fiber answer are on this page: https://dchub.cloud/upgrade/h/a.b?buy=1');
+    expect(T.structuredContent.user_message).toBe('This free DC Hub fiber preview of Ashburn hides part of the full answer. The full fiber answer is not in this preview; see what your agent found: https://dchub.cloud/upgrade/h/a.b?buy=1');
   });
   it('kill switch DCHUB_GRID_SELL_LINE=0 restores the old fiber wall', async () => {
     const off = env('DCHUB_GRID_SELL_LINE', '0');
     try {
       const t = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, seat()));
-      // Grok audit 2026-10-08 item 2: the fiber rows are Developer's, so the old wall names Developer.
-      expect(t).toMatch(/the lowest plan that returns them is a paid DC Hub plan/);
+      // Grok audit 2026-10-08 item 2: the fiber rows are Developer's. Note V keyed follow-up (owner 2026-11-16): the old
+      // wall's clause names no plan now ("; those fields are withheld from this answer").
+      expect(t).toMatch(/this answer hid .+; those fields are withheld from this answer/);
+      expect(t).not.toMatch(/lowest plan|paid DC Hub plan/);
       expect(t).not.toContain('buy=1');
     } finally { off(); }
   });
