@@ -704,8 +704,9 @@ describe('planner routing', () => {
     // routes to dc_capacity (pipeline, facilities, the power timeline as backup) instead of power_timeline.
     ['available data center capacity to buy in Dallas by 2027', 'dc_capacity', 'get_pipeline',
       ['get_pipeline', 'search_facilities', 'get_power_availability_timeline'], { state: 'TX', available_by: '2027-12' }],
-    ['turnkey colocation space 5 MW Phoenix', 'facility_search', 'search_facilities',
-      ['search_facilities', 'get_facility'], { state: 'AZ', min_mw: 5 }],
+    // 5.32: a colocation ask is the colocation class (the metro's DCPI card leads); was facility_search.
+    ['turnkey colocation space 5 MW Phoenix', 'colocation', 'get_market_dcpi_rank',
+      ['get_market_dcpi_rank', 'search_facilities', 'get_power_availability_timeline', 'get_facility'], { state: 'AZ', min_mw: 5 }],
   ];
   const CONTROLS = [
     'find 100 MW of buildable capacity near Dallas',
