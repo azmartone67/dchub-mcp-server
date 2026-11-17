@@ -145,7 +145,7 @@ describe('Q-f: a named address is the facility asked about; fiber facts lead', (
     const gf = seq.filter((s) => s.tool === 'get_facility');
     expect(gf).toHaveLength(1);
     expect(gf[0].depends_on).toEqual([addr.step]);
-    expect(seq.map((s) => s.tool)).toEqual(expect.arrayContaining(['get_metro_fiber', 'get_fiber_readiness']));
+    expect(seq.map((s) => s.tool)).toEqual(expect.arrayContaining(['get_metro_fiber', 'get_peering_intel']));
   });
   it('the headline is the key-endpoint and on-net facts, then the DCPI verdict', () => {
     const cs = coloSignals(q, {});
