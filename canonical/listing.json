@@ -1,6 +1,6 @@
 {
   "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. First live refresh 2026-10-09 (seed was Grok refresh-oct9 listing-copy.md; values were identical).",
-  "as_of": "2026-11-15T13:43:02Z",
+  "as_of": "2026-11-17T13:42:36Z",
   "auth": "None required to start (previews); claim_free_key returns a free key in one call; OAuth 2.0 supported",
   "canon_version": "1.0.0",
   "capacity_blurb": "Capacity Source by DC Hub: operators and brokers list available data-center capacity free; buyers and AI agents source it by size (kW or MW) and location with the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if the provider accepts.",
@@ -21,7 +21,7 @@
   "copy_source": {
     "path": "canonical/listing-copy.json",
     "repo": "azmartone67/dchub-mcp-server",
-    "sha256": "ebdbbb327ecd819b032122df926cd5c002a1d4ffb9d694e8c7ce991972e6fba9"
+    "sha256": "4ae0fc887092e5f016645dc84383f32cf3f026eb5321313fc256eee8915363f0"
   },
   "copy_updated_at": "2026-11-15",
   "endpoint": "https://dchub.cloud/mcp",
