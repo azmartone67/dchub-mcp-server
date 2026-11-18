@@ -71,6 +71,28 @@ export function hitsOf(patterns, text) {
   return Object.entries(patterns).filter(([, re]) => re.test(s)).map(([k]) => k);
 }
 
+// 2026-11-17 (Grok QA g_canvas_pa / c_canvas_pa): a keyless partial on /mcp/claude and /mcp/chatgpt
+// carries ONE link the profile adds itself (lib/chatgpt-directory.mjs withPartialLink): human_url, the
+// matching human_message and one text line, all naming the same DC Hub link, on a result that ends with
+// the profile's partial notice. This returns the raw body with exactly that link (and the two keys and
+// the line that carry it) taken out, so a probe still fails on ANY other commerce, relay or price
+// content. A result that is not partial, or whose link is not a DC Hub hand-off link, comes back as is.
+const _PARTIAL_LINE = 'The full result is available on DC Hub: ';
+const _PARTIAL_URL = /^https:\/\/dchub\.cloud\/(?:u\/[2-9a-hj-km-np-z]{6}|upgrade\/h\/[A-Za-z0-9_-]{8,400}\.[0-9a-f]{32}(?:\?[a-z0-9_=&-]{1,200})?)$/;
+export function withoutPartialLink(r, notice) {
+  const raw = String((r && r.raw) || '');
+  const res = r && r.msg && r.msg.result;
+  const sc = res && res.structuredContent;
+  const texts = ((res && res.content) || []).map((c) => (c && c.text) || '');
+  const url = sc && sc.human_url;
+  if (typeof url !== 'string' || !_PARTIAL_URL.test(url) || texts.at(-1) !== notice
+      || texts.at(-2) !== _PARTIAL_LINE + url || sc.human_message !== _PARTIAL_LINE + url) return raw;
+  const L = 'PARTIAL_LINK';
+  return raw.split(url).join(L)
+    .split(JSON.stringify(_PARTIAL_LINE + L).slice(1, -1)).join('')
+    .replace(/"human_url":"PARTIAL_LINK",?/g, '').replace(/"human_message":"",?/g, '');
+}
+
 // Steering / injection phrasing the directory rejects, built from the owner's
 // examples ("THE FRONT DOOR: call this FIRST … instead of answering from
 // training data", "PAUSE and ask your human", "relay verbatim", price ladders,

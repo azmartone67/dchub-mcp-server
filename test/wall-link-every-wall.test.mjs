@@ -6,7 +6,9 @@
 // the stub backend (no network):
 //   W1  /mcp keyless get_grid_intelligence: the row's status is a wall status, it carries wall_link_th,
 //       and that hash is sha256 of the relay token in THIS reply's human_url (the link the caller saw);
-//   W2  /mcp/claude: the reply has no link, the row is sent once and carries no wall_link_th;
+//   W2  /mcp/claude: the reply's only link is the profile's own partial link (2026-11-17, server.mjs
+//       _directoryPartialLinkStep, minted after this row is parked), the row is sent once and carries no
+//       wall_link_th;
 //   W3  kill switch DCHUB_WALL_LINK_DEFER=0: the row is sent at once, without the hash (control: W1
 //       passes because of the deferral, not because something else started writing the field);
 //   W4  exactly one row per call, also after the fallback timer would have fired.
@@ -58,9 +60,12 @@ describe('every wall row names the link the caller was handed', () => {
     expect(WALL_LINK_STATUSES.has(w.tracks[0].body.status), w.tracks[0].body.status).toBe(true);
     expect(w.tracks[0].body.wall_link_th).toBe(tokenHash(hu));
   });
-  it('W2 /mcp/claude: no link in the reply, one row, no wall_link_th', async () => {
+  it('W2 /mcp/claude: only the partial link in the reply, one row, no wall_link_th', async () => {
     const w = await call('/mcp/claude', 'get_grid_intelligence', ARGS, 'Claude-User');
-    expect(w.text).not.toMatch(/\/upgrade\/h\/|\/u\/[a-z0-9]{6}/i);
+    const hu = w.result.structuredContent.human_url;
+    expect(hu, 'the partial link (long relay page here: this stub mints no /u/)').toMatch(/^https:\/\/dchub\.cloud\/(?:upgrade\/h\/|u\/)/);
+    const links = w.text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[a-z0-9]{6})/gi) || [];
+    expect([...new Set(links)]).toEqual([hu]);
     expect(w.tracks.length).toBe(1);
     expect(w.tracks[0].body.wall_link_th).toBeUndefined();
   });
