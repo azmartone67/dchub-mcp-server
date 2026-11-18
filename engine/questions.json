@@ -1,0 +1,261 @@
+{
+  "_about": "Fixed benchmark set for the daily MCP self-improvement engine (scripts/engine-bench.mjs, graded by lib/engine-grade.mjs). Change a question only in its own PR: a question edit resets that row's day-over-day diff. Fields: id (stable, never reused), set (cross_domain | colocation), intent (sent verbatim to execute_plan, detail compact, keyless), place_groups (each group needs one hit in the lead), open_places_min (distinct US places from the grader's list the lead must name, for 'where' questions), sides (dc and/or energy: each needs a sentence in the lead with that side's words and a figure), require_figure (default true), classes / not_classes (intent_class routing).",
+  "version": 1,
+  "questions": [
+    {
+      "id": "x01-50mw-24mo-us",
+      "set": "cross_domain",
+      "intent": "Where in the US can I get 50 MW of data center capacity powered within 24 months, and what will power cost?",
+      "open_places_min": 2,
+      "sides": [
+        "dc",
+        "energy"
+      ],
+      "not_classes": [
+        "interconnection_queue",
+        "price"
+      ]
+    },
+    {
+      "id": "x02-nova-100mw-pjm",
+      "set": "cross_domain",
+      "intent": "For a 100 MW data center in Northern Virginia, what is the power situation in PJM, what does power cost, and how many data centers are already there?",
+      "place_groups": [
+        [
+          "Northern Virginia",
+          "Ashburn",
+          "Loudoun",
+          "Virginia"
+        ],
+        [
+          "PJM",
+          "Dominion"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x03-dallas-vs-phoenix-ai",
+      "set": "cross_domain",
+      "intent": "Compare Dallas and Phoenix for a 50 MW AI campus: data center supply, grid headroom and power prices.",
+      "place_groups": [
+        [
+          "Dallas",
+          "DFW"
+        ],
+        [
+          "Phoenix"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x04-ercot-time-to-power-metros",
+      "set": "cross_domain",
+      "intent": "How soon can a 100 MW load get power in ERCOT, and which Texas metros already have the most data center capacity?",
+      "place_groups": [
+        [
+          "ERCOT",
+          "Texas"
+        ],
+        [
+          "Dallas",
+          "Houston",
+          "San Antonio",
+          "Austin",
+          "Abilene"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x05-chicago-prices-vacancy",
+      "set": "cross_domain",
+      "intent": "What are electricity prices and data center vacancy like in Chicago right now?",
+      "place_groups": [
+        [
+          "Chicago",
+          "Illinois"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x06-rank-200mw-ai",
+      "set": "cross_domain",
+      "intent": "Rank US markets for a 200 MW AI training campus by power availability and existing data center ecosystem.",
+      "open_places_min": 3,
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x07-columbus-aep-60mw",
+      "set": "cross_domain",
+      "intent": "Is Columbus, Ohio a good place for a 60 MW data center given AEP's grid constraints and local data center supply?",
+      "place_groups": [
+        [
+          "Columbus",
+          "Ohio"
+        ],
+        [
+          "PJM",
+          "AEP"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "x08-atlanta-georgia-power-30mw",
+      "set": "cross_domain",
+      "intent": "How does the Atlanta data center market look for a 30 MW deployment, and what are Georgia Power grid and price conditions?",
+      "place_groups": [
+        [
+          "Atlanta",
+          "Georgia"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "c01-ashburn-500kw",
+      "set": "colocation",
+      "intent": "Colocation options in Ashburn for 500 kW",
+      "place_groups": [
+        [
+          "Ashburn",
+          "Northern Virginia",
+          "Loudoun"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    },
+    {
+      "id": "c02-dallas-providers",
+      "set": "colocation",
+      "intent": "Which colocation providers have the most data center capacity in Dallas?",
+      "place_groups": [
+        [
+          "Dallas",
+          "DFW"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    },
+    {
+      "id": "c03-nova-colo-pricing",
+      "set": "colocation",
+      "intent": "What does colocation cost in Northern Virginia per kW per month?",
+      "place_groups": [
+        [
+          "Northern Virginia",
+          "Ashburn",
+          "Virginia"
+        ]
+      ],
+      "sides": [],
+      "require_figure": false
+    },
+    {
+      "id": "c04-facility-pair",
+      "set": "colocation",
+      "intent": "Compare Equinix DC11 in Ashburn and CyrusOne Sterling for a 1 MW deployment",
+      "place_groups": [
+        [
+          "DC11",
+          "Equinix"
+        ],
+        [
+          "CyrusOne",
+          "Sterling"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    },
+    {
+      "id": "c05-chicago-2mw-2027",
+      "set": "colocation",
+      "intent": "Find 2 MW of colocation in Chicago available in 2027",
+      "place_groups": [
+        [
+          "Chicago",
+          "Illinois"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    },
+    {
+      "id": "c06-atlanta-peering",
+      "set": "colocation",
+      "intent": "Best carrier-neutral colocation in Atlanta with strong peering",
+      "place_groups": [
+        [
+          "Atlanta"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    },
+    {
+      "id": "c07-phoenix-300kw-power-cost",
+      "set": "colocation",
+      "intent": "Colocation in Phoenix for 300 kW, and what is the local power cost?",
+      "place_groups": [
+        [
+          "Phoenix",
+          "Arizona"
+        ]
+      ],
+      "sides": [
+        "dc",
+        "energy"
+      ]
+    },
+    {
+      "id": "c08-silicon-valley-750kw",
+      "set": "colocation",
+      "intent": "Which Silicon Valley colocation facilities could take a 750 kW deployment?",
+      "place_groups": [
+        [
+          "Silicon Valley",
+          "Santa Clara",
+          "San Jose",
+          "Bay Area"
+        ]
+      ],
+      "sides": [
+        "dc"
+      ]
+    }
+  ],
+  "_governance": "Rules (owner decision 5, 2026-11-18): (1) ids are permanent: a question is never edited in place; change its wording by retiring the id (move it to retired with the date and reason) and adding a new id, so the day-over-day diff never compares two different questions. (2) a retired id is never reused. (3) add or retire questions only in a PR the owner merges; Brain may draft it. (4) outside head-to-head questions (Grok's set) come in verbatim with an id prefix g, set cross_domain or colocation. (5) keep the run at or under MAX_CALLS in scripts/engine-bench.mjs. test/engine-grade.test.mjs enforces 1, 2 and 5.",
+  "retired": []
+}

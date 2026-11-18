@@ -210,6 +210,7 @@ test/end-of-burst-hook.test.mjs
 test/energy-capacity-cross-link.test.mjs
 test/energy-prices-describes-what-is-served.test.mjs
 test/energy-prices-free-taste.test.mjs
+test/engine-grade.test.mjs
 test/enterprise-hint-quotes-no-stale-floor.test.mjs
 test/error-envelope.test.mjs
 test/every-test-file-runs.test.mjs

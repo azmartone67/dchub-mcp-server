@@ -1,0 +1,781 @@
+{
+  "meta": {
+    "date": "2026-11-18T04:39:22.989Z",
+    "url": "https://dchub.cloud/mcp",
+    "planner": "5.38",
+    "note": "Baseline 2026-11-18 ~04:38Z, 16 QA-marked keyless compact calls to https://dchub.cloud/mcp, planner 5.38; re-graded offline after the /100 scale fix."
+  },
+  "rows": [
+    {
+      "id": "x01-50mw-24mo-us",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "RED",
+          "evidence": "intent_class=price"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "named 0/2: none"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=13.04 as_of=yes"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "PASS",
+          "evidence": "all-sector average retail electricity rate: 13.04 cents/kWh (2026 average, EIA, as of 2026-08-31)."
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "price",
+      "planner_version": "5.38",
+      "lead": "all-sector average retail electricity rate: 13.04 cents/kWh (2026 average, EIA, as of 2026-08-31).",
+      "steps": {
+        "planned": 2,
+        "executed": 1,
+        "not_executed": [
+          "get_gas_economics:skipped_unresolved"
+        ]
+      },
+      "facts_count": 1,
+      "points": 5,
+      "possible": 8
+    },
+    {
+      "id": "x02-nova-100mw-pjm",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=20,11,313 as_of=no"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "DC Hub answer for ASHBURN (market) | PJM (ISO): DCPI 20/100 | Tracked 11,313 MW."
+        },
+        "energy_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "RED",
+          "evidence": "not in facts[]: 11,313"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "market_outlook",
+      "planner_version": "5.38",
+      "lead": "DC Hub answer for ASHBURN (market) | PJM (ISO): DCPI 20/100 | Tracked 11,313 MW.",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 3,
+      "points": 4,
+      "possible": 7
+    },
+    {
+      "id": "x03-dallas-vs-phoenix-ai",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=42,43.5 as_of=no"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "DC Hub answer for Dallas (market) | Phoenix (market) | ERCOT (ISO) | WECC (ISO): Dallas DCPI CAUTION 42/100 | Phoenix DCPI CAUTION 43.5/100."
+        },
+        "energy_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "2 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "market_comparison",
+      "planner_version": "5.38",
+      "lead": "DC Hub answer for Dallas (market) | Phoenix (market) | ERCOT (ISO) | WECC (ISO): Dallas DCPI CAUTION 42/100 | Phoenix DCPI CAUTION 43.5/100.",
+      "steps": {
+        "planned": 5,
+        "executed": 5,
+        "not_executed": []
+      },
+      "facts_count": 4,
+      "points": 5,
+      "possible": 7
+    },
+    {
+      "id": "x04-ercot-time-to-power-metros",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "missing: Dallas|Houston|San Antonio|Austin|Abilene"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=1,1,1 as_of=no"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "PASS",
+          "evidence": "Queue projects returned sit in Fisher County (1), Franklin County (1), Leon County (1) (the rows shown, not a TX count)."
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "NA"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "grid_headroom",
+      "planner_version": "5.38",
+      "lead": "Time to 100 MW of power for ERCOT (ISO) is not measurable from this run: time-to-power and queue wait are withheld at this tier. Queue projects returned sit in Fisher County (1), Franklin County (1), Leon County (1) (the rows shown, not a TX count).",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 3,
+      "points": 3,
+      "possible": 6
+    },
+    {
+      "id": "x05-chicago-prices-vacancy",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=1,383 as_of=no"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "RED",
+          "evidence": "not in facts[]: 1,383"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "price",
+      "planner_version": "5.38",
+      "lead": "DC Hub answer for Chicago Il (market) | PJM (ISO): Tracked 1,383 MW.",
+      "steps": {
+        "planned": 3,
+        "executed": 3,
+        "not_executed": []
+      },
+      "facts_count": 1,
+      "points": 3,
+      "possible": 7
+    },
+    {
+      "id": "x06-rank-200mw-ai",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "named 0/3: none"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=185.2 as_of=yes"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "PASS",
+          "evidence": "DC Hub answer: Generation queue 185.2 GW (get_interconnection_queue, collected 2026-11-17)."
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "grid_headroom",
+      "planner_version": "5.38",
+      "lead": "DC Hub answer: Generation queue 185.2 GW (get_interconnection_queue, collected 2026-11-17).",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 5,
+      "possible": 7
+    },
+    {
+      "id": "x07-columbus-aep-60mw",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "missing: PJM|AEP"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=none as_of=no"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "NA"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "market_outlook",
+      "planner_version": "5.38",
+      "lead": "Columbus Ohio was not DCPI-checked in this run, so there is no verdict for it. The run checked columbus instead; do not report those as Columbus Ohio.",
+      "steps": {
+        "planned": 3,
+        "executed": 3,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 2,
+      "possible": 6
+    },
+    {
+      "id": "x08-atlanta-georgia-power-30mw",
+      "set": "cross_domain",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=313,860 as_of=yes"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "2 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "market_outlook",
+      "planner_version": "5.38",
+      "lead": "Atlanta Data Center was not DCPI-checked in this run, so there is no verdict for it. The run checked atlanta instead; do not report those as Atlanta Data Center. GA 2026 firm-supply signal: 313 MW (EIA-860M, as of 2026-11-01).",
+      "steps": {
+        "planned": 3,
+        "executed": 3,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 5,
+      "possible": 7
+    },
+    {
+      "id": "c01-ashburn-500kw",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=20,3 as_of=yes"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "Data Center Power Index (DCPI) for Northern Virginia: AVOID, composite 20/100 (as of 2026-11-18)."
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "colocation",
+      "planner_version": "5.38",
+      "lead": "Data Center Power Index (DCPI) for Northern Virginia: AVOID, composite 20/100 (as of 2026-11-18). The \"Ashburn\" facility search returned preview rows, e.g. Level 3 Ashburn, Ashburn II, VA, United States, Ashburn III, VA, United States (facility records as of 2026-03-30).",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 6,
+      "possible": 6
+    },
+    {
+      "id": "c02-dallas-providers",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=42 as_of=yes"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "Data Center Power Index (DCPI) for Dallas-Fort Worth: CAUTION, composite 42/100 (as of 2026-11-18)."
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "colocation",
+      "planner_version": "5.38",
+      "lead": "Data Center Power Index (DCPI) for Dallas-Fort Worth: CAUTION, composite 42/100 (as of 2026-11-18). The \"Dallas\" facility search returned preview rows, e.g. QTS Irving - Dallas Data Center Campus, Equinix Infomart, Flexential Dallas - Plano (facility records as of 2026-11-18).",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 6,
+      "possible": 6
+    },
+    {
+      "id": "c03-nova-colo-pricing",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "NA"
+        },
+        "dc_side": {
+          "status": "NA"
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "pricing_out_of_scope",
+      "planner_version": "5.38",
+      "lead": "DC Hub doesn't publish colocation pricing. It covers the drivers behind it: power availability (DCPI), grid stress and time to power, energy prices and tax incentives. VA all-sector average retail electricity rate: 10.63 cents/kWh (2026 average, EIA, as of 2026-08-31). Data Center Power Index (DCPI) for Northern Virginia…",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 4,
+      "points": 4,
+      "possible": 4
+    },
+    {
+      "id": "c04-facility-pair",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "missing: DC11|Equinix"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=20,20.2 as_of=no"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "DC Hub answer for ASHBURN (market) | STERLING (market) | PJM (ISO): ASHBURN DCPI AVOID 20/100 | STERLING DCPI AVOID 20.2/100."
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "2 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "market_comparison",
+      "planner_version": "5.38",
+      "lead": "DC Hub answer for ASHBURN (market) | STERLING (market) | PJM (ISO): ASHBURN DCPI AVOID 20/100 | STERLING DCPI AVOID 20.2/100.",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 4,
+      "possible": 6
+    },
+    {
+      "id": "c05-chicago-2mw-2027",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "RED",
+          "evidence": "missing: Chicago|Illinois"
+        },
+        "figure_as_of": {
+          "status": "RED",
+          "evidence": "figures=1 as_of=no"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "NA"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "capacity_search",
+      "planner_version": "5.38",
+      "lead": "Siting read for 2 MW, PJM (ISO): DCPI AVOID (chicago-il). 1 filed generator retirement in IL in the slice returned (the tool has no state filter; this is a slice, not a IL total).",
+      "steps": {
+        "planned": 3,
+        "executed": 3,
+        "not_executed": []
+      },
+      "facts_count": 1,
+      "points": 2,
+      "possible": 5
+    },
+    {
+      "id": "c06-atlanta-peering",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=20.7,1,1 as_of=yes"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "Data Center Power Index (DCPI) for Atlanta: AVOID, composite 20.7/100 (as of 2026-11-18)."
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "colocation",
+      "planner_version": "5.38",
+      "lead": "Data Center Power Index (DCPI) for Atlanta: AVOID, composite 20.7/100 (as of 2026-11-18). The \"Atlanta\" facility search returned preview rows, e.g. QTS Atlanta Data Center 1, Flexential Atlanta - Alpharetta Data Center, QTS Suwanee Data Center 1 (facility records as of 2026-11-18).",
+      "steps": {
+        "planned": 6,
+        "executed": 6,
+        "not_executed": []
+      },
+      "facts_count": 3,
+      "points": 6,
+      "possible": 6
+    },
+    {
+      "id": "c07-phoenix-300kw-power-cost",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=10.03 as_of=yes"
+        },
+        "dc_side": {
+          "status": "RED",
+          "evidence": "no sentence pairs this side with a figure"
+        },
+        "energy_side": {
+          "status": "PASS",
+          "evidence": "AZ all-sector average retail electricity rate: 10.03 cents/kWh (2026 average, EIA, as of 2026-08-31)."
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "pricing_out_of_scope",
+      "planner_version": "5.38",
+      "lead": "DC Hub doesn't publish colocation pricing. It covers the drivers behind it: power availability (DCPI), grid stress and time to power, energy prices and tax incentives. AZ all-sector average retail electricity rate: 10.03 cents/kWh (2026 average, EIA, as of 2026-08-31). Data Center Power Index (DCPI) for Phoenix: CAUTION…",
+      "steps": {
+        "planned": 3,
+        "executed": 3,
+        "not_executed": []
+      },
+      "facts_count": 3,
+      "points": 6,
+      "possible": 7
+    },
+    {
+      "id": "c08-silicon-valley-750kw",
+      "set": "colocation",
+      "verdict": "graded",
+      "checks": {
+        "routing": {
+          "status": "NA"
+        },
+        "names_place": {
+          "status": "PASS",
+          "evidence": "all groups hit"
+        },
+        "figure_as_of": {
+          "status": "PASS",
+          "evidence": "figures=44.2,1 as_of=yes"
+        },
+        "dc_side": {
+          "status": "PASS",
+          "evidence": "Data Center Power Index (DCPI) for Silicon Valley: CAUTION, composite 44.2/100 (as of 2026-11-18)."
+        },
+        "energy_side": {
+          "status": "NA"
+        },
+        "no_lookup_lead": {
+          "status": "PASS"
+        },
+        "grounded": {
+          "status": "PASS",
+          "evidence": "1 figures found in facts[]"
+        },
+        "no_contradiction": {
+          "status": "PASS"
+        }
+      },
+      "intent_class": "colocation",
+      "planner_version": "5.38",
+      "lead": "Data Center Power Index (DCPI) for Silicon Valley: CAUTION, composite 44.2/100 (as of 2026-11-18). The \"Santa Clara\" facility search returned preview rows, e.g. Evocative Santa Clara SJC11, Lumen Santa Clara, QTS Santa Clara 1 (facility records as of 2026-11-18).",
+      "steps": {
+        "planned": 4,
+        "executed": 4,
+        "not_executed": []
+      },
+      "facts_count": 2,
+      "points": 6,
+      "possible": 6
+    }
+  ],
+  "totals": {
+    "cross_domain": {
+      "points": 32,
+      "possible": 55,
+      "graded": 8,
+      "blind": 0
+    },
+    "colocation": {
+      "points": 40,
+      "possible": 46,
+      "graded": 8,
+      "blind": 0
+    },
+    "all": {
+      "points": 72,
+      "possible": 101,
+      "graded": 16,
+      "blind": 0
+    }
+  },
+  "red_by_check": {
+    "routing": 1,
+    "names_place": 6,
+    "dc_side": 8,
+    "figure_as_of": 7,
+    "energy_side": 5,
+    "grounded": 2
+  }
+}
