@@ -15,7 +15,7 @@ import {
 } from '../lib/claude-directory.mjs';
 import {
   startHarness, fenceNetwork, claudeProbePatterns, hitsOf, GUESS_ARGS, PRO_KEY,
-  SPONSOR_BLOCK, SPONSOR_TEXT_BLOCK,
+  SPONSOR_BLOCK, SPONSOR_TEXT_BLOCK, withoutPartialLink,
 } from './helpers/claude-directory-harness.mjs';
 
 const PATTERNS = claudeProbePatterns(CLAUDE_REMOVED);
@@ -83,7 +83,9 @@ describe('/mcp/claude — every listed tool, keyless and keyed', () => {
         const r = await H.call(DIR, name, args);
         // 2026-11-13 (owner decision a, lib/claude-directory.mjs claudeSiteUnlock): the two site walls
         // carry their own unlock link; only the hits that link trips are allowed, and only on them.
-        const hits = hitsOf(PATTERNS, r.raw).filter((k) => !(SITE_WALLS.has(name) && SITE_LINK_ONLY.has(k)));
+        // 2026-11-17 (Grok QA): any other keyless partial carries the profile's one partial link; exactly
+        // that link is taken out before the sweep (withoutPartialLink), everything else must still be clean.
+        const hits = hitsOf(PATTERNS, withoutPartialLink(r, CLAUDE_PLANS_NOTICE)).filter((k) => !(SITE_WALLS.has(name) && SITE_LINK_ONLY.has(k)));
         if (hits.length) offenders.push(`${name} ${args === GUESS_ARGS ? '(args)' : '(no args)'}: ${hits.join(', ')}`);
         if (!r.msg || !r.msg.result) continue;
         answered += 1;
@@ -151,7 +153,7 @@ describe('execute_plan on /mcp/claude: slimmed step results are scrubbed too', (
       const env = JSON.parse(r.msg.result.content[0].text);
       // Steps really ran through the loopback, so their slimmed results are in the body.
       expect(env.executed.filter((e) => e.status === 'executed').length, r.body.slice(0, 400)).toBeGreaterThan(0);
-      expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
+      expect(hitsOf(PATTERNS, withoutPartialLink(r, CLAUDE_PLANS_NOTICE))).toEqual([]);
       expect(r.raw).not.toContain(PRO_KEY);
     }, 120_000);
   }
@@ -228,7 +230,7 @@ describe('sponsor content never reaches /mcp/claude, whatever the key names are'
   it('live path: the dcpi scores sponsor block the fake backend sends is gone from every /mcp/claude answer', async () => {
     const r = await H.call(DIR, 'get_market_dcpi_rank', { market_slug: 'northern-virginia' });
     expect(r.msg.result).toBeTruthy();
-    expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
+    expect(hitsOf(PATTERNS, withoutPartialLink(r, CLAUDE_PLANS_NOTICE))).toEqual([]);
     const c = await H.call('/mcp', 'get_market_dcpi_rank', { market_slug: 'northern-virginia' });
     expect(c.raw).toMatch(/is_paid_placement|Acme Cooling/);   // CONTROL: /mcp passes it through
   }, 60_000);

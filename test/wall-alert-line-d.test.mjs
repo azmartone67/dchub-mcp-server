@@ -159,7 +159,13 @@ describe('1. switch off: no m- field, the copy is unchanged', () => {
         expect(rel.fields).toEqual([r.sid, 'execute_plan', expect.any(String), expect.stringMatching(/^\d+$/), 'w-freekey']);
       }
     }
-    expect(norm(withM)).toBe(norm(noM));
+    // The daily-habit email ask (mcp#1539, owner 2026-11-17) names the call's market by design: it goes to the
+    // claim call (CLAIM_TOOL {email, market}), not to a relay token, so option D's switch does not hold it. Outside
+    // that ask the two responses stay identical.
+    expect(withM.sc.email_ask.arguments.market).toBe('northern-virginia');
+    expect(noM.sc.email_ask.arguments.market).toBeUndefined();
+    const dropAsk = (s) => s.split(' for Northern Virginia.').join('.').replace(',"market":"northern-virginia"', '');
+    expect(dropAsk(norm(withM))).toBe(norm(noM));
   });
   it('a value that is not 1/on/true/yes leaves it off ("enabled", "0")', async () => {
     anonCount = 999;
