@@ -171,6 +171,7 @@ test/coverage-counts-not-masked.test.mjs
 test/coverage-gap-log-only.test.mjs
 test/cross-domain-answer-1117.test.mjs
 test/cross-domain-one-server-1117.test.mjs
+test/daily-habit.test.mjs
 test/daily-quota-gateway.test.mjs
 test/data-sources-odbl-117627.test.mjs
 test/dchub-identity.test.mjs
@@ -711,6 +712,7 @@ test/via-src-directory-attribution.test.mjs
 test/via-tags.test.mjs
 test/wall-alert-line-d.test.mjs
 test/wall-ask-guard.test.mjs
+test/wall-email-ask-daily.test.mjs
 test/wall-email-line-freekey.test.mjs
 test/wall-email-line-prod-transport.test.mjs
 test/wall-exits.test.mjs

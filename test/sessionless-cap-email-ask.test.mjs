@@ -20,7 +20,9 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const UA = { 'user-agent': 'Claude-User' };
 const SHORT = 'https://dchub.cloud/u/abcdef';
-const ASK = /ask your human for their email[^]*`get_api_key` with \{email\}[^]*X-API-Key/;
+// Daily habit (owner 2026-11-17): the ask is the owner's sentence, then ONE claim call with {email, market}.
+// `wire` is JSON, so its quotes arrive escaped (\"): the pattern takes either form.
+const ASK = /Ask your human: \\?"Give your email to keep this answer and get daily changes[^"\\]*\.\\?" Then make ONE call, `get_api_key` with \{email[^]*X-API-Key/;
 
 let H, fence, anonCount = 0, ipN = 0;
 let EXTERNAL = true;
@@ -86,10 +88,24 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     const up = r.sc._upgrade || {};
     expect(up.tier).toBe('anon_daily_cap');
     const prose = (r.res.content || []).filter((x) => x.type === 'text' && !/^\s*\{/.test(x.text)).map((x) => x.text);
-    expect(prose.some((t) => /^Keep going free: ask your human for their email/.test(t) && ASK.test(t))).toBe(true);
+    expect(prose.some((t) => /^Ask your human: "Give your email to keep this answer/.test(t) && ASK.test(t))).toBe(true);
+    expect(r.wire).not.toMatch(/calls a day|free tier|free key/);   // no allowance wording
     expect(up.email_ask).toEqual({ tool: 'get_api_key', arguments: { email: '<your human’s email>' } });
     expect(up.unlock_kind).toBeUndefined();                       // no page link: there is no session to grant onto
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_daily_cap', 'line']]);
+  });
+
+  it('a call with a market: the ask names it and the ONE claim call carries it (no allowance wording)', () => {
+    const c = { client_ip: '203.0.113.9', session_id: '', platform: 'claude', _wallMarket: 'dallas' };
+    const ask = H.S._sessionlessCapEmailAsk(c, 'search_facilities', { wide: true });
+    expect(ask).toContain('Ask your human: "Give your email to keep this answer and get daily changes for Dallas."');
+    expect(ask).toContain('`claim_free_key` with {email, market: "dallas"}');
+    expect(ask).toMatch(/follows Dallas daily/);
+    expect(ask).not.toMatch(/calls a day|free tier|free key|\bper day\b/i);
+    // without a market: the owner's market-less sentence, {email} only
+    const plain = H.S._sessionlessCapEmailAsk({ ...c, _wallMarket: '' }, 'search_facilities', { wide: true });
+    expect(plain).toContain('Ask your human: "Give your email to keep this answer and get daily changes."');
+    expect(plain).toContain('`claim_free_key` with {email}');
   });
 
   it('hard wall (land/site): the message asks for the email instead of the no-email claim', async () => {
