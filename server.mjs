@@ -21924,6 +21924,7 @@ export const _CLASS_WHY_LIVE = {
   named_campus: 'requires_facility_registry_data',
   subsea_cables: 'requires_current_infrastructure_layers',
   point_infrastructure: 'requires_current_infrastructure_layers',
+  capacity_grid: 'requires_live_queue_data',
 };
 // Extract deterministic signals from intent + context (never throws).
 

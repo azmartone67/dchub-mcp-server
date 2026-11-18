@@ -514,6 +514,7 @@ test/planner-536-e2e.test.mjs
 test/planner-536-regions-ttp.test.mjs
 test/planner-538-pairs-e2e.test.mjs
 test/planner-538-pairs.test.mjs
+test/planner-539-cross-domain.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
@@ -732,4 +733,3 @@ test/weekly-summary-disclosure-1023.test.mjs
 test/why-dchub-market-count-scope.test.mjs
 test/windsurf-path-and-claim-copy.test.mjs
 test/write-tool-annotation-accuracy.test.mjs
-test/planner-539-cross-domain.test.mjs

@@ -46,6 +46,7 @@ describe('planner 5.39: cross-domain answers', () => {
       'interconnection queue in ERCOT near Dallas', 'how soon can 100 MW get power in Texas',
       'find 100 MW near Ashburn with fiber and grid headroom', 'where can I get 200 MW with grid headroom in Europe',
       'where can I find 100 MW with power in ERCOT', 'what does the PJM interconnection queue look like',
+      'where in the US is there grid headroom for a 100 MW data center',
     ]) {
       it(`not: ${q}`, () => { expect(_planQuery(q, {}).intent_class).not.toBe('capacity_grid'); });
     }
