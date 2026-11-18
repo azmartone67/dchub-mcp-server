@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { gradeAnswer, gradeRun, diffRuns, leadOf, figuresIn, CHECKS, PASS, RED, NA, BLIND } from '../lib/engine-grade.mjs';
-import { loadQuestions, summaryMarkdown, MAX_CALLS } from '../scripts/engine-bench.mjs';
+import { loadQuestions, summaryMarkdown, benchRequest, MAX_CALLS } from '../scripts/engine-bench.mjs';
 
 const msg = (lead, sc = {}) => ({ result: {
   content: [{ type: 'text', text: `${lead} Source: DC Hub (dchub.cloud), as of 2026-08-31. Full answer: the JSON in the next content block.` }],
@@ -145,6 +145,23 @@ describe('engine questions file', () => {
       const s = JSON.parse(fs.readFileSync(new URL(f, dir), 'utf8'));
       expect(s.rows.map((r) => r.id).sort(), f).toEqual(qs.map((q) => q.id).sort());
     }
+  });
+  it('governance: retired ids are never live again, and ids keep the set prefix', () => {
+    const file = JSON.parse(fs.readFileSync(new URL('../engine/questions.json', import.meta.url), 'utf8'));
+    const live = new Set(qs.map((q) => q.id));
+    for (const r of file.retired || []) {
+      expect(live.has(r.id), `retired id ${r.id} is live again`).toBe(false);
+      expect(r.retired_on && r.reason, `retired ${r.id} needs retired_on and reason`).toBeTruthy();
+    }
+    for (const q of qs) expect(q.id, q.id).toMatch(/^[xcg]\d{2}-[a-z0-9-]+$/);
+  });
+  it('a keyed bench call carries the key in X-API-Key and stays QA-marked; keyless sends no key', () => {
+    const q = qs[0];
+    const keyed = benchRequest(q, 'engine', 'k_test');
+    expect(keyed.headers['x-api-key']).toBe('k_test');
+    expect(keyed.headers['x-dchub-qa']).toBe('1');
+    expect(JSON.parse(keyed.body).params.arguments).toEqual({ intent: q.intent, detail: 'compact' });
+    expect(benchRequest(q, 'engine').headers['x-api-key']).toBeUndefined();
   });
   it('summary.md names every check', () => {
     const md = summaryMarkdown(gradeRun(qs.slice(0, 1), {}), { date: 'd' });

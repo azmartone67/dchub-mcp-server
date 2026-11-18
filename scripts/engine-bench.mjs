@@ -7,7 +7,7 @@
 // BLIND, never RED; the run stops calling on the first wall, since every later call would be walled too.
 //
 // Usage:
-//   node scripts/engine-bench.mjs [--out dir] [--only id,id] [--prev scores.json] [--url u] [--tag t]
+//   node scripts/engine-bench.mjs [--seat anon|paid] [--out dir] [--only id,id] [--prev scores.json] [--url u] [--tag t]
 //   node scripts/engine-bench.mjs --replay dir [--prev scores.json]     # grade saved raw/*.json, no network
 // Writes <out>/raw/<id>.json (full JSON-RPC), <out>/scores.json and <out>/summary.md.
 // Cost: one keyless call per question. The home IP has a 300/day anonymous cap; MAX_CALLS refuses bigger runs.
@@ -20,6 +20,13 @@ import { gradeRun, diffRuns, CHECKS, RED } from '../lib/engine-grade.mjs';
 export const MAX_CALLS = 40;
 const ROOT = new URL('..', import.meta.url).pathname;
 
+/** The QA-marked execute_plan call for one question; a key rides in X-API-Key only. Pure. */
+export function benchRequest(q, tag, key = '') {
+  const req = qaProbeRequest('execute_plan', { intent: q.intent, detail: 'compact' }, tag);
+  if (key) req.headers['x-api-key'] = key;
+  return req;
+}
+
 export function loadQuestions(file = path.join(ROOT, 'engine/questions.json')) {
   return JSON.parse(fs.readFileSync(file, 'utf8')).questions;
 }
@@ -28,7 +35,7 @@ export function loadQuestions(file = path.join(ROOT, 'engine/questions.json')) {
 export function summaryMarkdown(run, meta = {}, diff = null) {
   const L = [];
   L.push(`# MCP engine bench ${meta.date || ''}`.trim(), '');
-  L.push(`Endpoint ${meta.url || 'replay'}; keyless, detail compact, QA-marked. Planner ${meta.planner || 'n/a'}.`, '');
+  L.push(`Endpoint ${meta.url || 'replay'}; seat ${meta.seat || 'anon'}, detail compact, QA-marked. Planner ${meta.planner || 'n/a'}.`, '');
   L.push('| Set | Points | Possible | Graded | Blind |', '|---|---|---|---|---|');
   for (const [k, t] of Object.entries(run.totals)) L.push(`| ${k} | ${t.points} | ${t.possible} | ${t.graded} | ${t.blind} |`);
   L.push('', '| Check | RED rows | RED when |', '|---|---|---|');
@@ -54,6 +61,8 @@ async function main(argv) {
   const replay = opt('--replay');
   const out = opt('--out') || replay || path.join(process.cwd(), `engine-run-${new Date().toISOString().slice(0, 10)}`);
   const url = opt('--url') || process.env.DCHUB_MCP_URL || 'https://dchub.cloud/mcp';
+  const seat = opt('--seat') || 'anon';
+  if (!['anon', 'paid'].includes(seat)) { console.error(`--seat is anon or paid, not ${seat}`); return 2; }
   const answers = {};
   fs.mkdirSync(path.join(out, 'raw'), { recursive: true });
 
@@ -65,12 +74,15 @@ async function main(argv) {
   } else {
     if (questions.length > MAX_CALLS) { console.error(`refusing ${questions.length} calls (MAX_CALLS ${MAX_CALLS}); use --only`); return 2; }
     let walled = false;
+    // --seat paid: the same questions with an API key from DCHUB_ENGINE_API_KEY (never argv: it would show in ps).
+    const key = seat === 'paid' ? (process.env.DCHUB_ENGINE_API_KEY || '').trim() : '';
+    if (seat === 'paid' && !key) { console.error('--seat paid needs DCHUB_ENGINE_API_KEY'); return 2; }
     for (const q of questions) {
       if (walled) { answers[q.id] = null; continue; }
       const t0 = Date.now();
       let msg = null;
       try {
-        const res = await fetch(url, qaProbeRequest('execute_plan', { intent: q.intent, detail: 'compact' }, opt('--tag') || 'engine-bench'));
+        const res = await fetch(url, benchRequest(q, opt('--tag') || 'engine-bench', key));
         msg = parseRpcBody(await res.text());
       } catch (e) { msg = { error: { code: 'fetch', message: e.message } }; }
       const sc = (msg && msg.result && msg.result.structuredContent) || {};
@@ -83,7 +95,7 @@ async function main(argv) {
 
   const run = gradeRun(questions, answers);
   const planner = [...new Set(run.rows.map((r) => r.planner_version).filter(Boolean))].join(',');
-  const meta = { date: new Date().toISOString(), url: replay ? `replay of ${replay}` : url, planner };
+  const meta = { date: new Date().toISOString(), url: replay ? `replay of ${replay}` : url, planner, seat, red_when: CHECKS };
   const prev = opt('--prev') ? JSON.parse(fs.readFileSync(opt('--prev'), 'utf8')) : null;
   const diff = prev ? diffRuns(prev, run) : null;
   fs.writeFileSync(path.join(out, 'scores.json'), JSON.stringify({ meta, ...run, diff }, null, 2));
