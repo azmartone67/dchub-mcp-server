@@ -70,6 +70,9 @@ let claimBody = null;
 let standingHits = 0;
 let claimResponse = null;
 const askEvents = [];   // POST /api/v1/mcp/funnel-event bodies with event=email_ask_shown
+const RETURNING_IPS = new Set();   // IPs the stub says have a row on an earlier UTC day
+const anonReturningHits = [];
+let anonReturningDelayMs = 0;
 // Production payloads (read-only, 2026-10-25): /api/v1/grid/intelligence/MISO and
 // /api/v1/interconnection-queue/by-iso?iso=MISO. The option-A wall test runs the real handler on
 // them: mcp#1143's line passed a hand-built wall and never fired on a real one.
@@ -102,6 +105,13 @@ beforeAll(async () => {
         let n = ++shortN, code = '';
         for (let i = 0; i < 6; i++) { code += SHORT_ALPHA[n % SHORT_ALPHA.length]; n = Math.floor(n / SHORT_ALPHA.length); }
         res.end(JSON.stringify({ ok: true, url: 'https://dchub.cloud/u/' + code }));
+        return;
+      }
+      if (p === '/api/v1/mcp/anon-returning') {   // keyless returning caller (lib/keyless-return-ask.mjs)
+        const b = await readBody(req);
+        anonReturningHits.push({ ip: b.ip, query: url.search, key: req.headers['x-internal-key'], method: req.method });
+        if (anonReturningDelayMs) await new Promise((r) => setTimeout(r, anonReturningDelayMs));
+        res.end(JSON.stringify({ ok: true, returning: RETURNING_IPS.has(b.ip), ip_hash: 'x' }));
         return;
       }
       if (p === '/api/v1/mcp/funnel-event') {
@@ -746,4 +756,98 @@ describe('bind_email keyless mint+bind', () => {
     expect(identifyBody && identifyBody.email, 'the explicit key goes to identify (bind), not to a mint').toBe('jane@firm.com');
     expect(claimBody).toBeNull();
   });
+});
+
+// ── keyless returning caller (owner 2026-11-17, lib/keyless-return-ask.mjs) ──────────────────────
+// The real wiring: _returnNudgeStep sends a caller with no key to the keyless step, which reads
+// POST /api/v1/mcp/anon-returning in the background and asks on a later call, at the END, once per IP.
+describe('keyless returning caller', () => {
+  const KTOOL = 'get_market_intel';   // a full keyless answer here (walls carry their own ask)
+  const KARGS = { market: 'phoenix' };
+  const ASK = CA.continuityReturnLine() + '\n' + CA.CONTINUITY_RETURN_AGENT;
+  const settle = () => new Promise((r) => setTimeout(r, 50));
+  const strip = (t) => t.replace(/"(generated_at|retrieved_at|as_of|served_at|request_id|timestamp)":"[^"]*"/g, '');
+  afterEach(() => { delete process.env.DCHUB_KEYLESS_RETURN_ASK; anonReturningDelayMs = 0; });
+
+  it('an IP seen on an earlier UTC day: asked once at the END (after the background read); not again', async () => {
+    const ip = '203.0.113.41';
+    RETURNING_IPS.add(ip);
+    const s = await session('/mcp', 'Claude Code', null, { 'x-forwarded-for': ip });
+    const first = await s.call(KTOOL, KARGS);
+    expect(first.text).not.toContain(ASK);                 // the miss: skipped, not waited on
+    await settle();
+    const second = await s.call(KTOOL, KARGS);
+    expect(second.text).toContain(ASK);
+    expect(second.first.startsWith('{"success":true')).toBe(true);   // the data stays first
+    const at = second.text.indexOf(ASK);
+    expect(second.text.slice(at).split('\n').slice(2).every((l) => /^(Cite as:|Source:|\s*$)/.test(l))).toBe(true);
+    expect(tellCount(second.text)).toBe(1);
+    const third = await s.call(KTOOL, KARGS);
+    expect(third.text).not.toContain(ASK);                 // second call in the same 7 days: no ask
+    const mine = anonReturningHits.filter((h) => h.ip === ip);
+    expect(mine.length).toBe(1);                          // one backend read, then the cache
+    expect(mine[0]).toMatchObject({ method: 'POST', query: '', key: SECRET });   // IP in the body, never the URL
+  });
+
+  it('an IP seen only today: never asked', async () => {
+    const ip = '203.0.113.42';
+    const s = await session('/mcp', 'Claude Code', null, { 'x-forwarded-for': ip });
+    for (let i = 0; i < 3; i++) {
+      expect((await s.call(KTOOL, KARGS)).text).not.toContain(ASK);
+      await settle();
+    }
+    expect(anonReturningHits.filter((h) => h.ip === ip).length).toBe(1);
+  });
+
+  it('kill switch DCHUB_KEYLESS_RETURN_ASK=0: the same object, no backend read, and the answer matches a non-returning IP byte for byte', async () => {
+    const ip = '203.0.113.43';
+    RETURNING_IPS.add(ip);
+    process.env.DCHUB_KEYLESS_RETURN_ASK = '0';
+    const s = await session('/mcp', 'Claude Code', null, { 'x-forwarded-for': ip });
+    const offA = await s.call(KTOOL, KARGS);
+    await settle();
+    const offB = await s.call(KTOOL, KARGS);
+    expect(offB.text).not.toContain(ASK);
+    expect(anonReturningHits.filter((h) => h.ip === ip).length).toBe(0);
+    const obj = { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } };
+    expect(await S._ctxALS.run({ client_ip: ip, platform: 'claude-code' },
+      () => S._returnNudgeStep(obj, KTOOL))).toBe(obj);
+    delete process.env.DCHUB_KEYLESS_RETURN_ASK;
+    const other = await session('/mcp', 'Claude Code', null, { 'x-forwarded-for': '203.0.113.44' });
+    const onA = await other.call(KTOOL, KARGS);
+    await settle();
+    const onB = await other.call(KTOOL, KARGS);
+    expect(strip(offA.text)).toBe(strip(onA.text));
+    expect(strip(offB.text)).toBe(strip(onB.text));
+  });
+
+  it('< 20 ms p95 added: through the real step, a cache miss behind a 2 s backend read skips instead of stalling; a hit is cached', async () => {
+    const p95 = (xs) => { const v = xs.slice().sort((a, b) => a - b); return v[Math.ceil(0.95 * v.length) - 1]; };
+    const answerObj = () => ({ content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } });
+    const step = (ip) => S._ctxALS.run({ client_ip: ip, platform: 'claude-code', client_ua: 'claude-code/2.0' },
+      () => S._returnNudgeStep(answerObj(), KTOOL));
+    const time = async (ip) => { const t0 = performance.now(); const out = await step(ip); return [performance.now() - t0, out]; };
+    const N = 150;
+    anonReturningDelayMs = 2000;
+    const miss = [];
+    for (let i = 0; i < N; i++) {
+      const ip = '198.18.1.' + i;
+      RETURNING_IPS.add(ip);
+      const [ms, out] = await time(ip);
+      miss.push(ms);
+      expect(out.content[0].text).not.toContain('Welcome back');
+    }
+    anonReturningDelayMs = 0;
+    const hitIps = Array.from({ length: N }, (_, i) => '198.18.2.' + i);
+    hitIps.slice(0, N / 2).forEach((ip) => RETURNING_IPS.add(ip));
+    for (const ip of hitIps) await step(ip);
+    await settle();
+    const hit = [];
+    for (let k = 0; k < 2; k++) for (const ip of hitIps) hit.push((await time(ip))[0]);
+    console.log(`[keyless-return-ask server] miss (2 s backend) p95=${p95(miss).toFixed(3)} ms max=${Math.max(...miss).toFixed(3)} ms; `
+      + `hit p95=${p95(hit).toFixed(3)} ms max=${Math.max(...hit).toFixed(3)} ms`);
+    expect(p95(miss)).toBeLessThan(20);
+    expect(Math.max(...miss)).toBeLessThan(2000);
+    expect(p95(hit)).toBeLessThan(20);
+  }, 20000);
 });
