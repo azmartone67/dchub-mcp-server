@@ -24,7 +24,7 @@ process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 
 const FREE_NO_EMAIL = 'dch_live_sessionless_freekey_noemail_01';
 const AGENT_LINE = claimHandoffFreekeyText();
-const HUMAN_LINE = /Reply with your email and I'll unlock the full data free/;
+const HUMAN_LINE = /Reply with your email and I'll open the full answer and keep your saved shortlists/;   // lib/continuity-ask.mjs
 const TOOLS = [['get_grid_data', { iso: 'PJM' }], ['get_energy_prices', { state: 'VA' }],
   ['get_water_risk', { state: 'VA' }], ['get_renewable_energy', { state: 'VA' }]];
 
