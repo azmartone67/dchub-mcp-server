@@ -16,7 +16,7 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import { OUTREACH_LEAD } from '../lib/agent-outreach.mjs';
-import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
+import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { CAPACITY_ZERO_NOTE } from '../lib/capacity-source-summary.mjs';
 
 const market = (name, state, count, mw) => ({ market: name, state, country: 'US', count, mw, delivery_types: ['powered_shell'] });
@@ -102,8 +102,9 @@ describe('the handshake and execute_plan lead with energy', () => {
     const ins = init.result.instructions;
     // Item 9 (owner 2026-11-11): the canon sentence opens the text and names power, grid and interconnection queues
     // before capacity, sites and markets; the lead after it names gas prices and the Data Center Gas Index.
-    expect(ins.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
-    const head = ins.slice(0, 360);
+    expect(ins.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    // Grok 2026-11-17 "one server": CROSS_DOMAIN_SENTENCE sits between the two, so the window grows by exactly its length.
+    const head = ins.slice(0, 360 + CROSS_DOMAIN_SENTENCE.length + 1);
     expect(head).toMatch(/question about power, grid, interconnection queues, capacity, fiber, sites or markets/);
     expect(head).toMatch(/Also: gas prices \(Data Center Gas Index, DCGI\), facilities/);
     expect(head.indexOf('interconnection queues')).toBeLessThan(head.indexOf('facilities'));
