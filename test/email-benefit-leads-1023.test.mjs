@@ -13,19 +13,20 @@ const bindDesc = between("trackedTool(srv, 'bind_email',", '{ email: Sreq');
 
 describe('the email benefit sentence', () => {
   const t = _emailBenefitText();
-  it('states the bound allowance, the decision-tool allowance and recovery', () => {
-    expect(t).toMatch(/^WHAT AN EMAIL GETS \(no card\): \d+ calls\/day \(up to \d+ full answers per tool per day\)/);
-    expect(t).toMatch(/full answers a day each on the grid, queue and market-intel tools/);
+  // Note F / option A (owner 2026-11-17) supersedes the 10-23 allowance wording: the sentence says what an email
+  // KEEPS (lib/continuity-ask.mjs emailKeepsText), with no call count, per-day allowance or "no card".
+  it('states what an email keeps, the fuller decision answers and recovery', () => {
+    expect(t).toMatch(/^WHAT AN EMAIL KEEPS: the key, with its saved shortlists, alerts and tracked changes \(get_changes\), for the next chat/);
+    expect(t).toMatch(/fuller grid, queue and market answers/);
     expect(t).toMatch(/recover_my_key/);
+    expect(t).not.toMatch(/calls\/day|per day|a day\b|no card|\bfree\b/i);
   });
   it('names no plan and no price', () => {
     expect(t).not.toMatch(/\$|pro\b|developer|enterprise|pricing/i);
   });
-  it('its figures are computed, not typed into the copy', () => {
+  it('is read from lib/continuity-ask.mjs, with no figure typed into the copy', () => {
     const fn = between('export function _emailBenefitText()', '\n}\n');
-    expect(fn).toMatch(/_rungNum\('identified'\)/);
-    expect(fn).toMatch(/_fullAnswersPerToolPerDay\('identified'\)/);
-    expect(fn).toMatch(/EMAIL_DECISION_DAILY_FULL_CAP/);
+    expect(fn).toMatch(/_emailKeepsText\(\)/);
     expect(fn).not.toMatch(/['"][^'"]*\b(50|10)\b[^'"]*['"]/);
   });
 });

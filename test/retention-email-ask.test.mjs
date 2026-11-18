@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import * as R from '../lib/retention.mjs';
 import * as CA from '../lib/continuity-ask.mjs';
 import { __test as OAUTH } from '../oauth.mjs';
-import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
+import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay, KEYLESS_FIRST_FULL_CLAUSE } from '../lib/tier-canon.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -264,10 +264,12 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.sc.daily_full_answers_per_tool).toBe(2);
     expect(r.sc.daily_limit_with_email).toBe(50);
     expect(r.sc.full_answers_per_tool_per_day_with_email).toBe(10);
+    // Note F / option A (owner 2026-11-17): the field stays, its value says what the key keeps (no call count,
+    // no per-day allowance, no pricing pointer). The numeric fields above are unchanged.
     expect(r.sc.free_tier_rule).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
       + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-      + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
-      + 'Higher limits: dchub.cloud/pricing.');
+      + 'after that, previews. With an email, the key keeps your saved shortlists, alerts and the changes you track '
+      + 'for your next chat. More detail is available at dchub.cloud/connect.');
     expect(r.text).not.toMatch(/Free tier = 10 calls\/day/);
   });
 
@@ -306,8 +308,11 @@ describe('bind_email success leads with the masked address and a watch offer', (
     expect(r.sc.bound).toBe(true);
     expect(r.sc.daily_limit).toBe(50);
     expect(r.sc.full_answers_per_tool_per_day).toBe(10);
-    expect(r.sc.free_tier_rule).toBe(_freeTierRuleText());
-    expect(r.text).toContain('Free with an email: 50 calls/day (up to 10 full answers per tool per day).');
+    // Note F / option A (owner 2026-11-17): what the bound key keeps, not an allowance.
+    expect(r.sc.free_tier_rule).toBe(CA.keyRuleText(KEYLESS_FIRST_FULL_CLAUSE));
+    expect(r.sc.free_tier_rule).not.toBe(_freeTierRuleText());
+    expect(r.text).toContain('The key now keeps saved shortlists, alerts and tracked changes (get_changes) for the next chat.');
+    expect(r.text).not.toMatch(/calls\/day|Free with an email/);
   });
 
   it('the agent line names tools and params that exist on /mcp', async () => {

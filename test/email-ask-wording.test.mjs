@@ -14,7 +14,9 @@ describe('EMAIL_ASK', () => {
   it.each(['get_interconnection_queue', 'get_grid_intelligence'])('%s leads with it when a bound email deepens the tool', (tool) => {
     const t = claimHandoffDecisionText({ tool, emailCap: 3 });
     expect(t.startsWith(EMAIL_ASK)).toBe(true);
-    expect(t).toContain('`claim_free_key`');   // fallback stays
+    // Note F / option A (owner 2026-11-17): the "Fallback: `claim_free_key` with the same email." sentence is gone.
+    expect(t).toContain('`bind_email`');
+    expect(t).not.toContain('claim_free_key');
   });
   it('is not used where bind_email opens nothing more (get_market_intel, cap 0) or on generic walls', () => {
     expect(claimHandoffDecisionText({ tool: 'get_market_intel', emailCap: 0 })).not.toContain(EMAIL_ASK);

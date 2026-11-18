@@ -189,7 +189,8 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claim-handoff-test', version: '1.0' } } });
     const ins = init.json.result.instructions;
     expect(ins.length).toBeLessThanOrEqual(2048);
-    expect(ins).toContain('KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint;');
+    // Note F / option A (owner 2026-11-17): the key line says what the key keeps (lib/continuity-ask.mjs).
+    expect(ins).toContain('KEYS: get your human\'s email, then `claim_free_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions; save it, never re-mint;');
   });
 });
 

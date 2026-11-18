@@ -312,7 +312,9 @@ describe("server.mjs states no rung as a literal", () => {
     const hits = SRC.filter((l) => CODE(l) && /FREE_TIER\.\w+_calls_per_day|_callsPerDay\('\w+'\)/.test(l));
     // v14 (owner 2026-10-10) dropped the per-plan call counts from the walls (no counts tied to a plan),
     // so fewer sites interpolate a rung; the free-tier ones remain.
-    expect(hits.length).toBeGreaterThan(5);
+    // Note F / option A (owner 2026-11-17) took the rung out of claim_free_key / bind_email prose and the
+    // unbound-key paywall line: 10 sites on main became 5. The guard still needs a nonzero set to scan.
+    expect(hits.length).toBeGreaterThanOrEqual(3);
   });
   it("no code line carries a literal N calls/day or N free calls total", () => {
     const bad = SRC.map((l, i) => ({ l, n: i + 1 })).filter(({ l }) => CODE(l) && LIT.test(l));

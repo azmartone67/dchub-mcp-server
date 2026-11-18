@@ -438,6 +438,7 @@ test/no-sql-tokens-in-output.test.mjs
 test/no-starter-offer.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
+test/note-f-agent-prose-1117.test.mjs
 test/noteN-one-key-per-session.test.mjs
 test/noteN-save-key-first-answer.test.mjs
 test/npm-launcher-key-not-in-argv.test.mjs
