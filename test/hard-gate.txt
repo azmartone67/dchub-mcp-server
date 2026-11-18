@@ -129,6 +129,7 @@ test/claude-review-blockers-1023.test.mjs
 test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
+test/client-paths.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/colocation-answer-preview-count.test.mjs
 test/colocation-city-fit-1117.test.mjs
