@@ -154,7 +154,7 @@ const PHRASES = [
   { id: 'free-full', re: /(?:is|are) free \+ full(?: at every tier| for everyone| by design)?/i, free_full: true },
   { id: 'free-friendly', re: /(?:is|are) free-tier friendly|(?:is|are) free citation hooks?|is free for everyone/, free_friendly: true },
   { id: 'gas-econ-below-pro',
-    re: /shows the EIA state gas prices \(delivered industrial, delivered electric, burner tip\) to every caller, and masks Henry Hub, the regional hub and basis prices and the \$\/MWh table below the access level that includes every tool/, gas_below_pro: true },
+    re: /shows the EIA state gas prices \(delivered industrial, delivered electric, burner tip\) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the \$\/MWh table below the access level that includes every tool/, gas_below_pro: true },
   // Not about one tool: the free-key call quota, rendered from canon.
   { id: 'free-key-quota', re: /Call quota on a free key: [^.]*\./, untooled: true },
   { id: 'retirement-mw-below-developer',
@@ -407,7 +407,7 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
     expect(bad).toEqual([]);
   }, 60000);
 
-  it('get_gas_economics: EIA state prices for every seat, Henry Hub and basis below full access masked', async () => {
+  it('get_gas_economics: EIA state prices and Henry Hub for every seat, basis below full access masked', async () => {
     const { claims } = extractClaims();
     const cs = claims.filter((c) => c.ph.gas_below_pro);
     expect(cs.map((c) => c.tool)).toContain('get_gas_economics');
@@ -416,8 +416,9 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
         const out = await call(c.tool, key);
         // 2026-11-18 (owner Grok note): delivered EIA state prices are public domain, served to all.
         expect(out.text.includes('3.853'), `${c.tool} ${seat}: delivered price shown?`).toBe(true);
-        // Henry Hub (Refinitiv via EIA) and basis stay masked unless full access (DCHUB_KEYLESS_HENRY_HUB off).
-        expect(out.text.includes('2.917'), `${c.tool} ${seat}: Henry Hub shown?`).toBe(seat === 'pro');
+        // Henry Hub (Refinitiv via EIA): owner 2026-11-18 "share with citation", every seat (switch default on).
+        expect(out.text.includes('2.917'), `${c.tool} ${seat}: Henry Hub shown?`).toBe(true);
+        // The regional basis is a synthetic seed, not a published figure: full access only.
         expect(out.text.includes('-0.412'), `${c.tool} ${seat}: basis shown?`).toBe(seat === 'pro');
       }
     }

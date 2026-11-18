@@ -3644,8 +3644,9 @@ async function _paidKeyIsProOrAbove(apiKey) {
 // government work in the public domain. Each freed figure carries its source,
 // basis, period and as_of in figure_labels (_gasEconomicsFigureLabels).
 //   henry_hub_spot_usd_mmbtu: EIA's RNGWHHD daily spot names Refinitiv/LSEG as
-//     its source, so it is not a public-domain EIA figure; free only when
-//     DCHUB_KEYLESS_HENRY_HUB=1 (default off, the backend's flag name).
+//     its source. Owner 2026-11-18 ("share with citation"): served to every
+//     caller with that credit; DCHUB_KEYLESS_HENRY_HUB=0 masks it again below
+//     full access (the backend's flag name, default on).
 //   hub_spot_usd_mmbtu / basis_diff_usd_mmbtu: Henry Hub + a SYNTHETIC seed
 //     basis (field_basis "synthetic"), not an EIA figure: masked.
 //   gas_price_used_usd_mmbtu, scenarios_usd_per_mwh: masked as before (owner
@@ -3661,7 +3662,7 @@ function _maskBurnerTip(bt) {
   return o;
 }
 export function _keylessHenryHubOn() {
-  return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_KEYLESS_HENRY_HUB || '').trim());
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_KEYLESS_HENRY_HUB || '').trim());
 }
 const _GAS_ECON_NUMERIC = ['henry_hub_spot_usd_mmbtu', 'hub_spot_usd_mmbtu', 'basis_diff_usd_mmbtu',
   'gas_price_used_usd_mmbtu'];
@@ -16144,7 +16145,11 @@ const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi
   // caller, the same figures /api/v1/iso-lmp/snapshot prints publicly; the backend decides which
   // ISOs' terms allow it and sends wholesale_lmp_withheld {iso, reason} for the rest. The anon trim
   // would cut hubs_available to 3 rows behind `_hubs_available_total_in_pro`. Exact keys.
-  'wholesale_lmp', 'wholesale_lmp_withheld']);
+  'wholesale_lmp', 'wholesale_lmp_withheld',
+  // Owner 2026-11-18 ("share with citation"): for an ISO with no served live LMP (PJM) the backend
+  // sends wholesale_context, published report figures with their source, plus a link to the ISO's
+  // own live-price page. Cited facts for every caller; its figures list must not be cut to 3.
+  'wholesale_context']);
 // Owner 2026-11-17 (Grok note, item 1): get_refined_queue's project_name and queue_id reach every
 // caller. ISO queue lists are public filings; dchub-backend withholds them (null + _locked_fields)
 // for an ISO whose terms bar reuse, and markLockedRowFields marks those rows. The depth gate
@@ -20191,6 +20196,13 @@ export const _TOOL_OUTPUT_SCHEMAS = {
       iso: _oStr('ISO whose LMP is not served'),
       reason: _oStr('Why: the ISO\'s terms bar or have not cleared reuse'),
     }, 'Present when wholesale_lmp is null for licence reasons'),
+    wholesale_context: _oObj({
+      iso: _oStr('ISO the figures describe'),
+      label: _oStr('published price figures (not live)'),
+      figures: _oArr(z.looseObject({}), 'Published figures: {name, value, unit, period, area, source, source_url, published, basis}'),
+      live_prices: _oObj({ label: _oStr('What the link shows'), url: _oStr('The ISO\'s own live-price page'),
+        note: _oStr('DC Hub does not republish these live prices') }, 'Link to the ISO\'s own live LMP page'),
+    }, 'Published, cited price figures for an ISO whose live LMP is not served (PJM), with a link to its live page'),
   }).describe('EIA retail electricity rates (monthly) for one US ISO footprint, state or the US, the latest Henry Hub gas spot and, where an ISO\'s terms allow, the wholesale LMP at one of its hubs — alongside the DC Hub envelope keys.'),
 
   list_transactions: z.looseObject({
@@ -21920,7 +21932,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics shows the EIA state gas prices (delivered industrial, delivered electric, burner tip) to every caller, and masks Henry Hub, the regional hub and basis prices and the $/MWh table below the access level that includes every tool.',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics shows the EIA state gas prices (delivered industrial, delivered electric, burner tip) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the $/MWh table below the access level that includes every tool.',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -35909,7 +35921,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub for ERCOT, plus other ISOs only where their terms allow, served to every caller: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar or have not yet cleared reuse, wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp block is not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub (ERCOT, CAISO, NYISO, ISO-NE), served to every caller with the ISO credited: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar reuse (PJM, MISO, SPP), wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why; for PJM, wholesale_context carries published, cited figures (capacity auction clearing prices, the market monitor\'s average LMP) with their period and source_url, plus live_prices.url, PJM\'s own live LMP page. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp and wholesale_context blocks are not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),

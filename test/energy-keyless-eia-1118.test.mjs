@@ -3,8 +3,8 @@
 // (1) Keyless public-domain figures: the EIA state gas prices reach every caller on
 //     get_gas_economics (delivered industrial / electric, the burner-tip PEU mean and its
 //     monthly min/max), each dated and labelled in figure_labels. Henry Hub is EIA's RNGWHHD
-//     series, which EIA credits to Refinitiv (LSEG), so it stays behind DCHUB_KEYLESS_HENRY_HUB
-//     (default off). get_refined_queue's project_name and queue_id pass through, except on a
+//     series, which EIA credits to Refinitiv (LSEG); owner 2026-11-18 serves it with that credit
+//     (DCHUB_KEYLESS_HENRY_HUB default on, =0 masks it). get_refined_queue's project_name and queue_id pass through, except on a
 //     held ISO's row (MISO, SPP: their terms bar republishing), which stays null with
 //     identity_withheld below full depth, whether the backend or this server withheld it.
 // (2) get_energy_prices' wholesale_lmp block (hub LMP, $/MWh) reaches every caller untouched,
@@ -54,7 +54,14 @@ const ENERGY_ERCOT = { ok: true, tool: 'get_energy_prices', filter: { iso: 'ERCO
   wholesale_lmp: LMP };
 const ENERGY_PJM = { ok: true, tool: 'get_energy_prices', filter: { iso: 'PJM', sector: 'all', state: null },
   scope: 'iso_footprint_avg', caller_tier: 'anonymous', gated: true, wholesale_lmp: null,
-  wholesale_lmp_withheld: { iso: 'PJM', reason: "PJM's terms do not permit redistribution of its LMP data." } };
+  wholesale_lmp_withheld: { iso: 'PJM', reason: "PJM's terms do not permit redistribution of its LMP data." },
+  // Owner 2026-11-18 ("share with citation"): published PJM figures + PJM's own live page. Five
+  // figures on purpose: the anon trim cuts any list longer than 3 unless the key is exempt.
+  wholesale_context: { iso: 'PJM', label: 'published PJM price figures (not live)',
+    figures: [101.11, 202.22, 303.33, 404.44, 505.55].map((v, i) => ({ name: `fig ${i}`, value: v, unit: '$/MW-day',
+      period: `20${27 + i}/20${28 + i}`, area: 'RTO', source: 'PJM', source_url: `https://www.pjm.com/r${i}`,
+      published: '2026-07-22', basis: 'published report figure, quoted' })),
+    live_prices: { label: 'PJM live LMP', url: 'https://dataviewer.pjm.com/', note: 'DC Hub does not republish live PJM LMP' } } };
 
 // ── get_gas_economics: the two backend reads, served whole to this server (X-Internal-Key) ──
 const PRICING = { market_name: 'Dallas', state: 'TX', pricing_hub_key: 'houston_ship_channel',
@@ -102,7 +109,9 @@ const VALIDATE = {
 const seen = [];
 let S, PORT, httpServer, stub;
 const prev = {};
-const ENV = { DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET, DCHUB_KEYLESS_HENRY_HUB: undefined, ISO_PUBLISH_RELEASED: undefined };
+// DCHUB_KEYLESS_HENRY_HUB=0 here: the per-seat cases pin the switched-off mask. Owner 2026-11-18
+// made Henry Hub default-on ("share with citation"); the unset case has its own test below.
+const ENV = { DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET, DCHUB_KEYLESS_HENRY_HUB: '0', ISO_PUBLISH_RELEASED: undefined };
 
 beforeAll(async () => {
   await new Promise((resolve) => {
@@ -190,6 +199,11 @@ describe('get_energy_prices: wholesale_lmp reaches every caller', () => {
       expect(sc.wholesale_lmp ?? null).toBeNull();
       expect(sc.wholesale_lmp_withheld).toEqual(ENERGY_PJM.wholesale_lmp_withheld);
     });
+    it(`${seat}: PJM wholesale_context (published figures + live link) passes through whole`, async () => {
+      const { sc } = await call('get_energy_prices', { iso: 'PJM' }, key);
+      expect(sc.wholesale_context, JSON.stringify(sc).slice(0, 600)).toEqual(ENERGY_PJM.wholesale_context);
+      expect(sc._figures_total_in_pro).toBeUndefined();
+    });
   }
 
   for (const [seat, key] of SEATS) {
@@ -227,6 +241,7 @@ describe('get_energy_prices: wholesale_lmp reaches every caller', () => {
     expect(out.wholesale_lmp.hubs_available).toEqual(LMP.hubs_available);
     const w = S.trimForTrial(JSON.parse(JSON.stringify(ENERGY_PJM)), 'get_energy_prices');
     expect(w.wholesale_lmp_withheld).toEqual(ENERGY_PJM.wholesale_lmp_withheld);
+    expect(w.wholesale_context).toEqual(ENERGY_PJM.wholesale_context);
     const r = { content: [{ type: 'text', text: JSON.stringify(ENERGY_ERCOT) }], structuredContent: ENERGY_ERCOT };
     for (const tier of ['', 'anonymous', 'free', 'identified', 'trial']) {
       const g = await S._gateToolNumerics(r, 'get_energy_prices', { tier });
@@ -270,8 +285,8 @@ describe('get_gas_economics: the EIA state prices are free, the rest stays maske
     });
   }
 
-  it('DCHUB_KEYLESS_HENRY_HUB=1 opens Henry Hub only', async () => {
-    process.env.DCHUB_KEYLESS_HENRY_HUB = '1';
+  it('DCHUB_KEYLESS_HENRY_HUB unset (the default) opens Henry Hub only', async () => {
+    delete process.env.DCHUB_KEYLESS_HENRY_HUB;
     try {
       const { sc } = await call('get_gas_economics', { market: 'dallas' }, null);
       expect(sc.henry_hub_spot_usd_mmbtu).toBe(HH);
@@ -279,7 +294,7 @@ describe('get_gas_economics: the EIA state prices are free, the rest stays maske
       expect(sc.hub_spot_usd_mmbtu).toBeNull();
       expect(sc.tier_masked.fields).not.toContain('henry_hub_spot_usd_mmbtu');
       expect(sc.tier_masked.fields).toContain('hub_spot_usd_mmbtu');
-    } finally { delete process.env.DCHUB_KEYLESS_HENRY_HUB; }
+    } finally { process.env.DCHUB_KEYLESS_HENRY_HUB = '0'; }
   });
 
   it('a full-access seat keeps every number', async () => {

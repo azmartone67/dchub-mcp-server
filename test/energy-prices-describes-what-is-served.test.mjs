@@ -43,13 +43,15 @@ describe('get_energy_prices text matches the served payload', () => {
       expect(desc, f).toContain(f);
     }
     expect(desc).toMatch(/served to every caller/);
-    // The backend decides which ISOs; the text names only the two whose terms are clear.
-    // be#8996: only ERCOT serves by default (CAISO's API terms grant no rights in CAISO Data).
-    expect(desc).toMatch(/for ERCOT, plus other ISOs only where their terms allow/);
-    expect(desc).not.toMatch(/CAISO where|TH_NP15/);
+    // be#8996, owner 2026-11-18 "share with citation": ERCOT, CAISO, NYISO and ISO-NE serve with
+    // the ISO credited; PJM, MISO and SPP are withheld, and PJM gets published figures instead.
+    expect(desc).toMatch(/at one ISO pricing hub \(ERCOT, CAISO, NYISO, ISO-NE\), served to every caller with the ISO credited/);
+    expect(desc).toMatch(/terms bar reuse \(PJM, MISO, SPP\), wholesale_lmp is null/);
+    expect(desc).toMatch(/wholesale_context carries published, cited figures/);
+    expect(desc).not.toMatch(/TH_NP15/);
     expect(desc).toMatch(/an unknown hub is an error that lists hubs_available/);
     expect(src).toMatch(/hub: S\.describe\('Optional ISO pricing hub for wholesale_lmp/);
-    for (const f of ['wholesale_lmp: _oObj(', 'wholesale_lmp_withheld: _oObj(', "lmp_usd_mwh: _oNum('Real-time hub LMP, USD/MWh')"]) {
+    for (const f of ['wholesale_lmp: _oObj(', 'wholesale_lmp_withheld: _oObj(', 'wholesale_context: _oObj(', "lmp_usd_mwh: _oNum('Real-time hub LMP, USD/MWh')"]) {
       expect(schema, f).toContain(f);
     }
   });

@@ -14,6 +14,9 @@ const SENT = 41.7371;
 // 2026-11-18 (owner, Grok note 2026-11-17 item 1): the EIA state prices (delivered industrial /
 // electric, the burner-tip PEU mean and its monthly min/max) reach every caller; FREE marks them.
 const FREE = 3.6619;
+// 2026-11-18 (owner, "share with citation"): Henry Hub spot reaches every caller by default
+// (DCHUB_KEYLESS_HENRY_HUB=0 masks it again; energy-keyless-eia-1118 covers that switch).
+const HH = 2.9173;
 let S, PORT, httpServer, stub;
 
 const g2g = {
@@ -22,7 +25,7 @@ const g2g = {
   burner_tip: { status: 'ok', usd_mmbtu: FREE, monthly_min_usd_mmbtu: FREE, monthly_max_usd_mmbtu: FREE,
                 window: ['2025-07', '2026-06'], months_reported: 12, reason: null },
 };
-const pricing = { henry_hub_spot_usd_mmbtu: SENT, delivered_electric_usd_mmbtu: FREE, market_name: 'Dallas' };
+const pricing = { henry_hub_spot_usd_mmbtu: HH, delivered_electric_usd_mmbtu: FREE, market_name: 'Dallas' };
 const brief = {
   region: 'TX', henry_hub_usd_mmbtu: 2.9,
   basis_usd_mmbtu: SENT, delivered_price_usd_mmbtu: SENT,
@@ -79,6 +82,7 @@ describe('anonymous MCP callers get the REST free view of gas $/MWh', () => {
     expect(out.burner_tip.window).toEqual(['2025-07', '2026-06']);   // explanation kept
     expect(out.tier_masked.tier_required).toBe('pro');
     expect(out.delivered_electric_usd_mmbtu).toBe(FREE);
+    expect(out.henry_hub_spot_usd_mmbtu).toBe(HH);
     expect(out.burner_tip.usd_mmbtu).toBe(FREE);
     expect(out.tier_masked.fields).not.toContain('burner_tip.usd_mmbtu');
   });
@@ -116,6 +120,7 @@ describe('the masks themselves', () => {
     expect(o.burner_tip.months_reported).toBe(12);
     expect(JSON.stringify(o)).not.toContain(String(SENT));
     expect(o.burner_tip.monthly_max_usd_mmbtu).toBe(FREE);
+    expect(o.henry_hub_spot_usd_mmbtu).toBe(HH);
   });
 
   it('brief mask is a no-op on a brief with no $/MWh (withdrawn or withheld)', () => {
