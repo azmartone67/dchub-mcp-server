@@ -70,11 +70,28 @@ describe('tools/list: get_api_key is listed, claim_free_key is not (canonical su
     expect(titles.length).toBeGreaterThan(0);
     for (const x of titles) expect(x).toBe(KEY_TOOL_TITLE);
     expect(Object.keys(t.inputSchema.properties).sort()).toEqual(['client_name', 'email', 'market']);   // market: daily habit, mcp#1539
-    // no description anywhere in the list still points at the old name (a URL's tracking value, tool=claim_free_key,
-    // is the registered name the backend counts, and stays)
+    // no description anywhere in the list still points at the old name (connect_url's tool= value: see the next case)
     expect(JSON.stringify(r.body.result.tools)).not.toMatch(/(?<![=/&?.\-A-Za-z0-9_])claim_free_key(?![A-Za-z0-9_])/);
     // the listing metric: no free-key / free-tier / paid-plan wording in the served list
     expect(JSON.stringify(r.body.result.tools)).not.toMatch(/free key|free tier|paid plan/i);
+  });
+
+  // 2026-11-18 (owner stability item 2): the access tag's connect_url was built from the REGISTERED name, so the
+  // listed get_api_key entry carried tool=claim_free_key in annotations.connect_url (and the _meta mirror).
+  it.each(['/mcp', '/mcp?catalog=full', '/mcp/registry'])('%s: the key tool\'s connect_url names get_api_key', async (path) => {
+    const t = (await rpc(path, 'tools/list')).body.result.tools.find((x) => x.name === KEY_TOOL_LISTED);
+    const urls = [t.annotations && t.annotations.connect_url, t._meta && t._meta['cloud.dchub/access'] && t._meta['cloud.dchub/access'].connect_url]
+      .filter((x) => x !== undefined);
+    expect(urls.length, 'control: the entry carries a connect_url').toBeGreaterThan(0);
+    for (const u of urls) expect(u).toBe('https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_api_key');
+    expect(JSON.stringify(t)).not.toMatch(/claim_free_key/);
+  });
+
+  it('the sessioned path: the key tool\'s connect_url names get_api_key', async () => {
+    const init = await rpc('/mcp', 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'vitest', version: '0' } });
+    const sid = init.headers.get('mcp-session-id');
+    const t = (await rpc('/mcp', 'tools/list', {}, { 'mcp-session-id': sid })).body.result.tools.find((x) => x.name === KEY_TOOL_LISTED);
+    expect(t.annotations && t.annotations.connect_url).toBe('https://dchub.cloud/connect?ref=mcp-tools-list&tool=get_api_key');
   });
 
   it('a pack that carries the key tool lists it as get_api_key', async () => {
