@@ -21,7 +21,7 @@ process.env.DCHUB_LEAN_RESPONSES = '0';
 const LINK = 'https://dchub.cloud/u/abcdef';
 const COPY_M = 'Give your email to keep this answer and get daily changes for Dallas.';
 const COPY = 'Give your email to keep this answer and get daily changes.';
-const EMAIL = "<your user's email>";
+const EMAIL = '<your human’s email>';
 
 describe('builders: email_ask on the session cap walls', () => {
   it('hard wall, first of the day: structured one call with the market; text has the copy, never the key tool', () => {
