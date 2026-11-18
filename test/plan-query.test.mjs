@@ -95,7 +95,7 @@ describe('plan_query router (pure)', () => {
     // schema_version stays 1. Exactly the split this assertion exists to prove.
     // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
     // 5.17: market_outlook binds every tracked DCPI market (owner priority 1, 2026-11-08).
-    expect(r.planner_version).toBe('5.37');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.38');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
@@ -419,9 +419,10 @@ describe('plan_query router (pure)', () => {
       // answers "site 50 MW here" — so the step is worth a call.
       const il = _planQuery('site a 50 MW data center in central Illinois', {});
       expect(il.intent_class).toBe('capacity_search');
+      // Planner 5.38: the Illinois data-center pipeline follows (the pairing step, lib/plan-pairs.mjs).
       expect(seq('site a 50 MW data center in central Illinois')).toEqual([
-        'get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank', 'get_hosting_capacity']);
-      expect(il.execution_waves).toEqual([[1, 2, 3, 4]]);   // still one parallel wave
+        'get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank', 'get_hosting_capacity', 'get_pipeline']);
+      expect(il.execution_waves).toEqual([[1, 2, 3, 4, 5]]);   // still one parallel wave
       expect(hcStep('site a 50 MW data center in central Illinois').args_hint)
         .toMatchObject({ utility: 'Ameren Illinois (load)', capacity_type: 'load' });
       // ...and the intent's MW figure is deliberately NOT pushed into min_mw:

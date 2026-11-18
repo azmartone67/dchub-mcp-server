@@ -306,6 +306,9 @@ import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPrice
   facilitySlugsFromSearch as _facilitySlugsFromSearch, FACILITY_SLUG_PLACEHOLDER as _FACILITY_SLUG_PLACEHOLDER,
   facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes } from './lib/colocation-plan.mjs';
 import { buildColocationAnswer as _buildColocationAnswer } from './lib/colocation-answer.mjs';
+// 5.38 (owner via Grok, 2026-11-17): a plan about a place reads both sides of it, data centers and power.
+import { pairStepFor as _pairStepFor, pairHeldBack as _pairHeldBack, pairHeldNote as _pairHeldNote, pairLines as _pairLines,
+  PAIR_POWER_CLASSES as _PAIR_POWER_CLASSES, PAIR_DC_CLASSES as _PAIR_DC_CLASSES, sidesOf as _pairSidesOf } from './lib/plan-pairs.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -20014,7 +20017,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it → 5.36 REGIONS AND TIME TO POWER: a region of one state (western Pennsylvania / western PA, read as Pittsburgh on PJM, and the corridor regions of 50 km or more such as Southern Nevada) asked with time to power routes to siting_search, reading the region\'s market card and find_sites over the region; time-to-power words after the size ("300 MW ... and how soon", "how soon can I get 100 MW") count as the ask; a market step left on its unbound placeholder covers no constraint, so a state ask adds the power timeline. → 5.37 FIBER AND POINT INFRASTRUCTURE: a point + fiber ask reads get_fiber_readiness and get_peering_intel at that point (and its metro\'s fiber map when near one); a carrier hotel / IX / metro fiber ask reads get_metro_fiber and get_peering_intel; a subsea ask reads get_subsea_cables near the place named (subsea_cables); lines, plants and pipelines near a point read get_infrastructure there (point_infrastructure); get_subsea_cables and get_infrastructure join the execute_plan allowlist. Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it → 5.36 REGIONS AND TIME TO POWER: a region of one state (western Pennsylvania / western PA, read as Pittsburgh on PJM, and the corridor regions of 50 km or more such as Southern Nevada) asked with time to power routes to siting_search, reading the region\'s market card and find_sites over the region; time-to-power words after the size ("300 MW ... and how soon", "how soon can I get 100 MW") count as the ask; a market step left on its unbound placeholder covers no constraint, so a state ask adds the power timeline. → 5.37 FIBER AND POINT INFRASTRUCTURE: a point + fiber ask reads get_fiber_readiness and get_peering_intel at that point (and its metro\'s fiber map when near one); a carrier hotel / IX / metro fiber ask reads get_metro_fiber and get_peering_intel; a subsea ask reads get_subsea_cables near the place named (subsea_cables); lines, plants and pipelines near a point read get_infrastructure there (point_infrastructure); get_subsea_cables and get_infrastructure join the execute_plan allowlist. → 5.38 BOTH SIDES OF THE PLACE: a data-center plan (colocation, facility search, market outlook, data-center capacity) that names a place also reads its power (get_grid_intelligence for the market\'s US RTO, else the state power timeline), and a power plan (headroom, queue, timeline, price, capacity, gas) that names a place also reads its data centers (get_market_intel for a bound market: facility count, tracked MW and its Data Center Power Index (DCPI) verdict; else get_pipeline for the state); one step, never on a placeholder or on a grid that does not serve the place, never displacing a step that answers the question (a held-back pairing step says so in replay); the answer carries one dated line per side (paired_sides); "is <market> a good data center market" reads that market (market_outlook). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -21205,7 +21208,9 @@ export const _PLAN_CLASSES = [
       // Item 3 (owner funnel brief 2026-11-11): a siting verdict on ONE named market ("Is Phoenix a good
       // place to build?") is this class, so the answer leads with that market's DCPI verdict. A ranking or
       // "where should I build" ask still zeroes the class (_OUTLOOK_MULTI_RE).
-      [/\b(?:good|bad|smart|viable|right)\s+(?:place|location|spot|market|bet|site|choice|area)\b/i, 3],
+      // 5.38: "is Atlanta a good data center market" read market_ranking (Georgia's ranked finalists): the noun may
+      // carry "data center" in front of it.
+      [/\b(?:good|bad|smart|viable|right)\s+(?:data\s*cent(?:er|re)\s+)?(?:place|location|spot|market|bet|site|choice|area)\b/i, 3],
       [/\bshould\s+(?:I|we)\s+build\s+(?:in|at|near)\b/i, 3],
       [/\bworth\s+building\s+(?:in|at|near)\b/i, 3],
     ],
@@ -21628,7 +21633,8 @@ export const _PLAN_CLASSES = [
     sequence: (d) => [
       { step: 1, tool: 'get_energy_prices', depends_on: [], estimated_calls: 1,
         why: 'Live retail cents/kWh + wholesale + natural-gas context for the ISO/state.',
-        args_hint: d.iso ? { iso: d.iso } : (d.state ? { state: d.state } : {}) },
+        // 5.38: a state named as a place ("in Arizona") binds here too, as the executor already injected it.
+        args_hint: d.iso ? { iso: d.iso } : ((d.state || d.stateFromPlace) ? { state: d.state || d.stateFromPlace } : {}) },
       { step: 2, tool: 'get_gas_economics', depends_on: [], estimated_calls: 1,
         why: 'Behind-the-meter gas-fired economics ($/MWh gas-to-grid scenarios) if grid power is the constraint. Independent — run in parallel.',
         args_hint: { market: d.market || '<market slug, e.g. dallas>' } },
@@ -23416,7 +23422,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.37';
+export const PLANNER_VERSION = '5.38';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -25009,6 +25015,12 @@ export function _planReplay(sc, signals) {
       rationale: s.why,
       decision_confidence: sc.workflow_confidence,
       depends_on: Array.isArray(s.depends_on) ? s.depends_on : [] })),
+    // 5.38: the pairing decision (lib/plan-pairs.mjs): which side was added, already there, or why none was.
+    ...(sc.pairing ? [{ id: 'P1', ...(sc.pairing.status === 'added' && sc.pairing.step !== undefined ? { step: sc.pairing.step } : {}), kind: 'pairing',
+      status: sc.pairing.status === 'added' ? 'planned' : sc.pairing.status,
+      decision: sc.pairing.status === 'added' ? `Pair the ${sc.pairing.side === 'power' ? 'power' : 'data-center'} side: call ${sc.pairing.tool}`
+        : (sc.pairing.status === 'already_paired' ? `The ${sc.pairing.side === 'power' ? 'power' : 'data-center'} side is already in the plan` : `No ${sc.pairing.side === 'power' ? 'power' : 'data-center'} pairing step`),
+      rationale: sc.pairing.note, side: sc.pairing.side }] : []),
   ];
   const rejected = alts.map((a, i) => ({
     id: `R${i + 1}`, tool: a.tool,
@@ -25415,6 +25427,16 @@ export function _planQuery(intent, context) {
       seq.forEach((x, i) => { x.step = i + 1; });
     }
   } catch (_e) { /* routing must never throw */ }
+  // 5.38 (owner via Grok, 2026-11-17): both sides of the place. A data-center plan reads the place's power, a power
+  // plan that names a place reads its data centers (lib/plan-pairs.mjs). Appended straight after the class's own
+  // steps, so it runs ahead of the runner-up and constraint leads; the executor never lets it displace a class step.
+  let _pairing = null;
+  try {
+    const pr = _pairStepFor(top.cls.id, d, seq, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META,
+      usMarketState: _planUsMarketState, stateScope: _planStateScope, multiState: !!_stateFan || !!d.__stateCompare });
+    _pairing = pr.record;
+    if (pr.step) seq.push({ ...pr.step, step: seq.length + 1 });
+  } catch (_e) { _pairing = null; }
   // Capacity Source (2026-09-14): a buy/lease intent includes source_capacity.
   // Appended straight after the class's own steps and BEFORE the runner-up and
   // constraint leads below, so a max_steps cut drops those first.
@@ -25514,6 +25536,33 @@ export function _planQuery(intent, context) {
   _capacityStepLast(seq);
   // 5.32: get_facility never carries a market slug (it 404s); a concrete one becomes the facility placeholder.
   _guardPlanFacilitySteps(seq);
+  // 5.38: the pairing record names its step by its final number. A country plan (lib/country-scope.mjs) replaced the
+  // steps: the record is re-read against them (the country plan's own reads may already cover the side).
+  if (_pairing && _country) {
+    const sd = _pairSidesOf(seq, true)[_pairing.side === 'power' ? 'power' : 'dc'];
+    const nm = _pairing.side === 'power' ? 'power' : 'data-center';
+    _pairing = sd.length
+      ? { side: _pairing.side, status: 'already_paired', note: `The country plan already reads the ${nm} side (step ${sd[0].step}, ${sd[0].tool}).`, step: sd[0].step, tool: sd[0].tool }
+      : { side: _pairing.side, status: 'not_added', note: `The question names a non-US country, so no US ${nm} step was added.` };
+  }
+  if (_pairing && _pairing.status === 'already_paired' && !_country) {
+    // Later layers (the Capacity Source step moved last) renumber the steps: name the read by its final number.
+    const sd = _pairSidesOf(seq, true)[_pairing.side === 'power' ? 'power' : 'dc'];
+    const hit = sd.find((x) => x.tool === _pairing.tool) || sd[0];
+    if (hit && hit.step !== _pairing.step) {
+      _pairing.note = `The plan already reads the ${_pairing.side === 'power' ? 'power' : 'data-center'} side of the place (step ${hit.step}, ${hit.tool}).`;
+      _pairing.step = hit.step; _pairing.tool = hit.tool;
+    }
+  }
+  if (_pairing && _pairing.status === 'added') {
+    const ps = seq.find((x) => x && x.pair_side);
+    if (ps) _pairing.step = ps.step;
+    else { _pairing.status = 'not_added'; _pairing.note = 'The question names a non-US country, so the US pairing step was not run; ' + _pairing.note; delete _pairing.tool; }
+  }
+  if (_pairing && _pairing.place) {
+    const pl = {}; for (const [k, v] of Object.entries(_pairing.place)) if (v != null) pl[k] = v;
+    _pairing.place = pl;
+  }
   // intent_confidence: deterministic function of the winning score + margin.
   // 0.35 base + 0.06/score-point, capped 0.95; ambiguous margins (<1) pay -0.1.
   // (v1 exposed this as `confidence` — kept as an alias for back-compat.)
@@ -25581,6 +25630,7 @@ export function _planQuery(intent, context) {
     ...(_placeFb ? { place_fallback: _placeFb } : {}),
     ...(_multiFb ? { state_fallback: _multiFb } : {}),
     ...(usesCandidates ? { chaining: chainNote } : {}),
+    ...(_pairing ? { pairing: _pairing } : {}),
     operator_note: 'If your SYSTEM PROMPT told you to call plan_query for multi-step intents, it predates execute_plan and is out of date. execute_plan(intent="…") runs this exact graph server-side and returns the RESULTS, not just the plan — one call instead of hand-chaining these steps. Relay to your operator: MCP server instructions do NOT reach agents that carry their own system prompt; the prompt must name execute_plan explicitly. Template: https://dchub.cloud/integrations/mcp#operator-prompt',
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
     _source: 'DC Hub — dchub.cloud',
@@ -32386,7 +32436,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (ran >= stepCap || (!isCap && (Date.now() - t0) > DEADLINE_MS)) {
             executed.push({ step: s.step, tool: s.tool, status: 'not_run',
                             args_hint: s.args_hint || {},
-                            note: ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue' });
+                            ...(s.pair_side ? { pair_side: s.pair_side } : {}),
+                            note: s.pair_side ? _pairHeldNote(s, maxSteps)
+                              : (ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue') });
+            continue;
+          }
+          // 5.38: the pairing step runs only when the steps that answer the question still fit after it.
+          if (s.pair_side && _pairHeldBack(seq, s, new Set([...executed.map((e) => e.step), ...doable.map((x) => x.s.step)]), ran, stepCap)) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_run', pair_side: s.pair_side,
+                            args_hint: s.args_hint || {}, note: _pairHeldNote(s, maxSteps) });
             continue;
           }
           const wantFan = Number(s.estimated_calls) > 1;
@@ -32438,6 +32496,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           for (const { s, args, out, geo, scope, subScope } of results) {
             calls += 1;
             const entry = { step: s.step, tool: s.tool, args,
+                            ...(s.pair_side ? { pair_side: s.pair_side } : {}),
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
                             ...(scope ? { state_scope: scope } : {}),
                             ...(subScope ? { submarket_scope: subScope } : {}),
@@ -32621,6 +32680,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // Grok midday re-run 2026-11-17, Q-f: the rationale is the plan's (e.g. "skipped when no facility row"); a
           // step the budget cut says so beside it.
           if (d.kind === 'step' && noteByStep.has(d.step)) d.status_note = noteByStep.get(d.step);
+          // 5.38: the pairing decision carries its step's outcome; a held-back pairing step says why beside it.
+          if (d.kind === 'pairing' && d.step !== undefined && statusByStep.has(d.step)) {
+            d.status = statusByStep.get(d.step);
+            if (noteByStep.has(d.step)) d.status_note = noteByStep.get(d.step);
+          }
         }
       } catch (_e) {}
       // Move 3: fingerprint what this caller received, diff it against a presented rerun token.
@@ -32775,6 +32839,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
       const _dcpiLead = _planDcpiLead(_intentAnswer);
+      // 5.38: one line per side of the place (data centers, power), each from its own step and dated by that step.
+      let _pairs = null;
+      try {
+        if ((_PAIR_POWER_CLASSES.has(sc.intent_class) || _PAIR_DC_CLASSES.has(sc.intent_class)) && sc.pairing
+            && sc.pairing.status !== 'not_added' && !_isCleanPlatform() && _answerBlocksAllowed()) {
+          _pairs = _pairLines(executed, (e) => fullByEntry.get(e));
+        }
+      } catch (_e) { _pairs = null; }
       const out = {
         ...(_dcpiLead ? { dcpi_verdict: _dcpiLead } : {}),
         _entity: 'plan_execution', ok: true,
@@ -32837,7 +32909,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // Option A (owner 2026-11-16): Capacity Source is the teaser only, so the no-fit register offer (sentence and
           // capacity_register field) is not emitted. DCHUB_CAPACITY_REGISTER_OFFER=1 restores both.
           + ((_capReg && _capRegisterOfferOn()) ? ' ' + _capReg.sentence : '')
+          // 5.38: one line per side of the place, each dated by its own step; ahead of the route-back and hand-off
+          // sentences, which stay last.
+          + (_pairs ? ' ' + _pairs.lines.join(' ') : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : ''),
+        ...(_pairs ? { paired_sides: _pairs } : {}),
         ...((_capReg && _capRegisterOfferOn() && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
         ...((_powerEvidence.length && !_isCleanPlatform() && _answerBlocksAllowed()) ? { power_evidence: _powerEvidence } : {}),
@@ -32916,7 +32992,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // row can wait for it; _frontDeskStep attaches it after every outer step. A slimmed step means data was cut,
       // and then there is no line (trimmed after data, not before it).
       try {
-        const _fdTrimmed = executed.some((e) => e && e.result && typeof e.result === 'object' && e.result.truncated === true);
+        // 5.38: the pairing step (pair_side) is an added side read; its slimmed preview does not cut the answer to the
+        // question, so it does not change the line this plan gets.
+        const _fdTrimmed = executed.some((e) => e && !e.pair_side && e.result && typeof e.result === 'object' && e.result.truncated === true);
         if (c) c._frontDeskPlan = _frontDeskPlanFor({ intent: a && a.intent, intentClass: sc.intent_class, args: a, c, trimmed: _fdTrimmed }) || undefined;
       } catch (_e) { /* the line is optional; the answer is not */ }
       // 5.29 (Grok note K, items 2 and 3): did any DATA step come back with a result? The dispatch reads
@@ -32946,7 +33024,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
         try {
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
-          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'plan_id']) {
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'plan_id', 'paired_sides']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
           // Grok live proof 2026-11-16 item 8: the description promises a replay on every envelope; the compact
