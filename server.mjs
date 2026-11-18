@@ -216,7 +216,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
-import { CANON_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
+import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
@@ -31702,7 +31702,7 @@ export const _INSTRUCTIONS = (() => {
   // neutral connect line (lib/neutral-connect.mjs): no prices, credits, free-key or calls-per-day wording here.
   // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
-  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
+  return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
     + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
 })();
 
@@ -31980,7 +31980,7 @@ export const _INSTRUCTIONS_LEAN = (() => {
   // Owner GO 2026-10-20 (directory-safe): "MUST CALL (FRONT DOOR)" and "never reuse a figure from
   // memory" are gone. execute_plan stays the RECOMMENDED entry for a multi-part question, stated as a
   // recommendation; the freshness fact (data moves daily) replaces the order.
-  return CANON_SENTENCE + ' ' + OUTREACH_LEAD + 'DC Hub' + (n ? ': ' + n + ' tools' : '') + '. '
+  return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + 'DC Hub' + (n ? ': ' + n + ' tools' : '') + '. '
     + (routing ? routing + ' ' : '')
     // Item 9 (owner 2026-11-11): the TOOL CHOICE line ("a multi-part question fits execute_plan (recommended); one fact fits
     // the tool whose description starts Use this when") is gone. The canon sentence that now opens this text says when to call
@@ -32108,7 +32108,7 @@ export const INSTR_WELCOME = 'Welcome: start with execute_plan; dchub_services l
 export function _withWelcome(text, env = process.env) {
   const s = String(text == null ? '' : text);
   if (/^(0|false|no|off)$/i.test(String((env && env.DCHUB_FRONT_DESK_WELCOME) || '').trim())) return s;
-  const lead = CANON_SENTENCE + ' ' + OUTREACH_LEAD;
+  const lead = CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD;
   if (!s.startsWith(lead) || s.includes(INSTR_WELCOME)) return s;
   return lead + INSTR_WELCOME + ' ' + s.slice(lead.length);
 }
@@ -32958,7 +32958,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return withEndOfBurstHook({ content: _content, structuredContent: _final }, 'execute_plan', c);
     });
 
-  trackedTool(srv, 'search_facilities', 'Use this when the user asks which data centers exist, or who operates in a city, state or country; filters: country, state, city, operator, MW range, tier or text. Returns name, operator, location, market, status and MW where disclosed; each row is flagged verified or unverified_directory_listing. Keyless: names and locations; MW and specs need a full-access key. Ex: "Equinix sites in Virginia over 10 MW."',
+  trackedTool(srv, 'search_facilities', 'Use this when the user asks which data centers exist, or who operates in a city, state or country; filters: country, state, city, operator, MW range, tier or text. Returns name, operator, location, market, status and MW where disclosed; each row is flagged verified or unverified_directory_listing. For the energy side of the same place, execute_plan adds the local ISO, interconnection queue and power prices. Keyless: names and locations; MW and specs need a full-access key. Ex: "Equinix sites in Virginia over 10 MW."',
     { query: S.describe('Free-text search over facility name/operator/location (mapped to the backend `q` param), e.g. "hyperscale Ashburn"'),
       country: S.describe('ISO 3166-1 alpha-2 country code, e.g. US, GB, SG'),
       state: S.describe('US state abbreviation or region, e.g. VA, TX'),
@@ -32984,7 +32984,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: _markUnverifiedText(_out) }] };
     });
 
-  trackedTool(srv, 'get_facility', 'Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-digital-realty-iad38-ashburn-5754e62d. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
+  trackedTool(srv, 'get_facility', 'Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-digital-realty-iad38-ashburn-5754e62d. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities). For the energy side of the same place, execute_plan adds the local ISO, interconnection queue and power prices.',
     // r-slug-alias (2026-07-02, friction audit): the description advertises
     // `slug=` and search_facilities returns `slug` fields, but the handler read
     // ONLY facility_id — the natural search→detail chain sent slug, fid
@@ -33035,7 +33035,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
+    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. DCPI joins the grid side of a data center market (headroom, queue, modeled time-to-power) to that market; get_market_intel gives the same market\'s facility supply and pipeline, and execute_plan returns both in one answer. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
@@ -34266,7 +34266,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
+    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
     { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
@@ -35463,7 +35463,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. This tool has no wholesale/LMP price and no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. This tool has no wholesale/LMP price and no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE') },
@@ -35534,7 +35534,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use this when the user asks about grid capacity, power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks a few full briefs a day. Unlimited needs a full-access key. Ex: "PJM headroom for 200 MW?"',
+  trackedTool(srv, 'get_grid_intelligence', 'Use this when the user asks about grid capacity, power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Can be scoped to a data center market or site: execute_plan pairs the grid with that place\'s facilities, capacity and markets. Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks a few full briefs a day. Unlimited needs a full-access key. Ex: "PJM headroom for 200 MW?"',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for Ashburn / Northern Virginia zone load from EIA-930: hourly and dated, but posted daily, so about 1.25-2.25 days old and not live. Real-time LMP for the zone is withheld for licence reasons (licence_withheld).'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
       region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
