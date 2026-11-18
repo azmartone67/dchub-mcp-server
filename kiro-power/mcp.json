@@ -3,7 +3,7 @@
   "mcpServers": {
     "dchub": {
       "type": "streamable-http",
-      "url": "https://dchub.cloud/mcp"
+      "url": "https://dchub.cloud/mcp?via=kiro"
     }
   }
 }

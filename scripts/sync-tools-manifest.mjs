@@ -1070,6 +1070,27 @@ const names = new Set(tools.map((t) => t.name));
     if (FIX) pend(CCP, ccp.replace(CCPRX, `$1${VERSION}$3`));
   }
 
+  // ★2026-11-18 — plugins/dchub-copilot/plugin.json is the GitHub Copilot CLI plugin
+  // (Agent Plugins 1.0 manifest, served by .github/plugin/marketplace.json). Copilot CLI
+  // and the awesome-copilot intake compare this version with the listing, so heal it
+  // like the Claude Code manifest. A missing anchor is a PROBLEM, not a silent no-op.
+  const CPP = 'plugins/dchub-copilot/plugin.json';
+  const cppHere = pending.has(CPP) || fs.existsSync(path.join(ROOT, CPP));
+  const cpp = cppHere ? readCur(CPP) : '';
+  const CPPRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
+  const cppm = CPPRX.exec(cpp);
+  if (!cppHere) {
+    // a scratch tree without the Copilot plugin (canon-guard fixtures) has nothing to heal
+  } else if (!cppm) {
+    problems.push(`${CPP}: top-level \`"version": "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a 2-space-indented, double-quoted "version" line. If the key moved or '
+      + 'changed shape, re-anchor it here: Copilot CLI reads it to decide whether an '
+      + 'installed plugin is stale.');
+  } else if (cppm[2] !== VERSION) {
+    problems.push(`${CPP} version ${cppm[2]} != ${VERSION}`);
+    if (FIX) pend(CPP, cpp.replace(CPPRX, `$1${VERSION}$3`));
+  }
+
   // ★2026-11-13 — .codex-plugin/plugin.json is the Codex / HOL scanner manifest.
   // It was missing from the tree (HOL still indexed a sparse generated copy).
   // Same 2-space top-level version anchor as the Gemini and Claude manifests;

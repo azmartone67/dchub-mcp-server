@@ -1,0 +1,30 @@
+{
+  "name": "dchub",
+  "owner": {
+    "name": "DC Hub",
+    "url": "https://dchub.cloud"
+  },
+  "metadata": {
+    "description": "DC Hub: the orchestration layer for data center and energy intelligence, for GitHub Copilot CLI. Call execute_plan first."
+  },
+  "plugins": [
+    {
+      "name": "dchub",
+      "source": "./plugins/dchub-copilot",
+      "description": "DC Hub: the orchestration layer for data center and energy intelligence. Remote MCP (call execute_plan first) plus three workflow skills.",
+      "author": {
+        "name": "DC Hub",
+        "url": "https://dchub.cloud"
+      },
+      "homepage": "https://dchub.cloud/install/copilot-cli",
+      "license": "MIT",
+      "keywords": [
+        "mcp",
+        "data-center",
+        "energy",
+        "power-grid",
+        "site-selection"
+      ]
+    }
+  ]
+}
