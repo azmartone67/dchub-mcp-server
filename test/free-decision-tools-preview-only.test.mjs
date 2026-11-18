@@ -187,7 +187,10 @@ beforeAll(async () => {
       if (p === '/api/v1/grid/extended/PJM') return send(EXT);
       if (p === '/api/v1/interconnection-queue/by-iso') return send(QUEUE_BY_ISO);
       if (p === '/api/v1/markets/northern-virginia') return send(MARKET);
-      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null }, retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } });
+      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null }, retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 },
+        // 2026-11-18: the blocks the backend serves every caller (be#8996, be#8988).
+        wholesale_lmp: { label: 'wholesale LMP, $/MWh', iso: 'CAISO', hub: 'TH_NP15_GEN-APND', real_time: { lmp_usd_mwh: 44.83, as_of: '2026-11-18T17:00:00Z', market: 'RTM' }, source: 'California ISO (CAISO) OASIS' },
+        natural_gas_usd_mmbtu: 2.917, natural_gas: { hub: 'Henry Hub', status: 'measured', as_of: '2026-11-17', source: 'EIA RNGWHHD', source_url: 'https://www.eia.gov/dnav/ng/hist/rngwhhdD.htm' } });
       return send({});
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -708,6 +711,14 @@ describe('get_energy_prices anonymous preview carries the labelled taste (Grok 1
     const msg = (sc._upgrade && sc._upgrade.message) || '';
     expect(msg).toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options/);   // item 1 leftover (2026-10-17)
     expect(msg).not.toMatch(/\$|Developer|Pro\b/);
+  });
+  // Owner 2026-11-18 "share with citation": the preview dropped these (seen live 17:00Z).
+  it('the hub LMP and the credited Henry Hub spot reach the anonymous caller', async () => {
+    const r = await callAs({}, 'get_energy_prices', { iso: 'CAISO' });
+    expect(r.sc.wholesale_lmp.real_time.lmp_usd_mwh).toBe(44.83);
+    expect(r.sc.wholesale_lmp.source).toMatch(/CAISO/);
+    expect(r.sc.natural_gas_usd_mmbtu).toBe(2.917);
+    expect(r.sc.natural_gas.source).toMatch(/Refinitiv\/LSEG/);
   });
 });
 
