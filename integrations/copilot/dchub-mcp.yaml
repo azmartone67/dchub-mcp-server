@@ -19,19 +19,11 @@ auth:
       type: none
     - name: api_key
       description: >
-        A DC Hub key sent as a Bearer token. A free key with an email gives
-        50 MCP calls/day; get one at https://dchub.cloud/connect.
+        A DC Hub key sent as a Bearer token. DCHUB_API_KEY is optional and
+        opens fuller answers. Get a key: https://dchub.cloud/connect
       type: bearer
       header: Authorization
       header_format: "Bearer {token}"
-      rate_limits:
-        daily: 50
-
-rate_limits:
-  default_mode: keyless
-  modes:
-    api_key:
-      daily: 50
 
 tools:
   - name: search_facilities

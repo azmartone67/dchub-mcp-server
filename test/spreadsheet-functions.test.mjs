@@ -107,8 +107,8 @@ describe('task pane first-run experience', () => {
     for (const id of examples) expect(Object.keys(C.DCHUB_FUNCTIONS)).toContain(id);
     expect(welcome).toBeLessThan(html.indexOf('id="k"'));
   });
-  it('free key link goes to /connect?via=excel', () => {
-    expect(html).toMatch(/href="https:\/\/dchub\.cloud\/connect\?via=excel"[^>]*>Get a free key</);
+  it('key link goes to /connect?via=excel', () => {
+    expect(html).toMatch(/href="https:\/\/dchub\.cloud\/connect\?via=excel"[^>]*>Get a key</);
   });
   it('names no price or plan', () => {
     const text = html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<[^>]+>/g, ' ');

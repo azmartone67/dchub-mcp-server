@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>8254ec3d-b268-4eef-b62f-2224f1babb28</Id>
-  <Version>1.0.2.0</Version>
+  <Version>1.0.3.0</Version>
   <ProviderName>DC Hub</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="DC Hub for Excel"/>
@@ -105,7 +105,7 @@
         <bt:String id="Button.Label" DefaultValue="DC Hub key"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Type =DCHUB.GRID(&quot;PJM&quot;) in a cell. Open DC Hub key on the Home tab to add your free key."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Type =DCHUB.GRID(&quot;PJM&quot;) in a cell. Open DC Hub key on the Home tab to add a key (optional; it opens fuller answers)."/>
         <bt:String id="Button.Tooltip" DefaultValue="Add your DC Hub API key"/>
       </bt:LongStrings>
     </Resources>

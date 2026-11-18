@@ -138,6 +138,9 @@ import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
+import { neutralCanvasTeaser as _neutralCanvasTeaser } from './lib/canvas-teaser-copy.mjs';
+import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyToolAs, keyToolPointerText as _keyToolPointerText,
+         keyToolPointerStep as _keyToolPointerStep } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -384,6 +387,10 @@ const TOOL_ALIASES = {
   // digest / key
   subscribe_weekly_digest: 'subscribe_digest', subscribe_to_digest: 'subscribe_digest',
   get_free_key: 'claim_free_key', claim_key: 'claim_free_key',
+  // 2026-11-17 (owner): get_api_key is the LISTED name of the key tool (lib/key-tool-name.mjs). The handler stays
+  //   registered as claim_free_key (telemetry, backend funnels and the gating sets key on it), so the listed name
+  //   resolves here at call time, and claim_free_key stays callable, unlisted.
+  get_api_key: 'claim_free_key',
   // discovery
   list_tools: 'discover_tools', get_tools: 'discover_tools',
   // ★2026-09-06 — REGULARISED NAMES. Our own catalog is inconsistent:
@@ -25994,6 +26001,9 @@ function _sourceLineCb(name, fn) {
       // Paid callers keep the full answer unless they ask for detail:"compact". Kill switch DCHUB_PLAN_COMPACT=0.
       if (name === 'execute_plan') _final = _planCompactStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(),
         detail: _planDetailRequested(args), paid: _planCallerPaid(c) });
+      // 2026-11-17 (owner): every pointer at the key tool names its listed name, get_api_key (lib/key-tool-name.mjs).
+      // Not on the directory / Claude / core profiles (each scrubs the key tool out) or a loopback step.
+      _final = _keyToolPointerStep(_final, { skip: !!c.loopback_step || ownScrub });
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -32317,11 +32327,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // /mcp/grok (2026-09-29): instructionsRewrite restates the lead tool count
     // as the count that path serves (lib/grok-profile.mjs grokInstructions).
     // Every other path passes none, so their text is unchanged byte for byte.
-    instructions: ((typeof instructionsRewrite === 'function')
+    // 2026-11-17: the key tool is named by its listed name, get_api_key (lib/key-tool-name.mjs).
+    instructions: _keyToolPointerText(((typeof instructionsRewrite === 'function')
       ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
       : (opts && opts.capacityIntro
         ? _withWelcome(_capacityInstructions(_INSTRUCTIONS_LEAN))
-        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
+        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : '')),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -36275,11 +36286,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID — or ALL to see every scored market in the geography. Defaults to BUILD,CAUTION, so a geography whose markets are all AVOID returns matched:0 plus an `empty_result` block explaining that; re-run with verdict=ALL to see those rows.'),
       limit: LIMIT.describe('Number of shortlist markets to return') },
     async (a) => {
-      const data = await callAPI('/api/v1/site-selection/canvas', {
+      const _canvasData = await callAPI('/api/v1/site-selection/canvas', {
         capacity_mw: a.capacity_mw, region: a.region, state: a.state, iso: a.iso,
         max_months: a.max_months,
         verdict: a.verdict, limit: a.limit || 12,
       });
+      // 2026-11-17 (owner): the locked synthesis names no plan and carries no pitch on /mcp (lib/canvas-teaser-copy.mjs).
+      // The directory / Claude / core profiles keep their own scrub. Kill switch DCHUB_CANVAS_TEASER_NEUTRAL=0.
+      const data = _neutralCanvasTeaser(_canvasData, { skip: !!(getCtx() || {}).profile });
       // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
       try {
         if (_findingNudgeAllowed()) _attachFindingNext(data, _findingNextTool('site_selection_canvas', _findingResultGaps(data, a)));
@@ -37717,7 +37731,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   const _R = (name, uri, title, description, text) =>
     srv.registerResource(name, uri, { title, description, mimeType: 'text/markdown' },
-      async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
+      async () => ({ contents: [{ uri, mimeType: 'text/markdown', text: _keyToolPointerText(text) }] }));
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
      '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- A global data-center facility map across 170+ countries\n- 300+ markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 30+ EU zones, Taiwan, Japan, South Korea, Brazil; Australia + Singapore partial) + Canada (IESO, AESO, Hydro-Québec)\n- 1,900+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\n## Recent changes (2026-10-20)\n\n- Direct MCP URL: https://dchub.cloud/mcp. Use it in place of a Smithery-hosted run.tools URL; Smithery retires its hosted proxy on 2026-10-31.\n- A key bound to an email (`bind_email`) gets full answers, capped per day, from `get_grid_intelligence`, `get_interconnection_queue` and `get_market_intel`.\n- Facility discovery adds data centers found in EPA ECHO air-permit records (US federal, public domain).\n- A keyless daily check of each core data layer: https://dchub.cloud/api/v1/ops/data-onboarding\n- The full list for people: https://dchub.cloud/whats-new\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
@@ -38007,6 +38021,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         if (t.outputSchema) t.outputSchema = expandTypeUnions(stripSchemaDialect(t.outputSchema));
       }
       if (res && Array.isArray(res.tools)) res.tools = _frontDoorFirst(_claimKeyFirst(res.tools));   // execute_plan, then claim_free_key (see above)
+      // 2026-11-17: the key tool is listed as get_api_key on the canonical surfaces (lib/key-tool-name.mjs). The cache
+      // probe keeps the registered name so the directory and pack projections read one canonical catalog.
+      if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile) res.tools = _listKeyToolAs(res.tools);
       // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
       // canonical list instead, so the directory/pack projections keep reading full schemas.
       if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile && process.env.DCHUB_LIST_SLIM_DISABLE !== '1') res.tools = res.tools.map(_slimTool);
@@ -40086,7 +40103,9 @@ app.post(MCP_PATHS, async (req, res) => {
           if (_cachedList) {
             // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
             const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
-            return _writeRpcResult(req, res, body.id, _pack ? _slim(_packFilter(_cachedList, _pack)) : _slim(_cachedList));
+            // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
+            const _keyName = (_dirProfile || _coreProfile) ? ((x) => x) : _listResultKeyToolAs;
+            return _writeRpcResult(req, res, body.id, _pack ? _slim(_keyName(_packFilter(_cachedList, _pack))) : _slim(_keyName(_cachedList)));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {

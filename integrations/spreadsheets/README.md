@@ -10,8 +10,8 @@ Live data center, power grid and energy data as spreadsheet formulas.
 | `=DCHUB_ENERGY_RATE("VA")` | `=DCHUB.ENERGY_RATE("VA")` | retail electricity rate |
 
 Without a key the formulas return previews; a value DC Hub withholds shows as
-`withheld: <link>`, never an estimate. A free key ([dchub.cloud/signup](https://dchub.cloud/signup))
-opens more. Cite as `DC Hub (dchub.cloud), as of <date>`.
+`withheld: <link>`, never an estimate. DCHUB_API_KEY is optional and opens fuller
+answers. [Get a key](https://dchub.cloud/signup). Cite as `DC Hub (dchub.cloud), as of <date>`.
 
 ## Install
 
