@@ -167,6 +167,7 @@ test/country-scope-e2e.test.mjs
 test/country-scope-geography.test.mjs
 test/coverage-counts-not-masked.test.mjs
 test/coverage-gap-log-only.test.mjs
+test/cross-domain-answer-1117.test.mjs
 test/cross-domain-one-server-1117.test.mjs
 test/daily-quota-gateway.test.mjs
 test/data-sources-odbl-117627.test.mjs

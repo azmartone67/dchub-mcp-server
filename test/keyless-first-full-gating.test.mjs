@@ -272,7 +272,7 @@ describe('M) a sited build is planned as a capacity search; the first plan leads
                  { step: 2, tool: 'get_facility', status: 'failed', result: { error: 'API 404' } }] };
     const c = F.compactFirstPlan(out, new Map(), { cap: 1 });
     expect(c.answer).not.toMatch(/^Compose/);
-    expect(c.answer).toBe('DC Hub ran 1 read for this question: search_facilities (preview). Each one’s key figures are in executed[].');
+    expect(c.answer).toBe('1 read ran for this question: search_facilities (preview). Each one’s key figures are in executed[].');
     // A guide sentence that is prose still leads, as before.
     expect(F.compactFirstPlan({ ...out, answer_guide: 'Dallas has 40 tracked facilities. More.' }, new Map(), { cap: 1 }).answer)
       .toBe('Dallas has 40 tracked facilities.');
