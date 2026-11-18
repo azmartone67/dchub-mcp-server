@@ -1,0 +1,40 @@
+{
+ "_entity": "gas",
+ "index": "DCGI",
+ "score": {
+  "data_as_of": "2026-08-01",
+  "data_as_of_basis": "OLDEST of the two DCGI inputs — the score is no fresher than its stalest half. gas_pipelines ingest 2026-11-16; EIA gas price period 2026-08 (dated from its FIRST day). Stalest: gas price.",
+  "dcgi": null,
+  "_dcgi_withheld": true,
+  "gas_access_score": null,
+  "_gas_access_score_withheld": true,
+  "gas_access_score_band": "BUILD",
+  "gas_cost_score": null,
+  "_gas_cost_score_withheld": true,
+  "gas_cost_score_band": "CAUTION",
+  "gas_price": null,
+  "_gas_price_withheld": true,
+  "gas_price_method": "trailing-12-month mean of reported months, negatives included",
+  "gas_price_months_reported": 12,
+  "gas_price_period": null,
+  "_gas_price_period_withheld": true,
+  "gas_price_sector": null,
+  "_gas_price_sector_withheld": true,
+  "gas_price_series": null,
+  "_gas_price_series_withheld": true,
+  "gas_price_window": [
+   "2025-09",
+   "2026-08"
+  ],
+  "interstate": null,
+  "_interstate_withheld": true,
+  "operators": null,
+  "_operators_withheld": true,
+  "pipelines": null,
+  "_pipelines_withheld": true,
+  "state": "TX",
+  "verdict": "GAS-ADVANTAGED"
+ },
+ "state": "TX",
+ "as_of": "2026-08-01"
+}

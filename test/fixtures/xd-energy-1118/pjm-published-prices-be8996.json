@@ -1,0 +1,132 @@
+{
+  "_about": "Published PJM price figures served as `wholesale_context` on GET /api/v1/energy/summary?iso=PJM (util/wholesale_lmp.py). Owner decision 2026-11-18: DC Hub does not ingest or republish PJM LMP (Data Miner 2 terms), but quotes figures PJM and its Independent Market Monitor publish in their reports, each with its source. Every figure was read from the linked document on the retrieved date; the quoted sentence or table for each is in the PR that added it (be#8996). To add a figure, open the primary document, copy the number as printed, and fill every field.",
+  "iso": "PJM",
+  "label": "published PJM price figures (not live)",
+  "figures": [
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 325.00,
+      "unit": "$/MW-day (UCAP)",
+      "period": "2028/2029 delivery year",
+      "area": "PJM RTO (all prices cleared at the $325.00 cap)",
+      "source": "PJM Interconnection, 2028/2029 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2028-2029/2028-2029-bra-results-report.pdf",
+      "published": "2026-07-14",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 333.44,
+      "unit": "$/MW-day (UCAP)",
+      "period": "2027/2028 delivery year",
+      "area": "PJM RTO (Rest of RTO; all prices cleared at the $333.44 cap)",
+      "source": "PJM Interconnection, 2027/2028 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2027-2028/2027-2028-bra-report.pdf",
+      "published": "2025-12-17",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 329.17,
+      "unit": "$/MW-day (UCAP)",
+      "period": "2026/2027 delivery year",
+      "area": "PJM RTO (Rest of RTO, BGE and DOM all cleared at the $329.17 cap)",
+      "source": "PJM Interconnection, 2026/2027 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2026-2027/2026-2027-bra-report.pdf",
+      "published": "2025-07-22",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 269.92,
+      "unit": "$/MW-day",
+      "period": "2025/2026 delivery year",
+      "area": "PJM RTO (Rest of RTO)",
+      "source": "PJM Interconnection, 2025/2026 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2025-2026/2025-2026-base-residual-auction-report.pdf",
+      "published": "2024-07-30",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 466.35,
+      "unit": "$/MW-day",
+      "period": "2025/2026 delivery year",
+      "area": "BGE LDA (constrained)",
+      "source": "PJM Interconnection, 2025/2026 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2025-2026/2025-2026-base-residual-auction-report.pdf",
+      "published": "2024-07-30",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Base Residual Auction (capacity) clearing price",
+      "value": 444.26,
+      "unit": "$/MW-day",
+      "period": "2025/2026 delivery year",
+      "area": "Dominion (DOM) LDA (constrained)",
+      "source": "PJM Interconnection, 2025/2026 Base Residual Auction Report",
+      "source_url": "https://www.pjm.com/-/media/DotCom/markets-ops/rpm/rpm-auction-info/2025-2026/2025-2026-base-residual-auction-report.pdf",
+      "published": "2024-07-30",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Real-time load-weighted average LMP",
+      "value": 74.98,
+      "unit": "$/MWh",
+      "period": "first nine months of 2026 (January through September)",
+      "area": "PJM (system-wide, load-weighted)",
+      "source": "Monitoring Analytics (PJM Independent Market Monitor), 2026 Quarterly State of the Market Report for PJM: January through September, Section 1 Introduction",
+      "source_url": "https://www.monitoringanalytics.com/reports/PJM_State_of_the_Market/2026/2026q3-som-pjm-sec1.pdf",
+      "published": "2026-11-12",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Day-ahead load-weighted average LMP",
+      "value": 72.73,
+      "unit": "$/MWh",
+      "period": "first nine months of 2026 (January through September)",
+      "area": "PJM (system-wide, load-weighted)",
+      "source": "Monitoring Analytics (PJM Independent Market Monitor), 2026 Quarterly State of the Market Report for PJM: January through September, Section 1 Introduction",
+      "source_url": "https://www.monitoringanalytics.com/reports/PJM_State_of_the_Market/2026/2026q3-som-pjm-sec1.pdf",
+      "published": "2026-11-12",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Real-time load-weighted average LMP",
+      "value": 50.73,
+      "unit": "$/MWh",
+      "period": "2025",
+      "area": "PJM (system-wide, load-weighted)",
+      "source": "Monitoring Analytics (PJM Independent Market Monitor), 2025 State of the Market Report for PJM, Section 1 Introduction",
+      "source_url": "https://www.monitoringanalytics.com/reports/PJM_State_of_the_Market/2025/2025-som-pjm-sec1.pdf",
+      "published": "2026-03-12",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "name": "Day-ahead load-weighted average LMP",
+      "value": 50.70,
+      "unit": "$/MWh",
+      "period": "2025",
+      "area": "PJM (system-wide, load-weighted)",
+      "source": "Monitoring Analytics (PJM Independent Market Monitor), 2025 State of the Market Report for PJM, Section 1 Introduction",
+      "source_url": "https://www.monitoringanalytics.com/reports/PJM_State_of_the_Market/2025/2025-som-pjm-sec1.pdf",
+      "published": "2026-03-12",
+      "basis": "published report figure, quoted",
+      "retrieved": "2026-11-18"
+    }
+  ],
+  "live_prices": {
+    "label": "PJM live LMP (PJM's own public pages)",
+    "url": "https://dataviewer.pjm.com/dataviewer/pages/public/lmp.jsf",
+    "note": "DC Hub does not republish live PJM LMP; open PJM's page for current prices"
+  }
+}

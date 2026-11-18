@@ -72,7 +72,7 @@ describe('keyless wall, end to end', () => {
     const sc = r.structuredContent;
     expect(['BUILD', 'CAUTION', 'AVOID']).toContain(sc.site_teaser.verdict);
     expect(sc.site_teaser.locked).toContain('shareable_report');
-    expect(sc.next_tool).toBe('claim_free_key');
+    expect(sc.next_tool).toBe('get_api_key');
     const all = JSON.stringify(r);
     for (const leak of ['83.7', '88.1', '95.4', '350.5', 'SECRET_REPORT_SIG', 'Branded 5-page']) expect(all).not.toContain(leak);
   });

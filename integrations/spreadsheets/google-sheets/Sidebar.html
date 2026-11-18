@@ -16,7 +16,7 @@
 <body>
   <h1>DC Hub <span>for Sheets</span></h1>
   <p>Paste your DC Hub API key. It is stored for your Google account only and sent only to dchub.cloud.</p>
-  <p>No key yet? <a href="https://dchub.cloud/signup" target="_blank" rel="noopener">Get a free key</a>. Without one, formulas return previews.</p>
+  <p>DCHUB_API_KEY is optional and opens fuller answers. Without one, formulas return previews. <a href="https://dchub.cloud/signup" target="_blank" rel="noopener">Get a key</a>.</p>
   <input id="k" type="password" autocomplete="off" placeholder="your DC Hub key">
   <button onclick="google.script.run.withSuccessHandler(function(r){document.getElementById('s').textContent='Key '+r+'. Recalculate to refresh.';}).dchubSaveKey(document.getElementById('k').value)">Save</button>
   <div id="s"></div>

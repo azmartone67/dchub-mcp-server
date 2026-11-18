@@ -151,7 +151,7 @@ describe('initialize instructions and tools/list descriptions carry none of it',
   }, 30000);
   it('the key line is the continuity line and the tool names stay', async () => {
     const { instructions } = await listTools('/mcp');
-    expect(instructions).toContain('`claim_free_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions');
+    expect(instructions).toContain('`get_api_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions');
     expect(instructions).toContain('`recover_my_key` re-sends a lost one');
     expect(instructions).not.toContain('Both are free');
   }, 30000);
@@ -160,7 +160,7 @@ describe('initialize instructions and tools/list descriptions carry none of it',
 describe('claim_free_key (no email)', () => {
   it('still resolves under the same name, next to bind_email and unlock_more_data', async () => {
     const names = new Set((await listTools('/mcp?catalog=full')).tools.map((t) => t.name));
-    for (const n of ['claim_free_key', 'bind_email', 'unlock_more_data', 'recover_my_key']) expect(names.has(n), n).toBe(true);
+    for (const n of ['get_api_key', 'bind_email', 'unlock_more_data', 'recover_my_key']) expect(names.has(n), n).toBe(true);
     const r = await claimNoEmail('/mcp');
     expect(r.isError).not.toBe(true);
     expect(r.structuredContent.api_key).toBe(MINTED);

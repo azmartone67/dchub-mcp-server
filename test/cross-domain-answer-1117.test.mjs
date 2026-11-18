@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import fs from 'node:fs';
 import { capacityGridAsk, capacityGridSequence, energyPriceAsk, energyPriceStep, wholesaleAsked, buildCrossDomainAnswer,
   WHOLESALE_SCOPE_NOTE, HEADLINE_MAX } from '../lib/cross-domain-answer.mjs';
 import { planLeadText, PLAN_LEAD_MAX } from '../lib/plan-lead-text.mjs';
@@ -96,7 +97,7 @@ describe('the answer for (a), keyless', () => {
 
   it('names the top 3 markets with their grids', () => {
     expect(ia.kind).toBe('cross_domain');
-    expect(ia.headline).toMatch(/^50 MW, US \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
+    expect(ia.headline).toMatch(/^Top DCPI BUILD markets for 50 MW \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
     expect(ia.headline.length).toBeLessThanOrEqual(HEADLINE_MAX);
   });
   it('gives each grid\'s queue depth with its date, and says headroom is withheld (never estimated)', () => {
@@ -118,7 +119,7 @@ describe('the answer for (a), keyless', () => {
     const plan = { _entity: 'plan_execution', intent: QA, executed, intent_answer: ia, human_message: 'preview' };
     const lead = planLeadText(plan);
     expect(lead).not.toMatch(/^DC Hub ran/);
-    expect(lead.startsWith('50 MW, US (24-month cut not applied): Midland')).toBe(true);
+    expect(lead.startsWith('Top DCPI BUILD markets for 50 MW (24-month cut not applied): Midland')).toBe(true);
     // 2026-11-18: the deadline is never claimed in the lead when the cut was not applied.
     expect(lead).not.toMatch(/with power in under 24 months/);
     expect(lead.length).toBeLessThanOrEqual(PLAN_LEAD_MAX);
@@ -164,8 +165,8 @@ describe('the answer for (b), keyless', () => {
 
   it('names both sides with figures and dates, and says what DC Hub prices are', () => {
     expect(ia.headline).toBe('Northern Virginia (PJM). Data centers: 587 facilities, 11,313 MW tracked (as of 2026-11-03); DCPI AVOID (as of 2026-11-18).'
-      + ' Power: PJM queue 373.5 GW (collected 2026-11-17); VA retail rate 10.63 cents/kWh (EIA 2026 average, as of 2026-08-31; not wholesale/LMP);'
-      + ' PJM headroom figures withheld.');
+      + ' Power: PJM queue 373.5 GW (collected 2026-11-17); PJM headroom withheld;'
+      + ' VA retail rate 10.63 cents/kWh (EIA 2026 average, as of 2026-08-31; not wholesale/LMP).');
     expect(ia.headline.length).toBeLessThanOrEqual(HEADLINE_MAX);
     expect(ia.not_established).toContain(WHOLESALE_SCOPE_NOTE);
   });
@@ -229,7 +230,15 @@ beforeAll(async () => {
       if (p === '/api/v1/listings') return send(LISTINGS_EMPTY);
       if (p === '/api/v1/energy/summary') return send(ENERGY_VA);
       if ((m = /^\/api\/v1\/markets\/([^/]+)$/.exec(p))) return m[1] === 'northern-virginia' ? send(INTEL_NOVA) : send({ error: 'not found' }, 404);
-      if (p === '/api/v1/interconnection-queue/refined') return send({ ok: true, results: [], count_total_matching: null });
+      if (p === '/api/v1/interconnection-queue/refined') {
+        // The VA slice shaped like the live keyless PJM OH payload (2026-11-18), with the live VA count (312).
+        if (u.searchParams.get('state') === 'VA') {
+          const rq = JSON.parse(fs.readFileSync(new URL('./fixtures/xd-energy-1118/refined-queue-pjm-oh.json', import.meta.url), 'utf8'));
+          const { _min_mw_not_applied, ...fa } = rq.filters_applied || {};
+          return send({ ...rq, count_total_matching: 312, filters_applied: { ...fa, state: 'VA' } });
+        }
+        return send({ ok: true, results: [], count_total_matching: null });
+      }
       if (p.startsWith('/api/v1/mcp/full-cap/')) return send({ ok: false });
       return send({});
     });
@@ -285,9 +294,9 @@ describe('end to end, keyless, compact', () => {
   describe('(a) 50 MW, US, under 24 months, headroom and queue', () => {
     let o, lead;
     beforeAll(async () => { ({ o, lead } = await plan({ intent: QA, detail: 'compact' })); }, 120_000);
-    it('routes to capacity_grid on planner 5.39', () => {
+    it('routes to capacity_grid on planner 5.40', () => {
       expect(o.intent_class).toBe('capacity_grid');
-      expect(o.planner_version).toBe('5.39');
+      expect(o.planner_version).toBe('5.40');
     });
     it('reads the shortlist, both finalist grids\' queue and headroom, and Capacity Source; nothing failed', () => {
       const ran = o.executed.filter((e) => e.status === 'executed' || e.status === 'gated_preview');
@@ -299,7 +308,7 @@ describe('end to end, keyless, compact', () => {
     });
     it('the lead names the three markets, the queue figures with dates, and never starts "DC Hub ran"', () => {
       expect(lead).not.toMatch(/^DC Hub ran/);
-      expect(lead).toMatch(/^50 MW, US \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
+      expect(lead).toMatch(/^Top DCPI BUILD markets for 50 MW \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
       expect(lead).toContain('ERCOT queue 461.4 GW (as of 2026-10-31)');
       expect(o.intent_answer.kind).toBe('cross_domain');
     });
@@ -321,7 +330,9 @@ describe('end to end, keyless, compact', () => {
     it('the lead names both sides with figures and says DC Hub serves retail, not wholesale', () => {
       expect(lead).not.toMatch(/^DC Hub ran/);
       expect(lead).toMatch(/^Northern Virginia \(PJM\)\. Data centers: 587 facilities, 11,313 MW tracked/);
-      expect(lead).toContain('Power: PJM queue 373.5 GW (collected 2026-11-17); VA retail rate 10.63 cents/kWh (EIA 2026 average, as of 2026-08-31; not wholesale/LMP)');
+      // 5.40: a DC noun, a power noun and a bound place make dc_power_place, whose queue read is the VA slice of PJM's.
+      expect(o.intent_class).toBe('dc_power_place');
+      expect(lead).toContain('Power: PJM queue (VA): 312 active requests (as of 2026-11-17); PJM headroom withheld; VA retail rate 10.63 cents/kWh (EIA 2026 average, as of 2026-08-31; not wholesale/LMP)');
       expect(o.answer_guide).toContain(WHOLESALE_SCOPE_NOTE);
       expect(o.intent_answer.not_established).toContain(WHOLESALE_SCOPE_NOTE);
     });

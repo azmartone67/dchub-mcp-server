@@ -241,7 +241,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     expect(text).toContain('This preview leaves out');   // Note V (2026-11-16): the keyless person line (was "DC Hub's paid plan")
     expect(text).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
-    expect(text).toContain('claim_free_key');
+    expect(text).toContain('get_api_key');
     expect(burns).toEqual([]);
   });
 

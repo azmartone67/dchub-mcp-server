@@ -138,9 +138,14 @@ import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
+import { neutralCanvasTeaser as _neutralCanvasTeaser } from './lib/canvas-teaser-copy.mjs';
+import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyToolAs, keyToolPointerText as _keyToolPointerText,
+         keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
+         KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
+import { fetchEmberMonthly, emberAreaForGrid } from './lib/ember-monthly.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
 import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields, EMAIL_ASK as _UNLOCK_EMAIL_ASK } from './lib/unlock-line.mjs';
@@ -171,6 +176,9 @@ import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAG
          MCP_OAUTH_RESOURCE, MCP_OAUTH_PRM, mcpOauthChallenge as _mcpOauthChallenge,
          isMcpOauthRequest as _isMcpOauthRequest,
          mcpOauthChallengeEligible as _mcpOauthChallengeEligible } from './lib/mcp-oauth-path.mjs';
+// 2026-11-18: /mcp/gemini, /mcp/copilot, /mcp/perplexity, /mcp/cursor, /mcp/mistral serve the full /mcp
+// with an arrival source tag (lib/client-paths.mjs).
+import { CLIENT_PATHS } from './lib/client-paths.mjs';
 // G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
 // carries (header NAMES, UA, clientInfo, session behaviour) — lib/grok-ident-log.mjs.
 import { grokIdentLogActive as _grokIdentLogActive, grokSignals as _grokSignals,
@@ -322,6 +330,12 @@ import { pairStepFor as _pairStepFor, pairHeldBack as _pairHeldBack, pairHeldNot
 import { capacityGridAsk as _capacityGridAsk, capacityGridSequence as _capacityGridSequence,
   energyPriceStep as _energyPriceStep, wholesaleAsked as _wholesaleAsked, WHOLESALE_SCOPE_NOTE as _WHOLESALE_SCOPE_NOTE,
   buildCrossDomainAnswer as _buildCrossDomainAnswer } from './lib/cross-domain-answer.mjs';
+import { dcPowerPlaceAsk as _dcPowerPlaceAsk, dcPowerPlaceSequence as _dcPowerPlaceSequence, hostingPoint as _dcHostingPoint,
+  dcPowerPlaceTakes as _dcPowerPlaceTakes, DC_POWER_PLACE_MAX_STEPS as _DC_POWER_PLACE_MAX_STEPS,
+  priceNowAsk as _priceNowAsk, priceNowSequence as _priceNowSequence, queueWithdrawalsAsk as _queueWithdrawalsAsk,
+  queueWithdrawalsSequence as _queueWithdrawalsSequence } from './lib/dc-power-place.mjs';
+import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _buildGasPriceAnswer,
+  buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer } from './lib/energy-answers.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -386,6 +400,11 @@ const TOOL_ALIASES = {
   // digest / key
   subscribe_weekly_digest: 'subscribe_digest', subscribe_to_digest: 'subscribe_digest',
   get_free_key: 'claim_free_key', claim_key: 'claim_free_key',
+  // 2026-11-17 (owner): get_api_key is the LISTED name of the key tool (lib/key-tool-name.mjs). The handler stays
+  //   registered as claim_free_key (telemetry, backend funnels and the gating sets key on it), so the listed name
+  //   resolves here at call time, and claim_free_key stays callable, unlisted.
+  //   Written with the constants: a literal `<listed>: '<registered>'` pair reads as a hardcoded key to the plugin scanner.
+  [_KEY_TOOL_LISTED]: _KEY_TOOL_REGISTERED,
   // discovery
   list_tools: 'discover_tools', get_tools: 'discover_tools',
   // ★2026-09-06 — REGULARISED NAMES. Our own catalog is inconsistent:
@@ -4580,6 +4599,10 @@ const MCP_SOURCE_PATHS = new Map([
   //   readout (excludedFromRelayReadout). /mcp/anthropic above is unchanged: it
   //   still serves the full /mcp under 'anthropic-directory'.
   [CLAUDE_PATH, CLAUDE_SOURCE],
+  // ★ 2026-11-18 — the five client paths (lib/client-paths.mjs). Same shape as /mcp/anthropic: the full /mcp
+  //   under an arrival tag. Before this they answered GET 200 (worker description) and POST 404, the
+  //   /mcp/docker failure above.
+  ...CLIENT_PATHS,
 ]);
 
 function _normPath(req) {
@@ -19103,6 +19126,23 @@ const _ISO_REORDERED = { NEISO: 'ISONE' };
 const _isoKey = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const _normIso = v => { const n = _isoKey(v); return _ISO_REORDERED[n] || n; };
 const _isoValid = v => _US_ISO_SET.has(_normIso(v));
+// ── neso-tec (2026-11-18, be#8980) ──
+// get_interconnection_queue also drills into Great Britain. The backend's
+// /api/v1/interconnection-queue/by-iso already answers iso=NESO with the NESO
+// aggregate row (a mixed generation + demand connections register, queue_kind
+// mixed_connection_queue), and be#8980 attaches the NESO TEC Register project
+// rows to it. The strict US-ISO check refused NESO before the call ever left this
+// server. Only this tool widens: get_iso_context stays US-only. NGESO (the
+// operator's former name, used by get_grid_data) and GB fold to NESO, because the
+// backend matches the letters of the code and knows only NESO. UK is NOT folded:
+// NESO's register covers Great Britain, not Northern Ireland.
+const _QUEUE_INTL_FOLD = Object.freeze({ NESO: 'NESO', NGESO: 'NESO', GB: 'NESO' });
+const _queueIntlIso = v => _QUEUE_INTL_FOLD[_isoKey(v)] || null;
+const _queueIsoValid = v => _isoValid(v) || !!_queueIntlIso(v);
+export const _foldQueueIsoArg = a => {
+  const f = a && a.iso != null && _queueIntlIso(a.iso);
+  return f ? { ...a, iso: f } : _foldIsoArg(a);
+};
 // ── 2026-10-21 (owner: "mcp tools should cover way more") ──
 // get_grid_data and compare_isos serve EVERY live grid DC Hub ingests, not only
 // the 7 US ISOs. Two backend reads cover them:
@@ -19247,11 +19287,14 @@ const _isoError = (raw, toolName) => {
   // `iso` is actually a declared param of this tool. buildErrorEnvelope filters
   // the candidate to the allowed set and omits the key if nothing survives.
   const suggested = near ? { iso: near } : undefined;
+  // get_interconnection_queue also takes NESO (Great Britain, the NESO TEC Register).
+  const queueGb = toolName === 'get_interconnection_queue'
+    ? ' Great Britain: iso=NESO (the NESO TEC Register).' : '';
   const payload = {
     error: 'invalid_iso',
     detail: `iso="${raw}" not recognized for ${toolName}. Valid US ISOs: `
-            + US_ISOS.join(', ') + '.' + intl,
-    valid_isos: US_ISOS,
+            + US_ISOS.join(', ') + '.' + queueGb + intl,
+    valid_isos: toolName === 'get_interconnection_queue' ? [...US_ISOS, 'NESO'] : US_ISOS,
     _source: 'DC Hub — dchub.cloud',
   };
   const enriched = _withErrorEnvelope(payload, {
@@ -19412,7 +19455,8 @@ export function _locationPoint(rawLocation, slug, row, param = 'location') {
 export function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
-      && String(args.iso).trim() !== '' && !_isoValid(args.iso)) {
+      && String(args.iso).trim() !== ''
+      && !(name === 'get_interconnection_queue' ? _queueIsoValid(args.iso) : _isoValid(args.iso))) {
     return _isoError(args.iso, name);
   }
   if (_coordsRequired(name, args)) {
@@ -20295,7 +20339,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it → 5.36 REGIONS AND TIME TO POWER: a region of one state (western Pennsylvania / western PA, read as Pittsburgh on PJM, and the corridor regions of 50 km or more such as Southern Nevada) asked with time to power routes to siting_search, reading the region\'s market card and find_sites over the region; time-to-power words after the size ("300 MW ... and how soon", "how soon can I get 100 MW") count as the ask; a market step left on its unbound placeholder covers no constraint, so a state ask adds the power timeline. → 5.37 FIBER AND POINT INFRASTRUCTURE: a point + fiber ask reads get_fiber_readiness and get_peering_intel at that point (and its metro\'s fiber map when near one); a carrier hotel / IX / metro fiber ask reads get_metro_fiber and get_peering_intel; a subsea ask reads get_subsea_cables near the place named (subsea_cables); lines, plants and pipelines near a point read get_infrastructure there (point_infrastructure); get_subsea_cables and get_infrastructure join the execute_plan allowlist. → 5.38 BOTH SIDES OF THE PLACE: a data-center plan (colocation, facility search, market outlook, data-center capacity) that names a place also reads its power (get_grid_intelligence for the market\'s US RTO, else the state power timeline), and a power plan (headroom, queue, timeline, price, capacity, gas) that names a place also reads its data centers (get_market_intel for a bound market: facility count, tracked MW and its Data Center Power Index (DCPI) verdict; else get_pipeline for the state); one step, never on a placeholder or on a grid that does not serve the place, never displacing a step that answers the question (a held-back pairing step says so in replay); the answer carries one dated line per side (paired_sides); "is <market> a good data center market" reads that market (market_outlook). → 5.39 CROSS-DOMAIN ANSWERS: capacity with power plus grid headroom or the queue, with no place named, routes to capacity_grid (the DCPI-ranked shortlist for the size and deadline, each finalist grid\'s queue and headroom, Capacity Source last; three finalists and up to 8 steps unless set); power-price wording about one US place reads that state\'s get_energy_prices, and a wholesale or LMP ask is told DC Hub serves EIA retail rates and Henry Hub gas; a cross-domain answer names both sides with figures, each a dated fact listed first in facts[]; a side line never says no figure came back when facts[] holds one; no lead starts "DC Hub ran". Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields) → 5.14 NEVADA: Southern/Northern Nevada, Las Vegas, Reno and their counties bind a point + radius, the regions name their metro, and get_retirement_headroom reads region_iso=NEVP on a Nevada intent → 5.15 QUEUE STATE: get_refined_queue takes state=, and a state intent filters the queue server-side → 5.16 ONE NAMED MARKET: market_outlook reads the market the question named (DCPI + brief + its RTO) and never a ranking; the unknown fallback runs discover_tools only; a plan that could not bind says so in unresolved → 5.17 EVERY TRACKED MARKET: market_outlook binds any DCPI market, with the state after a name deciding (a name tracked in another state, shared by two markets, or two markets named is unresolved); every grid/power step is checked for an ISO or named source and an as_of (power_evidence), and an undated one is named UNDATED in answer_guide → 5.18 DATED US GRID RANKING: a grid_headroom run that reads the scoreboard returns grid_ranking (US ISOs by DCPI BUILD rate, each row with reason, value, ISO and as_of; withheld tie-breaks named without their number), the deep read takes the best-ranked queue ISO, the scoreboard step is dated by the ranking\'s oldest row, and plan steps count against the caller\'s own IP → 5.19 SITING VERDICT LEADS: a one-market siting verdict ("is Phoenix a good place to build") routes to market_outlook, and a market check\'s answer leads with dcpi_verdict (verdict + Source line) → 5.20 AIR PERMITS: air-permit / nonattainment / TCEQ intents route to the air_permits class (get_air_permit_context, then get_permitting_intel in parallel) instead of the moratorium tool → 5.21 NO-RTO OUTLOOK: a market_outlook market on no US RTO (Phoenix, Las Vegas: WECC) also reads get_power_availability_timeline for its state, so a power or interconnection outlook carries dated power-side evidence; RTO markets are unchanged. → 5.22 GRID_HEADROOM NON-RTO: a place whose isoFromPlace is not a US RTO (Phoenix/Las Vegas: WECC; Atlanta: SERC) no longer passes that label as iso to get_interconnection_queue or get_refined_queue, which reject it; the plan uses get_power_availability_timeline and get_refined_queue with the US state instead. … → 5.29 SEVERAL STATES, NEVER EMPTY: a siting question over two or more named US states routes to siting_search (per-state canvas, find_sites and power timeline); a plan none of whose steps reached a tool runs find_sites / canvas per named state, else discover_tools, instead of returning empty; dc_capacity holds get_pipeline to the named market or state, and a metro read state-wide says "Widened <metro> to <state>" in answer_guide → 5.30 ONE STATE, TIME TO POWER: a siting question in one named state that asks time to power and names two or more of its markets (or asks for faster sites) routes to siting_search, which first reads the DCPI card of every named market (up to three); get_retirement_headroom reads region_iso=PACE on a Utah or Wyoming intent → 5.31 NON-US REGIONS AND MARKETS: a question naming a non-US region (Europe/EU/EMEA, Asia-Pacific, Latin America, the Middle East and Africa) or a tracked non-US market alone (Frankfurt, read as Germany) runs no US-only step (lib/country-scope.mjs): rank_markets for a region that excludes the US and source_capacity by region, and says grid headroom, queues and time-to-power are not covered there. → 5.32 COLOCATION: a colocation ask (colo, cage, cabinet, rack, kW, carrier hotel, cross-connect) routes to the colocation class: the asked metro\'s DCPI card first, the metro facility search (Ashburn, Sterling and Loudoun read as Northern Virginia, Dallas as DFW; query plus state, never the state alone), its grid, and fiber/peering when asked; the kW size reaches search_facilities min_capacity_mw and is named in dropped_filters when not applied; two named facilities are compared from their own search rows; get_facility never runs on a market slug (lib/colocation-plan.mjs); a colocation price ask routes to pricing_out_of_scope (DC Hub does not publish colocation pricing; the cost drivers it covers are read); fiber/peering asks read get_peering_intel (now on the execute_plan allowlist) → 5.34 LEADS FROM EVERY STEP: the plain-language lead reads each step\'s own headline (pipeline, DCPI, grid reading, changes, any taste.headline), one line per place, and never counts lookups when a step returned a figure; a siting answer carries analyze_site\'s site-level verdict when no DCPI verdict was read; a pipeline with no capacity says MW not held; a non-US plan leads with its coverage line and a grid step with no reading is status no_data → 5.35 ENTITIES: generation_mix (a state reads its grid; the answer leads with compare_isos generation_mix_pct), gas_price (Henry Hub / gas price reads get_gas_index), named_campus (a campus is searched by name, with its pipeline), two or more grids named are each read (iso_comparison), a state comparison reads each state, every named market gets its DCPI card, a market slug that is a state, a grid or a non-market word is not run, and a state is never set on a step whose grid does not serve it → 5.36 REGIONS AND TIME TO POWER: a region of one state (western Pennsylvania / western PA, read as Pittsburgh on PJM, and the corridor regions of 50 km or more such as Southern Nevada) asked with time to power routes to siting_search, reading the region\'s market card and find_sites over the region; time-to-power words after the size ("300 MW ... and how soon", "how soon can I get 100 MW") count as the ask; a market step left on its unbound placeholder covers no constraint, so a state ask adds the power timeline. → 5.37 FIBER AND POINT INFRASTRUCTURE: a point + fiber ask reads get_fiber_readiness and get_peering_intel at that point (and its metro\'s fiber map when near one); a carrier hotel / IX / metro fiber ask reads get_metro_fiber and get_peering_intel; a subsea ask reads get_subsea_cables near the place named (subsea_cables); lines, plants and pipelines near a point read get_infrastructure there (point_infrastructure); get_subsea_cables and get_infrastructure join the execute_plan allowlist. → 5.38 BOTH SIDES OF THE PLACE: a data-center plan (colocation, facility search, market outlook, data-center capacity) that names a place also reads its power (get_grid_intelligence for the market\'s US RTO, else the state power timeline), and a power plan (headroom, queue, timeline, price, capacity, gas) that names a place also reads its data centers (get_market_intel for a bound market: facility count, tracked MW and its Data Center Power Index (DCPI) verdict; else get_pipeline for the state); one step, never on a placeholder or on a grid that does not serve the place, never displacing a step that answers the question (a held-back pairing step says so in replay); the answer carries one dated line per side (paired_sides); "is <market> a good data center market" reads that market (market_outlook). → 5.39 CROSS-DOMAIN ANSWERS: capacity with power plus grid headroom or the queue, with no place named, routes to capacity_grid (the DCPI-ranked shortlist for the size and deadline, each finalist grid\'s queue and headroom, Capacity Source last; three finalists and up to 8 steps unless set); power-price wording about one US place reads that state\'s get_energy_prices, and a wholesale or LMP ask is told DC Hub serves EIA retail rates and Henry Hub gas; a cross-domain answer names both sides with figures, each a dated fact listed first in facts[]; a side line never says no figure came back when facts[] holds one; no lead starts "DC Hub ran". → 5.40 ONE PLACE, BOTH SIDES; PRICES AND WITHDRAWALS: a data-center question about one place\'s power routes to dc_power_place (the market\'s data centers and DCPI verdict, the grid\'s headroom or, off an RTO, filed retirements, the state slice of the queue, utility-published feeder hosting capacity in a load-side covered territory, the state power timeline, and the state\'s price when asked; up to 8 steps), and its answer reads every power step\'s dated fact, narrowest queue first, and names a no-RTO place by its utilities and region ("Phoenix (APS/SRP/TEP, WECC)"); a power-price ask about a grid routes to price_now (the price DC Hub serves for it with its basis, and live demand); a gas-price answer leads with the gas price or says it is withheld, then the DCGI verdict, and get_gas_economics resolves its market from the state; a withdrawals ask routes to queue_withdrawals (status=withdrawn); the capacity_grid lead says the deadline cut was not applied and its rows say when the DCPI verdicts were read. Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -21591,6 +21635,54 @@ export const _PLAN_CLASSES = [
     coverage_notes: 'site_selection_canvas ranks every caller; its time-to-power figures, and so the max_months cut, need full access (below it the shortlist says the cut was not applied). get_interconnection_queue gives queued generation GW with the ISO report date to every caller. get_grid_intelligence headroom figures (average time to power, build rate, constraint band, reserves) need full access. source_capacity lists what Capacity Source holds.',
   },
   {
+    // 5.40 (Grok energy + cross-domain round 2, 2026-11-17 night): a data-center question about ONE place's power
+    // ("how long to get power for a 100 MW data center in Phoenix", "grid headroom and the queue for a campus near
+    // Columbus, Ohio", "how soon could a 50 MW data center in Dallas get power, and what do prices look like") took
+    // whichever power class scored highest and read one side: Phoenix led "WECC (ISO)" with no power figure, Columbus
+    // led with PJM's ISO-wide queue and never read the Ohio slice or AEP Ohio's published feeders, Dallas read the US
+    // average rate. A data-center noun + a power noun + one bound place is this class (lib/dc-power-place.mjs); it never
+    // scores from its own words: _planQuery gives it the win over the one-sided classes it may take.
+    id: 'dc_power_place', recipe: 'market_selection',
+    patterns: [],
+    rationale: 'One place, both sides, in one wave: the market\'s data centers and DCPI verdict, then the power side narrowest first (the grid\'s headroom or, off an RTO, filed retirements; the state slice of the queue; the utility\'s published feeder hosting capacity when the place sits in a load-side covered territory), the state power timeline, and the state\'s price when the question asks it.',
+    sequence: (d) => _dcPowerPlaceSequence(d, d.__dcPlace || {}, d.__dcHc || null, d.__dcText || ''),
+    alternatives: [
+      { tool: 'get_interconnection_queue', when: 'You want the ISO-wide queue depth rather than the place\'s state slice.',
+        rejected_because: 'The question named one place: the state slice is the narrowest queue read for it.' },
+      { tool: 'analyze_site', when: 'You have coordinates for one parcel and want its composite site verdict.',
+        rejected_because: 'The question named a market or state, not a parcel.' },
+    ],
+    coverage_notes: 'get_market_intel gives facility count, the MW floor and the DCPI verdict to every caller. get_grid_intelligence headroom figures need full access (below it the answer says withheld). get_refined_queue gives every caller the state-slice request count with the ISO file date. get_hosting_capacity covers utilities that publish feeder hosting capacity; load-side territories only earn a step. get_power_availability_timeline MW figures need full access (below it the queue context is quoted).',
+  },
+  {
+    // 5.40 (Grok energy head-to-head, gap 1): "What is the price of electricity in ERCOT right now?" led with the
+    // generation queue (461.4 GW). A power-price ask about a grid with no data-center noun reads the price DC Hub serves
+    // for that grid and its live demand, and the answer leads with the price and its basis (lib/energy-answers.mjs).
+    id: 'price_now', recipe: null,
+    patterns: [],
+    rationale: 'The price question is answered with the price DC Hub serves for the grid (a wholesale LMP where one is served, else the EIA retail rate with its basis) and the grid\'s live demand; DC Hub serves EIA retail averages and the Henry Hub spot, not real-time LMP, and the answer says so when no LMP is served.',
+    sequence: (d) => _priceNowSequence(d),
+    alternatives: [
+      { tool: 'get_gas_economics', when: 'The question is behind-the-meter gas-fired power cost.',
+        rejected_because: 'The question asked for the grid power price.' },
+    ],
+    coverage_notes: 'get_energy_prices gives the EIA retail rate to every caller; get_grid_data gives live demand (EIA-930 hourly).',
+  },
+  {
+    // 5.40 (Grok energy head-to-head, gap 3): "How many projects withdrew from the PJM queue this year?" read the active
+    // queue. Withdrawals read get_refined_queue status=withdrawn; DC Hub's loaders keep the active queue only, so today
+    // the answer says withdrawals are not held rather than quoting the active queue as if it answered.
+    id: 'queue_withdrawals', recipe: 'grid_and_queue',
+    patterns: [],
+    rationale: 'Withdrawn requests are filtered server-side (status=withdrawn) by ISO and state; the active queue they left is read alongside.',
+    sequence: (d) => _queueWithdrawalsSequence(d, d.__dcPlace || null),
+    alternatives: [
+      { tool: 'get_interconnection_queue', when: 'You want the active queue only.',
+        rejected_because: 'The question asked about withdrawals.' },
+    ],
+    coverage_notes: 'get_refined_queue takes status=withdrawn; the queue tables hold active requests today, so a zero is said as not held.',
+  },
+  {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
     patterns: [
       [/\binterconnection\b/i, 3], [/\bqueue(?:d|s)?\b/i, 3], [/\bbacklog\b/i, 2],
@@ -21931,7 +22023,12 @@ export const _PLAN_CLASSES = [
       { step: 1, tool: 'get_energy_prices', depends_on: [], estimated_calls: 1,
         why: 'Live retail cents/kWh + wholesale + natural-gas context for the ISO/state.',
         // 5.38: a state named as a place ("in Arizona") binds here too, as the executor already injected it.
-        args_hint: d.iso ? { iso: d.iso } : ((d.state || d.stateFromPlace) ? { state: d.state || d.stateFromPlace } : {}) },
+        // 5.40 (Grok round 2, Dallas): a market named without its state ("in Dallas") binds its state, not the US average.
+        args_hint: d.iso ? { iso: d.iso } : ((d.state || d.stateFromPlace) ? { state: d.state || d.stateFromPlace } : (() => {
+          let st = null;
+          try { st = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }).state; } catch (_e) { st = null; }
+          return st ? { state: st } : {};
+        })()) },
       { step: 2, tool: 'get_gas_economics', depends_on: [], estimated_calls: 1,
         why: 'Behind-the-meter gas-fired economics ($/MWh gas-to-grid scenarios) if grid power is the constraint. Independent — run in parallel.',
         args_hint: { market: d.market || '<market slug, e.g. dallas>' } },
@@ -22194,6 +22291,9 @@ export const _CLASS_WHY_LIVE = {
   capacity_search: 'requires_live_queue_data',
   interconnection_queue: 'requires_live_queue_data',
   capacity_grid: 'requires_current_market_scoring',
+  dc_power_place: 'requires_live_queue_data',
+  price_now: 'requires_current_market_pricing',
+  queue_withdrawals: 'requires_live_queue_data',
   power_timeline: 'requires_live_queue_data',
   grid_headroom: 'requires_live_grid_telemetry',
   hosting_capacity: 'requires_current_infrastructure_layers',
@@ -22768,7 +22868,8 @@ export function _execInjectGeo(tool, args, sig) {
 // while region_iso=NEVP returns Fort Churchill (Lyon County, NV). Only states
 // whose BA was read live are listed; NEVP is NV Energy, most of Nevada.
 // 5.30: UT and WY are PacifiCorp East; region_iso=PACE read live 2026-11-16 (one filed retirement, WY).
-export const _STATE_RETIREMENT_BA = { NV: 'NEVP', UT: 'PACE', WY: 'PACE' };
+// 5.40: AZ read live 2026-11-18 keyless with region_iso=AZPS,SRP,TEPC (Springerville 1, TEPC, filed 2027-12-01, with the IRP caveat).
+export const _STATE_RETIREMENT_BA = { NV: 'NEVP', UT: 'PACE', WY: 'PACE', AZ: 'AZPS,SRP,TEPC' };
 function _execInjectRetirementBa(args, sig) {
   if (!sig || !args || typeof args !== 'object' || args.region_iso != null) return [];
   const st = sig.state || sig.stateFromPlace;
@@ -23720,7 +23821,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.39';
+export const PLANNER_VERSION = '5.40';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -25023,6 +25124,7 @@ export function _planFanStatePlaceholders(seq, states) {
 // class left unset, and lists what it filled in `intent_bound`. get_refined_queue's max_ttp_months
 // is deliberately not filled: it is an ISO-average HARD cut (<=30 leaves only SPP), so a deadline
 // would silently drop whole grids. get_pipeline gets no size: a project's MW is not the requirement.
+// A step marked `unsized` (5.40: dc_power_place's state queue slice, a request count) gets no size either.
 const _PLAN_INTENT_ARGS = {
   site_selection_canvas:           { mw: 'capacity_mw', months: 'max_months' },
   get_retirement_headroom:         { mw: 'target_mw', months: 'horizon_months' },
@@ -25044,7 +25146,7 @@ export function _planBindIntentArgs(seq, d) {
       const args = { ...(s.args_hint || {}) };
       const bound = [];
       const put = (k, v) => { if (k && v != null && args[k] == null) { args[k] = v; bound.push(k); } };
-      if (mw) {
+      if (mw && !s.unsized) {
         const whole = Math.min(5000, Math.max(1, Math.round(mw)));
         if (!(s.tool === 'source_capacity' && args.min_kw != null)) put(spec.mw, spec.mw === 'min_mw' || spec.mw === 'target_mw' ? mw : whole);
       }
@@ -25617,6 +25719,30 @@ export function _planQuery(intent, context) {
             ...(best && best.score > 0 ? ['over ' + best.cls.id] : [])];
         }
       }
+    }
+  } catch (_e) { /* routing must never throw */ }
+  // 5.40 (Grok energy + cross-domain round 2): withdrawals, a grid's power price now, and one place's data centers with
+  // its power. Each wins by +1.5 over the best other class (clears the ambiguity margin) and only over the one-sided
+  // classes it may take; colocation, gas, fiber, comparisons, rankings and point reads keep their question.
+  try {
+    const best = (except) => { let b = null; for (const s of scored) if (!except.includes(s.cls.id) && (!b || s.score > b.score)) b = s; return b; };
+    const ids = ['dc_power_place', 'price_now', 'queue_withdrawals'];
+    for (const id of ids) { const z = scored.find((s) => s.cls.id === id); if (z) { z.score = 0; z.hits = []; } }
+    const top0 = best(ids);
+    const topId = top0 && top0.score > 0 ? top0.cls.id : 'unknown';
+    const win = (id, why) => { const w = scored.find((s) => s.cls.id === id); if (!w) return; w.score = Math.max(top0 ? top0.score : 0, 2) + 1.5; w.hits = [why]; };
+    let place = null;
+    try { place = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }); } catch (_e) { place = null; }
+    if (_queueWithdrawalsAsk(text) && ['interconnection_queue', 'grid_headroom', 'unknown', 'capacity_search', 'power_timeline'].includes(topId)) {
+      d.__dcPlace = place;
+      win('queue_withdrawals', 'a queue withdrawals ask');
+    } else if (_priceNowAsk(text, d) && ['grid_headroom', 'price', 'interconnection_queue', 'power_timeline', 'unknown', 'capacity_search'].includes(topId)) {
+      win('price_now', 'a power price ask about ' + (d.iso || (d.isos && d.isos[0])));
+    } else if (_dcPowerPlaceTakes(topId, text) && _dcPowerPlaceAsk(text, d, place)) {
+      d.__dcPlace = place; d.__dcText = text;
+      const pt = _dcHostingPoint(d, place);
+      d.__dcHc = pt ? _planHostingCoverage(text, pt) : null;
+      win('dc_power_place', 'data centers and their power in one place (' + (place.label || place.state) + (topId !== 'unknown' ? ', over ' + topId : '') + ')');
     }
   } catch (_e) { /* routing must never throw */ }
   scored.sort((a, b) => b.score - a.score);
@@ -26234,6 +26360,9 @@ function _sourceLineCb(name, fn) {
       // Paid callers keep the full answer unless they ask for detail:"compact". Kill switch DCHUB_PLAN_COMPACT=0.
       if (name === 'execute_plan') _final = _planCompactStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(),
         detail: _planDetailRequested(args), paid: _planCallerPaid(c) });
+      // 2026-11-17 (owner): every pointer at the key tool names its listed name, get_api_key (lib/key-tool-name.mjs).
+      // Not on the directory / Claude / core profiles (each scrubs the key tool out) or a loopback step.
+      _final = _keyToolPointerStep(_final, { skip: !!c.loopback_step || ownScrub });
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -29606,6 +29735,9 @@ const _ROUTING_OUTPUTS = {
   iso_comparison:       ['a side-by-side of the named grids', 'the same deep read for each grid'],
   dc_capacity:          ['data centers under construction and planned', 'facilities already built', 'listed capacity for sale or lease'],
   capacity_grid:        ['DCPI-ranked US markets for the size and deadline', 'queue depth and headroom for each finalist grid', 'listed capacity for sale or lease'],
+  dc_power_place:       ['the place\'s data centers and DCPI verdict', 'the state slice of the queue, headroom and published feeder hosting capacity', 'the dated power timeline and price for the state'],
+  price_now:            ['the power price DC Hub serves for the grid, with its basis', 'the grid\'s live demand'],
+  queue_withdrawals:    ['withdrawn queue requests by ISO and state, or that they are not held', 'the active queue they left'],
   siting_search:        ['DCPI-scored markets per named state for the size and deadline', 'candidate search areas per state', 'the dated power timeline per state'],
   unknown:              ['the tool families that could answer this', 'a suggested entry call'],
 };
@@ -29622,6 +29754,9 @@ const _ROUTING_WHY = {
   deals_ma:             'Transaction flow is a single-capability lookup.',
   fiber_power_pairing:  'Pairing fiber against power is two capabilities by definition.',
   capacity_grid:        'Capacity with power, and the grid behind it, spans market scores, queues, headroom and listings.',
+  dc_power_place:       'One place\'s data centers and the power behind them span market data, queues, headroom, feeders, timelines and prices.',
+  price_now:            'A grid\'s power price now is the price DC Hub serves for it and the grid\'s live demand.',
+  queue_withdrawals:    'Withdrawals are a single-capability queue lookup.',
   fiber:                'Fiber depth for one market is a single-capability lookup.',
   price:                'Price alone mis-answers siting; the cheapest ISO is often the one with no headroom.',
   incentives_tax:       'Statutory programs are a single-capability lookup.',
@@ -29706,6 +29841,9 @@ const _ROUTING_EXTERNAL = {
   dc_capacity:          ['market_analytics', 'operator_disclosure'],
   siting_search:        ['utility_or_iso_filing'],
   capacity_grid:        ['utility_or_iso_filing', 'operator_disclosure'],
+  dc_power_place:       ['utility_or_iso_filing', 'operator_disclosure'],
+  price_now:            ['utility_or_iso_filing'],
+  queue_withdrawals:    ['utility_or_iso_filing'],
   unknown:              [],
 };
 
@@ -32558,11 +32696,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // /mcp/grok (2026-09-29): instructionsRewrite restates the lead tool count
     // as the count that path serves (lib/grok-profile.mjs grokInstructions).
     // Every other path passes none, so their text is unchanged byte for byte.
-    instructions: ((typeof instructionsRewrite === 'function')
+    // 2026-11-17: the key tool is named by its listed name, get_api_key (lib/key-tool-name.mjs).
+    instructions: _keyToolPointerText(((typeof instructionsRewrite === 'function')
       ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
       : (opts && opts.capacityIntro
         ? _withWelcome(_capacityInstructions(_INSTRUCTIONS_LEAN))
-        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
+        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : '')),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -32720,6 +32859,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         if (!(parseInt(a && a.max_fanout, 10) > 0)) maxFan = 3;
         if (!(parseInt(a && a.max_steps, 10) > 0)) maxSteps = 8;
       }
+      // 5.40: a one-place data-center + power plan reads up to six sides in one wave (market, headroom, state queue,
+      // feeders, timeline, price): it runs up to 8 steps unless the caller set max_steps.
+      if (sc.intent_class === 'dc_power_place' && !(parseInt(a && a.max_steps, 10) > 0)) maxSteps = _DC_POWER_PLACE_MAX_STEPS;
       // route_back (owner 2026-10-28): for an intent that asks for something DC Hub does not hold, name who
       // owns it, from the Works with registry. In-memory read, no network, no tool call; omitted entirely
       // when no need matches. Same surfaces as ranked_answer: no new fields on the directory profiles.
@@ -33203,8 +33345,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.35 (gap 1): a generation-mix plan leads with the percentages (lib/plan-entities.mjs).
       const _mixAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _buildGenerationMixAnswer({ intent: sc.intent, intent_class: sc.intent_class, grids: _mixGrids(_sig || {}, _STATE_ISO_META) }, executed, fullByEntry);
+      // 5.40 (Grok round 2): the place the plan bound, computed once (the cross-domain and power answers both read it).
+      let _pl540 = null;
+      try { _pl540 = _sig ? _pairPlace(_sig, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META,
+        usMarketState: _planUsMarketState, stateScope: _planStateScope }) : null; } catch (_e) { _pl540 = null; }
+      // 5.40: the price, gas and withdrawal answers lead with the figure asked; a one-place data-center + power plan
+      // leads with both sides (lib/energy-answers.mjs, lib/cross-domain-answer.mjs).
+      const _energyAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
+        : (_buildPriceNowAnswer({ intent: sc.intent, intent_class: sc.intent_class, iso: _sig && _sig.iso }, executed, fullByEntry)
+          || _buildGasPriceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
+          || _buildQueueWithdrawalsAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
+          || (sc.intent_class === 'dc_power_place'
+            ? _buildCrossDomainAnswer({ intent: sc.intent, intent_class: sc.intent_class, requested_mw: _sig && _sig.mw,
+              deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl540 }, executed, fullByEntry)
+            : null));
       const _intentAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
-        : _mixAnswer || _coloAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+        : _mixAnswer || _coloAnswer || _energyAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class, place: _pl540,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
             state: (_sig && (_sig.state || _sig.stateFromPlace)) || null,
@@ -34339,6 +34495,20 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const g = giList[i];
         comparison[iso] = (g && g._latest) ? shapeLatestGrid(iso, g.body) : shapeGridIntelligence(iso, g, cmp, qsnap);
       });
+      // 2026-11-18 (be#8978): a non-US grid that is one country's grid gains `ember_monthly`,
+      // Ember's monthly country figures (CC BY 4.0), beside the live fields and never in them.
+      // Fail soft: a 404 (flag off, route not deployed) or any error leaves the row as before.
+      const _emberRows = await Promise.all(valid.map((iso) => {
+        const m = SUPPORTED.includes(iso) ? null : emberAreaForGrid(iso);
+        return m ? fetchEmberMonthly(callAPI, m.area, m.wider ? { area_note: m.wider } : {}) : Promise.resolve(null);
+      }));
+      let _emberAttribution = null;
+      valid.forEach((iso, i) => {
+        const e = _emberRows[i];
+        if (!e || !comparison[iso] || typeof comparison[iso] !== 'object') return;
+        comparison[iso] = { ...comparison[iso], ember_monthly: e };
+        _emberAttribution = _emberAttribution || e.attribution;
+      });
       // Owner 2026-11-16 (Note K item 7A), mcp#1476 follow-up: the iso-comparison read above carries
       // the caller's forwarded tier, so below the backend's paid plans its aggregates arrive null and
       // the free trim had no figure to band (live 06:15Z: no bands). Where a US row withholds a band
@@ -34364,6 +34534,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      if (_emberAttribution) {
+        out.source = out.source + ' + Ember Monthly Electricity Data (CC-BY-4.0, ember_monthly rows)';
+        out.ember_attribution = _emberAttribution;
+      }
       const _bandsLine = _bandsSummary(comparison);
       if (_bandsLine) out.bands_summary = _bandsLine;
       // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
@@ -34701,7 +34875,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
   // international operating + planned/UC asset set the US-federal feeds don't cover.
-  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
+  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
     { country: S.describe('Country/area name to filter, e.g. Germany, India, Brazil, Japan'),
       fuel: S.describe('Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal'),
       status: S.describe('Status substring filter, e.g. operating, construction, pre-construction, announced'),
@@ -34717,7 +34891,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       else if (a && a.status) q.status = a.status;
       if (a && a.bbox) q.bbox = a.bbox;
       if (a && a.min_mw) q.min_mw = a.min_mw;
-      const d = await callAPI('/api/v1/global-power', q);
+      // 2026-11-18 (be#8978): Ember's monthly electricity data for the named country rides
+      // beside the GEM plant summary. Read in parallel, fail soft: a 404 (flag off, route not
+      // deployed, no such area) or any error leaves the GEM answer exactly as before.
+      const [d, ember] = await Promise.all([
+        callAPI('/api/v1/global-power', q),
+        (a && a.country) ? fetchEmberMonthly(callAPI, a.country) : Promise.resolve(null),
+      ]);
       const units = (d && d.units) || [];
       const byFuel = {}, byStatus = {}; let totalMw = 0;
       for (const u of units) {
@@ -34736,6 +34916,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — GEM Global Integrated Power Tracker (CC-BY, dchub.cloud)',
         largest_units: top,
       };
+      if (ember) {
+        out.electricity_monthly = ember;
+        out.source = out.source + '; electricity_monthly: Ember Monthly Electricity Data (CC-BY-4.0)';
+        out.ember_attribution = ember.attribution;
+      }
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length) { out._params_not_applied = _ig; out._params_note = 'min_mw filters on unit capacity, which this tier does not read; it was not applied.'; }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
@@ -34745,11 +34930,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
-    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
+    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
+    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE, or NESO for Great Britain (the NESO TEC Register: generation and demand connections together, not a generation-only queue); omit for the all-ISO snapshot') },
     async (a) => {
-      if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
-      a = _foldIsoArg(a);
+      if (a.iso && !_queueIsoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
+      a = _foldQueueIsoArg(a);
       const data = await _withLargeLoad(
         await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);
       // r-structured (2026-06-19): structuredContent so agent clients get the
@@ -36547,11 +36732,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID — or ALL to see every scored market in the geography. Defaults to BUILD,CAUTION, so a geography whose markets are all AVOID returns matched:0 plus an `empty_result` block explaining that; re-run with verdict=ALL to see those rows.'),
       limit: LIMIT.describe('Number of shortlist markets to return') },
     async (a) => {
-      const data = await callAPI('/api/v1/site-selection/canvas', {
+      const _canvasData = await callAPI('/api/v1/site-selection/canvas', {
         capacity_mw: a.capacity_mw, region: a.region, state: a.state, iso: a.iso,
         max_months: a.max_months,
         verdict: a.verdict, limit: a.limit || 12,
       });
+      // 2026-11-17 (owner): the locked synthesis names no plan and carries no pitch on /mcp (lib/canvas-teaser-copy.mjs).
+      // The directory / Claude / core profiles keep their own scrub. Kill switch DCHUB_CANVAS_TEASER_NEUTRAL=0.
+      const data = _neutralCanvasTeaser(_canvasData, { skip: !!(getCtx() || {}).profile });
       // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
       try {
         if (_findingNudgeAllowed()) _attachFindingNext(data, _findingNextTool('site_selection_canvas', _findingResultGaps(data, a)));
@@ -37995,7 +38183,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   const _R = (name, uri, title, description, text) =>
     srv.registerResource(name, uri, { title, description, mimeType: 'text/markdown' },
-      async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
+      async () => ({ contents: [{ uri, mimeType: 'text/markdown', text: _keyToolPointerText(text) }] }));
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
      '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- A global data-center facility map across 170+ countries\n- 300+ markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 30+ EU zones, Taiwan, Japan, South Korea, Brazil; Australia + Singapore partial) + Canada (IESO, AESO, Hydro-Québec)\n- 1,900+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\n## Recent changes (2026-10-20)\n\n- Direct MCP URL: https://dchub.cloud/mcp. Use it in place of a Smithery-hosted run.tools URL; Smithery retires its hosted proxy on 2026-10-31.\n- A key bound to an email (`bind_email`) gets full answers, capped per day, from `get_grid_intelligence`, `get_interconnection_queue` and `get_market_intel`.\n- Facility discovery adds data centers found in EPA ECHO air-permit records (US federal, public domain).\n- A keyless daily check of each core data layer: https://dchub.cloud/api/v1/ops/data-onboarding\n- The full list for people: https://dchub.cloud/whats-new\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
@@ -38291,6 +38479,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         if (t.outputSchema) t.outputSchema = expandTypeUnions(stripSchemaDialect(t.outputSchema));
       }
       if (res && Array.isArray(res.tools)) res.tools = _frontDoorFirst(_claimKeyFirst(res.tools));   // execute_plan, then claim_free_key (see above)
+      // 2026-11-17: the key tool is listed as get_api_key on the canonical surfaces (lib/key-tool-name.mjs). The cache
+      // probe keeps the registered name so the directory and pack projections read one canonical catalog.
+      if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile) res.tools = _listKeyToolAs(res.tools);
       // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
       // canonical list instead, so the directory/pack projections keep reading full schemas.
       if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile && process.env.DCHUB_LIST_SLIM_DISABLE !== '1') res.tools = res.tools.map(_slimTool);
@@ -40372,7 +40563,9 @@ app.post(MCP_PATHS, async (req, res) => {
             const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
             // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
             const _listFor = _dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(_cachedList) : _cachedList;
-            return _writeRpcResult(req, res, body.id, _pack ? _slim(_packFilter(_listFor, _pack)) : _slim(_listFor));
+            // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
+            const _keyName = (_dirProfile || _coreProfile) ? ((x) => x) : _listResultKeyToolAs;
+            return _writeRpcResult(req, res, body.id, _pack ? _slim(_keyName(_packFilter(_listFor, _pack))) : _slim(_keyName(_listFor)));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {

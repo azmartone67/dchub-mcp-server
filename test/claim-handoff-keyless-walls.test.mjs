@@ -145,7 +145,7 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const names = r.json.result.tools.map((t) => t.name);
     expect(names.length).toBe(97);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement
     expect(names[0]).toBe('execute_plan');
-    expect(names[1]).toBe('claim_free_key');
+    expect(names[1]).toBe('get_api_key');
     expect(new Set(names).size).toBe(names.length);
     // registration order, from the one canonical catalog, minus the tool that moved
     const reg = Object.keys(S.createServer()._registeredTools);
@@ -169,8 +169,8 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const def = S.MCP_PACKS.get('/mcp/site');
     const pk = await open({ path: '/mcp/site' });
     const p = (await post(pk.h, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, '/mcp/site')).json.result.tools.map((t) => t.name);
-    expect(p).toEqual(S.packToolNames(def));            // the spine stays last on purpose
-    expect(p.indexOf('claim_free_key')).toBeGreaterThan(0);
+    expect(p).toEqual(S.packToolNames(def).map((n) => (n === 'claim_free_key' ? 'get_api_key' : n)));   // the spine stays last on purpose; the key tool shows by its listed name
+    expect(p.indexOf('get_api_key')).toBeGreaterThan(0);
   });
 
   it('_claimKeyFirst is a stable move, a no-op when absent or already first, and the switch restores order', () => {
@@ -190,7 +190,7 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const ins = init.json.result.instructions;
     expect(ins.length).toBeLessThanOrEqual(2048);
     // Note F / option A (owner 2026-11-17): the key line says what the key keeps (lib/continuity-ask.mjs).
-    expect(ins).toContain('KEYS: get your human\'s email, then `claim_free_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions; save it, never re-mint;');
+    expect(ins).toContain('KEYS: get your human\'s email, then `get_api_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions; save it, never re-mint;');
   });
 });
 
@@ -245,22 +245,22 @@ describe('keyless limit: anon_daily_cap', () => {
     expect(isJson(r.blocks[0]), 'block 0 stays the JSON a client parses').toBe(true);
     const prose = proseBlocks(r.blocks);
     expect(prose.length).toBeGreaterThan(0);
-    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. Free, one call: ask your human for an email, pass it to `claim_free_key`/);
+    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. Free, one call: ask your human for an email, pass it to `get_api_key`/);
     expect(prose[0]).toContain('X-API-Key');
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);
-    const iClaim = r.all.indexOf('claim_free_key', r.blocks[0].length);
+    const iClaim = r.all.indexOf('get_api_key', r.blocks[0].length);
     const iNudge = r.all.indexOf('execute_plan', r.blocks[0].length);
     expect(iNudge, 'the nudge is still there: the step adds, it does not delete').toBeGreaterThan(-1);
     expect(iClaim).toBeLessThan(iNudge);
-    // the JSON's own instruction is untouched
-    expect(r.sc._upgrade && r.sc._upgrade.next_tool).toBe('claim_free_key');
+    // the JSON's own instruction is untouched (named by the listed name, lib/key-tool-name.mjs)
+    expect(r.sc._upgrade && r.sc._upgrade.next_tool).toBe('get_api_key');
   });
 
   it('names it once in prose', async () => {
     const seat = await open({ ip: CAPPED_IP });
     const r = await call(seat, 'get_news', {});
-    const n = proseBlocks(r.blocks).join('\n').split('claim_free_key').length - 1;
+    const n = proseBlocks(r.blocks).join('\n').split('get_api_key').length - 1;
     expect(n).toBe(1);
   });
 
@@ -272,7 +272,7 @@ describe('keyless limit: anon_daily_cap', () => {
       const r = await call(seat, 'search_facilities', { state: 'VA' });
       expect(r.status).toBe('anon_daily_cap');
       expect(proseBlocks(r.blocks).join('\n')).not.toContain('claim_free_key');
-      expect(r.blocks[0]).toContain('claim_free_key');
+      expect(r.blocks[0]).toContain('get_api_key');
     } finally { delete process.env.DCHUB_CLAIM_HANDOFF; delete process.env.DCHUB_WALL_OFFER_FLOOR; }
   });
 });
@@ -283,11 +283,11 @@ describe('keyless preview wall: trial_used', () => {
     const r = await call(seat, 'get_pipeline', { country: 'US' });
     expect(r.status).toBe('trial_used');
     const prose = proseBlocks(r.blocks);
-    expect(prose[0]).toMatch(/^Free, one call: ask your human for their email first, then call `claim_free_key` with it \(only an address they gave you\), then send the api_key it returns as the X-API-Key header/);
+    expect(prose[0]).toMatch(/^Free, one call: ask your human for their email first, then call `get_api_key` with it \(only an address they gave you\), then send the api_key it returns as the X-API-Key header/);
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);
     const joined = prose.join('\n');
-    expect(joined.split('claim_free_key').length - 1, 'named once, first').toBe(1);
+    expect(joined.split('get_api_key').length - 1, 'named once, first').toBe(1);
     expect(joined).not.toContain('for a durable free-tier key');
     expect(joined.indexOf('claim_free_key')).toBeLessThan(joined.indexOf('the payer checks out in one click'));
     expect(joined).toMatch(/\*\*For your human:\*\*/);      // the human relay line is where it was

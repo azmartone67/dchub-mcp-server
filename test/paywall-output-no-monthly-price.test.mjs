@@ -36,6 +36,7 @@ import { readFileSync } from 'node:fs';
 import * as TC from '../lib/tier-canon.mjs';
 import { _paidPlansOutputLine, PRICING_URL } from '../lib/tier-canon.mjs';
 import { startHarness, fenceNetwork, GUESS_ARGS, PRO_KEY } from './helpers/claude-directory-harness.mjs';
+import { keyToolPointerText } from '../lib/key-tool-name.mjs';
 
 // Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
 // This file exercises the opt-in mint path, so it turns the switch on for itself.
@@ -243,7 +244,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     expect(live).not.toContain('$10');
     expect(live).not.toContain('1,000 API credits');
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
-    expect(live).toBe(committed);
+    expect(live).toBe(keyToolPointerText(committed));   // the wire names the key tool by its listed name (lib/key-tool-name.mjs)
   });
 
   it('/mcp instructions: no price, no pack, no pricing page (option A, owner 2026-11-16)', async () => {

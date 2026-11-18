@@ -45,7 +45,8 @@ describe('incentives_tax routes tax vocabulary to get_tax_incentives', () => {
 
   it('does NOT steal the price class (energy price vocabulary, no tax words)', () => {
     const r = first('what does power cost in ERCOT right now');
-    expect(r.cls).toBe('price');
+    // Planner 5.40: a grid price "right now" is the price_now class (the price family; still not incentives_tax).
+    expect(r.cls).toBe('price_now');
   });
 });
 

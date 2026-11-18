@@ -87,10 +87,10 @@ describe('guided 401/402 through a real session', () => {
     expect(text).not.toMatch(BARE);
     for (const b of [lead, sc]) {
       expect(b.error).toBe('API 401');               // legacy key stays
-      expect(b.next_tool).toBe('claim_free_key');
+      expect(b.next_tool).toBe('get_api_key');
       expect(b.tier_required).toBe('free_key');
       expect('required_plan' in b).toBe(false);
-      expect(b.message).toMatch(/claim_free_key/);
+      expect(b.message).toMatch(/get_api_key/);
     }
   });
 

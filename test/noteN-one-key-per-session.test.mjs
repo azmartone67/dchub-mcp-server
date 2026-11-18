@@ -14,6 +14,9 @@
 //   4. claim_free_key carries the same line; DCHUB_REUSE_KEY_LINE=0 drops it.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createServer } from 'node:http';
+import { keyToolPointerText } from '../lib/key-tool-name.mjs';
+// The served reuse line names the key tool by its listed name, get_api_key (lib/key-tool-name.mjs).
+let _LINE;
 
 const KEY = 'dch_live_' + 'n0te3a11'.repeat(4);
 let S, stub, srv, PORT;
@@ -52,6 +55,7 @@ beforeAll(async () => {
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   process.env.DCHUB_INTERNAL_KEY = 'test-internal-key-not-a-real-secret';
   S = await import('../server.mjs');
+  _LINE = keyToolPointerText(S.REUSE_KEY_LINE);
   await new Promise((resolve) => { srv = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = srv.address().port;
 });
@@ -97,9 +101,9 @@ describe('one durable key per MCP session (Grok note N item 3)', () => {
     const call = await session();
     const b = await call('bind_email', { email: 'human@acme-infra.com' });
     expect(b.sc.api_key).toBe(KEY);
-    expect(b.sc.reuse_key_line).toBe(S.REUSE_KEY_LINE);
-    expect(b.text.split(S.REUSE_KEY_LINE).length - 1).toBe(1);   // once, though claim_free_key ran inside
-    expect(S.REUSE_KEY_LINE).toMatch(/X-API-Key/);
+    expect(b.sc.reuse_key_line).toBe(_LINE);
+    expect(b.text.split(_LINE).length - 1).toBe(1);   // once, though claim_free_key ran inside
+    expect(_LINE).toMatch(/X-API-Key/);
     expect(count('/api/v1/keys/claim')).toBe(1);
   });
 
@@ -145,8 +149,8 @@ describe('one durable key per MCP session (Grok note N item 3)', () => {
     let call = await session();
     let c = await call('claim_free_key', { client_name: 'acme-siting-agent' });
     expect(c.sc.api_key).toBe(KEY);
-    expect(c.sc.reuse_key_line).toBe(S.REUSE_KEY_LINE);
-    expect(c.text).toContain('**Your key:** `' + KEY + '`\n' + S.REUSE_KEY_LINE);
+    expect(c.sc.reuse_key_line).toBe(_LINE);
+    expect(c.text).toContain('**Your key:** `' + KEY + '`\n' + _LINE);
     // A second claim in the same session returns the same key, not a sibling.
     const again = await call('claim_free_key', { client_name: 'acme-siting-agent' });
     expect(again.sc.api_key).toBe(KEY);
@@ -156,7 +160,7 @@ describe('one durable key per MCP session (Grok note N item 3)', () => {
     call = await session();
     c = await call('claim_free_key', { client_name: 'acme-siting-agent' });
     expect(c.sc.reuse_key_line).toBeUndefined();
-    expect(c.text).not.toContain(S.REUSE_KEY_LINE);
+    expect(c.text).not.toContain(_LINE);
   });
 });
 

@@ -157,7 +157,7 @@ for (const session of [true, false]) {
     it('carries no next_tool field (owner 2026-10-11); the no-email route stays as text and free_key_unlock', () => {
       expect(Object.keys(r.sc)).not.toContain('next_tool');
       expect(JSON.stringify(r.sc)).not.toContain('"next_tool"');
-      expect(r.text).toContain('claim_free_key');
+      expect(r.text).toContain(session ? 'get_api_key' : 'claim_free_key');   // a sessionless loopback call is a plan step: its parent names get_api_key
       if (!session) expect(r.sc.free_key_unlock).toMatchObject({ tool: 'claim_free_key', email_required: false });
     });
 
@@ -173,7 +173,7 @@ for (const session of [true, false]) {
       expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)/);
       const last = blocks[blocks.length - 2];
       expect(last).toBe('(agent) When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
-      expect(r.text).toContain('claim_free_key');
+      expect(r.text).toContain(session ? 'get_api_key' : 'claim_free_key');   // a sessionless loopback call is a plan step: its parent names get_api_key
     });
   });
 }

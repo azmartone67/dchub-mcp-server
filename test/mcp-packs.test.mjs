@@ -33,6 +33,8 @@
 // So the mount test below POSTs. A GET check would have passed on every one of
 // these paths the day before they existed.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { asListedKeyTool, KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';   // 2026-11-17: the key tool is listed as get_api_key
+const _listed = (n) => (n === KEY_TOOL_REGISTERED ? KEY_TOOL_LISTED : n);
 
 let S, PORT, httpServer, CANON;
 
@@ -118,7 +120,7 @@ describe('every declared pack name exists', () => {
     const canonNames = new Set(CANON.map((t) => t.name));
     const bad = [];
     for (const [path, def] of S.MCP_PACKS) {
-      for (const n of S.packToolNames(def)) if (!canonNames.has(n)) bad.push(`${path} -> ${n}`);
+      for (const n of S.packToolNames(def)) if (!canonNames.has(_listed(n))) bad.push(`${path} -> ${n}`);
     }
     // A typo or a rename lands here rather than in a quietly shorter endpoint.
     expect(bad, `pack entries absent from the catalog: ${bad.join(', ')}`).toEqual([]);
@@ -153,7 +155,7 @@ describe('what a pack path actually serves', () => {
 
       // Exact membership AND order — order is part of the contract: a pack
       // lists the tools it exists for before the shared spine.
-      expect(tools.map((t) => t.name)).toEqual(S.packToolNames(def));
+      expect(tools.map((t) => t.name)).toEqual(S.packToolNames(def).map(_listed));
     });
   }
 

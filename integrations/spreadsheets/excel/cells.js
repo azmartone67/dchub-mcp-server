@@ -63,7 +63,7 @@ function dchubCell(fn, resp, field) {
 }
 
 /* FACILITIES: header row + one row per facility, then a note row when DC Hub returned
- * a partial set (free tier), so the sheet says it is partial. */
+ * a partial set (a keyless preview), so the sheet says it is partial. */
 function dchubTable(resp) {
   if (!resp || typeof resp !== "object") return [["error: no response from DC Hub"]];
   if (resp.error && !resp.success) return [[dchubWithheld(resp)]];

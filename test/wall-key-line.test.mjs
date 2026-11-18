@@ -14,6 +14,7 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork, GUESS_ARGS } from './helpers/claude-directory-harness.mjs';
 import { keyLine, keyLineAllowance, keyLineEligible, withKeyLineAheadOfDigest, KEY_LINE_RE, KEY_LINE_LEAD } from '../lib/wall-key-line.mjs';
+import { keyToolPointerText } from '../lib/key-tool-name.mjs';
 import { wallOffers, wallEntitlements, mintedOnly, statesOnlyCanonLimits, offerKinds } from '../lib/wall-offers.mjs';
 import { offersShown, OFFER_KINDS } from '../lib/offers-shown.mjs';
 import { markEmailAsk, quotaWallEventBody, WALL_ASK_KINDS } from '../lib/keyless-wall.mjs';
@@ -206,7 +207,7 @@ describe('the five digest-only walls, through the real /mcp handler', () => {
   it.each(FIVE)('%s, keyless: the key line, ahead of the digest offer, tagged key_line', async (name) => {
     const { prose, rows } = await walled(name);
     expect(rows.length, 'the call walled').toBeGreaterThan(0);
-    const k = prose.indexOf(keyLine());
+    const k = prose.indexOf(keyToolPointerText(keyLine()));   // served under the key tool's listed name (lib/key-tool-name.mjs)
     const d = prose.indexOf('`subscribe_digest`');
     expect(k, 'the key line is in the answer').toBeGreaterThanOrEqual(0);
     expect(d, 'the digest offer is still there').toBeGreaterThan(k);

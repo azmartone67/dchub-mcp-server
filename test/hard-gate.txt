@@ -67,6 +67,7 @@ test/canon-heal-gates-on-the-marker.test.mjs
 test/canon-pack-price.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
 test/canvas-echoes-callers-own-inputs.test.mjs
+test/canvas-teaser-no-plan-1117.test.mjs
 test/cap-signal.test.mjs
 test/cap-trim-spares-capacity-teaser.test.mjs
 test/capacity-context.test.mjs
@@ -129,6 +130,7 @@ test/claude-review-blockers-1023.test.mjs
 test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
+test/client-paths.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/colocation-answer-preview-count.test.mjs
 test/colocation-city-fit-1117.test.mjs
@@ -208,6 +210,7 @@ test/email-bound-decision-full.test.mjs
 test/email-entered.test.mjs
 test/email-hint-after-taste.test.mjs
 test/email-tools-data-use.test.mjs
+test/ember-monthly-global-power.test.mjs
 test/end-of-burst-hook.test.mjs
 test/energy-capacity-cross-link.test.mjs
 test/energy-keyless-eia-1118.test.mjs
@@ -278,6 +281,7 @@ test/gating.test.mjs
 test/generate-site-analysis-keyless-preview.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
+test/get-api-key-listed-1117.test.mjs
 test/get-iso-context-locked-sections-schema.test.mjs
 test/github-description-canon.test.mjs
 test/github-description-push-behaviour.test.mjs
@@ -339,6 +343,7 @@ test/instructions-constraint-coverage.test.mjs
 test/instructions-selftest-pointer.test.mjs
 test/intent-answers-e2e.test.mjs
 test/intent-answers.test.mjs
+test/interconnection-queue-neso.test.mjs
 test/interconnection-queue-shape.test.mjs
 test/internal-challenge-state.test.mjs
 test/invalid-bearer.test.mjs
@@ -521,6 +526,8 @@ test/planner-536-e2e.test.mjs
 test/planner-536-regions-ttp.test.mjs
 test/planner-538-pairs-e2e.test.mjs
 test/planner-538-pairs.test.mjs
+test/planner-540-wholesale-context.test.mjs
+test/planner-540-xd-energy.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

@@ -192,7 +192,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
     const r = await callAs('cursor', 'search_facilities', { provider: 'STACK', city: 'Portland' });
     expect(tellLine(r.text)).toBeTruthy();
-    expect(r.sc.agent_hints.free_key_tool).toBe('claim_free_key');
+    expect(r.sc.agent_hints.free_key_tool).toBe('get_api_key');
     expect(r.text).not.toMatch(/claim_free_key/);
   });
 
