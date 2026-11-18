@@ -1684,6 +1684,20 @@
       "tracking_url": null,
       "added_at": "2026-11-16",
       "note": "Package ownership proved by the AgentNode keyword in npm dchub-mcp-server 2.12.58 (mcp#1457). No public listing URL yet; set status live + listing_url when it appears."
+    },
+    {
+      "id": "osama-ata-awesome-aeco",
+      "name": "Awesome AECO (osama-ata)",
+      "status": "pending",
+      "status_text": "PR open, awaiting maintainer",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": "https://github.com/osama-ata/Awesome-AECO/pull/35",
+      "added_at": "2026-11-18",
+      "note": "PR #35 opened 2026-11-18 6:40 AM MST (13:40Z), entry under '## AI & Automation for AECO' in readme.md. Once merged: live when readme.md lists azmartone67/dchub-mcp-server under that heading; listing_url https://github.com/osama-ata/Awesome-AECO, verified_at the merge date."
     }
   ]
 }
