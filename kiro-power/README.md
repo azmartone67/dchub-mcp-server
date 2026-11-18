@@ -28,17 +28,16 @@ The power activates when a conversation mentions its keywords, for example
 
 ## Authentication
 
-None is needed for the free tier: anonymous calls return previews. For more
-calls, ask the agent to run `claim_free_key`. To use a key you already have, add
-an `X-API-Key` header to the `dchub` server, or get one at
-https://dchub.cloud/connect.
+None is needed: `DCHUB_API_KEY` is optional, and calls without a key return
+previews. To use a key, add an `X-API-Key` header to the `dchub` server; keys
+are at https://dchub.cloud/connect.
 
 ## Example prompts
 
 - "Rank US markets for a 200 MW AI campus."
 - "How deep is the PJM interconnection queue right now?"
 - "Compare water and disaster risk for sites near Phoenix and Dallas."
-- "What are wholesale electricity prices in ERCOT today?"
+- "What are electricity prices in Texas, and how deep is the ERCOT queue?"
 - "Which fiber routes and subsea cables land near Virginia Beach?"
 
 ## Privacy policy
