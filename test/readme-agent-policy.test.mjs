@@ -34,7 +34,7 @@ describe('README agent documentation policy', () => {
   });
   it('does not require per-lookup approval or authorize credential, consent or spending actions', () => {
     for (const token of ['does not require separate approval for every lookup',
-      'claim_free_key creates a credential and needs user authorization',
+      'get_api_key creates a credential and needs user authorization',
       'explicitly provides for that purpose', 'only after the user agrees to that version',
       'delegated scope and budget', 'spending authorization',
       'request_capacity_intro', 'provider acceptance still controls release',

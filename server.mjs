@@ -141,7 +141,7 @@ import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless
 import { neutralCanvasTeaser as _neutralCanvasTeaser } from './lib/canvas-teaser-copy.mjs';
 import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyToolAs, keyToolPointerText as _keyToolPointerText,
          keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
-         KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED } from './lib/key-tool-name.mjs';
+         KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED, keyToolName as _keyToolName } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -10839,7 +10839,11 @@ function _accessTagFor(name) {
   // A2: a Pro tool reads `paid` even where the paywall class above does not
   // (export_dataset, get_composite_site_score were advertised free_preview).
   const access = tierRequired === 'pro' ? 'paid' : gateClass;
-  const q = encodeURIComponent(name || '');
+  // 2026-11-18 (owner stability item 2): the key tool is LISTED as get_api_key, but its handler is registered as
+  // claim_free_key, so this tag was built with tool=claim_free_key and the listed get_api_key entry carried the old
+  // name in annotations.connect_url (the pointer projection deliberately skips query values). Name the listed tool
+  // here; keyToolName honours the DCHUB_GET_API_KEY_LISTED kill switch, so a rollback lists and links the old name.
+  const q = encodeURIComponent(name === _KEY_TOOL_REGISTERED ? _keyToolName() : (name || ''));
   const gated = (gateClass === 'paid' || gateClass === 'metered');
   // ★ r-no-bare-wall (2026-09-19): the 09-16 fix above routed the 28 GATED
   // tools through /pricing/upgrade and left the other 63 on
