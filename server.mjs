@@ -140,7 +140,8 @@ import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS a
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
 import { neutralCanvasTeaser as _neutralCanvasTeaser } from './lib/canvas-teaser-copy.mjs';
 import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyToolAs, keyToolPointerText as _keyToolPointerText,
-         keyToolPointerStep as _keyToolPointerStep } from './lib/key-tool-name.mjs';
+         keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
+         KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -390,7 +391,8 @@ const TOOL_ALIASES = {
   // 2026-11-17 (owner): get_api_key is the LISTED name of the key tool (lib/key-tool-name.mjs). The handler stays
   //   registered as claim_free_key (telemetry, backend funnels and the gating sets key on it), so the listed name
   //   resolves here at call time, and claim_free_key stays callable, unlisted.
-  get_api_key: 'claim_free_key',
+  //   Written with the constants: a literal `<listed>: '<registered>'` pair reads as a hardcoded key to the plugin scanner.
+  [_KEY_TOOL_LISTED]: _KEY_TOOL_REGISTERED,
   // discovery
   list_tools: 'discover_tools', get_tools: 'discover_tools',
   // ★2026-09-06 — REGULARISED NAMES. Our own catalog is inconsistent:

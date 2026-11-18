@@ -12,7 +12,7 @@ import {
   KEY_TOOL_LISTED, KEY_TOOL_REGISTERED, KEY_TOOL_TITLE, keyToolPointerText, keyToolPointerStep, listKeyToolAs,
 } from '../lib/key-tool-name.mjs';
 
-let httpServer, stub, PORT, S;
+let httpServer, stub, PORT, S, prevBase;
 const claims = [];
 
 beforeAll(async () => {
@@ -30,10 +30,11 @@ beforeAll(async () => {
     });
   });
   await new Promise((r) => stub.listen(0, '127.0.0.1', r));
-  const prev = process.env.DCHUB_API_BASE;
+  // The stub stays the API base until afterAll: the claim handler reads DCHUB_API_BASE per call, so restoring it right
+  // after import sent the tools/call cases to production (hard-gate no-network check, mcp#1538 smoke).
+  prevBase = process.env.DCHUB_API_BASE;
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   S = await import('../server.mjs');
-  if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
   await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
   PORT = httpServer.address().port;
 }, 60000);
@@ -41,6 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise((r) => (httpServer ? httpServer.close(r) : r()));
   await new Promise((r) => (stub ? stub.close(r) : r()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevBase;
 });
 
 async function rpc(path, method, params = {}, headers = {}) {
