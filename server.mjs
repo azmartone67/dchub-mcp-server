@@ -300,7 +300,7 @@ import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPrice
   colocationSequence as _colocationSequence, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
   guardPlanFacilitySteps as _guardPlanFacilitySteps, facilitySlugGuard as _facilitySlugGuard,
   facilitySlugsFromSearch as _facilitySlugsFromSearch, FACILITY_SLUG_PLACEHOLDER as _FACILITY_SLUG_PLACEHOLDER,
-  facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS } from './lib/colocation-plan.mjs';
+  facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes } from './lib/colocation-plan.mjs';
 import { buildColocationAnswer as _buildColocationAnswer } from './lib/colocation-answer.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
@@ -14251,6 +14251,9 @@ const _FACILITY_FREE_FIELDS = new Set([
   // 2026-11-17 (backend util/facility_as_of): as_of_kind says what that date is ("verified" against PeeringDB or
   // OpenStreetMap, "refreshed" by a loader that re-reads the source, or "last_written" for a source nothing re-checks).
   'as_of', 'as_of_basis', 'as_of_kind', 'verified_at',
+  // Grok colocation note 2026-11-17 item 1 (owner: "Specs, no address"): one facility's specs for every tier, from
+  // backend util/facility_specs.py. The street address stays off this list; power capacity stays a full-access field.
+  'floor_space_sqft', 'tier_level', 'certifications', 'source_url', 'operator_url', 'specs_not_on_record',
 ]);
 
 // r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_
@@ -22492,10 +22495,25 @@ function _submarketPlaces() {
   _SUBMARKET_PLACES = [...set];
   return _SUBMARKET_PLACES;
 }
-export function _execSubmarketOut(tool, out, sig) {
-  // 5.32: a colocation ask names a METRO ("in Ashburn" is Northern Virginia): its facility search is scoped by the
-  // metro query, so Reston and Sterling rows stay (CoreSite VA1 in Reston was cut from "… in Ashburn").
-  if (tool === 'search_facilities' && sig && sig.__colo && sig.__colo.metro) return null;
+export function _execSubmarketOut(tool, out, sig, args = null) {
+  // 5.32: a colocation ask that names only a METRO is searched by the metro query, so Reston and Sterling rows stay.
+  // Grok midday note 2026-11-17, item 2 (owner-approved): a TOWN named inside the metro ("Ashburn 500 kW") is searched
+  // with city= (lib/colocation-plan.mjs coloCity), and only that search's rows are cut to the town here. A facility
+  // pair's searches carry no city and are never cut. A sized search gets a fit_note per row (coloFitNotes).
+  if (tool === 'search_facilities' && sig && sig.__colo && sig.__colo.metro) {
+    const cs = sig.__colo;
+    if (!out || !(out.ok || out.gated)) return null;
+    let scope = null;
+    for (const k of ['result', 'full']) {
+      if (!out[k] || typeof out[k] !== 'object') continue;
+      if (cs.city && args && args.city === cs.city) {
+        const r = _cutRowsToSubmarket(tool, out[k], { city: cs.city }, _submarketPlaces());
+        if (r.scope) { out[k] = r.result; scope = scope || r.scope; }
+      }
+      if (cs.kw && args && args.min_capacity_mw != null) out[k] = _coloFitNotes(out[k], cs.kw);
+    }
+    return scope;
+  }
   const sub = _planSubmarket(sig);
   if (!sub || !out || !(out.ok || out.gated)) return null;
   let scope = null;
@@ -23093,7 +23111,8 @@ export function _coloScopeWidened(colo, coords, generic = null) {
       if (generic) return generic;
       return m.state ? { widened_from: from, to: m.state } : null;
     }
-    if (isMetroName) return null;
+    // Item 2 (2026-11-17): a town named inside the metro is searched as that town, so nothing was widened.
+    if (isMetroName || colo.city) return null;
     return { widened_from: from, to: m.label + ' metro', grain: 'metro' };
   } catch (_e) { return generic || null; }
 }
@@ -32349,7 +32368,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               ? Math.max(_CAPACITY_STEP_MIN_MS, _execStepBudget(Date.now() - t0, DEADLINE_MS))
               : _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool));
             return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent),
-              subScope: _execSubmarketOut(s.tool, out, _sig) }));
+              subScope: _execSubmarketOut(s.tool, out, _sig, args) }));
           }));
           for (const { s, args, out, geo, scope, subScope } of results) {
             calls += 1;
@@ -32444,7 +32463,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // STACKED on the wave's rather than sharing it.
           const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool)));
           const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
-          const subScope2 = _execSubmarketOut(s.tool, out2, _sig);
+          const subScope2 = _execSubmarketOut(s.tool, out2, _sig, r2.args);
           calls += 1;
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
                            ...(geo2.length ? { geo_injected: geo2 } : {}),

@@ -220,18 +220,16 @@ describe('the real /mcp handler (keyless, stub backend)', () => {
     expect(st && st.status).toBe('executed');
   });
 
-  it('ashburn, fix 2: the metro facility search is disclosed as widened, like Northern Virginia', () => {
+  it('ashburn, fix 2: the facility search reads the town asked, so nothing is disclosed as widened', () => {
     const sc = res.ashburn.structuredContent;
     const sf = sc.executed.find((e) => e.tool === 'search_facilities');
     expect(sf, 'control: the facility search ran').toBeTruthy();
-    expect(sf.args).toMatchObject({ query: 'Northern Virginia', state: 'VA' });
-    const metroScoped = sf.args.city != null || sf.args.market != null || sf.args.lat != null;
-    const widened = sc.replay && sc.replay.scope_widened;
-    expect(metroScoped || !!widened).toBe(true);
-    // Grok re-run 2026-11-17 (Q-a): the search reads the METRO (query "Northern Virginia"), not the state. Ashburn is
-    // disclosed as read at the metro grain, and no step is said to have read all of Virginia.
-    expect(widened).toEqual({ widened_from: 'Ashburn', to: 'Northern Virginia metro', grain: 'metro' });
-    expect(sc.answer_guide).not.toMatch(/Widened Ashburn to Virginia/);
+    // Grok midday note 2026-11-17, item 2 (owner-approved): a town named inside the metro is searched as that city,
+    // not the metro (the round-2 read) and never the state. Nothing was widened, so no WIDENED line.
+    expect(sf.args).toMatchObject({ city: 'Ashburn', state: 'VA' });
+    expect(sf.args.query).toBeUndefined();
+    expect(sc.replay && sc.replay.scope_widened).toBeFalsy();
+    expect(sc.answer_guide).not.toMatch(/Widened Ashburn/);
     // Asked as "Northern Virginia": the search is the metro asked, nothing was widened.
     expect(res.nova.structuredContent.replay.scope_widened).toBeUndefined();
   });

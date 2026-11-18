@@ -14,21 +14,24 @@ const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 describe('5.32 routing: the head-to-head colocation asks', () => {
   it('PLANNER_VERSION is 5.32', () => { expect(PLANNER_VERSION).toBe('5.36'); });
 
-  it('NoVA 500 kW (context market + state): colocation, the asked market\'s DCPI first, metro search with the kW, no canvas', () => {
+  it('NoVA 500 kW (context market + state): colocation, the asked market\'s DCPI first, Ashburn search with the kW, no canvas', () => {
     const p = _planQuery('Colocation options in Northern Virginia (Ashburn) for about 500 kW', { market: 'Northern Virginia', state: 'VA' });
     expect(p.intent_class).toBe('colocation');
     expect(p.recommended_sequence[0]).toMatchObject({ tool: 'get_market_dcpi_rank', args_hint: { market_slug: 'northern-virginia' } });
-    expect(step(p, 'search_facilities').args_hint).toMatchObject({ query: 'Northern Virginia', state: 'VA', min_capacity_mw: 0.5 });
+    // Grok midday note 2026-11-17, item 2: the town named (Ashburn) is the search, not the metro.
+    expect(step(p, 'search_facilities').args_hint).toEqual({ city: 'Ashburn', state: 'VA', limit: 10, min_capacity_mw: 0.5 });
     expect(step(p, 'get_grid_intelligence').args_hint).toEqual({ iso: 'PJM' });
     expect(tools(p)).not.toContain('site_selection_canvas');
     expect(step(p, 'get_facility').args_hint.slug).toMatch(/^<facility slug/);
   });
 
-  it('Ashburn, Sterling and Loudoun all read as the Northern Virginia metro', () => {
-    for (const t of ['colo cage in Ashburn', 'need a cabinet in Sterling', 'retail colocation in Loudoun County']) {
+  it('Ashburn, Sterling and Loudoun all read as the Northern Virginia metro; a town is searched as that town', () => {
+    for (const [t, args] of [['colo cage in Ashburn', { city: 'Ashburn', state: 'VA' }], ['need a cabinet in Sterling', { city: 'Sterling', state: 'VA' }],
+      ['retail colocation in Loudoun County', { query: 'Northern Virginia', state: 'VA' }]]) {
       const p = _planQuery(t, {});
       expect(p.intent_class, t).toBe('colocation');
-      expect(step(p, 'search_facilities').args_hint, t).toMatchObject({ query: 'Northern Virginia', state: 'VA' });
+      expect(p.recommended_sequence[0].args_hint, t).toEqual({ market_slug: 'northern-virginia' });
+      expect(step(p, 'search_facilities').args_hint, t).toMatchObject(args);
     }
   });
 
