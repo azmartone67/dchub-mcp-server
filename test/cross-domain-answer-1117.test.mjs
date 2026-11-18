@@ -96,7 +96,7 @@ describe('the answer for (a), keyless', () => {
 
   it('names the top 3 markets with their grids', () => {
     expect(ia.kind).toBe('cross_domain');
-    expect(ia.headline).toMatch(/^50 MW with power in under 24 months, US: Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
+    expect(ia.headline).toMatch(/^50 MW, US \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
     expect(ia.headline.length).toBeLessThanOrEqual(HEADLINE_MAX);
   });
   it('gives each grid\'s queue depth with its date, and says headroom is withheld (never estimated)', () => {
@@ -118,7 +118,9 @@ describe('the answer for (a), keyless', () => {
     const plan = { _entity: 'plan_execution', intent: QA, executed, intent_answer: ia, human_message: 'preview' };
     const lead = planLeadText(plan);
     expect(lead).not.toMatch(/^DC Hub ran/);
-    expect(lead.startsWith('50 MW with power in under 24 months, US: Midland')).toBe(true);
+    expect(lead.startsWith('50 MW, US (24-month cut not applied): Midland')).toBe(true);
+    // 2026-11-18: the deadline is never claimed in the lead when the cut was not applied.
+    expect(lead).not.toMatch(/with power in under 24 months/);
     expect(lead.length).toBeLessThanOrEqual(PLAN_LEAD_MAX);
     const c = compactPlanObject({ ...plan, ok: true, intent_class: 'capacity_grid' });
     const factText = c.facts.map((f) => f.text).join(' ').replace(/,(?=\d{3})/g, '');
@@ -134,6 +136,8 @@ describe('the answer for (a), keyless', () => {
     ] };
     const ex2 = [ex(1, 'site_selection_canvas', {}, paid), ...executed.slice(1)];
     const a = buildCrossDomainAnswer({ intent: QA, intent_class: 'capacity_grid', requested_mw: 50, deadline_months: 24 }, ex2, asMap(ex2));
+    // The cut was applied, so the lead may claim the deadline.
+    expect(a.headline).toMatch(/^50 MW with power in under 24 months, US: Midland–Odessa TX \(ERCOT, 18 mo\)/);
     expect(a.headline).toContain('Midland–Odessa TX (ERCOT, 18 mo), Upper Peninsula MI (MISO, 22 mo)');
     expect(a.headline).not.toContain('Abilene');
     expect(a.not_established.join(' ')).not.toMatch(/was not applied/);
@@ -295,7 +299,7 @@ describe('end to end, keyless, compact', () => {
     });
     it('the lead names the three markets, the queue figures with dates, and never starts "DC Hub ran"', () => {
       expect(lead).not.toMatch(/^DC Hub ran/);
-      expect(lead).toMatch(/^50 MW with power in under 24 months, US: Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
+      expect(lead).toMatch(/^50 MW, US \(24-month cut not applied\): Midland–Odessa TX \(ERCOT\), Upper Peninsula MI \(MISO\), Williston, ND \(MISO\)/);
       expect(lead).toContain('ERCOT queue 461.4 GW (as of 2026-10-31)');
       expect(o.intent_answer.kind).toBe('cross_domain');
     });
