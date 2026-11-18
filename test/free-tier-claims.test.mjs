@@ -182,7 +182,8 @@ const FULL_ANSWERS = /(\d+)\s+full answers?(?:\s+per\s+tool)?\s*(?:per\s+|a\s+|\
 const ANON_WORD = /anonymous|keyless|no signup|no api key|without one|without an? (?:api )?key|no key/gi;
 // "an email adds N full answers/day each" is the decision-tool clause (freeDecisionClause, owner
 // 2026-10-19): the email rung's allowance on the grid/queue/market-intel tools.
-const KEYED_WORD = /free[ -]key|free tier|claim_?free_?key|unbound key|bind_email|add an email|with an email|an email adds|a key unlocks/gi;
+// get_api_key: the listed name of the key tool (mcp#1538); README says it since 2026-11-18.
+const KEYED_WORD = /free[ -]key|free tier|claim_?free_?key|get_?api_?key|unbound key|bind_email|add an email|with an email|an email adds|a key unlocks/gi;
 const FULL_ANSWER_CANON = new Set(Object.values(SNAP.allowance)
   .map((a) => a && a.full_answers_per_tool_per_day).filter(Number.isFinite));
 

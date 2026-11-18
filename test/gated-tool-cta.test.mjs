@@ -137,7 +137,8 @@ describe('the gated-tool CTA', () => {
       const gated = gc === 'paid' || gc === 'metered';
       expect(tag.pricing_url, `${name} (${tag.access}): pricing_url`).toBeUndefined();
       expect(tag.connect_url, `${name} (${tag.access}): connect_url`)
-        .toBe(`https://dchub.cloud/connect?ref=mcp-tools-list&tool=${encodeURIComponent(name)}`);
+        // The key tool is listed as get_api_key (mcp#1538), so its tag names the listed tool (2026-11-18).
+        .toBe(`https://dchub.cloud/connect?ref=mcp-tools-list&tool=${encodeURIComponent(name === 'claim_free_key' ? 'get_api_key' : name)}`);
       expect(Boolean(tag.upgrade_relay), `${name} (${tag.access}): upgrade_relay presence`).toBe(gated);
     }
   });
