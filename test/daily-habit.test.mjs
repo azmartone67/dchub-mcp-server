@@ -199,7 +199,8 @@ describe('one-call identity: claim_free_key {email, market}', () => {
     expect(emailEnteredEventBody({ path: hit.path, apiKey: hit.apiKey, market: hit.market })).toMatchObject({ event: 'email_entered', path: 'claim_free_key', market: 'dallas' });
   });
   it('the claim schema declares market; no market sent -> no market forwarded, no following', async () => {
-    const t = ((await H.list('/mcp', UA)).msg.result.tools).find((x) => x.name === CLAIM_TOOL);
+    // /mcp lists the key tool as get_api_key (lib/key-tool-name.mjs); CLAIM_TOOL stays the registered handler name
+    const t = ((await H.list('/mcp', UA)).msg.result.tools).find((x) => x.name === 'get_api_key');
     expect(t.inputSchema.properties.market.type).toBe('string');
     const r = await H.call('/mcp', 'claim_free_key', { email: 'owner2@example.org', client_name: 'daily-test-2' },
       { ...UA, 'x-dc-client-ip': '198.51.100.78' });

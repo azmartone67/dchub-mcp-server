@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { keylessCapEmailResult, keylessSoftCapEmailUpgrade, _resetCapWallDay } from '../lib/keyless-wall.mjs';
 import { CLAIM_TOOL } from '../lib/claim-handoff.mjs';
+import { KEY_TOOL_LISTED } from '../lib/key-tool-name.mjs';
 import * as D from '../lib/daily-habit.mjs';
 
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -105,7 +106,8 @@ describe('server: the anonymous hard wall with a session carries email_ask', () 
     const res = (r.msg && r.msg.result) || {};
     const sc = res.structuredContent || {};
     expect(sc.unlock_kind).toBe('email_cap');
-    expect(sc.email_ask).toEqual({ tool: CLAIM_TOOL, arguments: { email: EMAIL }, copy: COPY });
+    // the served /mcp result names the key tool by its listed name (lib/key-tool-name.mjs); the lib builds CLAIM_TOOL
+    expect(sc.email_ask).toEqual({ tool: KEY_TOOL_LISTED, arguments: { email: EMAIL }, copy: COPY });
     const text = (res.content || []).map((b) => b.text || '').join('\n');
     expect(text).toContain(COPY);
     expect(text).not.toContain(CLAIM_TOOL);

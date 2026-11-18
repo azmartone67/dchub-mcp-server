@@ -69,7 +69,7 @@ describe('tools/list: get_api_key is listed, claim_free_key is not (canonical su
     const titles = [t.title, t.annotations && t.annotations.title].filter((x) => x !== undefined);
     expect(titles.length).toBeGreaterThan(0);
     for (const x of titles) expect(x).toBe(KEY_TOOL_TITLE);
-    expect(Object.keys(t.inputSchema.properties).sort()).toEqual(['client_name', 'email']);
+    expect(Object.keys(t.inputSchema.properties).sort()).toEqual(['client_name', 'email', 'market']);   // market: daily habit, mcp#1539
     // no description anywhere in the list still points at the old name (a URL's tracking value, tool=claim_free_key,
     // is the registered name the backend counts, and stays)
     expect(JSON.stringify(r.body.result.tools)).not.toMatch(/(?<![=/&?.\-A-Za-z0-9_])claim_free_key(?![A-Za-z0-9_])/);
