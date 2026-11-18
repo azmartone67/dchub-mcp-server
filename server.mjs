@@ -128,7 +128,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
-         CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages } from './lib/chatgpt-directory.mjs';
+         CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages,
+         isGated as _directoryIsGated, PARTIAL_LINK_META_KEY as _PARTIAL_LINK_META_KEY } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
@@ -152,7 +153,8 @@ import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE
          claudePromptListing as _claudePromptListing, claudePromptText as _claudePromptText,
          CLAUDE_INVALID_TOKEN_CHALLENGE, CLAUDE_INVALID_TOKEN_MESSAGE,
          claudeLazyAuthEligible as _claudeLazyAuthEligible,
-         claudeLazyAuthResponse as _claudeLazyAuthResponse } from './lib/claude-directory.mjs';
+         claudeLazyAuthResponse as _claudeLazyAuthResponse,
+         claudeIsGated as _claudeIsGated } from './lib/claude-directory.mjs';
 import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
@@ -26208,6 +26210,9 @@ function _sourceLineCb(name, fn) {
       // Paid callers keep the full answer unless they ask for detail:"compact". Kill switch DCHUB_PLAN_COMPACT=0.
       if (name === 'execute_plan') _final = _planCompactStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(),
         detail: _planDetailRequested(args), paid: _planCallerPaid(c) });
+      // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
+      // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
+      if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -26246,6 +26251,41 @@ function _finishWallRow(c, name, result) {
   _flushQuotaWallHits(c, name);
   _drainPlanWallSink(c, result);
 }
+// ── Keyless partials on /mcp/chatgpt and /mcp/claude carry the unlock link (Grok QA 2026-11-17) ──
+// g_canvas_pa, g_plan_pa, c_canvas_pa: site_selection_canvas / execute_plan for a PA / PJM ask, keyless,
+// ended with the neutral partial notice and no link on both directory profiles, while /mcp?via=chatgpt
+// handed out https://dchub.cloud/u/<code>. The directory / Claude profiles skip every /mcp wall step
+// (_relayContractStep, shortWallLinkStep, _cleanPlatformWallLineStep) on purpose, so nothing minted one.
+// This mints it with the SAME two calls /mcp uses: buildHumanRelay (the signed relay page, keyless sid
+// fallback included) and _shortRelayPageLink (the /u/ mint, fail-open to the long page). The link rides
+// the raw result in _meta[PARTIAL_LINK_META_KEY]; the profile's scrub never copies _meta, and its
+// afterScrub (lib/chatgpt-directory.mjs withPartialLink) puts it back, as human_url + one plain line,
+// only on a result the profile closed with its own partial notice. Only "partial" in that profile's own
+// sense (isGated / claudeIsGated), only keyless (a key or OAuth bearer keeps today's answer), never a
+// paid-depth seat. Kill switch DCHUB_DIRECTORY_PARTIAL_LINK: unset/1/on = both profiles, 0/off = neither,
+// a comma list of "chatgpt" / "claude" = only those (set on BOTH Railway MCP services).
+export function directoryPartialLinkProfiles(env = process.env) {
+  const v = String((env && env.DCHUB_DIRECTORY_PARTIAL_LINK) || '').trim().toLowerCase();
+  if (!v || /^(1|true|yes|on)$/.test(v)) return new Set(['chatgpt', 'claude']);
+  if (/^(0|false|no|off)$/.test(v)) return new Set();
+  return new Set(v.split(',').map((x) => x.trim()).filter((x) => x === 'chatgpt' || x === 'claude'));
+}
+export async function _directoryPartialLinkStep(result, name, c = getCtx() || {}, env = process.env) {
+  try {
+    const prof = c.profile === DIRECTORY_PROFILE ? 'chatgpt' : c.profile === CLAUDE_PROFILE ? 'claude' : null;
+    if (!prof || !directoryPartialLinkProfiles(env).has(prof)) return result;
+    if (c.api_key || _isPaidDepthTier(c.tier)) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (!(prof === 'claude' ? _claudeIsGated(result) : _directoryIsGated(result))) return result;
+    const r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+    if (!r || !r.url) return result;   // no signing secret: nothing to hand a person
+    const link = await _shortRelayPageLink(r.url, name);
+    if (typeof link !== 'string' || !link) return result;
+    const meta = result._meta && typeof result._meta === 'object' && !Array.isArray(result._meta) ? result._meta : {};
+    return { ...result, _meta: { ...meta, [_PARTIAL_LINK_META_KEY]: link } };
+  } catch (_) { return result; }   // a link is never worth failing a response over
+}
+
 async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) {
   const c = getCtx() || {};
   let out;

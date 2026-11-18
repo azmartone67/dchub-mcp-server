@@ -14,7 +14,7 @@ DC Hub (dchub.cloud) is the orchestration layer for data center and energy quest
 MCP server: https://dchub.cloud/mcp  
 Start with execute_plan(intent="<the user's question>"): it picks and chains the right tools and returns one dated, cited answer.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=flat&logo=github)](https://github.com/azmartone67/dchub-mcp-server/stargazers) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub) [![HOL Plugins trust score](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Ddc-hub%252Fdchub%26metric%3Dtrust%26style%3Dflat)](https://hol.org/registry/plugins/dc-hub%2Fdchub?utm_source=hol_marketplace&utm_medium=plugins_badge&utm_campaign=listed_link&utm_content=dc-hub%2Fdchub)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiJodHRwczovL2RjaHViLmNsb3VkL21jcD92aWE9Y3Vyc29yIn0%3D) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=flat&logo=github)](https://github.com/azmartone67/dchub-mcp-server/stargazers) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub) [![HOL Plugins trust score](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Ddc-hub%252Fdchub%26metric%3Dtrust%26style%3Dflat)](https://hol.org/registry/plugins/dc-hub%2Fdchub?utm_source=hol_marketplace&utm_medium=plugins_badge&utm_campaign=listed_link&utm_content=dc-hub%2Fdchub) [![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=dchub&config=%7B%22url%22%3A%22https%3A%2F%2Fdchub.cloud%2Fmcp%3Fvia%3Dkiro%22%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) [![Add to LM Studio](https://img.shields.io/badge/LM_Studio-Add_MCP-4B32C3)](https://lmstudio.ai/install-mcp?name=dchub&config=eyJ1cmwiOiJodHRwczovL2RjaHViLmNsb3VkL21jcD92aWE9bG1zdHVkaW8ifQ%3D%3D)
 
 ## Start
 
@@ -176,7 +176,7 @@ Facility directories list sites you can browse. DC Hub adds the power side, quer
 
 ## Install
 
-One-line setup for Codex CLI, GitHub Copilot CLI, opencode, VS Code and Windsurf: [docs/quick-start.md](docs/quick-start.md).
+One-line setup for Codex CLI, GitHub Copilot CLI, opencode, VS Code, Windsurf, Goose, Kiro and LM Studio: [docs/quick-start.md](docs/quick-start.md).
 
 ### Claude Desktop — Quickstart (stdio)
 
@@ -202,9 +202,36 @@ Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use
 claude mcp add dchub --transport http https://dchub.cloud/mcp
 ```
 
+### GitHub Copilot CLI
+
+Plugin (MCP server plus three workflow skills), the same two-line path as Claude Code:
+
+```bash
+copilot plugin marketplace add azmartone67/dchub-mcp-server
+copilot plugin install dchub@dchub
+```
+
+Server only: `copilot mcp add --transport http dchub https://dchub.cloud/mcp` (writes `~/.copilot/mcp-config.json`).
+
+### VS Code (GitHub Copilot agent mode)
+
+One click: the **Install in VS Code** badge above, or from a terminal:
+
+```bash
+code --add-mcp '{"name":"dchub","type":"http","url":"https://dchub.cloud/mcp"}'
+```
+
+DC Hub is also in the GitHub MCP Registry at [github.com/mcp/cloud.dchub/mcp-server](https://github.com/mcp/cloud.dchub/mcp-server), which VS Code's MCP gallery reads.
+
+### Goose, Kiro, LM Studio
+
+- Goose Desktop: ``goose://extension?url=https%3A%2F%2Fdchub.cloud%2Fmcp%3Fvia%3Dgoose&type=streamable_http&id=dchub&name=DC%20Hub&description=The%20orchestration%20layer%20for%20data%20center%20and%20energy%20intelligence.%20Call%20execute_plan%20first.&timeout=300``, or `goose session --with-streamable-http-extension https://dchub.cloud/mcp`.
+- Kiro: the **Add to Kiro** badge above.
+- LM Studio (0.3.17+): the **Add to LM Studio** badge above.
+
 ### Cursor
 
-One-click: [Add DC Hub to Cursor](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D), or search "DC Hub" in [cursor.directory/plugins/dc-hub](https://cursor.directory/plugins/dc-hub) → Install.
+One-click: [Add DC Hub to Cursor](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiJodHRwczovL2RjaHViLmNsb3VkL21jcD92aWE9Y3Vyc29yIn0%3D), or search "DC Hub" in [cursor.directory/plugins/dc-hub](https://cursor.directory/plugins/dc-hub) → Install.
 
 Or add to `.cursor/mcp.json`:
 
