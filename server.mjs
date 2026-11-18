@@ -327,7 +327,7 @@ import { pairStepFor as _pairStepFor, pairHeldBack as _pairHeldBack, pairHeldNot
   pairPlace as _pairPlace } from './lib/plan-pairs.mjs';
 // 5.39 (Grok cross-domain head-to-head, 2026-11-17 night): capacity + grid with no place, power prices on a place, and
 // one answer that names both sides with figures from facts[].
-import { capacityGridAsk as _capacityGridAsk, capacityGridSequence as _capacityGridSequence,
+import { capacityGridAsk as _capacityGridAsk, powerMarketsAsk as _powerMarketsAsk, capacityGridSequence as _capacityGridSequence,
   energyPriceStep as _energyPriceStep, wholesaleAsked as _wholesaleAsked, WHOLESALE_SCOPE_NOTE as _WHOLESALE_SCOPE_NOTE,
   buildCrossDomainAnswer as _buildCrossDomainAnswer } from './lib/cross-domain-answer.mjs';
 import { dcPowerPlaceAsk as _dcPowerPlaceAsk, dcPowerPlaceSequence as _dcPowerPlaceSequence, hostingPoint as _dcHostingPoint,
@@ -25698,11 +25698,17 @@ export function _planQuery(intent, context) {
     const cg = scored.find((s) => s.cls.id === 'capacity_grid');
     if (cg) {
       cg.score = 0; cg.hits = [];
-      if (_capacityGridAsk(text, d) && !(d.__colo && (d.__colo.metro || d.__colo.pair))) {
+      const capAsk = _capacityGridAsk(text, d);
+      // 5.40 follow-up (Grok 1118 item 2): "which markets have the most available power for a data center" is the same
+      // DCPI-ranked shortlist, without the Capacity Source step (d.__powerMarkets).
+      const powAsk = !capAsk && _powerMarketsAsk(text, d);
+      if ((capAsk || powAsk) && !(d.__colo && (d.__colo.metro || d.__colo.pair))) {
         let best = 0;
         for (const s of scored) if (s !== cg && s.score > best) best = s.score;
         cg.score = Math.max(best, 2) + 1.5;
-        cg.hits = ['capacity with power and its grid, no place named (' + Math.round(d.mw) + ' MW)'];
+        if (powAsk) d.__powerMarkets = true;
+        cg.hits = [(powAsk ? 'markets ranked by available power for a data-center load, no place named'
+          : 'capacity with power and its grid, no place named') + (d.mw ? ' (' + Math.round(d.mw) + ' MW)' : '')];
       }
     }
   } catch (_e) { /* routing must never throw */ }
