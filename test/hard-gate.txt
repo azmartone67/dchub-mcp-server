@@ -317,6 +317,7 @@ test/grok-profile.test.mjs
 test/grok-relay-label.test.mjs
 test/grok-wall-hygiene-1008.test.mjs
 test/guided-auth-walls.test.mjs
+test/h2h-remaining-gaps-1118.test.mjs
 test/handler-args-declared.test.mjs
 test/handshake-is-lean.test.mjs
 test/hard-gate-no-network.test.mjs
