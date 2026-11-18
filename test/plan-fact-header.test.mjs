@@ -272,3 +272,31 @@ describe('through the real handler', () => {
     expect(claude).not.toContain('compact');
   }, 120_000);
 });
+
+// Grok midday re-run 2026-11-17, Q-d: the lead said "TX (mostly ERCOT)" while ENTITY listed every grid touching Texas.
+describe('ENTITY follows the answer\'s one-state scope', () => {
+  const TX_PLAN = Object.freeze({
+    _entity: 'plan_execution', ok: true, intent_class: 'grid_headroom',
+    intent_answer: { kind: 'power_timing', geography: 'TX (mostly ERCOT)' },
+    constraint_iso: ['ERCOT', 'SPP', 'MISO', 'WECC'],
+    executed: [],
+    provenance: { source: 'DC Hub', as_of: '2026-10-31' },
+  });
+  const entity = (plan) => (buildPlanFactHeader(plan).split('\n').find((l) => l.startsWith('ENTITY:')) || null);
+
+  it('a state that is mostly one grid names the state and that grid only', () => {
+    expect(entity(TX_PLAN)).toBe('ENTITY: TX (state) | ERCOT (ISO, most of TX)');
+  });
+  it('a split state with no main grid names the state and keeps its grids', () => {
+    const p = clone(TX_PLAN);
+    p.intent_answer.geography = 'IL (PJM/MISO)'; p.constraint_iso = ['PJM', 'MISO'];
+    expect(entity(p)).toBe('ENTITY: IL (state) | PJM (ISO) | MISO (ISO)');
+  });
+  it('controls: an ISO scope, a several-state scope and no scope keep the grid list', () => {
+    for (const geography of ['ERCOT/SPP (ISO)', 'TX and AZ (states)', undefined]) {
+      const p = clone(TX_PLAN);
+      if (geography) p.intent_answer.geography = geography; else delete p.intent_answer.geography;
+      expect(entity(p)).toBe('ENTITY: ERCOT (ISO) | SPP (ISO) | MISO (ISO) | WECC (ISO)');
+    }
+  });
+});
