@@ -18912,6 +18912,23 @@ const _ISO_REORDERED = { NEISO: 'ISONE' };
 const _isoKey = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const _normIso = v => { const n = _isoKey(v); return _ISO_REORDERED[n] || n; };
 const _isoValid = v => _US_ISO_SET.has(_normIso(v));
+// ── neso-tec (2026-11-18, be#8980) ──
+// get_interconnection_queue also drills into Great Britain. The backend's
+// /api/v1/interconnection-queue/by-iso already answers iso=NESO with the NESO
+// aggregate row (a mixed generation + demand connections register, queue_kind
+// mixed_connection_queue), and be#8980 attaches the NESO TEC Register project
+// rows to it. The strict US-ISO check refused NESO before the call ever left this
+// server. Only this tool widens: get_iso_context stays US-only. NGESO (the
+// operator's former name, used by get_grid_data) and GB fold to NESO, because the
+// backend matches the letters of the code and knows only NESO. UK is NOT folded:
+// NESO's register covers Great Britain, not Northern Ireland.
+const _QUEUE_INTL_FOLD = Object.freeze({ NESO: 'NESO', NGESO: 'NESO', GB: 'NESO' });
+const _queueIntlIso = v => _QUEUE_INTL_FOLD[_isoKey(v)] || null;
+const _queueIsoValid = v => _isoValid(v) || !!_queueIntlIso(v);
+export const _foldQueueIsoArg = a => {
+  const f = a && a.iso != null && _queueIntlIso(a.iso);
+  return f ? { ...a, iso: f } : _foldIsoArg(a);
+};
 // ── 2026-10-21 (owner: "mcp tools should cover way more") ──
 // get_grid_data and compare_isos serve EVERY live grid DC Hub ingests, not only
 // the 7 US ISOs. Two backend reads cover them:
@@ -19056,11 +19073,14 @@ const _isoError = (raw, toolName) => {
   // `iso` is actually a declared param of this tool. buildErrorEnvelope filters
   // the candidate to the allowed set and omits the key if nothing survives.
   const suggested = near ? { iso: near } : undefined;
+  // get_interconnection_queue also takes NESO (Great Britain, the NESO TEC Register).
+  const queueGb = toolName === 'get_interconnection_queue'
+    ? ' Great Britain: iso=NESO (the NESO TEC Register).' : '';
   const payload = {
     error: 'invalid_iso',
     detail: `iso="${raw}" not recognized for ${toolName}. Valid US ISOs: `
-            + US_ISOS.join(', ') + '.' + intl,
-    valid_isos: US_ISOS,
+            + US_ISOS.join(', ') + '.' + queueGb + intl,
+    valid_isos: toolName === 'get_interconnection_queue' ? [...US_ISOS, 'NESO'] : US_ISOS,
     _source: 'DC Hub — dchub.cloud',
   };
   const enriched = _withErrorEnvelope(payload, {
@@ -19221,7 +19241,8 @@ export function _locationPoint(rawLocation, slug, row, param = 'location') {
 export function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
-      && String(args.iso).trim() !== '' && !_isoValid(args.iso)) {
+      && String(args.iso).trim() !== ''
+      && !(name === 'get_interconnection_queue' ? _queueIsoValid(args.iso) : _isoValid(args.iso))) {
     return _isoError(args.iso, name);
   }
   if (_coordsRequired(name, args)) {
@@ -34516,11 +34537,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
-    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
+    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
+    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE, or NESO for Great Britain (the NESO TEC Register: generation and demand connections together, not a generation-only queue); omit for the all-ISO snapshot') },
     async (a) => {
-      if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
-      a = _foldIsoArg(a);
+      if (a.iso && !_queueIsoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
+      a = _foldQueueIsoArg(a);
       const data = await _withLargeLoad(
         await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);
       // r-structured (2026-06-19): structuredContent so agent clients get the
