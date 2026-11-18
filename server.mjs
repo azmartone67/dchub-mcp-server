@@ -21629,7 +21629,10 @@ export const _PLAN_CLASSES = [
     // (lib/cross-domain-answer.mjs capacityGridAsk). It never scores from its own words: _planQuery gives it the win.
     id: 'capacity_grid', recipe: 'market_selection',
     patterns: [],
-    rationale: 'Capacity with power, and the grid behind it, with no place named: rank the US markets by DCPI verdict and time to power first, then read each finalist grid\'s queue depth and headroom (one call per distinct ISO, in parallel), and close on the Capacity Source listings for the size.',
+    // A power-availability ranking (d.__powerMarkets, Grok 1118 item 2) runs no listings step, so its rationale names none.
+    rationale: (d) => d && d.__powerMarkets
+      ? 'Where power is available for a data-center load, with no place named: rank the US markets by DCPI verdict and time to power first, then read each finalist grid\'s queue depth and headroom (one call per distinct ISO, in parallel).'
+      : 'Capacity with power, and the grid behind it, with no place named: rank the US markets by DCPI verdict and time to power first, then read each finalist grid\'s queue depth and headroom (one call per distinct ISO, in parallel), and close on the Capacity Source listings for the size.',
     sequence: (d) => _capacityGridSequence(d),
     alternatives: [
       { tool: 'rank_markets', args_hint: { criteria: 'ai_ready', region: 'us', limit: 10 },
