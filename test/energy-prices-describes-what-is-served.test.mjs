@@ -30,7 +30,28 @@ describe('get_energy_prices text matches the served payload', () => {
       expect(desc).not.toContain(f);
       expect(schema).not.toContain(f);
     }
-    expect(desc).toMatch(/no wholesale\/LMP price and no grid-status flag/);
+    expect(desc).toMatch(/This tool has no grid-status flag\./);
+  });
+  // 2026-11-18 (owner, Grok note 2026-11-17 item 2): the backend serves a wholesale_lmp hub block.
+  it('describes the wholesale_lmp block it now serves, and the hub argument', () => {
+    expect(desc).not.toMatch(/no wholesale\/LMP price/);
+    expect(desc).toMatch(/wholesale_lmp/);
+    expect(desc).toMatch(/label "wholesale LMP, \$\/MWh"/);
+    for (const f of ['real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}',
+      'day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null', 'hubs_available',
+      'day_ahead_note', 'source_url', 'license', 'basis', 'wholesale_lmp_withheld {iso, reason}']) {
+      expect(desc, f).toContain(f);
+    }
+    expect(desc).toMatch(/served to every caller/);
+    // The backend decides which ISOs; the text names only the two whose terms are clear.
+    expect(desc).toMatch(/for ERCOT and CAISO where their terms allow/);
+    expect(src).toMatch(/hub: S\.describe\('Optional ISO pricing hub for wholesale_lmp/);
+    for (const f of ['wholesale_lmp: _oObj(', 'wholesale_lmp_withheld: _oObj(', "lmp_usd_mwh: _oNum('Real-time hub LMP, USD/MWh')"]) {
+      expect(schema, f).toContain(f);
+    }
+  });
+  it('names no plan and no price (Note F)', () => {
+    expect(desc).not.toMatch(/\$\d|paid plan|\bPro\b|free tier/i);
   });
   it('says the retail rates are monthly, not live', () => {
     expect(desc).toMatch(/monthly and not live/);
