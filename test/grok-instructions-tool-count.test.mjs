@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { keyToolPointerText as _listedKeyName } from '../lib/key-tool-name.mjs';   // 2026-11-17: served text names get_api_key
 
 const TOTAL = JSON.parse(readFileSync(new URL('../mcp-server.json', import.meta.url), 'utf8')).tools.length;
 const STATED = /\b(\d+)\s+(?:DC Hub\s+)?tools\b/g;
@@ -98,7 +99,7 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     expect(instr).not.toContain('curated subset');
     // Capacity handoff item 5 (owner 2026-11-11): /mcp alone adds the buy/RFP clause after the routing sentence.
     // Front desk item 4 (owner 2026-11-13): and the welcome after its lead.
-    expect(instr).toBe(S._withWelcome(S._INSTRUCTIONS_LEAN));
+    expect(instr).toBe(_listedKeyName(S._withWelcome(S._INSTRUCTIONS_LEAN)));
     expect(instr).not.toBe(S._INSTRUCTIONS_LEAN);
   });
 

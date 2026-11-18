@@ -258,7 +258,7 @@ const ARG_SAMPLES = { isos: 'PJM,ERCOT', iso: 'PJM', state: 'VA', market: 'dalla
   from: '32.78,-96.80', to: '32.80,-96.79' };
 // The cap line's promise (lib/keyless-wall.mjs keylessCapEmailOnlyLine).
 const CAP_FULL_RE = /One email unlocks[^.\n]*the full answer|Your human can get the full answer/;
-const EMAIL_ASK_RE = /`bind_email`|`claim_free_key`|enter (?:an|your) email/i;
+const EMAIL_ASK_RE = /`bind_email`|`claim_free_key`|`get_api_key`|enter (?:an|your) email/i;
 // A keyless result is a wall when it says it withheld something: the preview flags, a per-field
 // `_x_withheld` marker, or the citation's word.
 const isPreview = (sc) => !!sc && (sc.preview_is_partial === true || sc.trial_preview === true
@@ -336,7 +336,7 @@ describe('guard (real handler): the digest line is never sent where an email ope
       if (gained.length) {
         emailOpens.push(name);
         const up = (anon.sc._upgrade && typeof anon.sc._upgrade === 'object') ? anon.sc._upgrade : {};
-        if (!EMAIL_ASK_RE.test(anon.text) && !/^(claim_free_key|bind_email)$/.test(String(up.next_tool || ''))
+        if (!EMAIL_ASK_RE.test(anon.text) && !/^(claim_free_key|get_api_key|bind_email)$/.test(String(up.next_tool || ''))
             && !(name in NO_CHAIN_ASK)) noEmailAsk.push(name);
       }
       // 4. tools/list must not say an email opens the tool where it opens nothing.

@@ -31,7 +31,7 @@ const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this 
 // calls only, never "the full answer".
 const FREE_TIER_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
   + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks more answers\\.$');   // option A: no calls-per-day figure
-const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `claim_free_key` (one call, no email).';
+const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `get_api_key` (one call, no email).';
 // The anonymous-cap walls reset with the daily per-IP count (platform review 2026-11-14).
 import { nextUtcDayStart } from '../lib/keyless-wall.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
@@ -137,7 +137,7 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(f.sc.unlock_kind).toBe('email_cap');
     expect(f.sc.user_message).toMatch(FIRST_LINE(SHORT));
     expect(f.text.split('\n')[0]).toMatch(FIRST_LINE(SHORT));
-    expect(f.text).not.toContain('claim_free_key');
+    expect(f.text).not.toContain('get_api_key');
     expect(f.sc.next_tool).toBeUndefined();
     expect(f.sc.free_key_unlock).toBeUndefined();
     expect(f.sc.next_step).toBe('human_url');
@@ -152,9 +152,9 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(r.sc.human_url).toBe(SHORT);
     expect(r.text.split('\n')[0]).toBe('Keep going free by email → ' + SHORT);
     // claim_free_key only as the last line, after the email ask
-    expect(r.text.indexOf('claim_free_key')).toBeGreaterThan(r.text.indexOf('Keep going free by email'));
-    expect(r.text.split('\n').find((l) => l.includes('claim_free_key')))
-      .toBe('If the user prefers not to give an email, call `claim_free_key` (one call, no email).');
+    expect(r.text.indexOf('get_api_key')).toBeGreaterThan(r.text.indexOf('Keep going free by email'));
+    expect(r.text.split('\n').find((l) => l.includes('get_api_key')))
+      .toBe('If the user prefers not to give an email, call `get_api_key` (one call, no email).');
     expect(r.sc.remaining_this_month).toBe(0);
     // the hard wall is a DAILY per-IP count: resets_at is the next UTC midnight, never the month start
     expect(r.sc.binding_limit).toBe('anon_ip_daily_hard');
@@ -189,8 +189,8 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     process.env.DCHUB_WALL_NO_EMAIL_EXIT_DELAY = '0';
     const r = await call('find_sites', { state: 'TX' });
     expect(r.sc.user_message).toBe('Keep going free by email → ' + SHORT);
-    expect(r.text.split('\n').find((l) => l.includes('claim_free_key'))).toBe(NO_EMAIL_LINE);
-    expect(r.sc.next_tool).toBe('claim_free_key');
+    expect(r.text.split('\n').find((l) => l.includes('get_api_key'))).toBe(NO_EMAIL_LINE);
+    expect(r.sc.next_tool).toBe('get_api_key');
   });
 
   it('analyze_site: the relay is born w-siteruns (its own email unlock page)', async () => {
@@ -278,7 +278,7 @@ describe('A. anonymous soft cap: the preview stays, its nudge is email first', (
     const f = await call('site_selection_canvas', { state: 'TX', target_mw: 200 }, { extraHdr: ip });
     const fu = f.sc._upgrade || {};
     expect(fu.unlock_kind).toBe('email_cap');
-    expect(fu.message).not.toContain('claim_free_key');            // option C: first wall, no exit
+    expect(fu.message).not.toContain('get_api_key');            // option C: first wall, no exit
     expect(fu.next_tool).toBeUndefined();
     expect(fu.next_step).toBe('human_url');
     expect(f.sc.user_message).toMatch(FIRST_LINE(SHORT));
@@ -286,7 +286,7 @@ describe('A. anonymous soft cap: the preview stays, its nudge is email first', (
     expect(r.status).toEqual(['anon_daily_cap']);
     const up = r.sc._upgrade || {};
     expect(up.unlock_kind).toBe('email_cap');
-    expect(up.next_tool).toBe('claim_free_key');
+    expect(up.next_tool).toBe('get_api_key');
     expect(up.message.endsWith(NO_EMAIL_LINE)).toBe(true);
     expect(up.message.startsWith('Keep going free by email → ' + SHORT)).toBe(true);
     expect(up.remaining_this_month).toBe(0);

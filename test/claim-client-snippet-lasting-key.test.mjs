@@ -167,7 +167,7 @@ describe('the existing key comes back by IP plus client, and says so', () => {
     expect(sc).toMatchObject({ api_key: KEY, reused: true, already_held: true, held_by: 'backend_claim_dedupe', key_expires: false });
     expect(text).toContain('You already hold a DC Hub key');
     expect(text).not.toContain('Free DC Hub dev key minted');
-    expect(text).toContain('Calling claim_free_key again keeps returning this same key.');
+    expect(text).toContain('Calling get_api_key again keeps returning this same key.');
     expect(text).not.toContain('Save it once with the step');
     expect(text.indexOf('**Paste this into Cursor')).toBeGreaterThan(text.indexOf('**Your key:**'));
   });

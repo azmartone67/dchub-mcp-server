@@ -8,6 +8,7 @@
 // local stub and globalThis.fetch is stubbed for the direct reads.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer as httpServer } from 'node:http';
+import { keyToolPointerText as _listedKeyName } from '../lib/key-tool-name.mjs';   // 2026-11-17: served text names get_api_key
 
 const KEY = 'dchub_pro_' + 'inboxtestkey0000'.repeat(2);
 const INBOX_TEXT = 'DC Hub inbox for slug-test: 1 unread note(s) (now marked read)\n\n--- #7 | hello | from owner | 2026-10-07T00:00:00+00:00\nnote body\n';
@@ -152,7 +153,7 @@ describe('over HTTP: keyed vs keyless session', () => {
     expect(instructions).not.toContain('dchub://inbox');
     // 2026-11-11 (capacity item 5): /mcp adds the buy/RFP clause after the routing sentence.
     // 2026-11-13 (front desk item 4): and the welcome after its lead.
-    expect(instructions).toBe(S._withWelcome(S._capacityInstructions(S._INSTRUCTIONS_LEAN)));
+    expect(instructions).toBe(_listedKeyName(S._withWelcome(S._capacityInstructions(S._INSTRUCTIONS_LEAN))));
     const list = (await post(h, { jsonrpc: '2.0', id: 2, method: 'resources/list' })).msg.result.resources.map((r) => r.uri);
     expect(list).not.toContain('dchub://inbox');
     expect(list).toContain('dchub://instructions');

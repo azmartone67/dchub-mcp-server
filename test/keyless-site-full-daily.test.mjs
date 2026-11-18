@@ -85,7 +85,7 @@ describe('keyless: 2 full analyze_site answers per IP per UTC day, then the wall
       expect(isFull(r), `run ${i}: the full answer`).toBe(true);
       expect(r.sc.daily_site_runs).toMatchObject({ used: i, limit: 2, remaining: 2 - i });
       expect(r.text).toContain(`Free full site analysis without a key: ${i} of 2 today (UTC).`);
-      expect(r.text).toContain('claim_free_key');
+      expect(r.text).toContain('get_api_key');
       expect(r.status).toContain('keyless_full_trial');
       expect(r.charges).toHaveLength(1);
     }

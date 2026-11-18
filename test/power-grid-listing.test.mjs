@@ -1,6 +1,8 @@
 // R2 (2026-10-18): the second server "DC Hub Power & Grid" - pack membership, manifest limits, no price copy.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { asListedKeyTool, KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';   // 2026-11-17: the key tool is listed as get_api_key
+const _listed = (n) => (n === KEY_TOOL_REGISTERED ? KEY_TOOL_LISTED : n);
 
 const M = JSON.parse(readFileSync(new URL('../registry/power-grid.server.json', import.meta.url), 'utf8'));
 const SPINE = ['discover_tools', 'claim_free_key', 'unlock_more_data', 'summarize_for_citation'];
@@ -30,7 +32,7 @@ describe('POST /mcp/power', () => {
   it('lists exactly the 15 tools: 11 power/grid + the spine', async () => {
     const r = await post('/mcp/power', { jsonrpc: '2.0', id: 1, method: 'tools/list' });
     expect(r.status).toBe(200);
-    expect(r.json.result.tools.map((t) => t.name).sort()).toEqual([...LISTED, ...SPINE].sort());
+    expect(r.json.result.tools.map((t) => t.name).sort()).toEqual([...LISTED, ...SPINE].map(_listed).sort());
     expect(r.json.result.tools.length).toBeLessThanOrEqual(15);
   });
   it('answers initialize (a mounted path, not the GET health blob)', async () => {

@@ -73,7 +73,7 @@ describe('keyless wall, end to end', () => {
     const sc = r.structuredContent;
     expect(sc.site_teaser.verdict).toBe('BUILD');
     expect(sc.site_teaser.locked).toContain('composite_score');
-    expect(sc.next_tool).toBe('claim_free_key');
+    expect(sc.next_tool).toBe('get_api_key');
     const all = JSON.stringify(r);
     for (const leak of ['76.4', '88.1', '61.2', 'SECRET_CAVEAT_TEXT', 'coverage_ratio', 'sub_scores']) expect(all).not.toContain(leak);
   });

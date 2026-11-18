@@ -701,10 +701,10 @@ describe('walls come back as structured results an agent can act on', () => {
     const r = await call(WRITE, COMPLETE);
     const sc = r.structuredContent;
     expect(r.isError).toBeFalsy();
-    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', 'request_capacity_intro']);
+    expect(sc.next_steps).toEqual(['get_api_key', 'bind_email', 'request_capacity_intro']);
     expect(sc.error).toBe('identity_required');
     expect(sc.reason).toBe('sign_in_required');
-    expect(sc.access).toEqual(ACCESS_LOCKED);
+    expect(sc.access).toEqual({ ...ACCESS_LOCKED, unlock: { ...ACCESS_LOCKED.unlock, mcp_steps: ['get_api_key', 'bind_email'] } });   // served under the listed name
     expect(sc.message).toBe(E401_SIGN_IN.message);
     expect(sc.http_status).toBe(401);
     expect(sc.identity_note).toMatch(/OAuth/);
@@ -1066,7 +1066,7 @@ describe('accept_capacity_terms — the one write the gate needs', () => {
     responder = () => json(401, E401_SIGN_IN);
     const wall = await call(ACCEPT, { accept_terms: true, terms_version: '2026-09-11' });
     expect(wall.isError).toBeFalsy();
-    expect(wall.structuredContent.next_steps).toEqual(['claim_free_key', 'bind_email', ACCEPT]);
+    expect(wall.structuredContent.next_steps).toEqual(['get_api_key', 'bind_email', ACCEPT]);
     responder = () => json(409, E409);
     const moved = await call(ACCEPT, { accept_terms: true, terms_version: '2026-09-11' }, identifiedSeat());
     expect(moved.isError).toBeFalsy();
@@ -1535,10 +1535,10 @@ describe('browse-path access block → next_steps', () => {
     const r = await call(READ, {});
     expect(r.isError).toBeFalsy();
     const sc = r.structuredContent;
-    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(sc.next_steps).toEqual(['get_api_key', 'bind_email', READ]);
     // The note has to tell the agent what to do with its HUMAN, not just which
     // tool to call — a bare tool name is the inference this whole block removes.
-    expect(sc.next_steps_note).toContain('claim_free_key, then bind_email, then ' + READ);
+    expect(sc.next_steps_note).toContain('get_api_key, then bind_email, then ' + READ);
     expect(sc.next_steps_note).toMatch(/email your human explicitly gives you/);
     const ok = await accepts(READ, sc);
     expect(ok.ok, ok.issues).toBe(true);
@@ -1550,11 +1550,11 @@ describe('browse-path access block → next_steps', () => {
   it('a walled empty browse: next_call is the first unlock step, register_call waits on identity', async () => {
     responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_SIGN_IN });
     const anon = (await call(READ, { min_mw: 500 })).structuredContent;
-    expect(anon.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
-    expect(anon.next_call && anon.next_call.tool).toBe('claim_free_key');
+    expect(anon.next_steps).toEqual(['get_api_key', 'bind_email', READ]);
+    expect(anon.next_call && anon.next_call.tool).toBe('get_api_key');
     expect(anon.register_call.tool).toBe('request_capacity_intro');
     expect(anon.register_call.arguments).toEqual({ capacity_mw: 500 });
-    expect(anon.register_call.requires_first).toEqual(['claim_free_key', 'bind_email']);
+    expect(anon.register_call.requires_first).toEqual(['get_api_key', 'bind_email']);
     expect(anon.register_call.order[2]).toMatch(/^request_capacity_intro/);
     expect((await accepts(READ, anon)).ok).toBe(true);
     // Identified, terms not accepted: next call is accept_capacity_terms; the register call needs no
@@ -1574,7 +1574,7 @@ describe('browse-path access block → next_steps', () => {
     responder = () => json(200, { ...LIST_UPCOMING_EMPTY, caller_access: BROWSE_ACCESS_SIGN_IN });
     const r = await call(READ, {});
     expect(r.structuredContent.next_steps_note.startsWith(S.LISTING_NO_MATCH_LINE + ' ')).toBe(true);
-    expect(r.structuredContent.next_steps_note).toContain('claim_free_key, then bind_email');
+    expect(r.structuredContent.next_steps_note).toContain('get_api_key, then bind_email');
     // Control: a gated browse WITH listings keeps the plain sign-in note.
     responder = () => json(200, browseWith(BROWSE_ACCESS_SIGN_IN));
     expect((await call(READ, {})).structuredContent.next_steps_note).not.toContain('No listing matches');
@@ -1595,7 +1595,7 @@ describe('browse-path access block → next_steps', () => {
 
   it('the draft contract\u2019s `access` key is still accepted, so neither deploy order leaves this inert', async () => {
     const sc = (await browseResult(browseWith(BROWSE_ACCESS_SIGN_IN, 'access'))).structuredContent;
-    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(sc.next_steps).toEqual(['get_api_key', 'bind_email', READ]);
     // Those two names and no others: a gate that fires on whatever block-shaped
     // key turns up is not reading the contract, it is guessing.
     for (const wrong of ['listing_access', 'viewer_access', 'accessBlock']) {
@@ -1725,7 +1725,7 @@ describe('browse-path access block → next_steps', () => {
 
     responder = () => json(401, E401_SIGN_IN);
     const wall = (await call(READ, { slug: TEASER.slug })).structuredContent;
-    expect(wall.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(wall.next_steps).toEqual(['get_api_key', 'bind_email', READ]);
     expect(wall.identity_note).toMatch(/OAuth/);
   });
 });

@@ -2,6 +2,8 @@
 // more than half without touching what the server validates or returns.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { slimOutputSchema, slimDescription, stripChangelog, slimToolsList, SLIM_DESC_MAX, WIRE_ENVELOPE_KEYS } from '../lib/list-slim.mjs';
+import { asListedKeyTool, KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';   // 2026-11-17: the key tool is listed as get_api_key
+const _listed = (n) => (n === KEY_TOOL_REGISTERED ? KEY_TOOL_LISTED : n);
 
 let S, srv, PORT;
 beforeAll(async () => {
@@ -27,11 +29,11 @@ describe('wire list vs the canonical catalog', () => {
   it('is under half the canonical size, with every tool still listed', async () => {
     const canon = await S._buildToolsListResult(null);
     const w = await wire();
-    expect(w.tools.map((t) => t.name).sort()).toEqual(canon.tools.map((t) => t.name).sort());
+    expect(w.tools.map((t) => t.name).sort()).toEqual(canon.tools.map((t) => _listed(t.name)).sort());
     expect(w.bytes).toBeLessThan(JSON.stringify(canon).length * 0.5);
   });
   it('keeps names, titles, parameter names/types/required and the access annotations', async () => {
-    const canon = new Map((await S._buildToolsListResult(null)).tools.map((t) => [t.name, t]));
+    const canon = new Map((await S._buildToolsListResult(null)).tools.map(asListedKeyTool).map((t) => [t.name, t]));
     for (const t of (await wire()).tools) {
       const c = canon.get(t.name);
       expect(t.title, t.name).toBe(c.title);

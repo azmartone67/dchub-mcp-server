@@ -355,7 +355,7 @@ describe('walls and errors on match', () => {
     const r = await call({ target_mw: 40 });
     const sc = r.structuredContent;
     expect(r.isError).toBeFalsy();
-    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(sc.next_steps).toEqual(['get_api_key', 'bind_email', READ]);
     expect(sc.next_steps_note).toContain('This wall is identity, not payment.');
     expect(sc.next_steps_note).toContain('browsing source_capacity without a target stays open');
     expect(sc.identity_note).toMatch(/OAuth/);
@@ -364,7 +364,7 @@ describe('walls and errors on match', () => {
   it('control: the browse/slug 401 note is unchanged (no match sentence)', async () => {
     responder = () => json(401, E401_MATCH);
     const sc = (await call({ slug: 'dfw-40mw-powered-shell' })).structuredContent;
-    expect(sc.next_steps_note).toBe('This wall is identity, not payment. Call claim_free_key, then bind_email, then source_capacity. Bind only an email your human explicitly gives you.');
+    expect(sc.next_steps_note).toBe('This wall is identity, not payment. Call get_api_key, then bind_email, then source_capacity. Bind only an email your human explicitly gives you.');
   });
 
   it('403 account_review: no tool to call, names the contact, not "higher plan"', async () => {

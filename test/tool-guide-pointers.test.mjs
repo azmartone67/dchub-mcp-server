@@ -4,6 +4,8 @@
 import { PLAN_SUFFIX } from '../lib/dchub-identity.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TOOL_GUIDE_TOOLS, toolGuideUri, toolGuidePointer, SLIM_DESC_MAX } from '../lib/list-slim.mjs';
+import { asListedKeyTool, KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';   // 2026-11-17: the key tool is listed as get_api_key
+const _listed = (n) => (n === KEY_TOOL_REGISTERED ? KEY_TOOL_LISTED : n);
 
 let S, srv, PORT;
 beforeAll(async () => {
@@ -64,7 +66,7 @@ describe('tool guide pointers', () => {
 
 describe('annotations trim (P1-6)', () => {
   it('the wire drops the repeated upgrade_relay sentence but keeps the access tags and links', async () => {
-    const canon = new Map((await S._buildToolsListResult(null)).tools.map((t) => [t.name, t]));
+    const canon = new Map((await S._buildToolsListResult(null)).tools.map(asListedKeyTool).map((t) => [t.name, t]));
     const wire = await wireTools();
     expect([...canon.values()].filter((t) => t.annotations.upgrade_relay).length).toBeGreaterThan(20);
     for (const t of wire) {

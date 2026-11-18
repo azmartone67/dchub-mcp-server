@@ -127,6 +127,7 @@ const freshIp = () => `198.51.${100 + Math.floor(ip / 250)}.${(ip++ % 250) + 1}`
 const STRAYS = [];
 function ownTools(name, result) {
   const own = new Set([name]);
+  if (name === 'get_api_key') own.add('claim_free_key');   // the listed name; telemetry rows carry the registered one
   const ex = name === 'execute_plan' && result && result.structuredContent && result.structuredContent.executed;
   if (Array.isArray(ex)) for (const e of ex) if (e && typeof e.tool === 'string') own.add(e.tool);
   return own;
@@ -163,7 +164,7 @@ async function runTool(name, args = GUESS_ARGS) {
   return out;
 }
 // Note L1 + L2 (2026-11-15): an execute_plan wall's one link is https://dchub.cloud/connect (lib/neutral-cta.mjs).
-const PROSE_OFFER = /`(?:bind_email|subscribe_digest|claim_free_key)`|dchub\.cloud\/u\/|dchub\.cloud\/connect\b/;
+const PROSE_OFFER = /`(?:bind_email|subscribe_digest|claim_free_key|get_api_key)`|dchub\.cloud\/u\/|dchub\.cloud\/connect\b/;
 // The rows of one call that broke the rule, as readable strings ([] = clean).
 function offenders(name, calls) {
   const bad = [];
@@ -191,7 +192,7 @@ describe('every wall carries an offer (lean ON)', () => {
     const bad = [], walled = new Set();
     for (const name of tools) {
       const calls = await runTool(name);
-      if (calls.some((c) => c.rows.some((e) => e.tool === name))) walled.add(name);
+      if (calls.some((c) => c.rows.some((e) => e.tool === name || (name === 'get_api_key' && e.tool === 'claim_free_key')))) walled.add(name);   // rows carry the registered name
       bad.push(...offenders(name, calls));
     }
     expect(bad).toEqual([]);

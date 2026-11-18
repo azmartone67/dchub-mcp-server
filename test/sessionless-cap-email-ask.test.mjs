@@ -20,7 +20,7 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const UA = { 'user-agent': 'Claude-User' };
 const SHORT = 'https://dchub.cloud/u/abcdef';
-const ASK = /ask your human for their email[^]*`claim_free_key` with \{email\}[^]*X-API-Key/;
+const ASK = /ask your human for their email[^]*`get_api_key` with \{email\}[^]*X-API-Key/;
 
 let H, fence, anonCount = 0, ipN = 0;
 let EXTERNAL = true;
@@ -87,7 +87,7 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     expect(up.tier).toBe('anon_daily_cap');
     const prose = (r.res.content || []).filter((x) => x.type === 'text' && !/^\s*\{/.test(x.text)).map((x) => x.text);
     expect(prose.some((t) => /^Keep going free: ask your human for their email/.test(t) && ASK.test(t))).toBe(true);
-    expect(up.email_ask).toEqual({ tool: 'claim_free_key', arguments: { email: '<your human’s email>' } });
+    expect(up.email_ask).toEqual({ tool: 'get_api_key', arguments: { email: '<your human’s email>' } });
     expect(up.unlock_kind).toBeUndefined();                       // no page link: there is no session to grant onto
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_daily_cap', 'line']]);
   });
@@ -96,7 +96,7 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     anonCount = 999;
     const r = await call('find_sites', { state: 'TX' });
     expect(r.wire).toMatch(ASK);
-    expect(r.wire).not.toContain('`claim_free_key` (no email)');
+    expect(r.wire).not.toContain('`get_api_key` (no email)');
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_hard_wall', 'line']]);
   });
 
