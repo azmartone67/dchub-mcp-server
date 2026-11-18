@@ -348,6 +348,7 @@ test/keyless-full-trial-http.test.mjs
 test/keyless-full-trial.test.mjs
 test/keyless-grid-data-honesty.test.mjs
 test/keyless-results-no-plan-wording.test.mjs
+test/keyless-return-ask.test.mjs
 test/keyless-site-full-daily.test.mjs
 test/keyless-site-full-not-a-wall.test.mjs
 test/keyless-wall-anon-cap-daily-reset.test.mjs
