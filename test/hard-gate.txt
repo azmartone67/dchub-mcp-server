@@ -38,6 +38,7 @@ test/arg-error-is-not-a-metered-answer.test.mjs
 test/as-of-record-scope.test.mjs
 test/as-of-retrieval-kind.test.mjs
 test/ask-once-per-tool.test.mjs
+test/asof-iso-report-date-1118.test.mjs
 test/asset-quantities-heal-registry-copy.test.mjs
 test/auth-demoted-identity.test.mjs
 test/auth-refused-identity.test.mjs
