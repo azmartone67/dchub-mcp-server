@@ -353,7 +353,8 @@ describe('the renders are what they claim to be (non-vacuous)', () => {
   it('dchub_services keeps every service and one link each', () => {
     const s = sc(R['dchub_services@cursor'].first).services || [];
     expect(s.length).toBeGreaterThanOrEqual(8);
-    for (const x of s) expect(x.link, x.id).toMatch(/^https:\/\/dchub\.cloud\/[^#\s]*\?via=agent-referral&src=services$/);
+    // an #anchor may follow the query (lib/dchub-services.mjs referralLink; sample_dataset -> /partners#licence)
+    for (const x of s) expect(x.link, x.id).toMatch(/^https:\/\/dchub\.cloud\/[^#\s]*\?via=agent-referral&src=services(#[a-z-]+)?$/);
   });
   it('with the kill switch off, the data API\'s strings come back (the step is what removes them)', () => {
     const offHits = Object.entries(OFF).map(([t, r]) => [t, offenders(r).length]);

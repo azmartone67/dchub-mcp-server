@@ -136,7 +136,8 @@ describe('dchub_services (item 1)', () => {
   });
   it('names the eight owner-listed services, no price and no plan name anywhere', () => {
     const ids = DCHUB_SERVICES.map((s) => s.id);
-    expect(ids).toEqual(['execute_plan', 'full_depth', 'advisory', 'capacity_source', 'deal_desk_brief', 'excel_add_in', 'chatgpt_app', 'claude_app']);
+    // sample_dataset: owner 2026-11-17 (daily habit), test/daily-habit.test.mjs pins its link and copy.
+    expect(ids).toEqual(['execute_plan', 'full_depth', 'advisory', 'capacity_source', 'deal_desk_brief', 'sample_dataset', 'excel_add_in', 'chatgpt_app', 'claude_app']);
     expect(DCHUB_SERVICES.find((s) => s.id === 'full_depth').name).toBe('Full-depth answers');
     expect(DCHUB_SERVICES.find((s) => s.id === 'advisory').link).toMatch(/^https:\/\/dchub\.cloud\/advisory\?/);
     expect(JSON.stringify(servicesFor())).not.toMatch(NO_PRICE_OR_PLAN);
