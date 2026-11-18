@@ -153,11 +153,17 @@ describe('5.21: a market on no US RTO gets a state-level power read (orchestrati
     const p = _planQuery('What is the data center power outlook for San Antonio?', {});
     expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_grid_intelligence']);
   });
-  it('the kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0 restores the two-step plan', () => {
+  it('the kill switch DCHUB_OUTLOOK_STATE_TIMELINE=0 turns off the 5.21 step; the 5.38 pairing step reads the power side instead', () => {
     process.env.DCHUB_OUTLOOK_STATE_TIMELINE = '0';
     try {
       const p = _planQuery('power outlook for Phoenix', {});
-      expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel']);
+      // Planner 5.38 (both sides of the place): a market question always carries one power read for the market.
+      expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_intel', 'get_power_availability_timeline']);
+      const s3 = step(p, 'get_power_availability_timeline');
+      expect(s3.pair_side).toBe('power');
+      expect(s3.args_hint).toEqual({ state: 'AZ' });
+      expect(s3.why).not.toMatch(/does not score the market/);
+      expect(p.pairing).toMatchObject({ side: 'power', status: 'added', step: 3 });
     } finally { delete process.env.DCHUB_OUTLOOK_STATE_TIMELINE; }
   });
   it('an untracked place is still unresolved and gets no state step', () => {

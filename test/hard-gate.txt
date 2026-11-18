@@ -154,6 +154,7 @@ test/context7-refresh-response-handling.test.mjs
 test/continuation-handback.test.mjs
 test/continuation-wall-pipeline.test.mjs
 test/continuation.test.mjs
+test/continuity-ask.test.mjs
 test/conversion-metric-wall-link.test.mjs
 test/coord-aliases.test.mjs
 test/copy-plan-name-and-price-ratchet.test.mjs
@@ -510,6 +511,8 @@ test/planner-532-colocation-e2e.test.mjs
 test/planner-532-colocation.test.mjs
 test/planner-536-e2e.test.mjs
 test/planner-536-regions-ttp.test.mjs
+test/planner-538-pairs-e2e.test.mjs
+test/planner-538-pairs.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
