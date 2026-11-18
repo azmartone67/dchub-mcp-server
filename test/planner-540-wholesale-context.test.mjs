@@ -48,10 +48,10 @@ describe('price_now reads the be#8996 wholesale block', () => {
     expect(a.headline).not.toContain(NOT_LMP_NOTE);
     expect(a.not_established).not.toContain(NOT_LMP_NOTE);
   });
-  it('PJM: the published figures lead with their periods and the live-price link, then why no LMP is served', () => {
+  it('PJM: the published figures lead (an energy price before a capacity price), then the live link and why no LMP', () => {
     const a = run('PJM', PJM_EP);
-    expect(a.headline).toMatch(/^PJM: PJM Capacity auction clearing price: \$100\/MW-day \(2027\/2028 delivery year; RTO; PJM Base Residual Auction report; published 2026-07-01; auction result\)\./);
-    expect(a.headline).toContain('Load-weighted average LMP: $50/MWh (2025;');
+    expect(a.headline).toMatch(/^PJM published figures \(not live\): Load-weighted average LMP \$50\/MWh \(2025\); Capacity auction clearing price \$100\/MW-day \(2027\/2028 delivery year\); each dated and cited in facts\[\]\./);
+    expect(a.facts.find((f) => f.as_of === '2026-07-01').text).toBe('PJM Capacity auction clearing price: $100/MW-day (2027/2028 delivery year; RTO; PJM Base Residual Auction report; published 2026-07-01; auction result).');
     expect(a.headline).toContain('Live PJM prices: https://dataminer2.pjm.com/.');
     expect(a.headline).toContain(`PJM wholesale LMP is not served: ${PJM_REASON}.`);
     expect(a.headline).not.toContain(NOT_LMP_NOTE);
@@ -68,6 +68,22 @@ describe('price_now reads the be#8996 wholesale block', () => {
     const a = run('ERCOT', { ...RETAIL, filter: { iso: 'ERCOT' } });
     expect(a.headline).toContain(NOT_LMP_NOTE);
     expect(noLmpNote({ p: {} }, 'ERCOT')).toBe(NOT_LMP_NOTE);
+  });
+  it('be#8996\'s own PJM file (bfc2367): energy averages lead, every figure dated, the lead fits the 600-character budget', () => {
+    const file = fx('pjm-published-prices-be8996');
+    const { _about, ...wc } = file;
+    const a = run('PJM', { ...PJM_EP, wholesale_context: wc });
+    expect(a.headline).toMatch(/^PJM published figures \(not live\): Real-time load-weighted average LMP \$74\.98\/MWh/);
+    expect(a.headline).toContain('Day-ahead load-weighted average LMP $72.73/MWh');
+    expect(a.headline).toContain("PJM live LMP (PJM's own public pages): https://dataviewer.pjm.com/dataviewer/pages/public/lmp.jsf.");
+    expect(a.headline.length).toBeLessThanOrEqual(600);
+    const figs = a.facts.filter((f) => f.tool === 'get_energy_prices' && /\$\d/.test(f.text) && f.entity === 'PJM');
+    expect(figs).toHaveLength(file.figures.length);
+    for (const f of figs) expect(f.as_of, f.text).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+  it('a figure with no published date is dated by when it was retrieved', () => {
+    const s = { p: { wholesale_context: { iso: 'PJM', figures: [{ name: 'x', value: 1, unit: '$/MWh', retrieved: '2026-11-18' }] } }, args: {}, tool: 'get_energy_prices', step: 1 };
+    expect(wholesaleContextFacts(s)[0].as_of).toBe('2026-11-18');
   });
   it('a day-ahead note on a served block goes to not_established', () => {
     const ep = { ...ERCOT_LMP, wholesale_lmp: { ...ERCOT_LMP.wholesale_lmp, day_ahead: null, day_ahead_note: 'NYISO day-ahead is not ingested yet' } };
@@ -106,7 +122,7 @@ describe('dc_power_place reads the ISO wholesale block when wholesale is asked',
   };
   it('PJM: the published figure and the live link are on the power side, ahead of retail; the reason is the gap', () => {
     const a = answerWith(PJM_EP);
-    expect(a.headline).toContain('Capacity auction clearing price $100/MW-day (2027/2028 delivery year); Live PJM prices: https://dataminer2.pjm.com/');
+    expect(a.headline).toContain('Load-weighted average LMP $50/MWh (2025); Live PJM prices: https://dataminer2.pjm.com/');
     expect(a.not_established).toContain(`PJM wholesale LMP is not served: ${PJM_REASON}.`);
     expect(a.not_established).not.toContain(WHOLESALE_SCOPE_NOTE);
     expect(a.headline).not.toMatch(/has no wholesale/);
