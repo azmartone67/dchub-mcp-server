@@ -4,8 +4,9 @@
 //     get_gas_economics (delivered industrial / electric, the burner-tip PEU mean and its
 //     monthly min/max), each dated and labelled in figure_labels. Henry Hub is EIA's RNGWHHD
 //     series, which EIA credits to Refinitiv (LSEG), so it stays behind DCHUB_KEYLESS_HENRY_HUB
-//     (default off). get_refined_queue's project_name and queue_id pass through; a row the
-//     backend withheld (null + _locked_fields) keeps its marker.
+//     (default off). get_refined_queue's project_name and queue_id pass through, except on a
+//     held ISO's row (MISO, SPP: their terms bar republishing), which stays null with
+//     identity_withheld below full depth, whether the backend or this server withheld it.
 // (2) get_energy_prices' wholesale_lmp block (hub LMP, $/MWh) reaches every caller untouched,
 //     the same figures /api/v1/iso-lmp/snapshot publishes; wholesale_lmp_withheld passes through;
 //     the new `hub` argument reaches the backend.
@@ -73,13 +74,20 @@ const G2G = { market_name: 'Dallas', gas_price_used_usd_mmbtu: USED, burner_tip:
   scenarios_usd_per_mwh: { new_ccgt_6400_btu_kwh: 18.8361, avg_ccgt_6800_btu_kwh: CCGT, peaker_10500_btu_kwh: 30.9021 },
   formula: '$/MWh = (heat_rate_btu_per_kwh * gas_$/MMBtu) / 1000', fetched_at: '2026-11-18T04:00:12Z' };
 
-// ── get_refined_queue: ERCOT names open, a MISO row the backend withheld ──
-const QUEUE = { ok: true, _entity: 'queue_results', count: 4, _locked_fields: ['project_name', 'queue_id'],
+// ── get_refined_queue, as the backend answers this server's internal key ──
+// Measured on dchub-backend (be#8988): the REST tease already serves project_name / queue_id
+// for every open ISO, nulls them on a held ISO's row (MISO, SPP) below a paid plan with
+// identity_withheld + identity_withheld_reason, and answers the internal key in full. So the
+// MISO row arrives here FULL and this server must hold it; the SPP row stands for a row the
+// backend already withheld, which passes through untouched.
+const HOLD_REASON = "this ISO's terms do not allow republishing its feed; publishing needs written permission from the ISO";
+const QUEUE = { ok: true, _entity: 'queue_results', count: 4, _locked_fields: ['capacity_mw'],
   results: [
     { project_name: 'Sentinel Solar Ranch', queue_id: '24INR0999', iso: 'ERCOT', state: 'TX', fuel_type: 'Solar', queue_status: 'active' },
-    { project_name: null, queue_id: null, iso: 'MISO', state: 'IN', fuel_type: 'Gas', queue_status: 'active' },
+    { project_name: 'Ameren Sentinel Line', queue_id: 'MISO-J9999', iso: 'MISO', state: 'MO', fuel_type: 'Gas', queue_status: 'active' },
+    { project_name: null, queue_id: null, iso: 'SPP', state: 'KS', fuel_type: 'Wind', queue_status: 'active',
+      identity_withheld: ['project_name', 'queue_id'], identity_withheld_reason: HOLD_REASON },
     { project_name: 'Bluebonnet Gas Peaker', queue_id: '25INR0123', iso: 'ERCOT', state: 'TX', fuel_type: 'Gas', queue_status: 'active' },
-    { project_name: 'Fourth Row Wind', queue_id: '26INR0042', iso: 'ERCOT', state: 'TX', fuel_type: 'Wind', queue_status: 'active' },
   ] };
 
 const FREE_KEY = 'dch_live_energykeyless11180000001';
@@ -94,7 +102,7 @@ const VALIDATE = {
 const seen = [];
 let S, PORT, httpServer, stub;
 const prev = {};
-const ENV = { DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET, DCHUB_KEYLESS_HENRY_HUB: undefined };
+const ENV = { DCHUB_PREVIEW_ISERROR: '0', DCHUB_INTERNAL_KEY: SECRET, DCHUB_KEYLESS_HENRY_HUB: undefined, ISO_PUBLISH_RELEASED: undefined };
 
 beforeAll(async () => {
   await new Promise((resolve) => {
@@ -257,29 +265,69 @@ describe('get_gas_economics: the EIA state prices are free, the rest stays maske
   });
 });
 
-describe('get_refined_queue: names and queue ids pass through, a backend-withheld row keeps its marker', () => {
+describe('get_refined_queue: names and queue ids open, a held ISO\'s identity stays withheld', () => {
+  const expectHeld = (rows, text, label) => {
+    const ercot = rows.find((r) => r.queue_id === '24INR0999');
+    expect(ercot, `${label}: ERCOT row lost its id\n${text.slice(0, 600)}`).toBeDefined();
+    expect(ercot.project_name).toBe('Sentinel Solar Ranch');
+    expect(ercot._project_name_in_pro ?? ercot._project_name_withheld).toBeUndefined();
+    expect(ercot.identity_withheld).toBeUndefined();
+    const miso = rows.find((r) => r.iso === 'MISO');
+    expect(miso.project_name, label).toBeNull();
+    expect(miso.queue_id, label).toBeNull();
+    expect(miso.identity_withheld).toEqual(['project_name', 'queue_id']);
+    expect(miso.identity_withheld_reason).toBe(HOLD_REASON);
+    expect(miso._project_name_in_pro ?? miso._project_name_withheld).toBe(true);
+    expect(miso._queue_id_in_pro ?? miso._queue_id_withheld).toBe(true);
+    const spp = rows.find((r) => r.iso === 'SPP');
+    expect(spp.project_name).toBeNull();
+    expect(spp.queue_id).toBeNull();
+    expect(spp.identity_withheld).toEqual(['project_name', 'queue_id']);
+    expect(spp.identity_withheld_reason).toBe(HOLD_REASON);
+    for (const leak of ['Ameren Sentinel Line', 'MISO-J9999']) expect(text, `${label}: leaked ${leak}`).not.toContain(leak);
+  };
   for (const [seat, key] of SEATS) {
     it(`${seat}`, async () => {
       const { sc, text } = await call('get_refined_queue', { status: 'active' }, key);
       const rows = sc.results || [];
       expect(rows.length, `${seat}\n${text.slice(0, 600)}`).toBeGreaterThanOrEqual(3);
-      const ercot = rows.find((r) => r.queue_id === '24INR0999');
-      expect(ercot, `${seat}: ERCOT row lost its id`).toBeDefined();
-      expect(ercot.project_name).toBe('Sentinel Solar Ranch');
-      expect(ercot._project_name_in_pro ?? ercot._project_name_withheld).toBeUndefined();
-      expect(rows.find((r) => r.queue_id === '25INR0123').project_name).toBe('Bluebonnet Gas Peaker');
-      const miso = rows.find((r) => r.iso === 'MISO');
-      expect(miso.project_name).toBeNull();
-      expect(miso.queue_id).toBeNull();
-      expect(miso._project_name_in_pro ?? miso._project_name_withheld).toBe(true);
-      expect(miso._queue_id_in_pro ?? miso._queue_id_withheld).toBe(true);
+      expectHeld(rows, text, seat);
+      const blue = rows.find((r) => r.queue_id === '25INR0123');
+      if (blue) expect(blue.project_name).toBe('Bluebonnet Gas Peaker');   // the keyless preview keeps 3 rows
     });
   }
+
+  it('a full-access seat sees the held ISO\'s identifiers, as the backend\'s paid seats do', async () => {
+    const { sc } = await call('get_refined_queue', { status: 'active' }, PRO_KEY);
+    const miso = sc.results.find((r) => r.iso === 'MISO');
+    expect(miso.project_name).toBe('Ameren Sentinel Line');
+    expect(miso.queue_id).toBe('MISO-J9999');
+    expect(miso.identity_withheld).toBeUndefined();
+  });
+
+  it('ISO_PUBLISH_RELEASED=MISO lifts the hold with no code change', async () => {
+    process.env.ISO_PUBLISH_RELEASED = 'MISO';
+    try {
+      const { sc } = await call('get_refined_queue', { status: 'active' }, null);
+      const miso = sc.results.find((r) => r.iso === 'MISO');
+      expect(miso.project_name).toBe('Ameren Sentinel Line');
+      expect(sc.results.find((r) => r.iso === 'SPP').identity_withheld).toEqual(['project_name', 'queue_id']);
+    } finally { delete process.env.ISO_PUBLISH_RELEASED; }
+  });
+
+  it('a row the backend already withheld is returned as the same object (never re-opened)', () => {
+    const out = S._withholdHeldIsoIdentity(JSON.parse(JSON.stringify(QUEUE)));
+    expect(out.results[2]).toEqual(QUEUE.results[2]);
+    expect(out.results[1].project_name).toBeNull();
+    const already = { results: [QUEUE.results[2]] };
+    expect(S._withholdHeldIsoIdentity(already)).toBe(already);
+  });
 
   it('trimForTrial alone: open ids on this tool, the depth gate everywhere else', () => {
     const out = S.trimForTrial(JSON.parse(JSON.stringify(QUEUE)), 'get_refined_queue');
     expect(out.results[0].project_name).toBe('Sentinel Solar Ranch');
     expect(out.results[0].queue_id).toBe('24INR0999');
+    expect(out.results[2].project_name).toBeNull();
     const other = S.trimForTrial({ projects: [{ project_name: 'X', queue_id: 'Y' }] }, 'get_interconnection_queue');
     expect(other.projects[0].project_name).toBeNull();
     expect(other.projects[0].queue_id).toBeNull();

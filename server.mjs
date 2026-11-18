@@ -16146,6 +16146,54 @@ const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi
 // for an ISO whose terms bar reuse, and markLockedRowFields marks those rows. The depth gate
 // (_DEPTH_ID_KEYS) still holds every other tool's queue identifiers, and this tool's other ids.
 const _OPEN_ID_KEYS_BY_TOOL = { get_refined_queue: new Set(['project_name', 'queue_id']) };
+// ...except on a row from an ISO whose own terms bar republishing (dchub-backend
+// util/iso_publish_hold.py: MISO and SPP; ISO_PUBLISH_RELEASED lifts one, no code
+// change). The backend nulls those two fields below a paid plan in its REST tease
+// (withhold_held_iso_identity, be#8988) but answers this server's internal key in
+// full, so the same rule is applied here for a caller below full depth. The row
+// carries the backend's own markers (identity_withheld, identity_withheld_reason)
+// plus this server's per-field `_<f>_in_pro`. A row the backend already withheld is
+// left exactly as it came: nothing here ever re-opens a null.
+export const QUEUE_IDENTITY_HELD_ISOS = Object.freeze(['MISO', 'SPP']);
+const _QUEUE_IDENTITY_FIELDS = ['project_name', 'queue_id'];
+const _QUEUE_HOLD_REASON = "this ISO's terms do not allow republishing its feed; publishing needs written permission from the ISO";
+export function _heldQueueIsos() {
+  const released = new Set(String(process.env.ISO_PUBLISH_RELEASED || '').split(',')
+    .map((x) => x.trim().toUpperCase()).filter(Boolean));
+  return new Set(QUEUE_IDENTITY_HELD_ISOS.filter((i) => !released.has(i)));
+}
+export function _withholdHeldIsoIdentity(payload, rowKeys = ['results']) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const held = _heldQueueIsos();
+  if (!held.size) return payload;
+  let out = null;
+  for (const rk of rowKeys) {
+    const rows = payload[rk];
+    if (!Array.isArray(rows)) continue;
+    let changed = false;
+    const next = rows.map((r) => {
+      if (!r || typeof r !== 'object' || Array.isArray(r) || r.identity_withheld) return r;
+      if (!held.has(String(r.iso || '').toUpperCase().replace(/-/g, ''))) return r;
+      const o = { ...r };
+      for (const f of _QUEUE_IDENTITY_FIELDS) { o[f] = null; o['_' + f + '_in_pro'] = true; }
+      o.identity_withheld = [..._QUEUE_IDENTITY_FIELDS];
+      o.identity_withheld_reason = _QUEUE_HOLD_REASON;
+      changed = true;
+      return o;
+    });
+    if (changed) { if (!out) out = { ...payload }; out[rk] = next; }
+  }
+  return out || payload;
+}
+// Full depth sees a held ISO's identifiers, as the backend's paid seats do: a paid tier, or a
+// live pack balance (a pack is paid depth; a failed balance read withholds).
+async function _callerSeesHeldIsoIdentity() {
+  let c = {};
+  try { c = getCtx() || {}; } catch (_) { c = {}; }
+  const t = String(c.tier || '').toLowerCase();
+  if (t === 'internal' || _isPaidDepthTier(_nodeTier(t))) return true;
+  try { return (Number((await _getCredits(c)).credits) || 0) > 0; } catch (_) { return false; }
+}
 export function _openIdKey(toolName, k) {
   const s = _OPEN_ID_KEYS_BY_TOOL[toolName];
   return !!s && s.has(k);
@@ -34633,7 +34681,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       a = _foldIsoArg(a);
       // Item 4 add-on (2026-11-13): a row field the backend nulled under `_locked_fields` (capacity_mw) carries
       // its `_<f>_in_pro` marker (renamed `_<f>_withheld` on the way out), as project_name and queue_id do.
-      const data = _markLockedRowFields(await callAPI('/api/v1/interconnection-queue/refined', a), ['results']);
+      let _rq = await callAPI('/api/v1/interconnection-queue/refined', a);
+      if (!(await _callerSeesHeldIsoIdentity())) _rq = _withholdHeldIsoIdentity(_rq);   // MISO / SPP identity hold
+      const data = _markLockedRowFields(_rq, ['results']);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length && sc === data) {

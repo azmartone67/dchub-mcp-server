@@ -208,6 +208,7 @@ test/email-hint-after-taste.test.mjs
 test/email-tools-data-use.test.mjs
 test/end-of-burst-hook.test.mjs
 test/energy-capacity-cross-link.test.mjs
+test/energy-keyless-eia-1118.test.mjs
 test/energy-prices-describes-what-is-served.test.mjs
 test/energy-prices-free-taste.test.mjs
 test/engine-grade.test.mjs
