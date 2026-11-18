@@ -115,9 +115,10 @@ describe('item 2: a comparison header names every compared market and is dated b
   });
   it('not a comparison (one market, or another intent class): the header is unchanged', () => {
     const one = { ...COMPARE, executed: [COMPARE.executed[0], COMPARE.executed[2]] };
-    expect(buildPlanFactHeader(one).split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-09-30');
+    // Owner 2026-11-18: the oldest input's date names that input (OLDEST_INPUT), the date itself unchanged.
+    expect(buildPlanFactHeader(one).split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-09-30 | OLDEST_INPUT: Phoenix market intel');
     const ranking = { ...COMPARE, intent_class: 'market_ranking' };
-    expect(buildPlanFactHeader(ranking)).toMatch(/^SOURCE: DC Hub \(dchub\.cloud\) \| AS_OF: 2026-09-30\nENTITY: Phoenix \(market\) \| PJM/);
+    expect(buildPlanFactHeader(ranking)).toMatch(/^SOURCE: DC Hub \(dchub\.cloud\) \| AS_OF: 2026-09-30 \| OLDEST_INPUT: Phoenix market intel and Columbus market intel\nENTITY: Phoenix \(market\) \| PJM/);
   });
 });
 
