@@ -306,12 +306,14 @@ describe('agent-facing text names no plan, no price, no paid/upgrade/trial', () 
 
 describe('discovery', () => {
   it('the instructions line rides /mcp, /mcp/grok and /mcp/claude, not /mcp/chatgpt', async () => {
-    expect(S.INSTR_FEEDBACK_LINE).toBe("If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement. Both are free.");
+    // Note F / option A (owner 2026-11-17): "Both are free." is dropped from the owner-approved line.
+    expect(S.INSTR_FEEDBACK_LINE).toBe("If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement.");
     for (const p of ['/mcp', '/mcp/grok']) expect((await open(p)).instructions, p).toContain(S.INSTR_FEEDBACK_LINE);
     // /mcp/claude says the same in its own plain words (no "your human" on that profile)
     const ci = (await open('/mcp/claude', {}, 'claude-ai')).instructions;
     expect(ci).toBe(CLAUDE_INSTRUCTIONS);
-    expect(ci).toContain('If data looks wrong or missing, report_finding files it; if the user wants something DC Hub does not do, request_enhancement files that. Both are free.');
+    expect(ci).toContain('If data looks wrong or missing, report_finding files it; if the user wants something DC Hub does not do, request_enhancement files that.');
+    expect(ci).not.toContain('Both are free');
     expect((await open('/mcp/chatgpt', {}, 'openai-mcp')).instructions).not.toContain('report_finding');
     // keyed sessions carry it once, and the partner tail no longer restates report_finding
     const keyed = (await open('/mcp', { 'x-api-key': PARTNER })).instructions;

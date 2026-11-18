@@ -79,7 +79,8 @@ async function claim(args = { client_name: 'reuse-test-agent' }) {
 describe('a key the backend reused is announced as the same key', () => {
   it('fresh mint: says minted, reused false, no already_held', async () => {
     const { text, sc } = await claim();
-    expect(text).toContain('Free DC Hub dev key minted');
+    expect(text).toContain('DC Hub key minted');   // note F / option A (2026-11-17): was "Free DC Hub dev key minted"
+    expect(text).not.toContain('Free DC Hub dev key minted');
     expect(text).not.toContain('You already hold a DC Hub key');
     expect(sc.reused).toBe(false);
     expect(sc.already_held).toBeUndefined();
@@ -88,7 +89,7 @@ describe('a key the backend reused is announced as the same key', () => {
     claimReply = { reused: true };
     const { text, sc } = await claim();
     expect(text).toContain('You already hold a DC Hub key');
-    expect(text).not.toContain('Free DC Hub dev key minted');
+    expect(text).not.toContain('DC Hub key minted');
     expect(text).toContain('keeps returning this same key');
     expect(text).toContain(KEY);
     expect(sc).toMatchObject({ api_key: KEY, reused: true, already_held: true, held_by: 'backend_claim_dedupe' });

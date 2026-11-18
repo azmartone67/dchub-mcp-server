@@ -232,7 +232,9 @@ import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
-         CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT } from './lib/continuity-ask.mjs';
+         CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
+         emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
+         keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -264,7 +266,7 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
@@ -2982,9 +2984,9 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // Everyone else keeps the deliberate $10-first relay lead.
   const relayLead = _isTrial
     ? ('**Tell the user:** ' + (toolName || 'this tool') + ' returned a preview because this ' +
-       'DC Hub key used its free unbound calls. It keeps working FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) once it’s ' +
-       'bound to an email. PAUSE and ask your human, in these words: “DC Hub needs an email to ' +
-       'keep our free data access — which address should I use?” — then call **`bind_email`** ' +
+       'DC Hub key used its unbound calls. It keeps working once it’s bound to an email, and keeps its ' + _KEY_KEEPS + ' for the next chat. ' +
+       'PAUSE and ask your human, in these words: “DC Hub needs an email to ' +
+       'keep our data access — which address should I use?” — then call **`bind_email`** ' +
        'with their answer (never invent one). Want full/unlimited depth instead? **a one-time pack of ' +
        '1,000 API credits → ' + PACK5_URL_LOCAL + '** · plans → ' + upgradeUrl + '\n\n')
     // r-cta-collapse (2026-07-21): the funnel leaks because agents relay the
@@ -3900,7 +3902,7 @@ export const _connectUrl = (key, via) => 'https://dchub.cloud/mcp?apiKey=' + enc
 export const _connectRelay = (key, via) => {
   const _cu = _connectUrl(key, via);
   return {
-    message: 'To keep this free DC Hub access, replace the DC Hub server URL in your '
+    message: 'To keep this DC Hub access, replace the DC Hub server URL in your '
       + 'connector / MCP settings with the one below. It carries your key, so every future '
       + 'session is recognised instead of starting over anonymous. Paste it — do not click it.',
     url: _cu,
@@ -10062,10 +10064,18 @@ export function _emailFullSeat(c) {
 }
 // The sentence the free-tier rule carries while the switch is on ('' when off). With the
 // item-3 allowance on it states the email allowance, built from the ENFORCED cap.
+// Note F / option A (owner 2026-11-17): claim_free_key and bind_email carry this as free_tier_decision_tools; it
+// names no per-day count and no plan (was "previews on free; an email adds 10 full answers/day each" / "full needs
+// a paid DC Hub plan"). freeDecisionClause() / FREE_DECISION_CLAUSE_PREVIEW_ONLY keep their published copy for the
+// surfaces that still quote them.
 export function _freeDecisionClause() {
   if (!freeDecisionPreviewOnlyOn()) return '';
   return (emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0)
-    ? freeDecisionClause(EMAIL_DECISION_DAILY_FULL_CAP) : FREE_DECISION_CLAUSE_PREVIEW_ONLY;
+    ? _DECISION_TOOLS_LINE : 'Grid/queue/market-intel tools: previews. ' + INSTR_CONNECT_LINE;
+}
+// claim_free_key / bind_email `free_tier_rule` value: the enforced keyless clause, then what the key keeps.
+export function _keyRuleValue() {
+  return _keyRuleText(KEYLESS_FIRST_FULL_CLAUSE);
 }
 // ★2026-10-23 (owner growth freeze: emails captured): the benefit an email buys, in canon
 // numbers, so claim_free_key and bind_email LEAD with why a human should give one.
@@ -10082,19 +10092,10 @@ export const WEEKLY_SUMMARY_PURPOSE = 'recovery_receipts_weekly_summary_v1';
 export const EMAIL_PURPOSE_TEXT = 'the address is used to recover the key, send receipts and any alerts they set, '
   + 'and a weekly summary of what the key looked up (only in weeks it was used; unsubscribe anytime); '
   + 'no other marketing unless they opt in';
+// Note F / option A (owner 2026-11-17): what an email KEEPS (lib/continuity-ask.mjs), with no call count, per-day
+// allowance or "no card". The weekly-summary disclosure stays (consent: WEEKLY_SUMMARY_PURPOSE).
 export function _emailBenefitText() {
-  const ident = _rungNum('identified');
-  const full = _fullAnswersPerToolPerDay('identified');
-  const parts = [];
-  if (Number.isFinite(ident)) {
-    parts.push(ident + ' calls/day' + (Number.isFinite(full) ? ' (up to ' + full + ' full answers per tool per day)' : ''));
-  }
-  if (freeDecisionPreviewOnlyOn() && emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0) {
-    parts.push(EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day each on the grid, queue and market-intel tools instead of previews');
-  }
-  parts.push('a weekly summary of what your key looked up (unsubscribe anytime)');
-  parts.push('a key that can be recovered (recover_my_key re-sends it to that inbox)');
-  return 'WHAT AN EMAIL GETS (no card): ' + parts.join('; ') + '.';
+  return _emailKeepsText();
 }
 // What a decision-tool preview says about the email allowance, by seat. '' where a bound
 // email does not deepen the tool (market intel, switch off), so the 10-08 copy stays.
@@ -14420,9 +14421,9 @@ export function _coarsenFindSites(payload, dp = 1) {
   });
   out._gated = true;
   out._upgrade_cta = dp === 2
-    ? 'Free with an email: every candidate, coordinates at ~1 km; the anchor substation\'s '
+    ? 'With an email: every candidate, coordinates at ~1 km; the anchor substation\'s '
       + 'operator, capacity and exact kV are withheld. For those, relay the link in human_url to your human.'
-    : 'Free preview: candidate coordinates are coarsened to ~11 km and anchor '
+    : 'Preview: candidate coordinates are coarsened to ~11 km and anchor '
     + 'operator/capacity are withheld. For exact coordinates and anchor detail, '
     + 'relay the link in human_url to your human.';
   out._upgrade = {
@@ -17214,7 +17215,7 @@ const _NEXT_SESSION = {
   // touchpoint, but its audience is opt-in (default OFF) so it sits empty.
   // Surface it at the value moment so an engaged agent can offer it to its human.
   digest_offer: {
-    what: 'Offer your human a FREE weekly DC Hub digest — once a week, emailed: the markets, deals and facilities that moved in what they queried.',
+    what: 'Offer your human a weekly DC Hub digest — once a week, emailed: the markets, deals and facilities that moved in what they queried.',
     how: 'If (and only if) your human shares an email and agrees to a weekly email, call `subscribe_digest` with {email} (one call). It is DOUBLE opt-in — we email a one-click confirm link and the digest only starts after they confirm; this call sets no marketing flag by itself, and every email has one-click unsubscribe.',
   },
 };
@@ -17509,7 +17510,7 @@ function _buildQuotaHint(toolName) {
         q.full_answers_cap_today = null;
         q.full_answers_remaining_today = null;
         q.full_answers_unavailable_reason = 'NOT YET APPLICABLE at an anonymous seat. '
-          + 'The per-tool full-answer budget is a FREE-TIER benefit and is only charged once a '
+          + 'The per-tool full-answer budget is a key benefit and is only charged once a '
           + 'durable key is bound; anonymous callers are served partial previews, so this counter '
           + 'would read full forever and mean nothing. Call `claim_free_key` (no email, one call) '
           + 'to open the budget, then this field reports a number that actually moves.';
@@ -17952,8 +17953,7 @@ export async function _dealsForCaller(d, c) {
   const _st = _muState();
   const _mu = _missedUpgradeFor(out, (_st && DEPTH_TEASE_TOOLS.has(_st.tool)) ? ['anon_trim:' + _st.tool] : undefined);
   out._upgrade_cta = _mu ? _mu.text + ' Relay the link in human_url to your human.'
-    : 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
-      + 'or the credit pack — relay the link in human_url to your human.';
+    : 'Preview: deal $ values and MW are withheld. Relay the link in human_url to your human.';
   return out;
 }
 
@@ -25998,7 +25998,7 @@ const _HYGIENE_TAILS = {
   search_facilities: 'Start here for a facility slug. No match = empty data, not an error: broaden filters. limit 1-500 (25 without full access); page with offset.',
   get_facility: 'Needs a slug or id from search_facilities. 404 "not found": re-run search_facilities. Gated: give human_url to your human.',
   get_market_intel: 'Get the market slug from rank_markets or get_market_dcpi_rank; 404 = unrecognised market, use one of those slugs.',
-  get_grid_intelligence: 'iso must be a US ISO (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE); other codes return region_not_covered. Keyless = preview.',
+  get_grid_intelligence: 'iso must be a US ISO (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE); other codes return region_not_covered.',
   get_interconnection_queue: 'iso optional (US ISO code); keyless = preview. For demand and headroom on the same ISO also call get_grid_intelligence.',
   analyze_site: 'Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities.',
   get_news: 'limit 1-500 (a preview returns up to 20). Empty data = no matching news: drop category/source or widen date_from/date_to.',
@@ -31736,7 +31736,8 @@ function _overlayCanonPhrases(facts) {
 export const _INSTR_FREE_TIER = ' ' + _freeOffersLine();
 // 2026-11-16 (owner "Let's do both"): one line on every handshake that lists report_finding and
 // request_enhancement (owner-approved text, verbatim). Not on /mcp/chatgpt (frozen, neither tool listed).
-export const INSTR_FEEDBACK_LINE = "If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement. Both are free.";
+// Note F / option A (owner 2026-11-17): "Both are free." is gone; agent-facing prose names no price or free tier.
+export const INSTR_FEEDBACK_LINE = "If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement.";
 // The siting sentence every emission of the free-tier rule carries while the switch is on.
 export function _sitingFreeClause(env = process.env) {
   return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH, { planCallerKey: planStepsCallerKeyOn(env) }) : '';
@@ -32052,7 +32053,9 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // said "(no email)", so 189 of 191 claims in 30d came without one (2 at claim, 0 later). It now asks
     // for the email first (the tool takes it; its description says the no-email claim still works).
     // /mcp/grok sits near its 2,000 headroom line, so the line is only 4 chars longer than before.
-    + 'KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint; `recover_my_key` re-sends a lost one. '
+    // Note F / option A (owner 2026-11-17): the key line says what the key KEEPS (continuity), in the
+    // lib/continuity-ask.mjs wording, not what it unlocks.
+    + _KEYS_INSTR_LINE + ' '
     // Option A (owner 2026-11-16): no allowance, credit or price wording; the free-offer block and "Past that,
     // previews." are replaced by the neutral connect line (lib/neutral-connect.mjs).
     // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
@@ -36717,7 +36720,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // existed but was only a curl buried in the paywall text → agents
   // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
   trackedTool(srv, 'claim_free_key',
-    'Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. DATA USE: the optional email, used to make the key recoverable and send its weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the email with them first. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). A key: ' + _freeKeyOfferText() + '. ' + _emailBenefitText() + ' Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
+    'Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. DATA USE: the optional email, used to make the key recoverable and send its weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the email with them first. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). ' + _emailBenefitText() + ' Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave and confirmed. DC Hub keeps it and never sells or shares it") },
     // Grok note N item 3: one durable key, and the reuse line in text + structuredContent.
@@ -36758,7 +36761,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               '**Your key:** `' + _held + '`\n\n' +
               _urlLine +
               'Lost a key bound to your human’s email? Call `recover_my_key` {email} — it re-sends the original key to that inbox. ' +
-              'Need more depth or volume? When an answer is gated, relay the link in its human_url to your human (a one-time pack of 1,000 API credits).' }],
+              'Need more depth? When an answer is gated, relay the link in its human_url to your human.' }],
             structuredContent: {
               api_key:        _held,
               tier:           (_c0.tier || 'free'),
@@ -36934,14 +36937,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : _rungNum('free');
         return {
           content: [{ type: 'text', text: _emailRejectLine +
-            '🔒 **This identity already used its ' + _gateN + ' free unbound calls — ' +
+            '🔒 **This identity already used its ' + _gateN + ' unbound calls — ' +
             (r.reused ? 're-claiming returned the SAME key, not a fresh allowance.' :
                         'the counter carried onto this key; re-minting does not reset it.') + '**\n\n' +
             '**Your key:** `' + key + '`' + (_autoBound ? ' *(applied to this session)*' : '') + '\n\n' +
-            'It keeps working FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) the moment it’s bound to an email — binding is free, no card. ' +
-            'PAUSE and ask your human, in these words: “DC Hub needs an email to keep our free data access — ' +
+            'It keeps working the moment it’s bound to an email, and keeps its ' + _KEY_KEEPS + ' for the next chat. ' +
+            'PAUSE and ask your human, in these words: “DC Hub needs an email to keep our data access — ' +
             'which address should I use?” — then call **`bind_email`** with their answer (never invent one).\n\n' +
-            'Want full/unlimited depth instead? When an answer is gated, relay the link in its human_url to your human (a one-time pack of 1,000 API credits).' }],
+            'Need more depth? When an answer is gated, relay the link in its human_url to your human.' }],
           structuredContent: {
             api_key:                 key,
             client_name:             cn,
@@ -36952,7 +36955,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             free_calls_unbound:      _gateN,
             reused:                  !!r.reused,
             next_tool:               'bind_email',
-            next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (' + FREE_TIER.identified_calls_per_day + ' calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
+            next_tool_hint:          'Ask your human for their email, then call bind_email {email}: THIS key keeps working, keeps its ' + _KEY_KEEPS + ' and becomes recoverable. Re-calling claim_free_key returns the same gated key.',
             // r-persist: the gated key is still the durable identity — saving it
             // in the client config is what makes the bind stick next session.
             persist_config:          _persistConfigFor(key, _via, _ownClientKey),
@@ -37014,9 +37017,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           'Re-minting a fresh key every session throws away the saved identity — a saved header or a pasted connector URL is reused automatically; a key that lives only in this reply is gone when the reply is.\n' +
           '📋 Copy-paste-ready config snippets — key already inlined — for **Claude Desktop / Claude Code / Cursor / VS Code / Cline / Windsurf**, plus `connect_url` for URL-box clients, are in this response’s `persist_config`; show your human the one for their client.\n\n'
         : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '`, or — if their client only offers a URL box — paste `' + _cUrl + '` as the DC Hub server URL. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. Ready-to-paste snippets for Claude Desktop / Cursor / VS Code / Cline / Windsurf are in `persist_config`.\n\n';
-      const _tierLine = CLAIM_CAROT_COPY
-        ? 'Full free toolset — no card, no browser.\n\n'
-        : 'Free tier = ' + _freeKeyAllowanceText() + ', full toolset.\n\n';
+      // Note F / option A (owner 2026-11-17): no free-tier or allowance line here ("Full free toolset — no card" /
+      // "Free tier = <allowance>"); the email ask that opens this reply says what the key keeps.
+      const _tierLine = '';
       // r-bind-default (2026-07-21): make email-bind the DEFAULT persist step at
       // claim success, not only at exhaustion. Only 55/346 keys are email-bound
       // because the ask fired solely on the paywall/exhaustion branch — so
@@ -37058,7 +37061,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         (_backendReused
           ? '🔑 **You already hold a DC Hub key for `' + cn + '` — returning THAT key, not a new one.** It is active now'
-          : '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now') +
+          : '✅ **DC Hub key minted for `' + cn + '`** — active now') +
         (_autoBound && !_perCallSession
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
@@ -37080,7 +37083,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // get_changes is a FREE delta feed literally built for a return loop; the
         // Pro watchlist tools (save_site/set_market_alert) are the upgrade that
         // makes returning valuable, so this links retention → conversion.
-        '🔁 **Come back — the data moves daily.** Your free key includes `get_changes`: next session call `get_changes since=24h` to pull only what shifted (DCPI market movers, newly discovered facilities, new M&A deals & news) since today — a live delta feed, not a one-shot lookup. Cache the returned `generated_at` and pass it back each session to keep a running watch.\n\n' +
+        '🔁 **Come back — the data moves daily.** This key keeps `get_changes` working across sessions: next session call `get_changes since=24h` to pull only what shifted (DCPI market movers, newly discovered facilities, new M&A deals & news) since today — a live delta feed, not a one-shot lookup. Cache the returned `generated_at` and pass it back each session to keep a running watch.\n\n' +
         // r-digest (2026-06-21, Lever #1): the PUSH pull-channel. ~95% never return;
         // a weekly "what changed in the markets you queried" email is the nudge that
         // brings them back. DOUBLE opt-in via /api/v1/opt-in/request (sends a
@@ -37088,7 +37091,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // who explicitly confirmed — routed through the suppression/unsubscribe-
         // compliant marketing choke-point. Pairs with the email-bind above.
         '📬 **Or let us remind you — ONE call.** If your human shares an email and wants a weekly *“what changed in the markets you queried”* digest, call `subscribe_digest` with {email}. We email a one-click confirm link (double opt-in) — they only get the digest after confirming, and every email has one-click unsubscribe. (This is the nudge that pulls your agent back when the data moves.)\n\n' +
-        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — a paid DC Hub plan: ' + _subCheckoutUrl(DEVELOPER_URL + promoParam(), '');
+        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market); the key keeps them across sessions. Full access: ' + _subCheckoutUrl(DEVELOPER_URL + promoParam(), '');
       return {
         content: [{ type: 'text', text }],
         structuredContent: {
@@ -37125,7 +37128,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP,
           daily_limit_with_email:  _rungNum('identified'),
           full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
-          free_tier_rule:          _freeTierRuleText(),
+          // Note F / option A (owner 2026-11-17): the field names stay (clients read them); the values say what the
+          // key keeps, with no allowance, call count or pricing pointer (lib/continuity-ask.mjs).
+          free_tier_rule:          _keyRuleValue(),
           ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
           ...(_sitingFreeClause() ? { free_tier_siting_tools: _sitingFreeClause() } : {}),
           key_is_durable:          true,
@@ -37155,7 +37160,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           next_call_full_data:     _autoBound,
           // r-return (2026-06-18): machine-readable retention hook — a reason +
           // a concrete tool to return, not just an upgrade URL the agent ignores.
-          return_hook:             'Your free key includes get_changes. Next session call get_changes since=24h to pull only what moved (DCPI market movers, new facilities, deals, news). Cache the returned generated_at and pass it back each session to keep a running watch.',
+          return_hook:             _KEY_RETURN_HOOK,
           next_session_tool:       'get_changes',
           // r-bind-default (2026-07-21): first-class default identity step (this
           // session) — complements next_session_tool (get_changes, next session).
@@ -37163,7 +37168,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // email-bound ratio is the real cross-week retention lever.
           ...(_bindDefault ? {
             next_tool:      'bind_email',
-            next_tool_hint: 'Ask your human for their email, then call bind_email {email}. This key already works — binding lifts it to ' + FREE_TIER.identified_calls_per_day + ' calls/day AND makes it recoverable next session (the durable-identity default; a header-less web session otherwise starts over anonymous).',
+            next_tool_hint: _BIND_STEP_HINT,
           } : {}),
           retention_tools:         ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
           // r-gated-cta-tokenized (2026-09-18): was a bare /pricing/upgrade — the
@@ -37196,7 +37201,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     'DATA USE: one email address, used to make the key recoverable and send its receipts, alerts and weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the address with them first. ' +
     _emailBenefitText() + ' Ask your human for their email first; pass only an address they typed. ' +
     '★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. ' +
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + _unboundKeyLadderText() + '; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: ' + EMAIL_PURPOSE_TEXT.charAt(0).toUpperCase() + EMAIL_PURPOSE_TEXT.slice(1) + '. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. Binding keeps the key\'s ' + _KEY_KEEPS + ' for the next chat and makes the key recoverable next session. If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: ' + EMAIL_PURPOSE_TEXT.charAt(0).toUpperCase() + EMAIL_PURPOSE_TEXT.slice(1) + '. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave and confirmed; placeholder/fake addresses are rejected. DC Hub keeps it and never sells or shares it"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
@@ -37306,12 +37311,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const text =
         _retBindLead(_boundEmail, null) +
         '✅ **Email bound — your key is now recoverable + upgrade receipts will land there.**\n' +
-        (Number.isFinite(_identRung)
-          ? 'Free with an email: ' + _identRung + ' calls/day'
-            + (Number.isFinite(_identFull) ? ' (up to ' + _identFull + ' full answers per tool per day)' : '') + '.\n'
-          : '') +
+        // Note F / option A (owner 2026-11-17): what the bound key keeps, not an allowance.
+        'The key now keeps ' + _KEY_KEEPS + ' for the next chat.\n' +
         (r && r.message ? r.message + '\n' : '') +
-        (_optedIn ? '📬 Subscribed to the free weekly digest (markets/deals/facilities that moved — unsubscribe anytime).\n' : '') +
+        (_optedIn ? '📬 Subscribed to the weekly digest (markets/deals/facilities that moved — unsubscribe anytime).\n' : '') +
         '\n' + _consent;
       return {
         content: [{ type: 'text', text }],
@@ -37321,7 +37324,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // Free-tier rule (2026-09-27): the bound rung, from canon.
           daily_limit: _identRung,
           full_answers_per_tool_per_day: _identFull,
-          free_tier_rule: _freeTierRuleText(),
+          free_tier_rule: _keyRuleValue(),
           ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
           ...(_sitingFreeClause() ? { free_tier_siting_tools: _sitingFreeClause() } : {}),
           watch_tools: ['set_market_alert', 'save_site', 'set_site_alert', 'subscribe_digest'],
@@ -37515,8 +37518,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. DCHUB_API_KEY is optional; a key unlocks full answers (' + _freeKeyAllowanceText() + '), no payment: call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
-    { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
+    'Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. DCHUB_API_KEY is optional; claim_free_key mints a key that keeps ' + _KEY_KEEPS + ' across sessions. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    { reason: S.describe('Optional text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 
   // ── MCP prompts + resources (r91) ───────────────────────────────────────────

@@ -51,9 +51,11 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     }
     expect(L.analyzeSiteKeyClause).toContain('a few free full site reports each month');
   });
-  it('the unbound-key line states the email rung and the per-tool figure from the canon, no "used up"', () => {
+  // Note F / option A (owner 2026-11-17): the live unbound-key line says what the email keeps, no allowance.
+  it('the unbound-key line says what the email keeps: no allowance, no "free", no "used up"', () => {
     const t = U.unboundKeyLine(_rungNum('identified'));
-    expect(t).toContain(_rungNum('identified') + ' calls/day, up to ' + _fullAnswersPerToolPerDay('identified') + ' full answers per tool per day');
+    expect(t).toContain('the key keeps its saved shortlists, alerts and tracked changes (get_changes) for the next chat');
+    expect(t).not.toMatch(/calls\/day|per tool per day|\bfree\b/i);
     expect(t).not.toMatch(/used up/);
     expect(rule).toContain('(up to ' + _fullAnswersPerToolPerDay('identified') + ' full answers per tool per day)');
   });

@@ -305,9 +305,13 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       expect(r.data.taste && r.data.taste.headline, 'still the labelled taste').toBeTruthy();
       for (const f of T.FREE_DECISION_STRIPPED_FIELDS[tool]) expect(Object.prototype.hasOwnProperty.call(r.data, f), f).toBe(false);
       const prose = proseOf(r);
-      const lines = prose.split('\n').filter((l) => l.includes('claim_free_key'));
-      expect(lines, 'claim_free_key named exactly once in prose\n' + prose.slice(0, 1500)).toHaveLength(1);
+      // Note F / option A (owner 2026-11-17): the email-first line no longer ends "Fallback: `claim_free_key` with the
+      // same email", so on the email-bound tools the claim line is found by its bind_email ask and names no claim tool.
+      const emailTool = T.EMAIL_FULL_DECISION_TOOLS.includes(tool);
+      const lines = prose.split('\n').filter((l) => l.includes(emailTool ? 'bind_email' : 'claim_free_key'));
+      expect(lines, 'the claim line exactly once in prose\n' + prose.slice(0, 1500)).toHaveLength(1);
       const line = lines[0];
+      if (emailTool) expect(prose, 'no claim_free_key fallback in prose').not.toContain('claim_free_key');
       // Grok/owner 2026-10-17: the email-bound tools lead with the email ask; market intel keeps the plain line.
       expect(line).toMatch(T.EMAIL_FULL_DECISION_TOOLS.includes(tool) ? new RegExp('^' + EMAIL_ASK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) : /^Free, one call/);
       expect(line, 'no plan name or price on the claim line').not.toMatch(PLAN_OR_PRICE);
@@ -316,7 +320,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       if (T.EMAIL_FULL_DECISION_TOOLS.includes(tool)) {
         // one email ask, not two: bind_email is named on the claim line and nowhere else in prose
         expect(prose.split('\n').filter((l) => l.includes('bind_email')), 'bind_email only on the claim line').toEqual([line]);
-        expect(line.indexOf('bind_email'), 'bind_email before claim_free_key').toBeLessThan(line.indexOf('claim_free_key'));
+        expect(line).not.toContain('Fallback');
         expect(line).toContain(EMAIL_ASK);
         expect(line).toContain('gets full `' + tool + '` answers');   // option A (2026-11-17): no daily allowance
         expect(line).not.toMatch(/answers a day/);
@@ -508,13 +512,16 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
 });
 
 describe('D) the published clause is built from the enforced cap', () => {
-  it('names the allowance, no plan name, and falls back to the 10-08 clause with the switch off', async () => {
-    expect(S._freeDecisionClause()).toBe(T.freeDecisionClause(S._emailDecisionDailyFullCap()));
-    expect(S._freeDecisionClause()).toBe(T.FREE_DECISION_CLAUSE);
+  // Note F / option A (owner 2026-11-17): what claim_free_key / bind_email emit (_freeDecisionClause) names no
+  // per-day count and no plan; the published lib clause (T.FREE_DECISION_CLAUSE) keeps its 10-16 wording.
+  it('no count, no plan name, and the switch-off clause names no plan either', async () => {
     expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
-    expect(T.FREE_DECISION_CLAUSE).not.toMatch(PLAN_OR_PRICE);
+    expect(S._freeDecisionClause()).toBe('Grid/queue/market-intel tools: previews without an email; an email opens fuller answers.');
+    expect(S._freeDecisionClause()).not.toMatch(PLAN_OR_PRICE);
+    expect(S._freeDecisionClause()).not.toMatch(/\bfree\b|\/day|a day\b/i);
     await withEnv('DCHUB_EMAIL_FULL_DECISION_TOOLS', '0', async () => {
-      expect(S._freeDecisionClause()).toBe(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY);
+      expect(S._freeDecisionClause()).toBe('Grid/queue/market-intel tools: previews. More detail is available at dchub.cloud/connect.');
+      expect(S._freeDecisionClause()).not.toMatch(PLAN_OR_PRICE);
     });
   });
 });

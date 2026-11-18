@@ -68,7 +68,7 @@ describe('item 3: the keyless decision-tool claim line', () => {
       // Growth freeze (owner 2026-10-19): get_market_intel joined the email allowance, so its keyless
       // line follows the same email-first wording as grid/queue (list-driven, EMAIL_FULL_DECISION_TOOLS).
       expect(texts(r).join('\n'), r.raw.slice(0, 600)).toMatch(
-        new RegExp(_re(EMAIL_ASK) + '[^\\n]*`bind_email`[^\\n]*`claim_free_key`'));   // item 4 (2026-11-13): the sentence is lib/unlock-line.mjs's   // Grok/owner 10-17: email first
+        new RegExp(_re(EMAIL_ASK) + '[^\\n]*`bind_email` is one call'));   // note F / option A (2026-11-17): no claim_free_key fallback   // item 4 (2026-11-13): the sentence is lib/unlock-line.mjs's   // Grok/owner 10-17: email first
     });
     it(`${name}: on /mcp/claude no claim line, the neutral partial line ends it, no plan or price, under 100K`, async () => {
       const r = await keyless('/mcp/claude', name);

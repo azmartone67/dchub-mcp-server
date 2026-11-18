@@ -635,10 +635,16 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     }
     expect(S._INSTRUCTIONS_LEAN).not.toContain('Past that, previews.');
   });
-  it('claim_free_key: free_tier_rule is the pinned B1 sentence, byte for byte, and the clause rides beside it', async () => {
+  // Note F / option A (owner 2026-11-17) supersedes the byte-for-byte B1 pin on claim_free_key's own result: the
+  // field names stay, the values say what the key keeps (lib/continuity-ask.mjs). B1 itself is still the
+  // tier-canon sentence (_freeTierRuleText) other surfaces quote.
+  it('claim_free_key: free_tier_rule keeps the keyless clause, then the continuity line; the decision clause has no count', async () => {
     const r = await callAs({}, 'claim_free_key', {});
-    expect(r.sc.free_tier_rule).toBe(B1);
-    expect(r.sc.free_tier_decision_tools).toBe(CLAUSE);
+    expect(r.sc.free_tier_rule.startsWith(B1.slice(0, B1.indexOf(' With an email')))).toBe(true);
+    expect(r.sc.free_tier_rule).toContain('With an email, the key keeps your saved shortlists, alerts and the changes you track');
+    expect(r.sc.free_tier_rule).not.toMatch(/calls\/day|Higher limits|pricing/);
+    expect(r.sc.free_tier_decision_tools).toBe('Grid/queue/market-intel tools: previews without an email; an email opens fuller answers.');
+    expect(r.sc.free_tier_decision_tools).not.toBe(CLAUSE);
   });
   it('every repo doc that states the free-key sentence also states the clause (tool descriptions are frozen and excluded)', () => {
     const SKIP = new Set(['node_modules', '.git', 'test', 'upstream', 'sdk', 'dxt', 'state']);
