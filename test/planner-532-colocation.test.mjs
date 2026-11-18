@@ -12,7 +12,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 
 describe('5.32 routing: the head-to-head colocation asks', () => {
-  it('PLANNER_VERSION is 5.32', () => { expect(PLANNER_VERSION).toBe('5.39'); });
+  it('PLANNER_VERSION is 5.32', () => { expect(PLANNER_VERSION).toBe('5.40'); });
 
   it('NoVA 500 kW (context market + state): colocation, the asked market\'s DCPI first, Ashburn search with the kW, no canvas', () => {
     const p = _planQuery('Colocation options in Northern Virginia (Ashburn) for about 500 kW', { market: 'Northern Virginia', state: 'VA' });
@@ -103,7 +103,8 @@ describe('5.32 routing: the head-to-head colocation asks', () => {
   });
 
   it('controls: energy prices, MW siting and markets without a colocation word are unchanged', () => {
-    expect(_planQuery('what does power cost in ERCOT', {}).intent_class).toBe('price');
+    // 5.40: a power-price ask about a grid is price_now (the price DC Hub serves for it, with live demand).
+    expect(_planQuery('what does power cost in ERCOT', {}).intent_class).toBe('price_now');
     expect(_planQuery('find 100 MW of buildable capacity near Dallas', {}).intent_class).toBe('capacity_search');
     expect(_planQuery('compare Phoenix vs Columbus', {}).intent_class).not.toBe('colocation');
     expect(_planQuery('how much colocation capacity is in Phoenix', {}).intent_class).toBe('colocation');

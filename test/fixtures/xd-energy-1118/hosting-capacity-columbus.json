@@ -1,0 +1,45 @@
+{
+ "_entity": "hosting_capacity_feeders",
+ "query": {
+  "mode": "point",
+  "lat": 39.9612,
+  "lon": -82.9988,
+  "radius_km": 25,
+  "bbox": "-83.2926,39.7360,-82.7050,40.1864",
+  "filters": {
+   "capacity_type": null,
+   "min_mw": null
+  }
+ },
+ "headline": "307 distinct published feeders, best 7.5 MW; totals describe only the top 4000 feed rows by capacity (complete at or above 1.82 MW), so the median is not the area's median",
+ "capacity_by_type": {
+  "load": {
+   "feeders": 307,
+   "max_mw": null,
+   "median_mw": null,
+   "min_mw": null,
+   "means": "LOAD-serving capacity — what a NEW DATA-CENTER LOAD can draw. This is the type that answers \"can I site N MW here\".",
+   "utilities": [
+    "AEP Ohio & I&M (load)"
+   ]
+  }
+ },
+ "totals": {
+  "feeders": 307,
+  "max_mw": null,
+  "median_mw": null,
+  "min_mw": null
+ },
+ "utilities": {
+  "AEP Ohio & I&M (load)": 307
+ },
+ "sample": {
+  "distinct_feeders": 307,
+  "geometry_rows_scanned": 4000,
+  "sample_complete": false,
+  "capacity_floor_mw": null,
+  "filtered_set_complete": false,
+  "truncation_note": "The feed returns rows capacity-DESC and capped this read at 4000 rows, so it is COMPLETE at or above 1.82 MW and partial below it. max_mw is exact; median_mw describes only the returned head, not the whole territory. Narrow the radius or set min_mw at/above the floor for a complete answer. capacity_floor_mw is the floor of the raw read, before the min_mw and capacity_type filters; filtered_set_complete says whether the set you asked for is complete.",
+  "basis": "Published rows are GIS vertices of feeder lines; this read folded 4000 rows into 307 distinct records (13.0x). Every capacity statistic here is computed over DISTINCT records, never raw rows."
+ }
+}

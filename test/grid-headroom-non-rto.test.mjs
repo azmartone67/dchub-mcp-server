@@ -66,6 +66,6 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
   });
 
   it('planner_version moved with the routing change', () => {
-    expect(PLANNER_VERSION).toBe('5.39');
+    expect(PLANNER_VERSION).toBe('5.40');
   });
 });

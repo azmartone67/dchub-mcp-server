@@ -1,0 +1,90 @@
+{
+ "_entity": "queue_results",
+ "count_returned": 3,
+ "count_total_matching": 175,
+ "filters_applied": {
+  "baseload_only": false,
+  "developer": null,
+  "fuel_type": null,
+  "geocoded_only": false,
+  "iso": "PJM",
+  "max_fiber_km": null,
+  "max_ttp_months": null,
+  "_max_ttp_months_withheld": true,
+  "min_mw": null,
+  "state": "OH",
+  "status": "active",
+  "_min_mw_not_applied": "min_mw=100 was asked and NOT applied: it filters on a figure this tier does not read, so this answer (and its count) covers every value."
+ },
+ "freshness_by_iso": {
+  "PJM": {
+   "last_refreshed": "2026-11-17T06:03:49.532077+00:00",
+   "refresh_cadence": "daily",
+   "source_age_days": 1,
+   "source_as_of": "2026-11-17",
+   "source_as_of_basis": "live_feed_fetch_date",
+   "source_as_of_note": "the source files carry no date of their own (generated on request); fetched_at is when DC Hub read them",
+   "source_report": "PJM cycle + serial service request status (active generation requests, sum of MFO)",
+   "source_stale": false
+  }
+ },
+ "summary": {
+  "by_fuel_class": {
+   "firm/baseload-capable": 59,
+   "intermittent": 116
+  },
+  "by_iso": {
+   "PJM": 175
+  },
+  "geocoded_returned": 174
+ },
+ "results": [
+  {
+   "candidate_id": "cand_e0aaa233b92c63e639ca",
+   "capacity_mw": null,
+   "coordinate_precision": "county_centroid",
+   "county": "Madison",
+   "estimated_ttp_months": null,
+   "_estimated_ttp_months_withheld": true,
+   "expected_cod": null,
+   "expected_cod_basis": "not_loaded",
+   "expires_at": "2026-11-24T08:53:47.714830+00:00",
+   "fiber_km": null,
+   "fuel_class": "firm/baseload-capable",
+   "fuel_type": "Natural Gas",
+   "iso": "PJM",
+   "lat": 39.9414,
+   "lng": -83.339,
+   "poi_name": null,
+   "project_name": null,
+   "_project_name_withheld": true,
+   "queue_date": "2026-04-27",
+   "queue_date_basis": "queue_entry_date",
+   "queue_date_note": "PJM: queue_date is the date the request entered the queue ('Submitted Date' in the PJM file), not a commercial-operation date. DC Hub loads no COD for PJM, so expected_cod is null.",
+   "queue_entry_date": "2026-04-27",
+   "queue_id": null,
+   "_queue_id_withheld": true,
+   "queue_status": "Active",
+   "representative_point": {
+    "lat": 39.9414,
+    "lng": -83.339
+   },
+   "site_evaluation_handoff": {
+    "analyze_site": {
+     "capacity_mw": null,
+     "include_fiber": true,
+     "include_risk": true,
+     "lat": 39.9414,
+     "lon": -83.339
+    },
+    "get_water_risk": {
+     "lat": 39.9414,
+     "lng": -83.339
+    }
+   },
+   "snapshot_id": "snap_2026-11-17",
+   "state": "OH",
+   "v": "published"
+  }
+ ]
+}
