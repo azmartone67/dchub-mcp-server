@@ -4,9 +4,9 @@ DC Hub is the orchestration layer for data center and energy intelligence: start
 
 **[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
-New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.
+New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.
 
-DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. `DCHUB_API_KEY` is optional. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
+DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber, colocation, data center capacity and powered land. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. `DCHUB_API_KEY` is optional. Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
 To start, [add the MCP server](https://dchub.cloud/connect). `DCHUB_API_KEY` is optional. Setup for Claude, ChatGPT, Grok, Copilot, Cursor, Gemini CLI, Mistral, LobeHub, VS Code, Cline and others is under [Install](#install) below.
 
