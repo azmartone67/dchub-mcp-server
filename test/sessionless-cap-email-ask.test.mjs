@@ -90,7 +90,7 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     const prose = (r.res.content || []).filter((x) => x.type === 'text' && !/^\s*\{/.test(x.text)).map((x) => x.text);
     expect(prose.some((t) => /^Ask your human: "Give your email to keep this answer/.test(t) && ASK.test(t))).toBe(true);
     expect(r.wire).not.toMatch(/calls a day|free tier|free key/);   // no allowance wording
-    expect(up.email_ask).toEqual({ tool: 'claim_free_key', arguments: { email: '<your human’s email>' } });
+    expect(up.email_ask).toEqual({ tool: 'claim_free_key', arguments: { email: "<your user's email>" } });
     expect(up.unlock_kind).toBeUndefined();                       // no page link: there is no session to grant onto
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_daily_cap', 'line']]);
   });

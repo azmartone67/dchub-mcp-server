@@ -26587,7 +26587,7 @@ function trackedTool(srv, name, description, schema, handler) {
             emailOpens: _emailOpensTool(name),
             packUrl: _packCheckoutUrl(_sidCap),
             proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidCap) : '',
-            wallKind: 'anon_hard_wall',
+            wallKind: 'anon_hard_wall', askMarket: c._wallMarket,
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
@@ -28192,7 +28192,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                                                  market: _wallAlertMarket(c),
                                                                  emailOpens: _capEmailOpens(name, trimmed),
                                                                  packUrl: _packCheckoutUrl(_sidSoft),
-                                                                 proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
+                                                                 proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '',
+                                                                 askMarket: c._wallMarket });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
