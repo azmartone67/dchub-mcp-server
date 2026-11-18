@@ -22,7 +22,7 @@ import { DCHUB_SERVICES, servicesFor, frontDeskFooter, frontDeskIntentClass, REF
   withFrontDeskLine, isFrontDeskLine, createCallMemo, deferFrontDeskRow, flushFrontDeskRow } from '../lib/dchub-services.mjs';
 import { agentReferralIntent } from '../lib/capacity-source-summary.mjs';
 import { capToolResultText } from '../lib/grok-profile.mjs';
-import { PREVIEW_FOOTER, CANON_SENTENCE } from '../lib/dchub-identity.mjs';
+import { PREVIEW_FOOTER, CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { OUTREACH_LEAD } from '../lib/agent-outreach.mjs';
 
 // The owner's copy, typed out here so a reworded constant fails this file, not just its copies.
@@ -386,7 +386,7 @@ describe('telemetry: the parked row (item 5)', () => {
 describe('the /mcp welcome (item 4), and every handshake in budget', () => {
   it('/mcp says it right after its lead (canon sentence + OUTREACH_LEAD); within 2,048', async () => {
     const t = (await session('/mcp')).init.msg.result.instructions;
-    expect(t.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD + WELCOME + ' ')).toBe(true);
+    expect(t.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + WELCOME + ' ')).toBe(true);
     expect(t.split(WELCOME).length - 1).toBe(1);
     expect(t.length, 'measured ' + t.length).toBeLessThanOrEqual(2048);
   });

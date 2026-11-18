@@ -1,6 +1,6 @@
 // Agent outreach front door (owner 2026-10-03) — lib/agent-outreach.mjs.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
+import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
   noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest, citeAsUrlFor, CITE_VIA } from '../lib/agent-outreach.mjs';
 
@@ -57,11 +57,11 @@ describe('instructions lead', () => {
     // Directory Policy 2.F: no pointer to an external guide for behaviour in the lead.
     expect(OUTREACH_LEAD).not.toContain('https://dchub.cloud/agents');
     expect(OUTREACH_LEAD).not.toMatch(/\/mo\b|\$\s*\d/);
-    expect(S._INSTRUCTIONS_LEAN.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    expect(S._INSTRUCTIONS_LEAN.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
   });
   it('opens the served /mcp instructions', async () => {
     const S = await import('../server.mjs');
-    expect(S._INSTRUCTIONS.startsWith(CANON_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    expect(S._INSTRUCTIONS.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
   });
 });
 
