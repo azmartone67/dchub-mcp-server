@@ -61,10 +61,11 @@ describe('detection', () => {
   });
   it('the sequence: shortlist, each finalist grid\'s queue and headroom, Capacity Source last', () => {
     const seq = capacityGridSequence({ mw: 50, deadline: { months: 24, by: '2028-11' } });
-    expect(seq.map((s) => s.tool)).toEqual(['site_selection_canvas', 'get_interconnection_queue', 'get_grid_intelligence', 'source_capacity']);
+    // 5.41: a deadline adds each finalist state's power timeline before Capacity Source.
+    expect(seq.map((s) => s.tool)).toEqual(['site_selection_canvas', 'get_interconnection_queue', 'get_grid_intelligence', 'get_power_availability_timeline', 'source_capacity']);
     expect(seq[0].args_hint).toMatchObject({ capacity_mw: 50, max_months: 24 });
     expect(seq[1].args_hint.iso).toBe('<ISO serving the finalist market>');
-    expect(seq[3].args_hint).toMatchObject({ min_mw: 50, region: 'north_america', available_by: '2028-11' });
+    expect(seq[4].args_hint).toMatchObject({ min_mw: 50, region: 'north_america', available_by: '2028-11' });
   });
   it('power-price wording, and wholesale/LMP wording', () => {
     expect(energyPriceAsk(QB)).toBe(true);
@@ -296,7 +297,7 @@ describe('end to end, keyless, compact', () => {
     beforeAll(async () => { ({ o, lead } = await plan({ intent: QA, detail: 'compact' })); }, 120_000);
     it('routes to capacity_grid on planner 5.40', () => {
       expect(o.intent_class).toBe('capacity_grid');
-      expect(o.planner_version).toBe('5.40');
+      expect(o.planner_version).toBe('5.41');
     });
     it('reads the shortlist, both finalist grids\' queue and headroom, and Capacity Source; nothing failed', () => {
       const ran = o.executed.filter((e) => e.status === 'executed' || e.status === 'gated_preview');
