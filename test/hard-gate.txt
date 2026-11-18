@@ -189,6 +189,7 @@ test/deterministic-install.test.mjs
 test/directories-growth.test.mjs
 test/directories-page.test.mjs
 test/directory-output-schema-contract.test.mjs
+test/directory-partial-unlock-link-1117.test.mjs
 test/directory-safe-copy.test.mjs
 test/directory-text-neutral.test.mjs
 test/discovery-coverage.test.mjs

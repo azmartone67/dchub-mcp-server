@@ -13,6 +13,7 @@ import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.m
 import { splitLeadingJson } from '../lib/facility-location.mjs';
 import { dropBuyParam, shortWallLinkStep, withWallNextAsk, wallFreeNext, withFreeNextAgentLine, freeNextAgentTail, withEmailNextAsk, emailNextAsk, EMAIL_NEXT_QUESTION, WALL_NEXT_ASK_QUESTION, WALL_FREE_NEXT_LEAD } from '../lib/short-wall-link.mjs';
 import { paidAgentLine } from '../lib/paid-sell-line.mjs';
+import { PARTIAL_LINK_LINE } from '../lib/chatgpt-directory.mjs';
 import { fiberAgentLine, gridAgentLine } from '../lib/grid-sell-line.mjs';
 
 // Same as test/agent-output-names-no-plan.test.mjs PLAN_PROSE (importing that file would re-run its suite here).
@@ -226,8 +227,13 @@ describe('over the real app (stub backend, no network)', () => {
     const all = JSON.stringify(res).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})/g) || [];
     expect([...new Set(all)]).toEqual([sc.human_url]);
   });
-  it('/mcp/chatgpt: no /u/ link, and identical with the step on and off', async () => {
+  // 2026-11-17 (Grok QA g_canvas_pa / g_plan_pa): a keyless partial on /mcp/chatgpt now carries ONE /u/ link,
+  // minted by its own step (server.mjs _directoryPartialLinkStep), not by this one. So the only /u/ link is
+  // that one (human_url and the line before the partial notice), and the reply is still identical with
+  // THIS step (DCHUB_WALL_SHORT_ALL) on and off once the minted code is normalised.
+  it('/mcp/chatgpt: only the profile\'s own partial link, and identical with the step on and off', async () => {
     const norm = (r) => JSON.stringify(r)
+      .replace(/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}/g, 'dchub.cloud/u/X')
       .replace(/\d{4}-\d{2}-\d{2}T[0-9:.]+Z?/g, 'T')
       .replace(/\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/g, '/upgrade/h/X')
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'SID')
@@ -237,7 +243,10 @@ describe('over the real app (stub backend, no network)', () => {
     let off;
     try { off = await call('/mcp/chatgpt', 'get_grid_intelligence', { iso: 'ERCOT' }); } finally { delete process.env.DCHUB_WALL_SHORT_ALL; }
     expect(on, 'control: /mcp/chatgpt answered').toBeTruthy();
-    expect(JSON.stringify(on)).not.toMatch(/dchub\.cloud\/u\//);
+    const links = JSON.stringify(on).match(/https:\/\/dchub\.cloud\/u\/[A-Za-z0-9]+/g) || [];
+    expect(on.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+    expect([...new Set(links)]).toEqual([on.structuredContent.human_url]);
+    expect(on.structuredContent.human_message).toBe(PARTIAL_LINK_LINE + on.structuredContent.human_url);
     // Premise, measured here: the directory profile hands out no relay link and no wall next_ask, so
     // neither step has anything to change on it; the skips below keep it that way if that changes.
     expect(JSON.stringify(on)).not.toMatch(/\/upgrade\/h\//);

@@ -15,8 +15,8 @@
 //
 // Hard-gate qualified: real server on 127.0.0.1 against a local stub, no egress.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { CLAUDE_REMOVED } from '../lib/claude-directory.mjs';
-import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf } from './helpers/claude-directory-harness.mjs';
+import { CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE } from '../lib/claude-directory.mjs';
+import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf, withoutPartialLink } from './helpers/claude-directory-harness.mjs';
 
 const DIR = '/mcp/claude';
 const PATTERNS = claudeProbePatterns(CLAUDE_REMOVED);
@@ -84,7 +84,8 @@ describe('source_capacity on /mcp/claude', () => {
         delivery_type: 'colocation', slug: 'phoenix-2-mw-colocation-available-now' });
       // No write, key or sign-in step: request_capacity_intro, claim_free_key,
       // bind_email and the sign-in URL are all gone.
-      expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
+      // 2026-11-17: a keyless partial carries the profile's one partial link; only that link is set aside.
+      expect(hitsOf(PATTERNS, withoutPartialLink(r, CLAUDE_PLANS_NOTICE))).toEqual([]);
       expect(r.raw).not.toMatch(/request_capacity_intro|accept_capacity_terms|bind_email|sign_in_url|login\?/);
     }
   });
