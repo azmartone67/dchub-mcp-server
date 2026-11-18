@@ -3655,6 +3655,27 @@ async function _paidKeyIsProOrAbove(apiKey) {
 // This mirrors exactly those rules. Values are NULLED, keys kept, so a shape an
 // agent parses does not change; no upsell copy and no beacon — it is a mask,
 // not a paywall.
+// ★2026-11-18 (owner, Grok note 2026-11-17 item 1, "keyless public-domain figures"):
+// the EIA state survey prices leave this mask and reach every caller. Verified
+// on dchub-backend origin/main the same day: delivered_industrial_usd_mmbtu and
+// delivered_electric_usd_mmbtu are routes/powered_land_gas.py
+// _delivered_industrial / _delivered_electric, read from eia_gas_prices, which
+// eia_gas_prices_loader.py fills from EIA v2 natural-gas/pri/sum (process PIN /
+// PEU, by state); burner_tip is util/gas_burner_tip.burner_tip_price, the
+// trailing-12-month mean of that same PEU series. EIA survey data is a U.S.
+// government work in the public domain. Each freed figure carries its source,
+// basis, period and as_of in figure_labels (_gasEconomicsFigureLabels).
+//   henry_hub_spot_usd_mmbtu: EIA's RNGWHHD daily spot names Refinitiv/LSEG as
+//     its source. Owner 2026-11-18 ("share with citation"): served to every
+//     caller with that credit; DCHUB_KEYLESS_HENRY_HUB=0 masks it again below
+//     full access (the backend's flag name, default on).
+//   hub_spot_usd_mmbtu / basis_diff_usd_mmbtu: Henry Hub + a SYNTHETIC seed
+//     basis (field_basis "synthetic"), not an EIA figure: masked.
+//   gas_price_used_usd_mmbtu, scenarios_usd_per_mwh: masked as before (owner
+//     brief). The one illustrative "~$N/MWh" scenario string is the REST free
+//     teaser (powered_land_gas.py keeps avg_ccgt_6800 as a rounded string for
+//     non-Pro), kept on purpose.
+// get_gas_intelligence's anonymous mask still nulls the burner-tip prices (any key opens them there).
 const _GAS_BT_NUMERIC = ['usd_mmbtu', 'monthly_min_usd_mmbtu', 'monthly_max_usd_mmbtu'];
 function _maskBurnerTip(bt) {
   if (!bt || typeof bt !== 'object') return bt;
@@ -3662,12 +3683,19 @@ function _maskBurnerTip(bt) {
   for (const k of _GAS_BT_NUMERIC) if (k in o) o[k] = null;
   return o;
 }
+export function _keylessHenryHubOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_KEYLESS_HENRY_HUB || '').trim());
+}
 const _GAS_ECON_NUMERIC = ['henry_hub_spot_usd_mmbtu', 'hub_spot_usd_mmbtu', 'basis_diff_usd_mmbtu',
-  'delivered_industrial_usd_mmbtu', 'delivered_electric_usd_mmbtu', 'gas_price_used_usd_mmbtu'];
+  'gas_price_used_usd_mmbtu'];
 export function _maskGasEconomicsBelowPro(out) {
   const o = { ...out };
   const masked = [];
-  for (const k of _GAS_ECON_NUMERIC) if (o[k] != null) { o[k] = null; masked.push(k); }
+  const hhFree = _keylessHenryHubOn();
+  for (const k of _GAS_ECON_NUMERIC) {
+    if (k === 'henry_hub_spot_usd_mmbtu' && hhFree) continue;
+    if (o[k] != null) { o[k] = null; masked.push(k); }
+  }
   const sc = o.scenarios_usd_per_mwh;
   if (sc && typeof sc === 'object') {
     const keep = 'avg_ccgt_6800_btu_kwh';
@@ -3676,12 +3704,49 @@ export function _maskGasEconomicsBelowPro(out) {
       k === keep && typeof v === 'number' ? `~$${Math.round(v)}/MWh (illustrative)` : null]));
     masked.push('scenarios_usd_per_mwh');
   }
-  if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
   o.tier_masked = { tier_required: 'pro', fields: masked,
     note: _wallCopy(_WALL_NEUTRAL_LINE,
       'Numeric gas prices and the full $/MWh table need a paid DC Hub plan, the same rule the REST API applies.') };
   _noteGate('gas_pro');
   return o;
+}
+// Source, basis, period and as_of for each $/MMBtu layer get_gas_economics can
+// serve, read from the backend's own field_basis / period / burner_tip where it
+// sends them. A label carries no figure, so every tier gets the same map.
+// `period` is the month EIA dates the figure; null where the backend does not
+// say which series its single `period` belongs to (it is the industrial month
+// when that series answered, else the electric-power month).
+export function _gasEconomicsFigureLabels(pricing, burnerTip, asOf) {
+  const p = (pricing && typeof pricing === 'object') ? pricing : {};
+  const fb = (p.field_basis && typeof p.field_basis === 'object') ? p.field_basis : {};
+  const basisOf = (k, dflt) => (fb[k] && fb[k].basis) || dflt;
+  const PD = 'Public domain (U.S. government work)';
+  const ind = p.delivered_industrial_usd_mmbtu, elec = p.delivered_electric_usd_mmbtu;
+  const per = p.period || null;
+  const indPeriod = ind != null ? per : null;
+  const elecPeriod = (ind == null && elec != null) ? per : null;
+  const bt = (burnerTip && typeof burnerTip === 'object') ? burnerTip : {};
+  return {
+    delivered_industrial_usd_mmbtu: {
+      source: 'EIA, price of natural gas delivered to industrial consumers (PIN), by state',
+      basis: basisOf('delivered_industrial_usd_mmbtu', 'measured'), unit: 'USD/MMBtu',
+      period: indPeriod, as_of: asOf || null, license: PD, served_to: 'every caller' },
+    delivered_electric_usd_mmbtu: {
+      source: 'EIA, price of natural gas sold to electric power consumers (PEU), by state',
+      basis: basisOf('delivered_electric_usd_mmbtu', 'measured'), unit: 'USD/MMBtu',
+      period: elecPeriod, as_of: asOf || null, license: PD, served_to: 'every caller',
+      ...(elecPeriod == null && elec != null ? { period_note: 'latest EIA month for this series; the backend dates only the industrial month here' } : {}) },
+    burner_tip: {
+      source: bt.source || 'EIA price of natural gas sold to electric power consumers (PEU), by state',
+      basis: bt.method || 'trailing-12-month mean of reported months, negatives included',
+      unit: 'USD/MMBtu', period: Array.isArray(bt.window) ? bt.window : null,
+      as_of: asOf || null, license: PD, served_to: 'every caller' },
+    henry_hub_spot_usd_mmbtu: {
+      source: 'EIA daily Henry Hub natural gas spot price (series RNGWHHD); EIA credits Refinitiv (LSEG) for the series',
+      basis: basisOf('henry_hub_spot_usd_mmbtu', 'measured'), unit: 'USD/MMBtu',
+      period: null, as_of: asOf || null,
+      served_to: _keylessHenryHubOn() ? 'every caller' : 'full-access callers' },
+  };
 }
 export function _maskGasIntelligenceAnonymous(out) {
   const o = { ...out };
@@ -7621,7 +7686,9 @@ function cacheKey(api_key, result) {
 // `balancing_authorities_in_data`; they were dropped here, so an agent saw only "unknown region_iso 'WECC'"
 // (Grok 2026-10-06, direct GET had them). An ALLOWLIST, never the whole body: a 4xx body can carry fields that
 // are not meant for the caller. 4xx only (a 5xx body is not guidance), and bounded.
-const _UPSTREAM_GUIDANCE_KEYS = ['note', 'known', 'also_accepted', 'ignored', 'balancing_authorities_in_data'];
+const _UPSTREAM_GUIDANCE_KEYS = ['note', 'known', 'also_accepted', 'ignored', 'balancing_authorities_in_data',
+  // get_energy_prices' unknown-hub 400 (dchub-backend /api/v1/energy/summary): the hub asked for and the hubs that exist.
+  'requested_hub', 'hubs_available'];
 function _guidanceValue(v) {
   if (typeof v === 'string') return v.length <= 600 ? v : v.slice(0, 600);
   if (Array.isArray(v)) {
@@ -15053,8 +15120,44 @@ function _isFigure(v) {
 // `_score` keys were withheld, and dcgi, gas_price, pipelines, operators and
 // interstate went out in the clear. state, verdict, data_as_of and the price
 // window stay free.
+// Owner 2026-11-17 (Grok note, item 1, "keyless public-domain figures"): the
+// state gas price is EIA survey data (natural-gas/pri/sum, PEU / PIN by state),
+// a U.S. government work in the public domain, so gas_price and its period,
+// series and sector leave this set and reach every caller, each row dated
+// (gas_price_period, gas_price_window, data_as_of) and labelled
+// (gas_price_source, _dcgiPriceSource). The DCGI itself, its two scores and the
+// pipeline counts stay paid. dchub-backend routes/dcgi.py _DCGI_MASK_FIELDS
+// drops the same four keys in its own PR (mask parity).
 export const DCGI_PAID_KEYS = new Set(['dcgi', 'gas_access_score', 'gas_cost_score', 'pipelines',
-  'operators', 'interstate', 'gas_price', 'gas_price_sector', 'gas_price_series', 'gas_price_period']);
+  'operators', 'interstate']);
+// EIA's own series titles, so a keyless row names where its gas_price came from.
+const _DCGI_PRICE_SOURCE = {
+  PEU: 'EIA, price of natural gas sold to electric power consumers, by state',
+  PIN: 'EIA, price of natural gas delivered to industrial consumers, by state',
+};
+// Adds gas_price_source to a DCGI row that carries a price and no source of its
+// own (only if absent: a backend label always wins). Pure; returns a new row.
+export function _dcgiPriceSource(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  if (row.gas_price == null || row.gas_price_source != null) return row;
+  const series = String(row.gas_price_series || '').toUpperCase();
+  const src = _DCGI_PRICE_SOURCE[series]
+    || ('EIA natural gas price by state' + (series ? ' (series ' + series + ')' : ''));
+  return { ...row, gas_price_source: src };
+}
+export function _labelDcgiPrices(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  let out = data;
+  if (Array.isArray(data.states)) {
+    const next = data.states.map(_dcgiPriceSource);
+    if (next.some((r, i) => r !== data.states[i])) out = { ...out, states: next };
+  }
+  if (data.score && typeof data.score === 'object') {
+    const s = _dcgiPriceSource(data.score);
+    if (s !== data.score) out = { ...out, score: s };
+  }
+  return out;
+}
 function _dcgiPaidKey(toolName, k, v) {
   return toolName === 'get_gas_index' && DCGI_PAID_KEYS.has(k) && v != null;
 }
@@ -16072,7 +16175,93 @@ const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi
   'ercotqueue_provenance', 'ercotqueue', 'attribution', 'freshness', 'large_load',
   // Grok QA 2026-10-22 item 3: the list of fields DC Hub does not track for a grid
   // (shapeLatestGrid) is a coverage fact, never a trimmed list.
-  'not_covered']);
+  'not_covered',
+  // Owner 2026-11-17 (Grok note, item 2): get_energy_prices' hub LMP block is served to every
+  // caller, the same figures /api/v1/iso-lmp/snapshot prints publicly; the backend decides which
+  // ISOs' terms allow it and sends wholesale_lmp_withheld {iso, reason} for the rest. The anon trim
+  // would cut hubs_available to 3 rows behind `_hubs_available_total_in_pro`. Exact keys.
+  'wholesale_lmp', 'wholesale_lmp_withheld',
+  // Owner 2026-11-18 ("share with citation"): for an ISO with no served live LMP (PJM) the backend
+  // sends wholesale_context, published report figures with their source, plus a link to the ISO's
+  // own live-price page. Cited facts for every caller; its figures list must not be cut to 3.
+  'wholesale_context']);
+// Owner 2026-11-17 (Grok note, item 1): get_refined_queue's project_name and queue_id reach every
+// caller. ISO queue lists are public filings; dchub-backend withholds them (null + _locked_fields)
+// for an ISO whose terms bar reuse, and markLockedRowFields marks those rows. The depth gate
+// (_DEPTH_ID_KEYS) still holds every other tool's queue identifiers, and this tool's other ids.
+const _OPEN_ID_KEYS_BY_TOOL = { get_refined_queue: new Set(['project_name', 'queue_id']) };
+// get_energy_prices: dchub-backend answers an unknown hub on a served ISO with HTTP 400
+// {error, requested_hub, iso, hubs_available}. callAPI folds that into {error: 'API 400', detail,
+// requested_hub, hubs_available} (_UPSTREAM_GUIDANCE_KEYS); this turns it into one readable error
+// the agent can act on. Anything else passes through as it came. Pure.
+export function _energyHubError(d, a) {
+  const hub = a && typeof a.hub === 'string' ? a.hub.trim() : '';
+  if (!hub || !d || typeof d !== 'object' || Array.isArray(d) || d.error !== 'API 400') return null;
+  const hubs = Array.isArray(d.hubs_available) ? d.hubs_available : null;
+  const iso = (a && a.iso) ? String(a.iso).trim().toUpperCase() : null;
+  return {
+    error: 'unknown_hub',
+    detail: (typeof d.detail === 'string' && d.detail) || `hub "${hub}" is not a pricing hub DC Hub serves${iso ? ' for ' + iso : ''}.`,
+    requested_hub: d.requested_hub || hub,
+    iso,
+    hubs_available: hubs,
+    retry: hubs && hubs.length
+      ? `get_energy_prices${iso ? ' iso=' + iso : ''} hub=${hubs[0]} (or omit hub for the ISO's default hub)`
+      : `get_energy_prices${iso ? ' iso=' + iso : ''} with no hub (the ISO's default hub)`,
+  };
+}
+// ...except on a row from an ISO whose own terms bar republishing (dchub-backend
+// util/iso_publish_hold.py: MISO and SPP; ISO_PUBLISH_RELEASED lifts one, no code
+// change). The backend nulls those two fields below a paid plan in its REST tease
+// (withhold_held_iso_identity, be#8988) but answers this server's internal key in
+// full, so the same rule is applied here for a caller below full depth. The row
+// carries the backend's own markers (identity_withheld, identity_withheld_reason)
+// plus this server's per-field `_<f>_in_pro`. A row the backend already withheld is
+// left exactly as it came: nothing here ever re-opens a null.
+export const QUEUE_IDENTITY_HELD_ISOS = Object.freeze(['MISO', 'SPP']);
+const _QUEUE_IDENTITY_FIELDS = ['project_name', 'queue_id'];
+const _QUEUE_HOLD_REASON = "this ISO's terms do not allow republishing its feed; publishing needs written permission from the ISO";
+export function _heldQueueIsos() {
+  const released = new Set(String(process.env.ISO_PUBLISH_RELEASED || '').split(',')
+    .map((x) => x.trim().toUpperCase()).filter(Boolean));
+  return new Set(QUEUE_IDENTITY_HELD_ISOS.filter((i) => !released.has(i)));
+}
+export function _withholdHeldIsoIdentity(payload, rowKeys = ['results']) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const held = _heldQueueIsos();
+  if (!held.size) return payload;
+  let out = null;
+  for (const rk of rowKeys) {
+    const rows = payload[rk];
+    if (!Array.isArray(rows)) continue;
+    let changed = false;
+    const next = rows.map((r) => {
+      if (!r || typeof r !== 'object' || Array.isArray(r) || r.identity_withheld) return r;
+      if (!held.has(String(r.iso || '').toUpperCase().replace(/-/g, ''))) return r;
+      const o = { ...r };
+      for (const f of _QUEUE_IDENTITY_FIELDS) { o[f] = null; o['_' + f + '_in_pro'] = true; }
+      o.identity_withheld = [..._QUEUE_IDENTITY_FIELDS];
+      o.identity_withheld_reason = _QUEUE_HOLD_REASON;
+      changed = true;
+      return o;
+    });
+    if (changed) { if (!out) out = { ...payload }; out[rk] = next; }
+  }
+  return out || payload;
+}
+// Full depth sees a held ISO's identifiers, as the backend's paid seats do: a paid tier, or a
+// live pack balance (a pack is paid depth; a failed balance read withholds).
+async function _callerSeesHeldIsoIdentity() {
+  let c = {};
+  try { c = getCtx() || {}; } catch (_) { c = {}; }
+  const t = String(c.tier || '').toLowerCase();
+  if (t === 'internal' || _isPaidDepthTier(_nodeTier(t))) return true;
+  try { return (Number((await _getCredits(c)).credits) || 0) > 0; } catch (_) { return false; }
+}
+export function _openIdKey(toolName, k) {
+  const s = _OPEN_ID_KEYS_BY_TOOL[toolName];
+  return !!s && s.has(k);
+}
 // DCHUB_QUEUE_MOAT (2026-10-05): `freshness` holds the per-ISO fresh/stale counts the anon trim
 // nulled (`_count$`), and `large_load` holds the dated, source-linked large-load figures DC Hub
 // already prints on /grid/large-load-queue. Neither is a paid field. Exact keys.
@@ -16247,6 +16436,8 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       // which nulled the whole row keyless, verdict and data_as_of with it. Trim
       // inside it, as the list rows are: the paid set goes, the verdict stays.
       out[k] = trimForTrial(v, toolName, _inRate);
+    } else if (_openIdKey(toolName, k)) {
+      out[k] = v;                             // owner 2026-11-17: open queue ids (backend withholds held ISOs)
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
@@ -20031,7 +20222,44 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     as_of: _oStr('Retail-rate as-of (EIA period basis)'),
     caller_tier: _oStr('Tier the response was served at'),
     gated: _oBool('true when parts of the payload were withheld by tier'),
-  }).describe('EIA retail electricity rates (monthly) for one US ISO footprint, state or the US, plus the latest Henry Hub gas spot — alongside the DC Hub envelope keys.'),
+    wholesale_lmp: _oObj({
+      label: _oStr('Always "wholesale LMP, $/MWh"'),
+      iso: _oStr('ISO the hub price is from'),
+      hub: _oStr('Pricing hub the figures are for'),
+      hubs_available: _oArr(z.string(), 'Hubs this ISO serves; pass one as hub'),
+      real_time: _oObj({
+        lmp_usd_mwh: _oNum('Real-time hub LMP, USD/MWh'),
+        interval_ending: _oStr('Settlement interval the price is for'),
+        as_of: _oStr('When the price was read'),
+        market: _oStr('RTM'),
+        stale: _oBool('true when the reading is older than stale_after_minutes'),
+        stale_after_minutes: _oNum('Age after which the reading counts as stale'),
+      }, 'Latest real-time market price'),
+      day_ahead: _oObj({
+        lmp_usd_mwh: _oNum('Day-ahead hub LMP, USD/MWh'),
+        delivery_date: _oStr('Operating day'),
+        hour_ending: _oNum('Hour ending of the price'),
+        as_of: _oStr('When the price was read'),
+        market: _oStr('DAM'),
+      }, 'Day-ahead market price, or null'),
+      day_ahead_note: _oStr('Why day_ahead is null, when it is'),
+      source: _oStr('Who publishes the price'),
+      source_url: _oStr('Where the price is published'),
+      license: _oStr('Reuse terms of the source'),
+      basis: _oStr('measured / modeled label for the figures'),
+    }, 'Wholesale LMP at one ISO pricing hub, served to every caller; null when withheld'),
+    wholesale_lmp_withheld: _oObj({
+      iso: _oStr('ISO whose LMP is not served'),
+      reason: _oStr('Why: the ISO\'s terms bar or have not cleared reuse'),
+    }, 'Present when wholesale_lmp is null for licence reasons'),
+    wholesale_context: _oObj({
+      iso: _oStr('ISO the figures describe'),
+      label: _oStr('published price figures (not live)'),
+      figures: _oArr(z.looseObject({}), 'Published figures: {name, value, unit, period, area, source, source_url, published, basis}'),
+      live_prices: _oObj({ label: _oStr('What the link shows'), url: _oStr('The ISO\'s own live-price page'),
+        note: _oStr('DC Hub does not republish these live prices') }, 'Link to the ISO\'s own live LMP page'),
+    }, 'Published, cited price figures for an ISO whose live LMP is not served (PJM), with a link to its live page'),
+  }).describe('EIA retail electricity rates (monthly) for one US ISO footprint, state or the US, the latest Henry Hub gas spot and, where an ISO\'s terms allow, the wholesale LMP at one of its hubs — alongside the DC Hub envelope keys.'),
 
   list_transactions: z.looseObject({
     ..._ENVELOPE_SHAPE,
@@ -20993,7 +21221,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // 5.29 (Grok note K, item 1, 2026-11-15): A SITING QUESTION OVER SEVERAL NAMED STATES.
@@ -21385,7 +21613,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     // 5.39 (Grok cross-domain head-to-head, 2026-11-17 night): "Where can I get 50 MW of colocation or powered capacity
@@ -21478,7 +21706,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -21813,7 +22041,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below the access level that includes every tool.',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics shows the EIA state gas prices (delivered industrial, delivered electric, burner tip) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the $/MWh table below the access level that includes every tool.',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -33486,16 +33714,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // it and provenance read "as_of: null, UNMEASURED" on a figure the backend dates.
   // The date of the data is not the withheld number; lift it to the top level.
   trackedTool(srv, 'get_gas_index',
-    'Use this when the user asks which US states suit gas-fired data center power: the Data Center Gas Index (DCGI), a per-state score. ★ WITHDRAWN 2026-08-08, RESTORED 2026-08-30 after all three defective terms were repaired: the 20-point interstate-share term was case-blind against EIA TYPEPIPE and scored ~0 for every state; the price was chosen by a non-deterministic tie-break across the EIA industrial (PIN) and electric-power (PEU) series, which carry different margins; and nine states including Texas ran on a hardcoded cost constant because the price loader dropped them on a case-sensitive name lookup. ★ DO NOT COMPARE a DCGI figure published before 2026-08-08 with one published now — they are different indices; the full record is at /api/v1/dcgi/methodology under `corrections`. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason`, never a placeholder score, so treat UNSCORED as absence and not as a low score. `gas_price_series` names which EIA series answered each state. Gas-fired $/MWh figures, withdrawn the same day for a separate defect, were republished 2026-09-27 under one burner-tip price rule (see get_gas_economics). Use get_gas_intelligence for pipeline, operator and parent-midstream data.',
+    'Use this when the user asks which US states suit gas-fired data center power: the Data Center Gas Index (DCGI), a per-state score. ★ WITHDRAWN 2026-08-08, RESTORED 2026-08-30 after all three defective terms were repaired: the 20-point interstate-share term was case-blind against EIA TYPEPIPE and scored ~0 for every state; the price was chosen by a non-deterministic tie-break across the EIA industrial (PIN) and electric-power (PEU) series, which carry different margins; and nine states including Texas ran on a hardcoded cost constant because the price loader dropped them on a case-sensitive name lookup. ★ DO NOT COMPARE a DCGI figure published before 2026-08-08 with one published now — they are different indices; the full record is at /api/v1/dcgi/methodology under `corrections`. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason`, never a placeholder score, so treat UNSCORED as absence and not as a low score. `gas_price_series` names which EIA series answered each state. Gas-fired $/MWh figures, withdrawn the same day for a separate defect, were republished 2026-09-27 under one burner-tip price rule (see get_gas_economics). Every caller gets each state\'s gas_price in $/MMBtu, EIA survey data (public domain), dated by gas_price_period and gas_price_window and labelled by gas_price_series and gas_price_source; the DCGI score, its two sub-scores and the pipeline counts come with a full-access key. Use get_gas_intelligence for pipeline, operator and parent-midstream data.',
     { state: S.describe('US state abbreviation, e.g. TX, VA, AZ. Returns the DCGI score and verdict, plus `gas_price_series` naming which EIA series priced the state. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason` — absence, not a low score. Withdrawn 2026-08-08, restored 2026-08-30: do NOT compare against a figure published before 2026-08-08. Use get_gas_intelligence for the per-state pipeline and operator brief'),
       limit: LIMIT },
     async (a) => {
       if (a.state) {
         const st = String(a.state).trim().toUpperCase().slice(0, 2);
-        const data = _liftDcgiAsOf(await callAPI(`/api/v1/dcgi/scores/${st}`, {}));
+        const data = _labelDcgiPrices(_liftDcgiAsOf(await callAPI(`/api/v1/dcgi/scores/${st}`, {})));
         return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
       }
-      const data = await callAPI('/api/v1/dcgi/scores', a.limit ? { limit: a.limit } : {});
+      const data = _labelDcgiPrices(await callAPI('/api/v1/dcgi/scores', a.limit ? { limit: a.limit } : {}));
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     });
 
@@ -33506,7 +33734,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // developer compares against a grid PPA. data_basis is labeled honestly
   // (synthetic_seed until the eia_gas_prices loader lands → then real delivered).
   trackedTool(srv, 'get_gas_economics',
-    'Use this when the user asks what behind-the-meter gas power costs in a US data-center market: Henry Hub spot, regional basis differential, and the delivered industrial + electric gas tariff ($/MMBtu), each with its own source label. Pass market=<slug> (e.g. "northern-virginia", "dallas", "phoenix"). Also returns the gas-to-grid fuel cost ($/MWh across CCGT/peaker heat-rate scenarios) — ★ WITHDRAWN 2026-08-08, RESTORED 2026-09-27 under one burner-tip price rule now used by every surface: EIA electric-power (PEU) delivered gas only, trailing-12-month mean over one window shared by every state (negative months included), published only when at least 9 of 12 months are reported and the mean is above $0 and at most $20/MMBtu. `burner_tip` carries the price, window, months reported and monthly min/max; a state that fails the rule comes back with null scenarios and `burner_tip.reason` (EIA withholds the monthly price for several states, e.g. AZ, GA, FL), never a substitute price; if the backend switch is ever turned off again, `gas_to_grid_status` carries that reason. ★ DO NOT COMPARE a $/MWh published before 2026-09-27 with one published now — each surface then picked the price its own way, up to 5.5x apart. Do not derive a $/MWh yourself from the $/MMBtu layers for a withheld state without saying that you did. Do NOT use for the electricity grid fuel mix (use get_grid_data).',
+    'Use this when the user asks what behind-the-meter gas power costs in a US data-center market: Henry Hub spot, regional basis differential, and the delivered industrial + electric gas tariff ($/MMBtu), each with its own source label. Pass market=<slug> (e.g. "northern-virginia", "dallas", "phoenix"). Also returns the gas-to-grid fuel cost ($/MWh across CCGT/peaker heat-rate scenarios) — ★ WITHDRAWN 2026-08-08, RESTORED 2026-09-27 under one burner-tip price rule now used by every surface: EIA electric-power (PEU) delivered gas only, trailing-12-month mean over one window shared by every state (negative months included), published only when at least 9 of 12 months are reported and the mean is above $0 and at most $20/MMBtu. `burner_tip` carries the price, window, months reported and monthly min/max; a state that fails the rule comes back with null scenarios and `burner_tip.reason` (EIA withholds the monthly price for several states, e.g. AZ, GA, FL), never a substitute price; if the backend switch is ever turned off again, `gas_to_grid_status` carries that reason. ★ DO NOT COMPARE a $/MWh published before 2026-09-27 with one published now — each surface then picked the price its own way, up to 5.5x apart. Do not derive a $/MWh yourself from the $/MMBtu layers for a withheld state without saying that you did. Every caller gets the EIA state survey prices (public domain): delivered_industrial_usd_mmbtu, delivered_electric_usd_mmbtu and the burner_tip price with its monthly min/max; figure_labels gives each figure\'s source, basis, period and as_of. The regional hub price and basis, gas_price_used_usd_mmbtu and the $/MWh table come with a full-access key, and figure_labels.henry_hub_spot_usd_mmbtu.served_to says who gets the Henry Hub spot. Do NOT use for the electricity grid fuel mix (use get_grid_data).',
     { market: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
       heat_rate_btu_per_kwh: N.describe('Optional custom generator heat rate in Btu/kWh for the gas-to-grid $/MWh scenario, e.g. 6800 (avg CCGT)') },
     async (a) => {
@@ -33598,6 +33826,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         gas_to_grid_error:              g2g && g2g.error,
         gas_to_grid_status:             g2gStatus,
       };
+      out.figure_labels = _gasEconomicsFigureLabels(pricing, out.burner_tip, out.as_of);
       const _shown = (await _callerIsProOrAbove()) ? out : _maskGasEconomicsBelowPro(out);
       return { content: [{ type: 'text', text: JSON.stringify(_shown, null, 2) }], structuredContent: _shown };
     });
@@ -34734,7 +34963,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       a = _foldIsoArg(a);
       // Item 4 add-on (2026-11-13): a row field the backend nulled under `_locked_fields` (capacity_mw) carries
       // its `_<f>_in_pro` marker (renamed `_<f>_withheld` on the way out), as project_name and queue_id do.
-      const data = _markLockedRowFields(await callAPI('/api/v1/interconnection-queue/refined', a), ['results']);
+      let _rq = await callAPI('/api/v1/interconnection-queue/refined', a);
+      if (!(await _callerSeesHeldIsoIdentity())) _rq = _withholdHeldIsoIdentity(_rq);   // MISO / SPP identity hold
+      const data = _markLockedRowFields(_rq, ['results']);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length && sc === data) {
@@ -35910,11 +36141,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. This tool has no wholesale/LMP price and no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub (ERCOT, CAISO, NYISO, ISO-NE), served to every caller with the ISO credited: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar reuse (PJM, MISO, SPP), wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why; for PJM, wholesale_context carries published, cited figures (capacity auction clearing prices, the market monitor\'s average LMP) with their period and source_url, plus live_prices.url, PJM\'s own live LMP page. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp and wholesale_context blocks are not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
-      iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
+      iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
+      hub: S.describe('Optional ISO pricing hub for wholesale_lmp, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON (ERCOT); omit for the ISO\'s default hub') },
+    async (a) => {
+      const d = await callAPI('/api/v1/energy/summary', a);
+      const e = _energyHubError(d, a);
+      if (e) return { isError: true, content: [{ type: 'text', text: JSON.stringify(e) }], structuredContent: e };
+      return { content: [{ type: 'text', text: JSON.stringify(d) }] };
+    });
 
   trackedTool(srv, 'get_renewable_energy', 'Use this when the user asks about renewable energy for a data center (execute_plan covers renewables plus siting): siting a renewable-powered data center, sizing a PPA, reading one US state\'s utility-scale fuel mix, or assessing RE100/24-7-CFE feasibility. Example: "What is Texas wind+solar capacity and how much utility-scale solar is operating today?" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of "solar" | "wind" | "combined" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: "EIA-860 + state RPS"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW).',
     { energy_type: S.describe('Renewable type: "solar", "wind", or "combined"; omit for all'),

@@ -8,6 +8,11 @@
 // (X-Internal-Key), so the rule has to be applied here. A free key had no DCGI
 // shape in _gateToolNumerics at all and got every number.
 //
+// 2026-11-18 (owner, Grok note 2026-11-17 item 1): the state gas price is EIA survey data,
+// public domain, so gas_price, gas_price_sector, gas_price_series and gas_price_period left the
+// paid set and reach every caller, labelled (gas_price_source) and dated. dchub-backend drops
+// the same four keys from _DCGI_MASK_FIELDS in its own change (mask parity).
+//
 // Real /mcp handler over loopback, 127.0.0.1 stub backend, off-loopback refused.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
@@ -30,9 +35,11 @@ net.Socket.prototype.connect = function connect(...args) {
 };
 
 const SECRET = 'test-internal-key-not-a-real-secret';
-// dchub-backend routes/dcgi.py _DCGI_MASK_FIELDS on origin/main 2026-11-04, verbatim.
+// dchub-backend routes/dcgi.py _DCGI_MASK_FIELDS less the four EIA price keys (owner 2026-11-17).
 const BACKEND_MASK_FIELDS = ['dcgi', 'gas_access_score', 'gas_cost_score', 'pipelines', 'operators',
-  'interstate', 'gas_price', 'gas_price_sector', 'gas_price_series', 'gas_price_period'];
+  'interstate'];
+// Served to every caller since 2026-11-18, with the row's dates.
+const FREE_PRICE_FIELDS = ['gas_price', 'gas_price_sector', 'gas_price_series', 'gas_price_period'];
 const BASIS = 'OLDEST of the two DCGI inputs';
 const row = (state, dcgi, acc, cost, pipes, ops, inter, price, verdict) => ({
   state, dcgi, gas_access_score: acc, gas_cost_score: cost, pipelines: pipes, operators: ops,
@@ -49,8 +56,8 @@ const LIST = { ok: true, index: 'Data Center Gas Index (DCGI)', count: 2, licens
 const ONE = { ok: true, index: 'DCGI', state: 'NM', license: 'CC BY 4.0',
   methodology: '/api/v1/dcgi/methodology', score: NM };
 // Each fixture's paid values, as they would print. None may appear below a paid seat.
-const PAID_FRAGMENTS = ['77.2', '84.9', '65.6', '6657', '1629', '2.803',
-  '67.9', '46.4', '1082', '0.37', 'electric_power', '"PEU"'];
+const PAID_FRAGMENTS = ['77.2', '84.9', '65.6', '6657', '1629',
+  '67.9', '46.4', '1082'];
 
 // Fixture keys: test values only.
 const FREE_KEY = 'dch_live_gasidxpaidset000000001';
@@ -139,9 +146,13 @@ function expectMasked(sc, result, label) {
       expect(r[`_${k}_withheld`], `${label} ${r.state}._${k}_withheld`).toBe(true);
     }
     const src = FIXTURE[r.state];
-    for (const k of ['state', 'verdict', 'data_as_of', 'data_as_of_basis', 'gas_price_window', 'gas_price_method']) {
+    for (const k of ['state', 'verdict', 'data_as_of', 'data_as_of_basis', 'gas_price_window', 'gas_price_method',
+      ...FREE_PRICE_FIELDS]) {
       expect(r[k], `${label} ${r.state}.${k} kept`).toEqual(src[k]);
+      expect(r[`_${k}_withheld`], `${label} ${r.state}._${k}_withheld`).toBeUndefined();
     }
+    expect(r.gas_price_source, `${label} ${r.state}.gas_price_source`)
+      .toBe('EIA, price of natural gas sold to electric power consumers, by state');
   }
   const all = scrubRelayTokens(JSON.stringify(result));
   for (const frag of PAID_FRAGMENTS) expect(all, `${label}: leaked ${frag}`).not.toContain(frag);
@@ -181,6 +192,7 @@ describe('get_gas_index below a paid seat withholds the whole backend DCGI paid 
           expect(r[`_${k}_in_pro`], `${form} ${r.state}._${k}_in_pro`).toBe(true);
         }
         expect(r.verdict, `${form} ${r.state}.verdict`).toBe(FIXTURE[r.state].verdict);
+        for (const k of FREE_PRICE_FIELDS) expect(r[k], `${form} ${r.state}.${k} kept`).toEqual(FIXTURE[r.state][k]);
       }
     }
   });
@@ -200,7 +212,7 @@ describe('get_gas_index below a paid seat withholds the whole backend DCGI paid 
     expect(scrubRelayTokens(JSON.stringify({ data_as_of: '2026-08-01' }))).toContain('2026-08-01');
   });
 
-  it('the server field list is the backend tuple, exactly', () => {
+  it('the server field list is the backend tuple less the EIA price keys, exactly', () => {
     expect([...S.DCGI_PAID_KEYS]).toEqual(BACKEND_MASK_FIELDS);
   });
 

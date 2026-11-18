@@ -112,7 +112,7 @@ const PHRASES = [
     re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a (?:\$10 )?credit pack\); (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'any-key-full',
-    re: /with no key a trimmed preview \(3 rows, project names and MW withheld\); any key, a free one included, gets the full survivor set/,
+    re: /with no key a trimmed preview \(3 rows, MW withheld; MISO and SPP project names and queue ids held\); any key, a free one included, gets the full survivor set/,
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },
   // ladder stage 1 (2026-09-29): Starter is not sold, so the notes name Developer.
   // A grandfathered Starter key still gets these in full (the seat below).
@@ -154,7 +154,7 @@ const PHRASES = [
   { id: 'free-full', re: /(?:is|are) free \+ full(?: at every tier| for everyone| by design)?/i, free_full: true },
   { id: 'free-friendly', re: /(?:is|are) free-tier friendly|(?:is|are) free citation hooks?|is free for everyone/, free_friendly: true },
   { id: 'gas-econ-below-pro',
-    re: /masks its numeric gas prices and the \$\/MWh table below (?:Pro \(Developer included\)|the DC Hub plan with every tool \(lower paid plans included\)|the access level that includes every tool)/, gas_below_pro: true },
+    re: /shows the EIA state gas prices \(delivered industrial, delivered electric, burner tip\) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the \$\/MWh table below the access level that includes every tool/, gas_below_pro: true },
   // Not about one tool: the free-key call quota, rendered from canon.
   { id: 'free-key-quota', re: /Call quota on a free key: [^.]*\./, untooled: true },
   { id: 'retirement-mw-below-developer',
@@ -366,7 +366,9 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
             const rows = (out.sc && out.sc.data) || [];
             if (rows.length !== 3) bad.push(`${c.tool} anon: ${rows.length} preview rows, note says 3`);
             rows.forEach((r, i) => {
-              if (r.project_name !== null) bad.push(`${c.tool} anon row ${i}: project_name not withheld`);
+              // 2026-11-18 (owner Grok note, keyless queue names): a PJM row keeps its name keyless;
+              // only MISO/SPP rows (iso_publish_hold) are held.
+              if (r.project_name !== `Proj ${i}`) bad.push(`${c.tool} anon row ${i}: PJM project_name not served`);
               if (r.capacity_mw !== null) bad.push(`${c.tool} anon row ${i}: capacity_mw not withheld`);
             });
           }
@@ -405,14 +407,19 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
     expect(bad).toEqual([]);
   }, 60000);
 
-  it('get_gas_economics masks prices below Pro, Developer included', async () => {
+  it('get_gas_economics: EIA state prices and Henry Hub for every seat, basis below full access masked', async () => {
     const { claims } = extractClaims();
     const cs = claims.filter((c) => c.ph.gas_below_pro);
     expect(cs.map((c) => c.tool)).toContain('get_gas_economics');
     for (const c of cs) {
       for (const [seat, key] of SEATS) {
         const out = await call(c.tool, key);
-        expect(out.text.includes('3.853'), `${c.tool} ${seat}: delivered price shown?`).toBe(seat === 'pro');
+        // 2026-11-18 (owner Grok note): delivered EIA state prices are public domain, served to all.
+        expect(out.text.includes('3.853'), `${c.tool} ${seat}: delivered price shown?`).toBe(true);
+        // Henry Hub (Refinitiv via EIA): owner 2026-11-18 "share with citation", every seat (switch default on).
+        expect(out.text.includes('2.917'), `${c.tool} ${seat}: Henry Hub shown?`).toBe(true);
+        // The regional basis is a synthetic seed, not a published figure: full access only.
+        expect(out.text.includes('-0.412'), `${c.tool} ${seat}: basis shown?`).toBe(seat === 'pro');
       }
     }
   }, 60000);
