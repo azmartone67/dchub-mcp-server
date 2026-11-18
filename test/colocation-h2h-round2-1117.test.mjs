@@ -95,7 +95,7 @@ describe('Q-d: "Fastest grid power in Texas" leads with dated supply facts', () 
     const lead = planLeadText({ _entity: 'plan_execution', intent: 'Where in Texas can I get grid power?', executed });
     expect(lead.startsWith("ERCOT's own reported generation queue: 461.4 GW")).toBe(true);
     // control: nothing to state -> the lookup count, as before
-    expect(planLeadText({ _entity: 'plan_execution', intent: 'x', executed: [ex(1, 'get_refined_queue', {}, {})] })).toMatch(/^DC Hub ran 1 lookup/);
+    expect(planLeadText({ _entity: 'plan_execution', intent: 'x', executed: [ex(1, 'get_refined_queue', {}, {})] })).toMatch(/^For "x": 1 lookup ran/);
   });
 });
 
