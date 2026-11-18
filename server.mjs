@@ -10560,6 +10560,7 @@ function _freeDecisionTasteObject(name, parsed, ctx, args) {
     emailFullCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0,   // item 3
     legacyWallCopy: _legacyWallCopy(ctx),
     listedMw: chatgptListedMwOn() && _chatgptFrozenSeat(ctx),   // Grok #117623
+    henryHubFree: _keylessHenryHubOn(),   // get_energy_prices: Henry Hub in the preview (owner 11-18)
   });
   if (!built || !built.envelope) return null;
   _noteGate('free_decision_preview');

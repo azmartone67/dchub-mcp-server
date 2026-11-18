@@ -69,6 +69,58 @@ describe('energy taste', () => {
   });
 });
 
+// Owner 2026-11-18 "share with citation": the keyless preview dropped the hub LMP, the PJM
+// published figures and the Henry Hub spot that get_energy_prices says reach every caller.
+describe('energy taste keeps the blocks served to every caller', () => {
+  const LMP = { label: 'wholesale LMP, $/MWh', iso: 'ERCOT', hub: 'HB_HUBAVG', hubs_available: ['HB_HUBAVG', 'HB_NORTH'],
+    real_time: { lmp_usd_mwh: 31.47, interval_ending: '2026-11-18T17:00:00Z', as_of: '2026-11-18T17:00:00Z', market: 'RTM', stale: false, stale_after_minutes: 30 },
+    day_ahead: null, day_ahead_note: 'n', source: 'ERCOT', source_url: 'https://www.ercot.com/', license: 'l', basis: 'b' };
+  const PJM_CTX = { iso: 'PJM', label: 'published PJM price figures (not live)',
+    figures: [{ name: 'BRA clearing price', value: 325, unit: '$/MW-day', period: '2028/2029', source_url: 'https://www.pjm.com/', retrieved: '2026-11-18' }],
+    live_prices: { label: 'PJM live LMP', url: 'https://dataviewer.pjm.com/dataviewer/pages/public/lmp.jsf', note: 'n' } };
+  const NG = { hub: 'Henry Hub', series: 'RNGWHHD', unit: '$/MMBtu', status: 'measured', period: '2026-11-17', as_of: '2026-11-17',
+    source: 'EIA Open Data v2 RNGWHHD', source_url: 'https://www.eia.gov/dnav/ng/hist/rngwhhdD.htm' };
+  const WITH = { ...FULL, wholesale_lmp: LMP, natural_gas_usd_mmbtu: 2.917, natural_gas: NG };
+
+  it('wholesale_lmp passes through whole, figure, as_of and credit', () => {
+    const e = T.buildFreeDecisionTaste('get_energy_prices', WITH).envelope;
+    expect(e.wholesale_lmp).toEqual(LMP);
+    expect(e._taste_note).toMatch(/wholesale and gas blocks served to every caller/);
+  });
+  it('PJM: wholesale_lmp null, the withheld reason and the published figures pass through', () => {
+    const W = { iso: 'PJM', reason: 'PJM terms bar reuse' };
+    const e = T.buildFreeDecisionTaste('get_energy_prices',
+      { ...FULL, filter: { iso: 'PJM' }, wholesale_lmp: null, wholesale_lmp_withheld: W, wholesale_context: PJM_CTX }).envelope;
+    expect(e.wholesale_lmp).toBeNull();
+    expect(e.wholesale_lmp_withheld).toEqual(W);
+    expect(e.wholesale_context).toEqual(PJM_CTX);
+  });
+  it('Henry Hub open (henryHubFree): the figure with the Refinitiv/LSEG credit, not listed as withheld', () => {
+    const e = T.buildFreeDecisionTaste('get_energy_prices', WITH, { henryHubFree: true }).envelope;
+    expect(e.natural_gas_usd_mmbtu).toBe(2.917);
+    expect(e.natural_gas).toMatchObject({ as_of: '2026-11-17', status: 'measured', source_url: NG.source_url });
+    expect(e.natural_gas.source).toMatch(/Refinitiv\/LSEG/);
+    expect(e.natural_gas.basis).toMatch(/national benchmark/);
+    expect(e._natural_gas_usd_mmbtu_in_pro).toBeUndefined();
+  });
+  it('Henry Hub switched off (DCHUB_KEYLESS_HENRY_HUB=0): no figure, still counted as withheld', () => {
+    const e = T.buildFreeDecisionTaste('get_energy_prices', WITH, { henryHubFree: false }).envelope;
+    expect('natural_gas_usd_mmbtu' in e).toBe(false);
+    expect('natural_gas' in e).toBe(false);
+    expect(JSON.stringify(e)).not.toContain('2.917');
+    expect(e.withheld.find((w) => w.section === 'wholesale_and_gas').count).toBe(1);
+    expect(e._natural_gas_usd_mmbtu_in_pro).toBe(true);
+    expect(e.wholesale_lmp).toEqual(LMP);   // the LMP block does not follow the gas switch
+  });
+  it('a payload without the blocks adds no keys (older backend)', () => {
+    const e = T.buildFreeDecisionTaste('get_energy_prices', FULL, { henryHubFree: true }).envelope;
+    for (const k of ['wholesale_lmp', 'wholesale_lmp_withheld', 'wholesale_context', 'natural_gas', 'natural_gas_usd_mmbtu']) {
+      expect(k in e, k).toBe(false);
+    }
+    expect(e._taste_note).not.toMatch(/wholesale and gas/);
+  });
+});
+
 describe('queue taste: a live feed fetch date is not a source date (Grok 10-12)', () => {
   const Q = { iso: 'CAISO', as_of: '2026-10-12', queued_generation_gw: 73.8, queued_generation_gw_as_of: '2026-10-12',
     project_count: 261, source_as_of: '2026-10-12', source_as_of_basis: 'live_feed_fetch_date',
