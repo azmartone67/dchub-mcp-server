@@ -171,7 +171,7 @@ describe('the anonymous over-cap trim spares the Capacity Source teaser', () => 
     expect(first.locked).toBe(true);
     expect(first.access_required).toBe('registered');
     expect(first.lock_reason).toBe('sign_in_required');
-    expect(body._upgrade.next_tool).toBe('claim_free_key');
+    expect(body._upgrade.next_tool).toBe('get_api_key');
   });
 
   it('parity: the over-cap agent sees the same numbers the anonymous web teaser serves', async () => {

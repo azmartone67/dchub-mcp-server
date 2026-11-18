@@ -291,7 +291,7 @@ describe('F-1 / F-5 / F-6 — a caller that presented a valid key', () => {
     const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat());
     expect(mintHits).toBe(1);
     expect(r.structuredContent.auto_trial_key).toBe(MINT.api_key);
-    expect(text(r)).toContain('claim_free_key');            // the keyless wall keeps its free rung
+    expect(text(r)).toContain('get_api_key');            // the keyless wall keeps its free rung
   });
 
   it('a key the session RESTORED (not presented on this request) mints no sibling (Grok note N item 3)', async () => {

@@ -189,7 +189,7 @@ describe('compare_sites keyless preview (owner 2026-10-13, reverses D6 for compa
       { site: 2, verdict: 'CAUTION', power_infrastructure: 'AVOID' },
     ]);
     expect(sc.site_teaser.locked).toEqual(expect.arrayContaining(['overall_score', 'recommended_pick']));
-    expect(sc.next_tool).toBe('claim_free_key');
+    expect(sc.next_tool).toBe('get_api_key');
     expect(sc.message).toMatch(/returns each site.s verdict band and power band/);
     expect(sc.message).not.toMatch(/returns no data/);
     expect(sc.winner).toBeUndefined();

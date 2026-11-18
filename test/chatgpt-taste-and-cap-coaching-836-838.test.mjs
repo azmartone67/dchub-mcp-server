@@ -344,7 +344,7 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     expect(sc._upgrade.pack_opens).toBe(false);
     expect(sc._upgrade.wall).toBe('depth');
     expect(sc._upgrade.remaining_today).toBe(0);
-    expect(sc._upgrade.message).toContain('claim_free_key');
+    expect(sc._upgrade.message).toContain('get_api_key');
     expect(sc._upgrade.message).toContain('human_url');
     expect(sc._upgrade.message).toMatch(/that page shows how to get it\./);   // Note V keyed follow-up: no plans named
     expect(sc._upgrade.message).not.toMatch(/\b(Developer|Pro)\b|\$\d/);

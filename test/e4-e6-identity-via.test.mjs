@@ -146,7 +146,7 @@ describe('E4: the backend\'s per-IP cap (429) is a plain answer, not a failure',
     expect(r.isError).toBeFalsy();
     expect(text).not.toContain('Could not mint');
     expect(text).toContain('never been used');
-    expect(sc).toMatchObject({ api_key: null, minted: false, reason: 'claim_rate_limited', next_tool: 'claim_free_key',
+    expect(sc).toMatchObject({ api_key: null, minted: false, reason: 'claim_rate_limited', next_tool: 'get_api_key',
       recover_tool: 'recover_my_key', guidance: S.ALREADY_HAVE_KEY_GUIDANCE });
   });
   it('with an email: points at recover_my_key', async () => {

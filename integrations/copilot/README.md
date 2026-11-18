@@ -9,7 +9,7 @@ pipeline.
 
 - Access to **Copilot Studio** with MCP support enabled.
 - Optional: a **DC Hub key**. No key is needed to start (some keyless answers are
-  previews). A free key with an email gives 50 MCP calls/day: https://dchub.cloud/connect
+  previews). DCHUB_API_KEY is optional and opens fuller answers. Get a key: https://dchub.cloud/connect
 - Basic familiarity with:
   - YAML configuration files.
   - HTTP APIs and JSON responses.

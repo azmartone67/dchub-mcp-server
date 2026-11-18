@@ -4,7 +4,7 @@
  *   =DCHUB_DCPI("phoenix")                 BUILD / CAUTION / AVOID; "composite_score" for the score
  *   =DCHUB_FACILITIES("Ashburn", 10)       a table of facilities
  *   =DCHUB_ENERGY_RATE("VA")               retail electricity rate
- * Extensions > DC Hub > Set API key stores your free key (https://dchub.cloud/signup)
+ * Extensions > DC Hub > Set API key stores your key (optional; https://dchub.cloud/signup)
  * for your account only. The mapping from responses to cells lives in Cells.gs.
  */
 var DCHUB_CACHE_SECONDS = 600;

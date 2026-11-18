@@ -67,7 +67,7 @@ describe('initialize instructions', () => {
     // Owner decision 2026-11-15: the free offers in plain words replace the labelled "FREE TIER" block.
     expect(instructions).not.toContain('FREE TIER');
     // Option A (owner 2026-11-16): the free offers are the neutral connect line.
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'source_capacity', 'More detail is available at dchub.cloud/connect.', 'dchub://instructions']) {
+    for (const need of ['execute_plan', 'get_api_key', 'for_your_human', 'human_url', 'source_capacity', 'More detail is available at dchub.cloud/connect.', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.

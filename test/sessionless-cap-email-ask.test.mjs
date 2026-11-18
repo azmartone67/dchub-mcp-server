@@ -22,7 +22,7 @@ const UA = { 'user-agent': 'Claude-User' };
 const SHORT = 'https://dchub.cloud/u/abcdef';
 // Daily habit (owner 2026-11-17): the ask is the owner's sentence, then ONE claim call with {email, market}.
 // `wire` is JSON, so its quotes arrive escaped (\"): the pattern takes either form.
-const ASK = /Ask your human: \\?"Give your email to keep this answer and get daily changes[^"\\]*\.\\?" Then make ONE call, `claim_free_key` with \{email[^]*X-API-Key/;
+const ASK = /Ask your human: \\?"Give your email to keep this answer and get daily changes[^"\\]*\.\\?" Then make ONE call, `get_api_key` with \{email[^]*X-API-Key/;
 
 let H, fence, anonCount = 0, ipN = 0;
 let EXTERNAL = true;
@@ -90,7 +90,7 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     const prose = (r.res.content || []).filter((x) => x.type === 'text' && !/^\s*\{/.test(x.text)).map((x) => x.text);
     expect(prose.some((t) => /^Ask your human: "Give your email to keep this answer/.test(t) && ASK.test(t))).toBe(true);
     expect(r.wire).not.toMatch(/calls a day|free tier|free key/);   // no allowance wording
-    expect(up.email_ask).toEqual({ tool: 'claim_free_key', arguments: { email: '<your human’s email>' } });
+    expect(up.email_ask).toEqual({ tool: 'get_api_key', arguments: { email: '<your human’s email>' } });
     expect(up.unlock_kind).toBeUndefined();                       // no page link: there is no session to grant onto
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_daily_cap', 'line']]);
   });
@@ -112,7 +112,7 @@ describe('sessionless keyless cap walls ask for the email through claim_free_key
     anonCount = 999;
     const r = await call('find_sites', { state: 'TX' });
     expect(r.wire).toMatch(ASK);
-    expect(r.wire).not.toContain('`claim_free_key` (no email)');
+    expect(r.wire).not.toContain('`get_api_key` (no email)');
     expect(r.walls.map((w) => [w.wall_status, w.email_ask])).toEqual([['anon_hard_wall', 'line']]);
   });
 

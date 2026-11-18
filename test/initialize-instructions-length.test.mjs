@@ -93,7 +93,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['tool choice (the canon sentence)', /call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer\./],
     // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
     // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
-    ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
+    ['keys', /email, then `get_api_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
     // Owner decision 2026-11-15: the labelled free-tier block (with its siting clause) is the two free offers in
     // plain words, no tier label; one neutral line states where the free answers stop (item 1, 2026-10-16).
     // Option A (owner 2026-11-16): the free offers and "Past that, previews." are the neutral connect line.

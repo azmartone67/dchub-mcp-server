@@ -65,7 +65,7 @@ describe('keyless get_grid_data, end to end', () => {
   });
   it('every next step names get_grid_data and claim_free_key, not get_grid_intelligence, and no email requirement', async () => {
     const sc = (await keylessGridData()).structuredContent;
-    expect(sc.message).toContain('claim_free_key');
+    expect(sc.message).toContain('get_api_key');
     expect(sc.message).toContain('get_grid_data with iso=PJM');
     expect(sc.message).not.toMatch(/email[- ]only|dev key/i);
     if (sc.agent_action) { expect(sc.agent_action.then || '').toContain('get_grid_data'); expect(sc.agent_action.then || '').not.toContain('grid/intelligence'); }

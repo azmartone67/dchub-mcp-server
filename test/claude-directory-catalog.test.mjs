@@ -32,6 +32,8 @@ import {
 import { STANDARD_ANNOTATION_KEYS } from '../lib/chatgpt-directory.mjs';
 import { startHarness, fenceNetwork, injectionHits, claudeProbePatterns, hitsOf } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
+import { asListedKeyTool, KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';   // 2026-11-17: the key tool is listed as get_api_key
+const _listed = (n) => (n === KEY_TOOL_REGISTERED ? KEY_TOOL_LISTED : n);
 
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DIR = '/mcp/claude';
@@ -124,7 +126,7 @@ describe('tools/list', () => {
   it('every canonical /mcp tool is either listed or removed, and none is both', () => {
     const listed = new Set(Object.keys(CLAUDE_TOOLS));
     const removed = new Set(CLAUDE_REMOVED);
-    for (const t of CANON) expect(listed.has(t.name) || removed.has(t.name), `${t.name} is neither listed nor removed`).toBe(true);
+    for (const t of CANON) expect(listed.has(t.name) || removed.has(t.name) || (t.name === KEY_TOOL_LISTED && removed.has(KEY_TOOL_REGISTERED)), `${t.name} is neither listed nor removed`).toBe(true);
     for (const n of listed) expect(removed.has(n), n).toBe(false);
     expect(CANON.length).toBe(97);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; both held off this profile; 97 on 2026-11-16: request_enhancement, listed here)
   });

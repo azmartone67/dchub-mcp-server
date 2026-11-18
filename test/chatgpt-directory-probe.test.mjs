@@ -179,7 +179,7 @@ describe('/mcp/chatgpt — handshake and catalog', () => {
   it('tools/list: the canonical /mcp catalog is unchanged (removed tools still listed there)', async () => {
     const r = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = JSON.parse(r.body).result.tools.map((t) => t.name);
-    for (const gone of ['claim_free_key', 'unlock_more_data', 'why_dchub']) expect(names).toContain(gone);
+    for (const gone of ['get_api_key', 'unlock_more_data', 'why_dchub']) expect(names).toContain(gone);
   });
 
   it('removed tools are not callable on the profile', async () => {

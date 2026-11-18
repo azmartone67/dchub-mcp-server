@@ -219,7 +219,7 @@ describe('r-anon-facility-allowlist — facility rows served without a key follo
     const out = await (await openSession()).call('search_facilities', { state: 'VA' });
     const up = out.lead._upgrade || {};
     expect(up.tier, 'not the anonymous preview').toBe('anonymous');
-    expect(up.next_tool, 'the claim-first CTA went missing').toBe('claim_free_key');
+    expect(up.next_tool, 'the claim-first CTA went missing').toBe('get_api_key');
     expect(out.lead.data.length, 'the preview row trim went missing').toBeLessThan(ROWS);
     expect(out.lead._data_total_available, 'the honest full-length sibling went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'anonymous preview');
@@ -233,7 +233,7 @@ describe('r-anon-facility-allowlist — facility rows served without a key follo
     // to return a hand-rolled `_upgrade_notice` envelope with no honesty block), so it carries
     // the claim-first `_upgrade` and not the old notice.
     expect(out.lead._upgrade_notice, 'the hand-rolled capped envelope is back').toBeUndefined();
-    expect((out.lead._upgrade || {}).next_tool, 'not the keyless trim').toBe('claim_free_key');
+    expect((out.lead._upgrade || {}).next_tool, 'not the keyless trim').toBe('get_api_key');
     expect(out.lead._data_total_available, 'the preview row trim went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'capped anonymous');
   });

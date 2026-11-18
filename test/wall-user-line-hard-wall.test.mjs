@@ -58,7 +58,7 @@ describe('anon_hard_wall', () => {
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);
     expect(r.structuredContent.copy_version).toBe('v14');
-    expect(r.content[0].text.indexOf('claim_free_key')).toBeGreaterThan(line.length);
+    expect(r.content[0].text.indexOf('get_api_key')).toBeGreaterThan(line.length);
     expect(r.isError).toBe(true);   // owner-controlled, default unchanged
   });
 });

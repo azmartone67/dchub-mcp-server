@@ -21,6 +21,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import * as L from '../lib/capacity-source-summary.mjs';
 import { pasteLine, attachCapacity } from '../scripts/ecosystem-sync.mjs';
 import { CAPACITY_BLURB, CAPACITY_LIVE_POINTER, capacityInventoryViolations } from '../lib/capacity-source-summary.mjs';
+import { keyToolPointerText as _listedKeyName } from '../lib/key-tool-name.mjs';   // 2026-11-17: served text names get_api_key
 // This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
 // that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
 // The gate still applies to every other market, so it is tested here with that decision switched
@@ -214,7 +215,7 @@ describe('summary client', () => {
   it('an unarmed cache (a module import, a test) never fetches', async () => {
     expect(S._capacitySummary.peek()).toBeNull();
     await call('find_sites', { state: 'TX' });
-    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
+    expect(S.createServer().server._instructions).toBe(_listedKeyName(S._INSTRUCTIONS_LEAN));
     expect(summaryCalls()).toHaveLength(0);
   });
 
@@ -666,21 +667,21 @@ describe('session instructions', () => {
   for (const [label, arrange] of DORMANT) {
     it(`dormant, ${label}: initialize carries the instructions byte for byte`, async () => {
       await arrange();
-      expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
+      expect(S.createServer().server._instructions).toBe(_listedKeyName(S._INSTRUCTIONS_LEAN));
       const client = await connect(S.createServer(null, ' TAIL'));
-      expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS_LEAN} TAIL`);
+      expect(client.getInstructions()).toBe(_listedKeyName(`${S._INSTRUCTIONS_LEAN} TAIL`));
       // the long form is the resource; dormant, it too is the original byte for byte
-      expect((await client.readResource({ uri: 'dchub://instructions' })).contents[0].text).toBe(S._INSTRUCTIONS);
+      expect((await client.readResource({ uri: 'dchub://instructions' })).contents[0].text).toBe(_listedKeyName(S._INSTRUCTIONS));
     });
   }
 
   it('live: option A (teaser only) leaves the instructions byte for byte; no live clause, no inventory numbers', async () => {
     await withSummary(LIVE);
     const client = await connect(S.createServer(null, ' TAIL'));
-    expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS_LEAN} TAIL`);
+    expect(client.getInstructions()).toBe(_listedKeyName(`${S._INSTRUCTIONS_LEAN} TAIL`));
     const ins = (await client.readResource({ uri: 'dchub://instructions' })).contents[0].text + ' TAIL';
     expect(ins).not.toContain(L.CAPACITY_INSTR_LIVE_CLAUSE);
-    expect(ins).toBe(`${S._INSTRUCTIONS} TAIL`);
+    expect(ins).toBe(`${_listedKeyName(S._INSTRUCTIONS)} TAIL`);
     // the splice itself still works where its anchor exists
     const a = 'X ' + L.CAPACITY_INSTR_ANCHOR + ' Y';
     expect(L.withCapacityLiveClause(a, S._capacitySummary.peek())).toContain(L.CAPACITY_INSTR_LIVE_CLAUSE);
@@ -1082,7 +1083,7 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
       expect(pointerOf(r), name).toBeNull();
       expect(pointerLines(r), name).toEqual([]);
     }
-    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
+    expect(S.createServer().server._instructions).toBe(_listedKeyName(S._INSTRUCTIONS_LEAN));
     expect(pasteLine(attachCapacity({ tools: 91 }, { ok: true, status: 200, text: JSON.stringify(LIVE) })))
       .not.toContain('Capacity Source');
     calls = [];
