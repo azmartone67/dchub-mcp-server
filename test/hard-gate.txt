@@ -487,6 +487,7 @@ test/pc-arm-tag-visible-link.test.mjs
 test/peeringdb-licence-g4.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
+test/pipeline-mw-fact-1118.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
 test/plan-answer-budget.test.mjs
@@ -749,4 +750,3 @@ test/weekly-summary-disclosure-1023.test.mjs
 test/why-dchub-market-count-scope.test.mjs
 test/windsurf-path-and-claim-copy.test.mjs
 test/write-tool-annotation-accuracy.test.mjs
-test/pipeline-mw-fact-1118.test.mjs
