@@ -3,7 +3,7 @@
 // Fixture: the six keyless head-to-head answers recorded live 2026-11-17 08:47Z (re-run tokens redacted).
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { compactPlanObject, planCompactStep, planDetailRequested, PLAN_COMPACT_BUDGET, FULL_DETAIL_LINE, KEEP_KEYS }
+import { compactPlanObject, planCompactStep, planDetailRequested, PLAN_COMPACT_BUDGET, FULL_DETAIL_LINE, KEEP_KEYS, compactAnswerGuide }
   from '../lib/plan-compact.mjs';
 
 const FIX = JSON.parse(fs.readFileSync(new URL('./fixtures/h2h-plans-1117.json', import.meta.url), 'utf8'));
@@ -30,9 +30,12 @@ describe('compact execute_plan answers (the six head-to-head questions)', () => 
       expect(bytes(sc)).toBeLessThan(10000);
       // the same lead: block 0, and every answer key the plan composed
       expect(out.content[0].text).toBe(before.content[0].text);
-      for (const key of ['fact_header', 'dcpi_verdict', 'intent_answer', 'answer_guide', 'intent', 'intent_class']) {
+      for (const key of ['fact_header', 'dcpi_verdict', 'intent_answer', 'intent', 'intent_class']) {
         expect(sc[key]).toEqual(before.structuredContent[key]);
       }
+      // the guide no longer sends the agent to step bodies this answer does not carry (compact-fiber-answer-1117)
+      expect(sc.answer_guide).toBe(compactAnswerGuide(before.structuredContent.answer_guide, sc));
+      expect(sc.answer_guide).not.toContain('executed[].result');
       // every step is still listed, with its status, and none carries its body
       expect(sc.executed.map((e) => [e.step, e.tool, e.status]))
         .toEqual(before.structuredContent.executed.map((e) => [e.step, e.tool, e.status]));
