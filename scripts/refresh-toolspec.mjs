@@ -41,6 +41,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { KEY_TOOL_LISTED, KEY_TOOL_REGISTERED } from '../lib/key-tool-name.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'toolspec.json');
@@ -91,8 +92,12 @@ async function main() {
   const tools = d.result && d.result.tools;
   if (!Array.isArray(tools) || tools.length === 0) bail('tools/list carried no tools');
 
+  // tools/list shows the key tool under its LISTED name (get_api_key, lib/key-tool-name.mjs) while
+  // server.mjs registers it as claim_free_key. This file mirrors the registrations
+  // (test/toolspec-is-real.test.mjs), so write the registered name back; writing the listed one made the
+  // daily heal fail its own hard gate from 2026-11-16 (missing claim_free_key, extra get_api_key).
   const spec = tools.map((t) => ({
-    name: t.name,
+    name: t.name === KEY_TOOL_LISTED ? KEY_TOOL_REGISTERED : t.name,
     description: t.description || '',
     inputSchema: t.inputSchema || { type: 'object' },
     // A static scan of this file is how ToolBench reads the return shapes; keep
