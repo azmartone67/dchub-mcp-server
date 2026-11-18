@@ -310,8 +310,9 @@ describe('option A line on a keyless free-key wall, production transport', () =>
 });
 
 describe('wallEmailFreekeyLineText', () => {
-  it('is the 10-25 wording, verbatim (the line the owner OK\'d for free-key walls)', () => {
-    expect(R.wallEmailFreekeyLineText('https://dchub.cloud/u/abcdef')).toBe(
+  it('continuity wording by default; the kill switch restores the 10-25 wording, verbatim (owner OK for free-key walls)', () => {
+    expect(R.wallEmailFreekeyLineText('https://dchub.cloud/u/abcdef')).toMatch(/^DC Hub held back part of this answer\. Open this link and enter your email to see all of it/);
+    expect(R.wallEmailFreekeyLineText('https://dchub.cloud/u/abcdef', { DCHUB_CONTINUITY_ASK: '0' })).toBe(
       'DC Hub held back part of this answer. Open this link and enter your email to get it free: https://dchub.cloud/u/abcdef');
   });
 });

@@ -14,6 +14,7 @@ import { createServer } from 'node:http';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import * as R from '../lib/retention.mjs';
+import * as CA from '../lib/continuity-ask.mjs';
 import { __test as OAUTH } from '../oauth.mjs';
 import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
@@ -222,9 +223,8 @@ describe('claim_free_key success leads with the email ask', () => {
     const lines = r.first.split('\n');
     // Option B (owner 2026-10-25): the ask names what the email opens; the number is the canon's.
     expect(_fullAnswersPerToolPerDay('identified')).toBeGreaterThan(0);
-    expect(lines[0]).toBe('Tell the user: "I set up a free DC Hub key. For grid, queue and market data it shows previews only. '
-      + 'Tell me your email and it unlocks ' + _fullAnswersPerToolPerDay('identified') + ' full answers a day on those, '
-      + 'and keeps working in your future chats. Your email is used only for this key and receipts."');
+    // Grok 2026-11-17 (funnel conversion gap): the ask says what the email keeps, no per-day figure.
+    expect(lines[0]).toBe('Tell the user: "' + CA.continuityClaimText() + '"');
     expect(lines[1]).toBe('(agent: pass an email only if the user typed it here, then call bind_email. Hosted clients: give the user connect_url to paste as the connector URL.)');
     expect(tellCount(r.text)).toBe(1);
     expect(r.text).not.toContain('One free step so this key is still yours tomorrow');   // one email ask, not two
@@ -234,6 +234,16 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.sc.connect_url).toContain(MINTED);
     expect(r.sc.persist_config).toBeTruthy();
     expect(r.result.isError).not.toBe(true);
+  });
+
+  it('DCHUB_CONTINUITY_ASK=0 restores the option B wording, verbatim', async () => {
+    process.env.DCHUB_CONTINUITY_ASK = '0';
+    try {
+      const r = await (await session('/mcp', 'Claude Code')).call('claim_free_key', { client_name: 'retention-test' });
+      expect(r.first.split('\n')[0]).toBe('Tell the user: "I set up a free DC Hub key. For grid, queue and market data it shows previews only. '
+        + 'Tell me your email and it unlocks ' + _fullAnswersPerToolPerDay('identified') + ' full answers a day on those, '
+        + 'and keeps working in your future chats. Your email is used only for this key and receipts."');
+    } finally { delete process.env.DCHUB_CONTINUITY_ASK; }
   });
 
   it('limits agree with the published free-tier rule: daily full answers, no call total (B1)', async () => {
@@ -265,7 +275,7 @@ describe('claim_free_key success leads with the email ask', () => {
     for (const client of ['grok', 'Claude Code']) {
       const s = await session('/mcp', client);
       const r = await s.call('claim_free_key', { client_name: 'retention-test' });
-      expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "I set up a free DC Hub key\./);
+      expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "I set up a DC Hub key for this chat\./);
       expect(tellCount(r.text)).toBe(1);
       expect(r.sc.connect_url).toContain(MINTED);
       expect(r.sc.paywall_contract).toBeUndefined();
@@ -345,18 +355,45 @@ describe('returning-key nudge', () => {
     expect(strip(on.first)).toBe(strip(off.first));
   });
 
-  it('no email bound → the "Add an email" line with the bound rung, prepended, answer intact, once a day', async () => {
+  it('no email bound → the continuity line at the END of the answer, data first, once', async () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
     const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
     const r = await s.call(TOOL, { since: '7d' });
-    expect(_rungNum('identified')).toBeGreaterThan(0);
-    // Option A (owner 2026-11-16): the line names no calls-per-day figure.
-    expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable'
-      + ' and tell you when the markets you ask about change."');
+    // Grok 2026-11-17: the answer leads; the ask is its last line, then the agent line.
+    expect(r.first.startsWith('{"ok":true')).toBe(true);
+    // after the data, ahead of only the cite / source footer the later steps add
+    const at = r.text.indexOf(CA.continuityReturnLine() + '\n' + CA.CONTINUITY_RETURN_AGENT);
+    expect(at).toBeGreaterThan(r.text.lastIndexOf('"next_call"'));
+    expect(r.text.slice(at).split('\n').slice(2).every((l) => /^(Cite as:|Source:|\s*$)/.test(l))).toBe(true);
     expect(tellCount(r.text)).toBe(1);
-    expect(r.first).toContain('"ok":true');
+    expect(CA.continuityReturnLine() + CA.CONTINUITY_RETURN_AGENT).not.toMatch(CA.NOTE_F_WORDS);
     const again = await s.call(TOOL, { since: '7d' });
     expect(again.text).not.toMatch(/Welcome back/);
+  });
+
+  it('asked once: a return on a later day of the same week gets no second ask (continuity only)', async () => {
+    process.env.DCHUB_RETURN_NUDGE = 'on';
+    S._resetReturnNudgeState();
+    const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
+    expect((await s.call(TOOL, { since: '7d' })).text).toMatch(/Welcome back\. Want this to carry over/);
+    S._clearNudgeDayForTest();                       // the next UTC day: the daily clock would ask again
+    expect((await s.call(TOOL, { since: '7d' })).text).not.toMatch(/Welcome back/);
+    process.env.DCHUB_CONTINUITY_ASK = '0';           // the earlier wording kept its every-later-day clock
+    try {
+      S._clearNudgeDayForTest();
+      expect((await s.call(TOOL, { since: '7d' })).text).toMatch(/Welcome back\. Add an email/);
+    } finally { delete process.env.DCHUB_CONTINUITY_ASK; }
+  });
+
+  it('DCHUB_CONTINUITY_ASK=0: the option A "Add an email" line, prepended, as before', async () => {
+    process.env.DCHUB_RETURN_NUDGE = 'on';
+    process.env.DCHUB_CONTINUITY_ASK = '0';
+    try {
+      const r = await (await session('/mcp', 'Claude Code', OLD_NOEMAIL)).call(TOOL, { since: '7d' });
+      expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable'
+        + ' and tell you when the markets you ask about change."');
+      expect(r.first).toContain('"ok":true');
+    } finally { delete process.env.DCHUB_CONTINUITY_ASK; }
   });
 
   it('email bound + a real move in the key\'s market → the DCPI line', async () => {
@@ -374,7 +411,7 @@ describe('returning-key nudge', () => {
       expect(r.text, k).not.toMatch(/Welcome back/);
     }
     const u = await (await session('/mcp', 'Claude Code', OLD_UNKNOWN)).call(TOOL, { since: '7d' });
-    expect(u.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\. Add an email/);
+    expect(u.text).toMatch(/Welcome back\. Want this to carry over/);
   });
 
   it('never for anonymous callers or our own traffic', async () => {
@@ -416,7 +453,7 @@ describe('returning-key nudge', () => {
     expect(r.text).not.toMatch(/Welcome back/);
     // and the key's one daily chance was not spent on a call that could not show it
     const next = await s.call(TOOL, { since: '7d' });
-    expect(next.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
+    expect(next.text).toMatch(/Tell the user: "Welcome back\./);
   });
 });
 
@@ -430,7 +467,7 @@ describe('email_ask_shown event', () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
     const s = await session('/mcp', 'Claude Code', EV_ONE);
     const r = await s.call(TOOL, { since: '7d' });
-    expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\. Add an email/);
+    expect(r.text).toMatch(/Welcome back\. Want this to carry over/);
     await settle();
     expect(mine(EV_ONE).length).toBe(1);
     const e = mine(EV_ONE)[0];
@@ -450,7 +487,7 @@ describe('email_ask_shown event', () => {
     process.env.DCHUB_EMAIL_ASK_EVENT = '0';
     try {
       const r = await (await session('/mcp', 'Claude Code', EV_OFF)).call(TOOL, { since: '7d' });
-      expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
+      expect(r.text).toMatch(/Tell the user: "Welcome back\./);
       await settle();
       expect(mine(EV_OFF).length).toBe(0);
     } finally { delete process.env.DCHUB_EMAIL_ASK_EVENT; }
@@ -474,7 +511,8 @@ describe('claim ask: kill switch restores the recovery wording', () => {
   });
   it('no canon number: the line drops it rather than guess', () => {
     for (const bad of [null, undefined, 0, -1, 2.5, 'ten']) {
-      expect(R.claimBenefitText(bad), String(bad)).toContain('it unlocks full answers on those');
+      expect(R.claimBenefitText(bad, { DCHUB_CONTINUITY_ASK: '0' }), String(bad)).toContain('it unlocks full answers on those');
+      expect(R.claimBenefitText(bad), String(bad)).toBe(CA.continuityClaimText());   // no number in it at all
     }
   });
 });
@@ -509,8 +547,9 @@ describe('wall email line (option A, agent half)', () => {
     }
   });
 
-  it('the line is the owner-approved wording, verbatim', () => {
-    expect(R.wallEmailLineText('https://dchub.cloud/u/abc234')).toBe(
+  it('the line is the continuity wording; the kill switch restores the owner-approved 10-25 line, verbatim', () => {
+    expect(R.wallEmailLineText('https://dchub.cloud/u/abc234')).toBe(CA.continuityWallLineText('https://dchub.cloud/u/abc234'));
+    expect(R.wallEmailLineText('https://dchub.cloud/u/abc234', { DCHUB_CONTINUITY_ASK: '0' })).toBe(
       "DC Hub held back part of this answer. Reply with your email and I'll unlock the full data free, "
       + 'in this chat and future ones. Your email is used only for this key and receipts. '
       + 'Or open this link: https://dchub.cloud/u/abc234');
@@ -581,10 +620,12 @@ describe('nudgeDecision (pure)', () => {
   });
   it('no-email line names the market when known, and no calls-per-day figure even when the rung is given (option A)', () => {
     const phx = { ...base, top_market: { slug: 'phoenix', name: 'Phoenix' } };
-    expect(R.nudgeDecision({ standing: phx, now }).line)
+    const off = { DCHUB_CONTINUITY_ASK: '0' };
+    expect(R.nudgeDecision({ standing: phx, now, env: off }).line)
       .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
-    expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: 50 }).line)
+    expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: 50, env: off }).line)
       .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
+    expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: 50 })).toEqual({ kind: 'no_email', tail: true, line: CA.continuityReturnLine('Phoenix') });
     for (const bad of [null, 0, -5, 'n/a', NaN]) {
       expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: bad }).line, String(bad)).not.toMatch(/calls a day/);
     }

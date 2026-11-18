@@ -231,6 +231,8 @@ import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextA
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
+import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
+         CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT } from './lib/continuity-ask.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -13260,6 +13262,7 @@ async function _keyReturning(apiKey) {
 // "At most once a day" is held per replica, in memory: the first call this
 // replica sees from a key on a given UTC day is the only one evaluated.
 const _NUDGE_DAY = new Map();             // api_key -> UTC day last evaluated (2nd-day ask, 2026-10-24)
+const _CONTINUITY_ONCE = _createOncePerWeek();   // api_key -> last continuity ask (Grok 2026-11-17: asked once)
 const _nudgeStandingCache = new Map();    // api_key -> { at, body }
 async function _keyStandingFull(apiKey) {
   const now = Date.now();
@@ -13302,9 +13305,13 @@ export async function _returnNudgeStep(result, name, env = process.env) {
       movers = ch && ch.diff && Array.isArray(ch.diff.dcpi_movers) ? ch.diff.dcpi_movers : null;
     }
     const d = _retNudgeDecision({ standing, email: c.email || null, movers, now,
-                                 identifiedPerDay: FREE_TIER.identified_calls_per_day });
+                                 identifiedPerDay: FREE_TIER.identified_calls_per_day, env });
     if (!d || !d.kind) return result;
-    const out = _retPrependTellLine(result, d.line);
+    // Grok 2026-11-17 (funnel conversion gap): the continuity ask is one line at the END of the answer, and a
+    // key is asked once a week (lib/continuity-ask.mjs), not on every later day.
+    if (d.tail && !_CONTINUITY_ONCE.take(c.api_key)) return result;
+    const out = d.tail ? _appendTailLine(result, d.line + '\n' + _CONTINUITY_RETURN_AGENT)
+                       : _retPrependTellLine(result, d.line);
     if (out !== result) _recordEmailAskShown(c, name, d.kind);
     return out;
   } catch (_) { return result; }
@@ -13458,7 +13465,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
       && texts.some((t) => t.split('\n').some(isHumanLine))
       && !texts.some((t) => t.includes('`' + 'bind_email' + '`'));
     if (sessionless && !freekeyChat) return result;   // the page-only wording needs a session to grant onto
-    const sentence = (gridQueue || freekeyChat) ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
+    const sentence = (gridQueue || freekeyChat) ? _retWallEmailLineText(url, env) : _retWallEmailFreekeyLineText(url, env);
     let wrote = false;
     const content = result.content.map((b) => {
       if (wrote || !b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -13487,7 +13494,8 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     return { ...result, content: wrote ? content : result.content, structuredContent: sc };
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
-export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
+export function _clearNudgeDayForTest() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }   // a later UTC day, same week
+export function _resetReturnNudgeState() { _CONTINUITY_ONCE.clear(); _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
