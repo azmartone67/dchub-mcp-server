@@ -41,7 +41,7 @@ export function summaryMarkdown(run, meta = {}, diff = null) {
       (reds.length ? `; RED ${reds.map(([k, c]) => `${k} (${String(c.evidence || '').slice(0, 140)})`).join('; ')}` : ''));
   }
   if (diff) {
-    L.push('', '## Since the previous run', '', `Points ${diff.points.before} -> ${diff.points.now} (of ${diff.points.possible_now}).`);
+    L.push('', '## Since the previous run', '', `Points on the ${diff.points.compared} questions graded both times: ${diff.points.before} -> ${diff.points.now} (of ${diff.points.possible_now}).`);
     for (const k of ['regressed', 'new_red', 'recovered', 'still_red']) L.push(`- ${k}: ${diff[k].length ? diff[k].map((x) => x.key).join(', ') : 'none'}`);
   }
   return `${L.join('\n')}\n`;

@@ -122,6 +122,10 @@ describe('engine-grade: run totals and day-over-day diff', () => {
     expect(d2.recovered.map((x) => x.key)).toEqual(['q1:no_lookup_lead']);
     expect(d2.still_red.map((x) => x.key)).toEqual(['q2:no_lookup_lead']);
   });
+  it('points compare only the questions graded in both runs (a --only run vs a full baseline)', () => {
+    const d = diffRuns(gradeRun(qs, { q1: good, q2: good }), gradeRun([Q], { q1: bad }));
+    expect(d.points).toEqual({ compared: 1, before: 8, now: 7, possible_now: 8 });
+  });
 });
 
 describe('engine questions file', () => {
