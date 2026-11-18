@@ -1,0 +1,29 @@
+{
+ "_entity": "energy",
+ "ok": true,
+ "tool": "get_energy_prices",
+ "filter": {
+  "iso": null,
+  "sector": "all",
+  "state": "TX"
+ },
+ "scope": "state",
+ "as_of": "2026-08-31",
+ "taste": {
+  "headline": {
+   "name": "retail_rate_cents_kwh",
+   "value": 7.68,
+   "unit": "cents/kWh",
+   "sector": "all-sector average",
+   "window": "2026",
+   "averaging_period": "2026",
+   "as_of": "2026-08-31",
+   "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+   "basis": "EIA retail rate for the period in `window`"
+  },
+  "band": null,
+  "source": "EIA retail electricity rates (eia.gov)",
+  "source_url": "https://www.eia.gov/opendata/browser/electricity/retail-sales",
+  "cite_as": "DC Hub (dchub.cloud), as of 2026-08-31"
+ }
+}

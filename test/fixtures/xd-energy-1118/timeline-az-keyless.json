@@ -1,0 +1,76 @@
+{
+ "_entity": "pipeline",
+ "as_of": "2026-11-18T05:10:59Z",
+ "state": "AZ",
+ "iso_context": [
+  "WECC"
+ ],
+ "queue_context": {
+  "active_mw": null,
+  "active_projects": 26,
+  "as_of": "2026-11-17T05:52:41.860796+00:00",
+  "basis": "DERIVED: sum of active project rows located in this state across every ISO queue that lists them (DC Hub interconnect_queue, row level). A state total: it includes other ISOs' parts of the state and only the rows each ISO lists with project detail. Not an ISO-reported figure.",
+  "basis_class": "derived",
+  "by_iso": [
+   {
+    "active_mw": null,
+    "active_projects": 26,
+    "as_of": "2026-11-17T05:52:41.860796+00:00",
+    "as_of_kind": "when DC Hub loaded the rows",
+    "iso": "CAISO",
+    "source": "CAISO Public Queue Report (live XLSX)"
+   }
+  ],
+  "caveat": "congestion pressure only — this feed has no commercial-operation dates and most queued MW historically never completes",
+  "median_entry": "2021-04-15",
+  "oldest_entry": "2014-04-30",
+  "primary": false
+ },
+ "timeline": [
+  {
+   "cumulative_firm_signal_mw": null,
+   "other_mw": null,
+   "planned_mw": null,
+   "retiring_mw": null,
+   "testing_mw": null,
+   "under_construction_mw": null,
+   "units": 11,
+   "year": 2026
+  },
+  {
+   "cumulative_firm_signal_mw": null,
+   "other_mw": null,
+   "planned_mw": null,
+   "retiring_mw": null,
+   "testing_mw": null,
+   "under_construction_mw": null,
+   "units": 42,
+   "year": 2027
+  },
+  {
+   "cumulative_firm_signal_mw": null,
+   "other_mw": null,
+   "planned_mw": null,
+   "retiring_mw": null,
+   "testing_mw": null,
+   "under_construction_mw": null,
+   "units": 12,
+   "year": 2028
+  }
+ ],
+ "sources": {
+  "generator_retirements": {
+   "feed": "EIA-860M planned retirements",
+   "vintage": "2026-08"
+  },
+  "interconnect_queue": {
+   "feed": "CAISO Public Queue Report (DC Hub interconnect_queue)",
+   "latest_queue_entry": "2033-06-15",
+   "vintage_note": "recency shown as the newest queue-entry date the feed carries"
+  },
+  "planned_generators": {
+   "feed": "EIA-860M monthly (planned + under-construction generators)",
+   "vintage": "2026-11-01T08:23:55.674418+00:00"
+  }
+ }
+}

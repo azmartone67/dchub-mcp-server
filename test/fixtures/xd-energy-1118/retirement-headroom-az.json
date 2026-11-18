@@ -1,0 +1,91 @@
+{
+ "_entity": "retirement_headroom_results",
+ "count_returned": 1,
+ "data": [
+  {
+   "generator": {
+    "capacity_mw": null,
+    "county": "Apache",
+    "fuel_category": "Conventional Steam Coal",
+    "generator_id": "1",
+    "name": "Springerville",
+    "prime_mover": "ST",
+    "retirement_date": "2027-12-01",
+    "state": "AZ"
+   },
+   "iso_context": "TEPC",
+   "nearest_substations": [
+    {
+     "distance_band": "within 1 km"
+    },
+    {
+     "distance_band": "within 1 km"
+    },
+    {
+     "distance_band": "within 10 km"
+    }
+   ],
+   "queue_pressure": {
+    "competing_mw": null,
+    "competing_projects": 0,
+    "county_state": "Apache, AZ",
+    "scope": "county"
+   },
+   "representative_point": {
+    "lat": 34.3186,
+    "lng": -109.1639
+   },
+   "site_evaluation_handoff": {
+    "analyze_site": {
+     "capacity_mw": null,
+     "include_fiber": true,
+     "include_risk": true,
+     "lat": 34.3186,
+     "lon": -109.1639
+    },
+    "get_water_risk": {
+     "lat": 34.3186,
+     "lng": -109.1639
+    }
+   },
+   "substations_within_25km": 3
+  }
+ ],
+ "filters_applied": {
+  "fuel_filter": null,
+  "horizon_months": null,
+  "_horizon_months_withheld": true,
+  "limit": 10,
+  "region_iso": [
+   "AZPS",
+   "SRP",
+   "TEPC"
+  ],
+  "target_mw": null
+ },
+ "meta": {
+  "baseline_age": "2026-08",
+  "caveat": "Represents filed planned retirements; actual decommissioning timelines are subject to ISO reliability reviews (RMR agreements can extend operation past the filed date).",
+  "irp_divergence": {
+   "note": "The utilities' current plans post-date these EIA-860M filings and keep these plants running longer or convert them to gas, which keeps the point of interconnection occupied, so the Arizona rows overstate headroom. DC Hub serves the EIA-860M dates unchanged; check the utility's current IRP before relying on one.",
+   "plants": [
+    {
+     "ba": "AZPS",
+     "plan": "APS 2026 IRP: may run past 2031, to 2038 at the latest; APS has not set the date",
+     "plant": "Four Corners"
+    },
+    {
+     "ba": "TEPC",
+     "plan": "TEP: converting to natural gas by 2030 (ACC approved 2026-03-04)",
+     "plant": "Springerville 1-2"
+    },
+    {
+     "ba": "SRP",
+     "plan": "SRP: converting to natural gas by late 2029 (SRP Board 2025-06, ACC 2026-03-04)",
+     "plant": "Coronado"
+    }
+   ]
+  },
+  "source": "DC Hub (dchub.cloud) via EIA-860M"
+ }
+}
