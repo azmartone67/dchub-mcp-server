@@ -697,8 +697,10 @@ describe('session instructions', () => {
 describe('planner routing', () => {
   // [intent, class, lead, the class's own sequence before this change, source_capacity args]
   const ROUTED = [
+    // Planner 5.38 (both sides of the place): "Texas" binds no market, so the DCPI step's market is a placeholder and
+    // the data-center side for TX is added (get_pipeline), ahead of the Capacity Source step.
     ['lease 40 MW powered shell in Texas', 'capacity_search', 'get_retirement_headroom',
-      ['get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank'], { state: 'TX', min_mw: 40 }],
+      ['get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank'], { state: 'TX', min_mw: 40 }, ['get_pipeline']],
     // 2026-11-12: a stated deadline rides along as available_by (a bare year is its December).
     // Planner 5.26 (item 2): "available data center capacity" is a data-center supply question, so it
     // routes to dc_capacity (pipeline, facilities, the power timeline as backup) instead of power_timeline.
@@ -724,8 +726,9 @@ describe('planner routing', () => {
     try { return S._planQuery(intent, ctx); } finally { delete process.env[KILL]; }
   };
 
-  for (const [intent, cls, lead, before, args] of ROUTED) {
+  for (const [intent, cls, lead, own, args, paired = []] of ROUTED) {
     it(`"${intent}" includes source_capacity; class, lead and the class's steps are unchanged`, async () => {
+      const before = [...own, ...paired];
       const p = S._planQuery(intent, {});
       expect(p.intent_class).toBe(cls);
       expect(p.best_tool).toBe(lead);

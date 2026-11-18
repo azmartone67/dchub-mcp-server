@@ -26,7 +26,9 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
     });
     expect(byTool.get_interconnection_queue).toBeUndefined();
     expect(byTool.get_grid_intelligence).toBeUndefined();
-    expect(plan.execution_waves).toEqual([[1, 2]]);
+    // Planner 5.38: the data-center side of Phoenix rides along (lib/plan-pairs.mjs).
+    expect(byTool.get_market_intel.args_hint).toEqual({ market: 'phoenix' });
+    expect(plan.execution_waves).toEqual([[1, 2, 3]]);
   });
 
   it('Las Vegas is the same non-RTO path with state NV', () => {
@@ -42,11 +44,12 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
     expect(plan.intent_class).toBe('grid_headroom');
     expect(JSON.stringify(steps)).toContain('ERCOT');
     expect(JSON.stringify(steps)).not.toContain('WECC');
+    // Planner 5.38: the data-center side of Dallas (get_market_intel) follows the three ISO tools.
     expect(steps.map((s) => s.tool)).toEqual([
-      'get_grid_intelligence', 'get_interconnection_queue', 'get_refined_queue',
+      'get_grid_intelligence', 'get_interconnection_queue', 'get_refined_queue', 'get_market_intel',
     ]);
     expect(steps[0].args_hint).toEqual({ iso: 'ERCOT' });
-    expect(plan.execution_waves).toEqual([[1, 2, 3]]);
+    expect(plan.execution_waves).toEqual([[1, 2, 3, 4]]);
   });
 
   it('an explicit ERCOT context is unchanged (fully parallel wave)', () => {
@@ -63,6 +66,6 @@ describe('grid_headroom does not pass a non-RTO iso (live 2026-11-12 Phoenix)', 
   });
 
   it('planner_version moved with the routing change', () => {
-    expect(PLANNER_VERSION).toBe('5.37');
+    expect(PLANNER_VERSION).toBe('5.38');
   });
 });

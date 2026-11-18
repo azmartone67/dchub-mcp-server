@@ -509,6 +509,8 @@ test/planner-532-colocation-e2e.test.mjs
 test/planner-532-colocation.test.mjs
 test/planner-536-e2e.test.mjs
 test/planner-536-regions-ttp.test.mjs
+test/planner-538-pairs-e2e.test.mjs
+test/planner-538-pairs.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
