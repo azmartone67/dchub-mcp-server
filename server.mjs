@@ -145,6 +145,7 @@ import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyT
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
+import { fetchEmberMonthly, emberAreaForGrid } from './lib/ember-monthly.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
 // Item 4 (Grok live review 2026-11-13): ONE source for the free unlock path a wall names (lib/unlock-line.mjs).
 import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields, EMAIL_ASK as _UNLOCK_EMAIL_ASK } from './lib/unlock-line.mjs';
@@ -34244,6 +34245,20 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const g = giList[i];
         comparison[iso] = (g && g._latest) ? shapeLatestGrid(iso, g.body) : shapeGridIntelligence(iso, g, cmp, qsnap);
       });
+      // 2026-11-18 (be#8978): a non-US grid that is one country's grid gains `ember_monthly`,
+      // Ember's monthly country figures (CC BY 4.0), beside the live fields and never in them.
+      // Fail soft: a 404 (flag off, route not deployed) or any error leaves the row as before.
+      const _emberRows = await Promise.all(valid.map((iso) => {
+        const m = SUPPORTED.includes(iso) ? null : emberAreaForGrid(iso);
+        return m ? fetchEmberMonthly(callAPI, m.area, m.wider ? { area_note: m.wider } : {}) : Promise.resolve(null);
+      }));
+      let _emberAttribution = null;
+      valid.forEach((iso, i) => {
+        const e = _emberRows[i];
+        if (!e || !comparison[iso] || typeof comparison[iso] !== 'object') return;
+        comparison[iso] = { ...comparison[iso], ember_monthly: e };
+        _emberAttribution = _emberAttribution || e.attribution;
+      });
       // Owner 2026-11-16 (Note K item 7A), mcp#1476 follow-up: the iso-comparison read above carries
       // the caller's forwarded tier, so below the backend's paid plans its aggregates arrive null and
       // the free trim had no figure to band (live 06:15Z: no bands). Where a US row withholds a band
@@ -34269,6 +34284,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      if (_emberAttribution) {
+        out.source = out.source + ' + Ember Monthly Electricity Data (CC-BY-4.0, ember_monthly rows)';
+        out.ember_attribution = _emberAttribution;
+      }
       const _bandsLine = _bandsSummary(comparison);
       if (_bandsLine) out.bands_summary = _bandsLine;
       // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
@@ -34606,7 +34625,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
   // international operating + planned/UC asset set the US-federal feeds don't cover.
-  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
+  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
     { country: S.describe('Country/area name to filter, e.g. Germany, India, Brazil, Japan'),
       fuel: S.describe('Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal'),
       status: S.describe('Status substring filter, e.g. operating, construction, pre-construction, announced'),
@@ -34622,7 +34641,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       else if (a && a.status) q.status = a.status;
       if (a && a.bbox) q.bbox = a.bbox;
       if (a && a.min_mw) q.min_mw = a.min_mw;
-      const d = await callAPI('/api/v1/global-power', q);
+      // 2026-11-18 (be#8978): Ember's monthly electricity data for the named country rides
+      // beside the GEM plant summary. Read in parallel, fail soft: a 404 (flag off, route not
+      // deployed, no such area) or any error leaves the GEM answer exactly as before.
+      const [d, ember] = await Promise.all([
+        callAPI('/api/v1/global-power', q),
+        (a && a.country) ? fetchEmberMonthly(callAPI, a.country) : Promise.resolve(null),
+      ]);
       const units = (d && d.units) || [];
       const byFuel = {}, byStatus = {}; let totalMw = 0;
       for (const u of units) {
@@ -34641,6 +34666,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — GEM Global Integrated Power Tracker (CC-BY, dchub.cloud)',
         largest_units: top,
       };
+      if (ember) {
+        out.electricity_monthly = ember;
+        out.source = out.source + '; electricity_monthly: Ember Monthly Electricity Data (CC-BY-4.0)';
+        out.ember_attribution = ember.attribution;
+      }
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       if (_ig && _ig.length) { out._params_not_applied = _ig; out._params_note = 'min_mw filters on unit capacity, which this tier does not read; it was not applied.'; }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
