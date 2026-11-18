@@ -26,7 +26,7 @@ describe('README opening', () => {
     expect(dcpiPara).toContain('https://dchub.cloud/dcpi');
   });
   it('the third paragraph teases new capacity listings, unnamed and without figures or dates', () => {
-    expect(paras[2]).toBe('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
+    expect(paras[2]).toBe('New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
     expect(paras[2]).not.toMatch(/\$/);
     expect(paras[2]).not.toMatch(/\bMW\b/);
   });

@@ -52,7 +52,7 @@ describe('README: the opening describes, it does not instruct', () => {
   const teaser = paras[2] ?? '';
   const description = paras[3] ?? '';
   const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.';
-  const CAPACITY_TEASER = 'New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
+  const CAPACITY_TEASER = 'New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 
   it('the opener is the orchestration lead, then DCPI, then the capacity teaser, then the description', () => {
     expect(lead).toBe(LEAD);
@@ -185,7 +185,7 @@ describe('README: no section gives an AI agent orders (owner 2026-10-14)', () =>
     // colon, so the second clause opens with "query". Allow only that known clause.
     const leftover = agentOrders(md).filter((x) => !/order: query them with source_capacity, or browse URL\.?$/.test(x));
     expect(leftover).toEqual([]);
-    expect(md).toContain('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
+    expect(md).toContain('New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
   });
 
   it('the without-MCP section keeps the facts and addresses no one', () => {
