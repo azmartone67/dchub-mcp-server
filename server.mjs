@@ -233,6 +233,7 @@ import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT } from './lib/continuity-ask.mjs';
+import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -13284,8 +13285,37 @@ async function _keyStandingFull(apiKey) {
   _nudgeStandingCache.set(apiKey, { at: now, body });
   return body;
 }
+// Keyless returning caller (owner 2026-11-17): the same continuity line, once per IP per 7 days, for a
+// caller with no key whose IP was here on an earlier UTC day (lib/keyless-return-ask.mjs). The backend read
+// is cached per IP and never awaited: a miss starts it in the background and skips the ask this time.
+// Kill switch DCHUB_KEYLESS_RETURN_ASK=0 (default on).
+const _KEYLESS_ONCE = _createOncePerWeek();
+async function _anonReturningLookup(ip) {
+  const r = await fetch(new URL('/api/v1/mcp/anon-returning', API_BASE).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+    body: JSON.stringify({ ip }), signal: AbortSignal.timeout(2500),
+  });
+  if (!r.ok) return false;
+  const j = await r.json();
+  return !!(j && j.returning === true);
+}
+let _keylessReturning = _createReturningCache({ lookup: (ip) => _anonReturningLookup(ip) });
+function _keylessReturnStep(result, name, c, env) {
+  if (result && (_isFailureEnvelope(result) || _OWN_TELL_TOOLS.has(name) || _retHasTellLine(result))) return result;
+  return _keylessReturnAsk(result, { c, env, cache: _keylessReturning, once: _KEYLESS_ONCE,
+    // the keyed ask's own caller filters (directory profiles, bots, our own traffic), minus "has a key"
+    eligible: (cc) => !_isCleanPlatform() && _retNudgeEligible({ ...cc, api_key: 'keyless' },
+      { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE], isBot: isBotOrInternalCtx }),
+    isWall: (res) => !!(res.structuredContent && typeof res.structuredContent === 'object'
+      && !Array.isArray(res.structuredContent) && _isRelayWall(res.structuredContent, c)) });
+}
+export function _setKeylessReturnLookupForTest(lookup) {
+  _keylessReturning = _createReturningCache({ lookup }); _KEYLESS_ONCE.clear();
+}
 export async function _returnNudgeStep(result, name, env = process.env) {
   try {
+    const kc = getCtx() || {};
+    if (!kc.api_key) return _keylessReturnStep(result, name, kc, env);   // keyless: never reaches the keyed ask
     if (!_retNudgeEnabled(env)) return result;               // flag off: the same object, untouched
     if (!result || result.isError || !Array.isArray(result.content)) return result;
     if (_isFailureEnvelope(result)) return result;           // an upstream failure is not a welcome
@@ -13498,7 +13528,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
 export function _clearNudgeDayForTest() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }   // a later UTC day, same week
-export function _resetReturnNudgeState() { _CONTINUITY_ONCE.clear(); _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
+export function _resetReturnNudgeState() { _CONTINUITY_ONCE.clear(); _KEYLESS_ONCE.clear(); _keylessReturning.clear(); _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
