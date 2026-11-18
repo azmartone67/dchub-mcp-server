@@ -44,7 +44,10 @@ describe('get_energy_prices text matches the served payload', () => {
     }
     expect(desc).toMatch(/served to every caller/);
     // The backend decides which ISOs; the text names only the two whose terms are clear.
-    expect(desc).toMatch(/for ERCOT and CAISO where their terms allow/);
+    // be#8996: only ERCOT serves by default (CAISO's API terms grant no rights in CAISO Data).
+    expect(desc).toMatch(/for ERCOT, plus other ISOs only where their terms allow/);
+    expect(desc).not.toMatch(/CAISO where|TH_NP15/);
+    expect(desc).toMatch(/an unknown hub is an error that lists hubs_available/);
     expect(src).toMatch(/hub: S\.describe\('Optional ISO pricing hub for wholesale_lmp/);
     for (const f of ['wholesale_lmp: _oObj(', 'wholesale_lmp_withheld: _oObj(', "lmp_usd_mwh: _oNum('Real-time hub LMP, USD/MWh')"]) {
       expect(schema, f).toContain(f);

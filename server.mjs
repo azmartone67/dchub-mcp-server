@@ -7648,7 +7648,9 @@ function cacheKey(api_key, result) {
 // `balancing_authorities_in_data`; they were dropped here, so an agent saw only "unknown region_iso 'WECC'"
 // (Grok 2026-10-06, direct GET had them). An ALLOWLIST, never the whole body: a 4xx body can carry fields that
 // are not meant for the caller. 4xx only (a 5xx body is not guidance), and bounded.
-const _UPSTREAM_GUIDANCE_KEYS = ['note', 'known', 'also_accepted', 'ignored', 'balancing_authorities_in_data'];
+const _UPSTREAM_GUIDANCE_KEYS = ['note', 'known', 'also_accepted', 'ignored', 'balancing_authorities_in_data',
+  // get_energy_prices' unknown-hub 400 (dchub-backend /api/v1/energy/summary): the hub asked for and the hubs that exist.
+  'requested_hub', 'hubs_available'];
 function _guidanceValue(v) {
   if (typeof v === 'string') return v.length <= 600 ? v : v.slice(0, 600);
   if (Array.isArray(v)) {
@@ -16146,6 +16148,26 @@ const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi
 // for an ISO whose terms bar reuse, and markLockedRowFields marks those rows. The depth gate
 // (_DEPTH_ID_KEYS) still holds every other tool's queue identifiers, and this tool's other ids.
 const _OPEN_ID_KEYS_BY_TOOL = { get_refined_queue: new Set(['project_name', 'queue_id']) };
+// get_energy_prices: dchub-backend answers an unknown hub on a served ISO with HTTP 400
+// {error, requested_hub, iso, hubs_available}. callAPI folds that into {error: 'API 400', detail,
+// requested_hub, hubs_available} (_UPSTREAM_GUIDANCE_KEYS); this turns it into one readable error
+// the agent can act on. Anything else passes through as it came. Pure.
+export function _energyHubError(d, a) {
+  const hub = a && typeof a.hub === 'string' ? a.hub.trim() : '';
+  if (!hub || !d || typeof d !== 'object' || Array.isArray(d) || d.error !== 'API 400') return null;
+  const hubs = Array.isArray(d.hubs_available) ? d.hubs_available : null;
+  const iso = (a && a.iso) ? String(a.iso).trim().toUpperCase() : null;
+  return {
+    error: 'unknown_hub',
+    detail: (typeof d.detail === 'string' && d.detail) || `hub "${hub}" is not a pricing hub DC Hub serves${iso ? ' for ' + iso : ''}.`,
+    requested_hub: d.requested_hub || hub,
+    iso,
+    hubs_available: hubs,
+    retry: hubs && hubs.length
+      ? `get_energy_prices${iso ? ' iso=' + iso : ''} hub=${hubs[0]} (or omit hub for the ISO's default hub)`
+      : `get_energy_prices${iso ? ' iso=' + iso : ''} with no hub (the ISO's default hub)`,
+  };
+}
 // ...except on a row from an ISO whose own terms bar republishing (dchub-backend
 // util/iso_publish_hold.py: MISO and SPP; ISO_PUBLISH_RELEASED lifts one, no code
 // change). The backend nulls those two fields below a paid plan in its REST tease
@@ -35847,12 +35869,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub for ERCOT and CAISO where their terms allow, served to every caller: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar or have not yet cleared reuse, wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or TH_NP15_GEN-APND; omit for the ISO\'s default hub); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp block is not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub for ERCOT, plus other ISOs only where their terms allow, served to every caller: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar or have not yet cleared reuse, wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp block is not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
-      hub: S.describe('Optional ISO pricing hub for wholesale_lmp, one of wholesale_lmp.hubs_available, e.g. HB_NORTH (ERCOT) or TH_NP15_GEN-APND (CAISO); omit for the ISO\'s default hub') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
+      hub: S.describe('Optional ISO pricing hub for wholesale_lmp, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON (ERCOT); omit for the ISO\'s default hub') },
+    async (a) => {
+      const d = await callAPI('/api/v1/energy/summary', a);
+      const e = _energyHubError(d, a);
+      if (e) return { isError: true, content: [{ type: 'text', text: JSON.stringify(e) }], structuredContent: e };
+      return { content: [{ type: 'text', text: JSON.stringify(d) }] };
+    });
 
   trackedTool(srv, 'get_renewable_energy', 'Use this when the user asks about renewable energy for a data center (execute_plan covers renewables plus siting): siting a renewable-powered data center, sizing a PPA, reading one US state\'s utility-scale fuel mix, or assessing RE100/24-7-CFE feasibility. Example: "What is Texas wind+solar capacity and how much utility-scale solar is operating today?" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of "solar" | "wind" | "combined" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: "EIA-860 + state RPS"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW).',
     { energy_type: S.describe('Renewable type: "solar", "wind", or "combined"; omit for all'),

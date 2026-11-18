@@ -116,7 +116,13 @@ beforeAll(async () => {
       if (p === '/api/v1/keys/auto-mint') return send({ ok: false });
       if (p === '/api/v1/mcp/trial-check') return send({ trial_used: false, prior_calls: 0 });
       if (p === '/api/v1/mcp/full-cap/consume' || p === '/api/v1/mcp/full-cap/peek') return send({ ok: false });
-      if (p === '/api/v1/energy/summary') return send(u.searchParams.get('iso') === 'PJM' ? ENERGY_PJM : ENERGY_ERCOT);
+      if (p === '/api/v1/energy/summary') {
+        // be#8996: an unknown hub on a served ISO is a 400 naming the hubs that exist.
+        if (u.searchParams.get('hub') === 'HB_NOWHERE') {
+          return send({ error: 'unknown hub for ERCOT', requested_hub: 'HB_NOWHERE', iso: 'ERCOT', hubs_available: LMP.hubs_available }, 400);
+        }
+        return send(u.searchParams.get('iso') === 'PJM' ? ENERGY_PJM : ENERGY_ERCOT);
+      }
       if (p === '/api/v1/markets/dallas/gas-pricing') return send(PRICING);
       if (p === '/api/v1/markets/dallas/gas-to-grid') return send(G2G);
       if (p === '/api/v1/interconnection-queue/refined') return send(QUEUE);
@@ -185,6 +191,26 @@ describe('get_energy_prices: wholesale_lmp reaches every caller', () => {
       expect(sc.wholesale_lmp_withheld).toEqual(ENERGY_PJM.wholesale_lmp_withheld);
     });
   }
+
+  for (const [seat, key] of SEATS) {
+    it(`${seat}: an unknown hub comes back as one readable error listing hubs_available`, async () => {
+      const { result, text } = await call('get_energy_prices', { iso: 'ERCOT', hub: 'HB_NOWHERE' }, key);
+      expect(result.isError, text.slice(0, 400)).toBe(true);
+      const e = JSON.parse(result.content[0].text);
+      expect(e.error).toBe('unknown_hub');
+      expect(e.requested_hub).toBe('HB_NOWHERE');
+      expect(e.iso).toBe('ERCOT');
+      expect(e.hubs_available).toEqual(LMP.hubs_available);
+      expect(e.detail).toBe('unknown hub for ERCOT');
+      expect(e.retry).toMatch(/hub=HB_NORTH/);
+    });
+  }
+
+  it('the hub error helper passes every other answer through', () => {
+    expect(S._energyHubError(ENERGY_ERCOT, { iso: 'ERCOT', hub: 'HB_NORTH' })).toBeNull();
+    expect(S._energyHubError({ error: 'API 400', detail: 'x' }, { iso: 'ERCOT' })).toBeNull();
+    expect(S._energyHubError({ error: 'API 503' }, { iso: 'ERCOT', hub: 'HB_NORTH' })).toBeNull();
+  });
 
   it('hub reaches /api/v1/energy/summary', async () => {
     seen.length = 0;
