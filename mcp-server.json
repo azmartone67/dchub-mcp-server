@@ -161,7 +161,7 @@
     },
     {
       "name": "get_changes",
-      "description": "Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering \"did MY sites move?\": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand \"24h\"/\"7d\" (default 24h); cache the response generated_at and pass it back next call. Answers \"what changed since I last looked\", \"anything new this week I should know about\". Try: get_changes since=7d. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering \"did MY sites move?\": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand \"24h\"/\"7d\" (default 24h); cache the response generated_at and pass it back next call. Answers \"what changed since I last looked\", \"anything new this week I should know about\". window:'1d' is the daily check-in; watchlist narrows it to your market slugs. Try: get_changes since=7d. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "get_facility_risk_delta",

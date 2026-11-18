@@ -198,7 +198,7 @@ import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bands
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { humanEmailReplyOn as _humanEmailReplyOn, applyHumanEmailReply as _applyHumanEmailReply } from './lib/human-email-reply.mjs';
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_TOOL as _CLAIM_TOOL, CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, SESSIONLESS_EMAIL_ASK_LEAD as _SESSIONLESS_EMAIL_ASK_LEAD, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -218,7 +218,9 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
-import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
+import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
+// Daily habit (owner 2026-11-17): get_changes window/watchlist, dchub://daily, the daily next_tools entry, the one-call email ask.
+import { changesParams as _dhChangesParams, changesFallbackParams as _dhChangesFallback, attachDailyNext as _dhAttachDailyNext, dailyResourceText as _dhDailyResourceText, DAILY_RESOURCE_URI, dailyClaimAgentText as _dhClaimAgentText, dailyClaimAsk as _dhClaimAsk, withClaimFollowing as _dhWithClaimFollowing, normMarketSlug as _dhSlug, holdDailyInputs as _dhHoldDailyInputs } from './lib/daily-habit.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
@@ -1136,9 +1138,10 @@ export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
     if (_realSession(c.session_id) || !_keylessEmailFirstTool(name, { wide })) return '';
     if (_pcIsGrok(c.platform) || _isCleanPlatform()) return '';
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return '';
-    return _SESSIONLESS_EMAIL_ASK_LEAD + ', and send the key it returns as the X-API-Key header. A keyed caller is '
-      + 'not subject to this anonymous limit, and an email-bound key gets ' + FREE_TIER.identified_calls_per_day
-      + ' calls a day, free. If they prefer not to give an email, call `claim_free_key` without one.';
+    // Daily habit (owner 2026-11-17, lib/daily-habit.mjs): ONE call to the claim tool with {email, market} mints the
+    // key, binds the email and follows the call's market. No allowance wording.
+    return _dhClaimAgentText(c._wallMarket) + ' A keyed caller is not subject to this anonymous limit. '
+      + 'If they prefer not to give an email, call `' + _CLAIM_TOOL + '` without one.';
   } catch (_) { return ''; }
 }
 // The keyless plan's one email ask (lib/plan-wall-sink.mjs): the same exclusions as the other email asks
@@ -4120,6 +4123,15 @@ export function _findingNudgeAllowed() {
     return !_isCleanPlatform();
   } catch (_) { return false; }
 }
+// Daily habit (owner 2026-11-17): a single-market answer (get_market_intel, get_market_dcpi_rank, get_market_context)
+// gains next_tools -> get_changes {window:'1d', watchlist:[slug]} on the same surfaces as the findings nudge. In place.
+export function _dailyNextFor(data, slug) {
+  try {
+    const m = _dhSlug(String(slug || ''));
+    if (m && data && typeof data === 'object' && !Array.isArray(data) && !data.error && _findingNudgeAllowed()) _dhAttachDailyNext(data, [m]);
+  } catch (_) { /* a hint never breaks an answer */ }
+  return data;
+}
 function _isCleanPlatform() {
   try {
     const p = (getCtx()?.platform || '').toLowerCase();
@@ -5457,7 +5469,7 @@ export function _emailEnteredEventFor(c, name, args, result) {
     if (!hit) return null;
     const tagged = _tagOwnTestTelemetry({ platform: c.platform || '' }, c);
     return _emailEnteredEventBody({ c, path: hit.path, wall: _lastWallMemo.get(c, hit.apiKey), apiKey: hit.apiKey,
-                                    isQa: _isQaCaller(c), platform: tagged.platform });
+                                    isQa: _isQaCaller(c), platform: tagged.platform, market: hit.market || '' });
   } catch (_) { return null; }
 }
 function _recordEmailEntered(c, name, args, result) {
@@ -26843,7 +26855,7 @@ function trackedTool(srv, name, description, schema, handler) {
             emailOpens: _emailOpensTool(name),
             packUrl: _packCheckoutUrl(_sidCap),
             proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidCap) : '',
-            wallKind: 'anon_hard_wall',
+            wallKind: 'anon_hard_wall', askMarket: c._wallMarket,
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
@@ -28448,7 +28460,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                                                  market: _wallAlertMarket(c),
                                                                  emailOpens: _capEmailOpens(name, trimmed),
                                                                  packUrl: _packCheckoutUrl(_sidSoft),
-                                                                 proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '' });
+                                                                 proUrl: PRO_URL ? _subCheckoutUrl(PRO_URL, _sidSoft) : '',
+                                                                 askMarket: c._wallMarket });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
@@ -28457,7 +28470,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_askS) {
               // Its own prose block: the lean step keeps it (SESSIONLESS_EMAIL_ASK_LEAD) and shrinks _upgrade to
               // machine fields, so email_ask names the call there.
-              trimmed._upgrade.email_ask = { tool: 'claim_free_key', arguments: { email: '<your human’s email>' } };
+              trimmed._upgrade.email_ask = _dhClaimAsk(c._wallMarket);
               _markEmailAsk(c, 'line');
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }, { type: 'text', text: _askS }],
                        structuredContent: trimmed };
@@ -32114,7 +32127,7 @@ export const _INSTRUCTIONS = (() => {
   // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
   return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
-    + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
+    + ' ' + DAILY_CHECKIN_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
@@ -32397,7 +32410,7 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // the tool whose description starts Use this when") is gone. The canon sentence that now opens this text says when to call
     // execute_plan, and a second, different rule beside it would contradict it; the 162 characters pay for the sentence
     // under the /mcp/grok budget (test/initialize-instructions-length). The freshness fact stays.
-    + 'Data moves daily: re-query. '
+    + 'Data moves daily: re-query. ' + DAILY_CHECKIN_LINE + ' '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
@@ -33315,6 +33328,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         _source: 'DC Hub — dchub.cloud',
         ...(_findingNext ? { next_tools: [_findingNext] } : {}),
       };
+      // Daily habit (owner 2026-11-17, lib/daily-habit.mjs): point at the daily check-in for the market(s) this
+      // plan read, after any report_finding entry. Same surfaces as that entry (not the frozen / core profiles).
+      try {
+        if (_findingNudgeAllowed()) {
+          const _mm = Array.isArray(minted.metro_slug) ? minted.metro_slug : (minted.metro_slug ? [minted.metro_slug] : []);
+          _dhAttachDailyNext(out, [_dhSlug(constraintSlug || ''), ..._mm.map((x) => _dhSlug(String(x || '')))].filter(Boolean).slice(0, 3));
+        }
+      } catch (_e) { /* a hint never breaks an answer */ }
       // A2: mint the Deal Desk Brief for the callers entitled to one. Attached
       // BEFORE the stringify so both halves of the response carry it.
       //
@@ -33482,7 +33503,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // r-rag-tooldata (2026-07-04): ?rag=1 opts this tool into backend RAG grounding
     // (cited related passages). The public market pages do NOT send it, so their hot
     // path stays embed-free; only this agent tool pays the synchronous-embed cost.
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, { rag: 1 })) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(_dailyNextFor(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, { rag: 1 }), slugify(a.market))) }] }));
 
   // r41-dcpi-rank (2026-05-25): expose DCPI verdict + composite_score
   // as a first-class tool. Lets agents ask "should I build in
@@ -33500,6 +33521,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const ordered = narrative
         ? { narrative, ...data }   // narrative first
         : data;
+      _dailyNextFor(ordered, slugify(a.market_slug));
       return { content: [{ type: 'text', text: JSON.stringify(ordered, null, 2) }] };
     });
 
@@ -34474,6 +34496,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const d = await callAPI(`/api/v1/context/market/${encodeURIComponent(slug)}`, q, { internal: true });
       const out = (d && typeof d === 'object' && !Array.isArray(d)) ? d : { data: d };
       out.source = 'DC Hub — market context pack (dchub.cloud)';
+      _dailyNextFor(out, slug);
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
@@ -35485,10 +35508,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // Turns DC Hub from a stateless lookup into agent state. get_changes wraps
   // the public delta feed (free hook); the rest wrap PRO-gated persistence /
   // monitoring endpoints (backend enforces the tier gate; listed PRO_ONLY).
-  trackedTool(srv, 'get_changes', 'Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering "did MY sites move?": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Answers "what changed since I last looked", "anything new this week I should know about". Try: get_changes since=7d.',
+  trackedTool(srv, 'get_changes', 'Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering "did MY sites move?": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Answers "what changed since I last looked", "anything new this week I should know about". window:\'1d\' is the daily check-in; watchlist narrows it to your market slugs. Try: get_changes since=7d.',
     { since: S.describe('Return changes since this ISO-8601 timestamp (YYYY-MM-DD or full datetime) or shorthand "24h"/"7d"; default 24h'),
+      window: z.enum(['1d', '7d']).optional().describe('Rolling window instead of since: "1d" is the daily check-in, "7d" the week'),
+      watchlist: z.array(z.string()).max(25).optional().describe('Market slugs to focus the changes on, e.g. ["northern-virginia","dallas"]'),
       limit: LIMIT },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
+    // Daily habit (owner 2026-11-17, lib/daily-habit.mjs): window + watchlist ride beside since. A backend that
+    // rejects window (or ignores a 7d one) is asked once more with since=<now - window>.
+    async (a) => {
+      let out = await callAPI('/api/v1/changes/since', _dhChangesParams(a));
+      const fb = _dhChangesFallback(a, out);
+      if (fb) {
+        const out2 = await callAPI('/api/v1/changes/since', fb);
+        if (out2 && typeof out2 === 'object' && !Array.isArray(out2)) out = { ...out2, window_applied_as: 'since=' + fb.since };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   // 2026-07-09: temporal risk intelligence — what CHANGED in a facility's risk
   // context. Only DCPI market-health has a real short-term series; hazard dims are
@@ -37097,9 +37132,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   trackedTool(srv, 'claim_free_key',
     'Use this when the user wants more DC Hub data center data than keyless allows, or asks for a key; no key is needed to start. DATA USE: the optional email, used to make the key recoverable and send its weekly lookup summary. DC Hub keeps it and never sells it or shares it for anyone else’s use (https://dchub.cloud/privacy). Run only when your human asks; confirm the email with them first. Mints a key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). ' + _emailBenefitText() + ' Ask the user for an email first; pass it only if they typed it. Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
-      email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave and confirmed. DC Hub keeps it and never sells or shares it") },
+      email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave and confirmed. DC Hub keeps it and never sells or shares it"),
+      market: S.describe('Optional market slug to follow with the email, e.g. northern-virginia: the same call follows its daily changes') },
     // Grok note N item 3: one durable key, and the reuse line in text + structuredContent.
-    async (a) => _withReuseKeyLine(await (async () => {
+    // Daily habit (owner 2026-11-17): `market` rides with the email; the backend mints, binds and follows in one call,
+    // and its `following` block is surfaced on the result (lib/daily-habit.mjs withClaimFollowing).
+    async (a) => { const _cf = {}; return _dhWithClaimFollowing(_withReuseKeyLine(await (async () => {
       const _via   = _claimVia();
       const _isByo = _BYO_MCP_PLATFORMS.has(_via);
       // 2026-10-25: Grok's connector opens a new session for every tool call, so
@@ -37247,8 +37285,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // Where the email came from (backend be#5836). See lib/retention.mjs emailSourceFor.
         body.email_source = _retEmailSourceFor(getCtx());
         body.consent_purpose = WEEKLY_SUMMARY_PURPOSE;   // the claim description discloses the summary
+        const _mk = _dhSlug(a.market);
+        if (_mk) body.market = _mk;   // daily habit: follow this market with the email (backend ignores it without one)
       }
       const r = await callAPIWrite('/api/v1/keys/claim', body, { wallVia: true });
+      _cf.r = r;
       const key = r && (r.api_key || r.key);
       if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
@@ -37554,7 +37595,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ..._emailRejectFields,
         },
       };
-    })()));
+    })()), _cf.r, a && a.email ? a.market : ''); });
 
   // r-bind (2026-06-18): bind_email — the anon-reachable, DISCOVERABLE tool that
   // ties an existing key to the human's email. The binding constraint is
@@ -37963,6 +38004,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   _R('instructions', INSTRUCTIONS_RESOURCE_URI, 'DC Hub full usage guide',
      'Coverage, provenance, liveness, scope and routing rules: the long form of the initialize instructions.',
      _capacityInstructions(_INSTRUCTIONS));
+  // Daily habit (owner 2026-11-17): today's DC Hub Daily, read at read time from GET /api/v1/daily
+  // (lib/daily-habit.mjs). Any failure reads as text naming the same check-in as a tool call, never a throw.
+  srv.registerResource('daily', DAILY_RESOURCE_URI,
+    { title: 'DC Hub Daily', description: 'Today\'s DC Hub Daily: what moved in the last day (markets, facilities, deals, news), dated and sourced.', mimeType: 'text/markdown' },
+    async () => ({ contents: [{ uri: DAILY_RESOURCE_URI, mimeType: 'text/markdown',
+      text: await _dhDailyResourceText((path) => callAPI(path, {})) }] }));
   _R('pack-ai-campus-power', 'dchub://packs/ai-campus-power', 'Starter pack: AI Campus Power + Interconnect',
      'The scoped 10-tool pack + 6 ready intents for the hyperscale AI-campus wave (Grok + Perplexity converged spec).',
      '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Free tier answers all six at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
@@ -40323,7 +40370,9 @@ app.post(MCP_PATHS, async (req, res) => {
           if (_cachedList) {
             // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
             const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
-            return _writeRpcResult(req, res, body.id, _pack ? _slim(_packFilter(_cachedList, _pack)) : _slim(_cachedList));
+            // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
+            const _listFor = _dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(_cachedList) : _cachedList;
+            return _writeRpcResult(req, res, body.id, _pack ? _slim(_packFilter(_listFor, _pack)) : _slim(_listFor));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {
