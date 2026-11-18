@@ -169,6 +169,9 @@ import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAG
          MCP_OAUTH_RESOURCE, MCP_OAUTH_PRM, mcpOauthChallenge as _mcpOauthChallenge,
          isMcpOauthRequest as _isMcpOauthRequest,
          mcpOauthChallengeEligible as _mcpOauthChallengeEligible } from './lib/mcp-oauth-path.mjs';
+// 2026-11-18: /mcp/gemini, /mcp/copilot, /mcp/perplexity, /mcp/cursor, /mcp/mistral serve the full /mcp
+// with an arrival source tag (lib/client-paths.mjs).
+import { CLIENT_PATHS } from './lib/client-paths.mjs';
 // G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
 // carries (header NAMES, UA, clientInfo, session behaviour) — lib/grok-ident-log.mjs.
 import { grokIdentLogActive as _grokIdentLogActive, grokSignals as _grokSignals,
@@ -4501,6 +4504,10 @@ const MCP_SOURCE_PATHS = new Map([
   //   readout (excludedFromRelayReadout). /mcp/anthropic above is unchanged: it
   //   still serves the full /mcp under 'anthropic-directory'.
   [CLAUDE_PATH, CLAUDE_SOURCE],
+  // ★ 2026-11-18 — the five client paths (lib/client-paths.mjs). Same shape as /mcp/anthropic: the full /mcp
+  //   under an arrival tag. Before this they answered GET 200 (worker description) and POST 404, the
+  //   /mcp/docker failure above.
+  ...CLIENT_PATHS,
 ]);
 
 function _normPath(req) {
