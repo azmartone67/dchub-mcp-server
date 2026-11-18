@@ -338,6 +338,7 @@ test/instructions-constraint-coverage.test.mjs
 test/instructions-selftest-pointer.test.mjs
 test/intent-answers-e2e.test.mjs
 test/intent-answers.test.mjs
+test/interconnection-queue-neso.test.mjs
 test/interconnection-queue-shape.test.mjs
 test/internal-challenge-state.test.mjs
 test/invalid-bearer.test.mjs
