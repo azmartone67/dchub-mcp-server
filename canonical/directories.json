@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Status 'offline' (2026-11-14) is a directory that listed us and took the listing down: hidden on /mcp/directories, shown as Offline on /mcp-standing. Status 'stale' (2026-11-15) is a list that still names us but is no longer maintained: hidden on /mcp/directories, shown as Stale on /mcp-standing, never counted as listed. Optional status_text (short, public) is shown beside a non-live row on /mcp-standing; note stays internal. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-15T06:30:00Z",
+  "updated_at": "2026-11-18T12:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -106,7 +106,7 @@
       "logo_url": null,
       "verified_at": "2026-10-09",
       "added_at": "2026-10-09",
-      "note": "gallery card azmartone67dchub-mcp-server; no per-extension detail page"
+      "note": "Gallery card azmartone67dchub-mcp-server; no per-extension detail page. Card still shows 2.12.29 / 92 tools (lastUpdated 2026-10-07) on 2026-11-18; geminicli.com/extensions.json Last-Modified 2026-10-16, so their daily crawl is frozen. Repo gemini-extension.json is 2.12.59. Refresh request: google-gemini/gemini-cli#30294 (ours, open); comment there, do not file a second issue."
     },
     {
       "id": "tensorblock",
@@ -201,8 +201,7 @@
       "logo_url": null,
       "verified_at": "2026-10-10",
       "added_at": "2026-10-09",
-      "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed",
-      "update_request_url": "https://github.com/cursor/community-plugins/issues/462"
+      "note": "/plugins/dc-hub is current (v2.12.59, 97 tools, config url https://dchub.cloud/mcp?via=directory&src=cursor-directory), per Grok's read 2026-11-18. Duplicate /plugins/mcp-dchub is still live, retitled 'DC Hub (older listing, see dc-hub)'. Owner approved closing community-plugins#462 on 2026-11-18; update_request_url dropped so the tracker reads Live."
     },
     {
       "id": "toolsdk",
@@ -1035,7 +1034,8 @@
       "verified_at": null,
       "added_at": "2026-10-24",
       "tracking_url": "https://github.com/archestra-ai/archestra/issues/8603",
-      "note": "catalog request issue #8603 open"
+      "note": "Issue #8603 closed as not_planned on 2026-10-29 by joeyorlando with no comment. No listing on archestra.ai/mcp-catalog. Their issue-based catalog intake appears shut (70+ similar [MCP Catalog] issues closed the same way). Do not reopen or file a new catalog issue unless they publish a new intake path. Status stays pending only because the schema has no declined/closed status; switch it if one is added.",
+      "status_text": "Catalog request closed as not planned, 29 Oct 2026"
     },
     {
       "id": "haystack-integrations",
@@ -1211,7 +1211,7 @@
       "verified_at": "2026-11-05",
       "added_at": "2026-11-05",
       "tracking_url": null,
-      "note": "Directory page titled 'DC Hub MCP Server' (Grade A / v2.12.45); confirmed in page HTML 2026-11-05"
+      "note": "Directory page 'DC Hub MCP Server'. On 2026-11-18 the page says 'Last updated 18 Nov 2026' but its version list tops out at v2.12.54 (96 tools); 2.12.55-2.12.59 not ingested. Refresh is via the owner's dashboard sign-in."
     },
     {
       "id": "composio",
@@ -1316,7 +1316,7 @@
       "verified_at": "2026-11-13",
       "tracking_url": null,
       "added_at": "2026-11-12",
-      "note": "Auto-listed, v2.12.46. Duplicate slug https://mcpnav.net/server/datacenter-power-grid-fiber/ still live at v2.12.9. Do not submit."
+      "note": "Auto-listed. Still v2.12.48 with old remotes first on 2026-11-18, though they claim a daily official-registry sync (registry 2.12.59 since 2026-11-16). Fix path: email support@mcpnav.net to re-sync; claim form only fixes description/icon. Duplicate slug https://mcpnav.net/server/datacenter-power-grid-fiber/ still live at v2.12.9. Do not submit."
     },
     {
       "id": "mcp-agents-market",
@@ -1487,7 +1487,7 @@
       "logo_url": null,
       "verified_at": "2026-11-13",
       "added_at": "2026-11-13",
-      "note": "Registry-derived; showed v2.12.25 and non-canonical remotes as of the 2026-11-13 audit."
+      "note": "Registry-derived. Still shows registry v2.12.25 and live check 2.12.27 with non-canonical remotes (/mcp/registry, /mcp/claude, /mcp/grok) on 2026-11-18; their snapshot is from 2026-10-04/05 and has not re-read the registry. No contact, form or re-sync found."
     },
     {
       "id": "vaultplane",
