@@ -201,8 +201,7 @@
       "logo_url": null,
       "verified_at": "2026-10-10",
       "added_at": "2026-10-09",
-      "note": "/plugins/dc-hub is current (v2.12.59, 97 tools, config url https://dchub.cloud/mcp?via=directory&src=cursor-directory), per Grok's read 2026-11-18. Duplicate /plugins/mcp-dchub is still live, retitled 'DC Hub (older listing, see dc-hub)'. Issue 462 stays open only to unpublish that duplicate.",
-      "update_request_url": "https://github.com/cursor/community-plugins/issues/462"
+      "note": "/plugins/dc-hub is current (v2.12.59, 97 tools, config url https://dchub.cloud/mcp?via=directory&src=cursor-directory), per Grok's read 2026-11-18. Duplicate /plugins/mcp-dchub is still live, retitled 'DC Hub (older listing, see dc-hub)'. Owner approved closing community-plugins#462 on 2026-11-18; update_request_url dropped so the tracker reads Live."
     },
     {
       "id": "toolsdk",
