@@ -14,7 +14,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const show = (p) => JSON.stringify(seq(p));
 
 describe('planner 5.36: regions and time to power', () => {
-  it('PLANNER_VERSION is 5.38', () => { expect(PLANNER_VERSION).toBe('5.38'); });
+  it('PLANNER_VERSION is 5.38 or later (5.39)', () => { expect(PLANNER_VERSION).toBe('5.39'); });
 
   it('western Pennsylvania reads PA, PJM, Pittsburgh and the region point', () => {
     for (const q of [WPA, 'how soon can I get 300 MW in western PA']) {

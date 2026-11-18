@@ -32,7 +32,7 @@ const EU_SHARES = { iso: 'EU_DE_LU', family: 'entsoe', demand_mw: null, newest_a
 const DE_SCOPE = { name: 'Germany', not_covered: 'grid headroom, interconnection queues and time-to-power' };
 
 describe('5.34: the planner version', () => {
-  it('the planner version is the current one (5.34 introduced this lead)', () => { expect(PLANNER_VERSION).toBe('5.38'); });
+  it('the planner version is the current one (5.34 introduced this lead)', () => { expect(PLANNER_VERSION).toBe('5.39'); });
 });
 
 describe('gap 2: one line per entity, never "ran N lookups" when a step returned a headline', () => {
@@ -55,9 +55,9 @@ describe('gap 2: one line per entity, never "ran N lookups" when a step returned
     expect(f[0].text).toBe('TX henry hub usd mmbtu: 3.12 $/MMBtu (DC Hub, as of 2026-11-14).');
     expect(f[0].entity).toBe('TX');
   });
-  it('a withheld headline (value null) is not a fact, and with nothing else the lookup count stays', () => {
+  it('a withheld headline (value null) is not a fact, and with nothing else the lead names the read (5.39: never a lookup count)', () => {
     const p = plan([ex(1, 'get_interconnection_queue', { iso: 'PJM' }, { taste: { headline: { name: 'queued_generation_gw', value: null, unit: 'GW' } } })]);
-    expect(planLeadText(p)).toMatch(/^DC Hub ran 1 lookup/);
+    expect(planLeadText(p)).toMatch(/^No figure this access level shows came back from get_interconnection_queue/);
   });
   it('changes: the counts the diff holds, dated', () => {
     const f = factsFromStep('get_changes', { since: '7d', generated_at: '2026-11-17T08:00:00Z', diff: { new_facilities: [1, 2, 3], new_deals: [1], dcpi_movers: [] } }, {});

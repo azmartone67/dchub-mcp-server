@@ -1,0 +1,1381 @@
+{
+ "_note": "Keyless live payloads, QA-marked probes 2026-11-18 ~04:30Z (scripts/qa-probe.mjs), link and upgrade fields removed.",
+ "canvas_us_50mw_24mo": {
+  "applied_filters": {
+   "max_months": null,
+   "region": "us",
+   "verdicts": [
+    "BUILD",
+    "CAUTION"
+   ]
+  },
+  "citation": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "CC-BY-4.0",
+   "retrieved_at": "2026-11-18T04:22:40.816Z",
+   "cite_as": "DC Hub Site Selection Canvas — dchub.cloud/site-selection (CC BY 4.0)",
+   "completeness": "partial_preview",
+   "_normalized_from": "string"
+  },
+  "constraint_coverage": {
+   "capacity_mw": {
+    "applied": false,
+    "instead": "Read excess_power_score and time_to_power_months per row and judge headroom yourself, or call get_grid_intelligence for the finalist's ISO.",
+    "reason": "The shortlist is NOT sized to this target. Ranking uses region, time-to-power, DCPI verdict and composite score. Market rows carry excess_power_score (a 0-100 index), not megawatts, so there is no MW quantity to filter against — and DC Hub will not invent a score-to-MW mapping to manufacture one.",
+    "status": "unavailable",
+    "what_it_does_affect": "Paid-tier synthesis prose only, where the figure is quoted back to describe your load."
+   },
+   "max_months": null,
+   "_max_months_withheld": true
+  },
+  "constraint_coverage_shape": "argument_disposition",
+  "inputs": {
+   "capacity_mw": 50,
+   "limit": 5,
+   "max_months": 24,
+   "region": "us",
+   "verdicts": [
+    "BUILD",
+    "CAUTION"
+   ]
+  },
+  "matched": 124,
+  "max_months_applied": false,
+  "max_months_note": "max_months was not applied: it filters on time to power, which this caller's access does not open. This answer ranks without it.",
+  "ok": true,
+  "product": "Site Selection Canvas",
+  "shortlist": [
+   {
+    "basis_note": null,
+    "composite_score": null,
+    "_composite_score_withheld": true,
+    "composite_score_band": "BUILD",
+    "constraint_score": null,
+    "_constraint_score_withheld": true,
+    "excess_power_score": null,
+    "_excess_power_score_withheld": true,
+    "iso": "ERCOT",
+    "market": "Midland–Odessa",
+    "queue_note": null,
+    "slug": "midland-tx",
+    "state": "TX",
+    "time_to_power_months": null,
+    "_time_to_power_months_withheld": true,
+    "verdict": "BUILD",
+    "verdict_reasons": [
+     {
+      "affects": "verdict",
+      "code": "EXCESS_POWER_MEETS_BUILD_FLOOR",
+      "component": "excess_power_score",
+      "message": "Excess-power score meets the 65.0 floor the BUILD band requires.",
+      "threshold": 65,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "verdict",
+      "code": "CONSTRAINT_WITHIN_BUILD_CEILING",
+      "component": "constraint_score",
+      "message": "Constraint score is within the 50.0 ceiling the BUILD band allows.",
+      "threshold": 50,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "composite_rank",
+      "code": "TIME_TO_POWER",
+      "component": "time_to_power_months",
+      "message": "Time-to-power weights the composite rank (capped at 60.0). It is NOT a verdict input: the verdict is decided by excess-power and constraint alone.",
+      "threshold": 60,
+      "unit": "months",
+      "value": null,
+      "_value_withheld": true
+     }
+    ]
+   },
+   {
+    "basis_note": null,
+    "composite_score": null,
+    "_composite_score_withheld": true,
+    "composite_score_band": "BUILD",
+    "constraint_score": null,
+    "_constraint_score_withheld": true,
+    "excess_power_score": null,
+    "_excess_power_score_withheld": true,
+    "iso": "MISO",
+    "market": "Upper Peninsula MI",
+    "queue_note": null,
+    "slug": "upper-michigan",
+    "state": "MI",
+    "time_to_power_months": null,
+    "_time_to_power_months_withheld": true,
+    "verdict": "BUILD",
+    "verdict_reasons": [
+     {
+      "affects": "verdict",
+      "code": "EXCESS_POWER_MEETS_BUILD_FLOOR",
+      "component": "excess_power_score",
+      "message": "Excess-power score meets the 65.0 floor the BUILD band requires.",
+      "threshold": 65,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "verdict",
+      "code": "CONSTRAINT_WITHIN_BUILD_CEILING",
+      "component": "constraint_score",
+      "message": "Constraint score is within the 50.0 ceiling the BUILD band allows.",
+      "threshold": 50,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "composite_rank",
+      "code": "TIME_TO_POWER",
+      "component": "time_to_power_months",
+      "message": "Time-to-power weights the composite rank (capped at 60.0). It is NOT a verdict input: the verdict is decided by excess-power and constraint alone.",
+      "threshold": 60,
+      "unit": "months",
+      "value": null,
+      "_value_withheld": true
+     }
+    ]
+   },
+   {
+    "basis_note": null,
+    "composite_score": null,
+    "_composite_score_withheld": true,
+    "composite_score_band": "BUILD",
+    "constraint_score": null,
+    "_constraint_score_withheld": true,
+    "excess_power_score": null,
+    "_excess_power_score_withheld": true,
+    "iso": "MISO",
+    "market": "Williston, ND",
+    "queue_note": null,
+    "slug": "williston-nd",
+    "state": "ND",
+    "time_to_power_months": null,
+    "_time_to_power_months_withheld": true,
+    "verdict": "BUILD",
+    "verdict_reasons": [
+     {
+      "affects": "verdict",
+      "code": "EXCESS_POWER_MEETS_BUILD_FLOOR",
+      "component": "excess_power_score",
+      "message": "Excess-power score meets the 65.0 floor the BUILD band requires.",
+      "threshold": 65,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "verdict",
+      "code": "CONSTRAINT_WITHIN_BUILD_CEILING",
+      "component": "constraint_score",
+      "message": "Constraint score is within the 50.0 ceiling the BUILD band allows.",
+      "threshold": 50,
+      "unit": "index_0_100",
+      "value": null,
+      "_value_withheld": true
+     },
+     {
+      "affects": "composite_rank",
+      "code": "TIME_TO_POWER",
+      "component": "time_to_power_months",
+      "message": "Time-to-power weights the composite rank (capped at 60.0). It is NOT a verdict input: the verdict is decided by excess-power and constraint alone.",
+      "threshold": 60,
+      "unit": "months",
+      "value": null,
+      "_value_withheld": true
+     }
+    ]
+   }
+  ],
+  "_shortlist_total_available": 5,
+  "tier": "anonymous",
+  "universe": 336,
+  "caller_tier": "anonymous",
+  "provenance": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "CC-BY-4.0",
+   "cite_as": "DC Hub, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:22:40.816Z",
+   "as_of": null,
+   "as_of_basis": "UNMEASURED — this response carries no source timestamp. `retrieved_at` is when DC Hub served it, NOT when the data was collected. Do not cite it as a data date.",
+   "basis_class": "unknown",
+   "basis_class_basis": "no backend provenance block in this response names a basis class; this server does not guess one",
+   "provenance_revision": "1.1",
+   "completeness": "partial_preview",
+   "preview": {
+    "reasons": [
+     "max_months withheld",
+     "composite_score withheld",
+     "constraint_score withheld",
+     "excess_power_score withheld",
+     "time_to_power_months withheld",
+     "value withheld",
+     "shortlist: 3 of 5 shown",
+     "decision layer locked"
+    ],
+    "withheld_fields": [
+     "max_months",
+     "composite_score",
+     "constraint_score",
+     "excess_power_score",
+     "time_to_power_months",
+     "value",
+     "shortlist"
+    ],
+    "shown": 3,
+    "total": 5,
+    "withholding_proven": true,
+    "size_trimmed": false,
+    "unlock_tool": "claim_free_key"
+   },
+   "preview_warning": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total.",
+   "tool": "site_selection_canvas",
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": null,
+    "evidence_as_of_basis": "UNMEASURED — this response carries no source timestamp. `retrieved_at` is when DC Hub served it, NOT when the data was collected. Do not cite it as a data date.",
+    "retrieved_at": "2026-11-18T04:22:40.816Z",
+    "data_basis": null,
+    "data_basis_basis": "no contract word applies: basis_class unknown; this server does not guess one",
+    "license_id": null,
+    "license_id_basis": "no single licence is stated for this response; provenance.license is the envelope default and is not a per-layer grant, so do not assume CC-BY-4.0 for any layer not listed in license_layers",
+    "license_layers": [],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "partial_preview",
+      "text": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total."
+     },
+     {
+      "code": "evidence_as_of_unmeasured",
+      "text": "This response carries no collection date; retrieved_at is when DC Hub served it, not when the data was collected."
+     }
+    ],
+    "coverage": {
+     "status": "partial_preview",
+     "shown": 3,
+     "total": 5,
+     "withheld_fields": [
+      "max_months",
+      "composite_score",
+      "constraint_score",
+      "excess_power_score",
+      "time_to_power_months",
+      "value",
+      "shortlist"
+     ],
+     "basis": null
+    },
+    "source_owner": null,
+    "source_url": null,
+    "partner_credit": null
+   }
+  }
+ },
+ "grid_pjm": {
+  "ok": true,
+  "tool": "get_grid_intelligence",
+  "iso": "PJM",
+  "iso_name": "PJM Interconnection (mid-Atlantic + Ohio Valley)",
+  "as_of": "2026-11-18T03:00:00Z",
+  "demand_period": "2026-11-18T03",
+  "provenance": {
+   "source": "EIA-930 hourly RTO/BA feed (PJM) + DC Hub grid intelligence; DC Hub Data Center Power Index (DCPI); US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE); gridstatus.io forward load, reserves and LMP",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — see https://dchub.cloud/data-sources",
+   "cite_as": "DC Hub, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:41:38.535Z",
+   "as_of": "2026-11-17T04:00:00.000Z",
+   "as_of_basis": "OLDEST of 8 source timestamps in this response — an answer is no fresher than its stalest input",
+   "as_of_range": {
+    "oldest": "2026-11-17T04:00:00.000Z",
+    "newest": "2026-11-18T03:00:00.000Z"
+   },
+   "basis_class": "unknown",
+   "basis_class_basis": "read from the backend 1.2 basis (mixed)",
+   "provenance_revision": "1.2",
+   "completeness": "partial_preview",
+   "preview": {
+    "reasons": [
+     "build_rate_pct withheld",
+     "market_count withheld",
+     "build_count withheld",
+     "queue_depth_gw withheld",
+     "demand_24h withheld",
+     "peak_mw withheld",
+     "min_mw withheld",
+     "load_factor withheld"
+    ],
+    "withheld_fields": [
+     "build_rate_pct",
+     "market_count",
+     "build_count",
+     "queue_depth_gw",
+     "demand_24h",
+     "peak_mw",
+     "min_mw",
+     "load_factor",
+     "generation_mix_mw",
+     "generation_mix_pct",
+     "capacity_auction_price_usd_mw_day",
+     "forward_load_mw"
+    ],
+    "withholding_proven": true,
+    "size_trimmed": false,
+    "unlock_tool": "bind_email"
+   },
+   "preview_warning": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total.",
+   "tool": "get_grid_intelligence",
+   "provenance_version": 1,
+   "sources": [
+    {
+     "id": "eia930",
+     "name": "EIA-930 hourly RTO/BA feed (PJM) + DC Hub grid intelligence",
+     "license": "public domain (US government)",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    {
+     "id": "dcpi",
+     "name": "DC Hub Data Center Power Index (DCPI)",
+     "license": "CC-BY-4.0 after 30 days; current values per DC Hub Terms 5.2"
+    },
+    {
+     "id": "iso_queues",
+     "name": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)"
+    },
+    {
+     "id": "gridstatus",
+     "name": "gridstatus.io forward load, reserves and LMP"
+    }
+   ],
+   "basis": "mixed",
+   "method": "Composite of 4 upstream reads for this region, each listed in sources. Per-figure basis and as_of are in fields where an upstream labelled them; a figure not listed there is unlabelled.",
+   "fields": {
+    "capacity_price_usd_mw_day": {
+     "source_id": "eia930",
+     "basis": "stated",
+     "basis_class": "cited",
+     "unit": "$/MW-day",
+     "method": "RTO clearing price of the latest Base Residual Auction as published in the ISO's auction report; dated on its source entry (sources[].as_of), the auction's results date"
+    },
+    "demand_mw": {
+     "source_id": "eia930",
+     "basis": "measured",
+     "basis_class": "measured",
+     "unit": "MW",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "generation_mix": {
+     "source_id": "eia930",
+     "basis": "measured",
+     "basis_class": "measured",
+     "unit": "MW",
+     "as_of": "2026-11-17T04:00:00Z"
+    },
+    "load_factor": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "ratio",
+     "method": "min_mw / peak_mw",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "min_mw": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "MW",
+     "method": "minimum of the settled hourly demand points in the 24h series",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "peak_mw": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "MW",
+     "method": "maximum of the settled hourly demand points in the 24h series",
+     "as_of": "2026-11-18T03:00:00Z"
+    }
+   },
+   "caveats": [
+    {
+     "code": "preliminary",
+     "text": "EIA-930 hourly values are collected as reported by the balancing authorities and published in real time, so they can be anomalous and are corrected later by EIA; DC Hub serves the latest settled hour."
+    }
+   ],
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": "2026-11-17T04:00:00.000Z",
+    "evidence_as_of_basis": "OLDEST of 8 source timestamps in this response — an answer is no fresher than its stalest input",
+    "retrieved_at": "2026-11-18T04:41:38.535Z",
+    "data_basis": null,
+    "data_basis_basis": "no contract word applies: basis_class unknown, basis mixed; this server does not guess one",
+    "license_id": "composite",
+    "license_id_basis": "this response declares 4 layer licences; none of them is a licence for the whole",
+    "license_layers": [
+     {
+      "id": "public-domain",
+      "source_id": "eia930",
+      "name": "EIA-930 hourly RTO/BA feed (PJM) + DC Hub grid intelligence",
+      "license_text": "public domain (US government)"
+     },
+     {
+      "id": "CC-BY-4.0",
+      "source_id": "dcpi",
+      "name": "DC Hub Data Center Power Index (DCPI)"
+     },
+     {
+      "id": "unstated",
+      "source_id": "iso_queues",
+      "name": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)"
+     },
+     {
+      "id": "unstated",
+      "source_id": "gridstatus",
+      "name": "gridstatus.io forward load, reserves and LMP"
+     },
+     {
+      "id": "composite",
+      "scope": "envelope"
+     }
+    ],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "preliminary",
+      "text": "EIA-930 hourly values are collected as reported by the balancing authorities and published in real time, so they can be anomalous and are corrected later by EIA; DC Hub serves the latest settled hour."
+     },
+     {
+      "code": "partial_preview",
+      "text": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total."
+     }
+    ],
+    "coverage": {
+     "status": "partial_preview",
+     "withheld_fields": [
+      "build_rate_pct",
+      "market_count",
+      "build_count",
+      "queue_depth_gw",
+      "demand_24h",
+      "peak_mw",
+      "min_mw",
+      "load_factor",
+      "generation_mix_mw",
+      "generation_mix_pct",
+      "capacity_auction_price_usd_mw_day",
+      "forward_load_mw"
+     ],
+     "basis": null
+    },
+    "source_owner": null,
+    "source_url": null,
+    "partner_credit": null,
+    "data_basis_by_field": {
+     "capacity_price_usd_mw_day": "reported",
+     "demand_mw": "measured",
+     "generation_mix": "measured",
+     "load_factor": "inferred",
+     "min_mw": "inferred",
+     "peak_mw": "inferred"
+    }
+   }
+  },
+  "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview (not the full dataset), as of 2026-11-18T03:00Z",
+  "citation": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — see https://dchub.cloud/data-sources",
+   "retrieved_at": "2026-11-18T04:41:38.535Z",
+   "cite_as": "DC Hub, dchub.cloud — PARTIAL preview (not the full dataset) (as of 2026-11-18T03:00Z)",
+   "completeness": "partial_preview",
+   "as_of": "2026-11-18T03:00:00Z"
+  },
+  "taste": {
+   "headline": {
+    "name": "demand_mw",
+    "value": 98081,
+    "unit": "MW",
+    "window": "2026-11-18T03",
+    "as_of": "2026-11-18T03:00:00Z",
+    "basis": "EIA-930 hourly demand for the period in `window` (UTC hour)"
+   },
+   "band": {
+    "constraint": null,
+    "excess_power": null,
+    "basis": "WITHHELD at this access level: DC Hub scores this ISO in the Data Center Power Index (DCPI), but its constraint and excess-power averages are not shown on a preview. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each."
+   },
+   "share": {
+    "name": "renewable_share_pct",
+    "value": 4.6,
+    "unit": "%",
+    "window": "2026-11-17T04",
+    "as_of": "2026-11-17T04:00Z",
+    "basis": "wind + solar + hydro + geothermal share of primary generation, storage excluded"
+   },
+   "source": "EIA-930 hourly RTO/BA feed (PJM) + DC Hub grid intelligence; DC Hub Data Center Power Index (DCPI); US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE); gridstatus.io forward load, reserves and LMP",
+   "cite_as": "DC Hub (dchub.cloud), as of 2026-11-18T03:00Z"
+  },
+  "withheld": [
+   {
+    "section": "dcpi_scores",
+    "count": 3
+   },
+   {
+    "section": "queue_and_time_to_power",
+    "count": 1
+   },
+   {
+    "section": "demand_history",
+    "count": 26
+   },
+   {
+    "section": "generation_mix_detail",
+    "count": 16
+   },
+   {
+    "section": "capacity",
+    "count": 2
+   },
+   {
+    "section": "related_intel",
+    "count": 4
+   }
+  ],
+  "withheld_total": 52,
+  "free_preview_only": true,
+  "_taste_note": "Preview: `taste` is the one headline this answer publishes; `withheld` lists every other section with its count. Nothing is nulled in place. This result is partial: some fields are not included at this access level. A key with a bound email gets full answers, a key without one does not.",
+  "_build_rate_pct_withheld": true,
+  "_market_count_withheld": true,
+  "_build_count_withheld": true,
+  "_queue_depth_gw_withheld": true,
+  "_demand_24h_withheld": true,
+  "_peak_mw_withheld": true,
+  "_min_mw_withheld": true,
+  "_load_factor_withheld": true,
+  "_generation_mix_mw_withheld": true,
+  "_generation_mix_pct_withheld": true,
+  "_capacity_auction_price_usd_mw_day_withheld": true,
+  "_forward_load_mw_withheld": true,
+  "_related_intel_withheld": true,
+  "preview_is_partial": true,
+  "completeness": {
+   "status": "partial",
+   "kind": "taste",
+   "withheld": [
+    "dcpi_scores",
+    "queue_and_time_to_power",
+    "demand_history",
+    "generation_mix_detail",
+    "capacity",
+    "related_intel"
+   ]
+  }
+ },
+ "grid_ercot": {
+  "ok": true,
+  "tool": "get_grid_intelligence",
+  "iso": "ERCOT",
+  "iso_name": "Electric Reliability Council of Texas",
+  "as_of": "2026-11-18T03:00:00Z",
+  "demand_period": "2026-11-18T03",
+  "provenance": {
+   "source": "EIA-930 hourly RTO/BA feed (ERCO) + DC Hub grid intelligence; DC Hub Data Center Power Index (DCPI); US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE); gridstatus.io forward load, reserves and LMP",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — see https://dchub.cloud/data-sources",
+   "cite_as": "DC Hub, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:45:38.679Z",
+   "as_of": "2026-11-18T03:00:00.000Z",
+   "as_of_basis": "OLDEST of 7 source timestamps in this response — an answer is no fresher than its stalest input",
+   "basis_class": "unknown",
+   "basis_class_basis": "read from the backend 1.2 basis (mixed)",
+   "provenance_revision": "1.2",
+   "completeness": "partial_preview",
+   "preview": {
+    "reasons": [
+     "build_rate_pct withheld",
+     "market_count withheld",
+     "build_count withheld",
+     "queue_depth_gw withheld",
+     "data_center_share_pct withheld",
+     "data_center_load withheld",
+     "demand_24h withheld",
+     "peak_mw withheld"
+    ],
+    "withheld_fields": [
+     "build_rate_pct",
+     "market_count",
+     "build_count",
+     "queue_depth_gw",
+     "data_center_share_pct",
+     "data_center_load",
+     "demand_24h",
+     "peak_mw",
+     "min_mw",
+     "load_factor",
+     "generation_mix_mw",
+     "generation_mix_pct"
+    ],
+    "withholding_proven": true,
+    "size_trimmed": false,
+    "unlock_tool": "bind_email"
+   },
+   "preview_warning": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total.",
+   "tool": "get_grid_intelligence",
+   "provenance_version": 1,
+   "sources": [
+    {
+     "id": "eia930",
+     "name": "EIA-930 hourly RTO/BA feed (ERCO) + DC Hub grid intelligence",
+     "license": "public domain (US government)",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    {
+     "id": "dcpi",
+     "name": "DC Hub Data Center Power Index (DCPI)",
+     "license": "CC-BY-4.0 after 30 days; current values per DC Hub Terms 5.2"
+    },
+    {
+     "id": "iso_queues",
+     "name": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)"
+    },
+    {
+     "id": "gridstatus",
+     "name": "gridstatus.io forward load, reserves and LMP"
+    }
+   ],
+   "basis": "mixed",
+   "method": "Composite of 4 upstream reads for this region, each listed in sources. Per-figure basis and as_of are in fields where an upstream labelled them; a figure not listed there is unlabelled.",
+   "fields": {
+    "demand_mw": {
+     "source_id": "eia930",
+     "basis": "measured",
+     "basis_class": "measured",
+     "unit": "MW",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "generation_mix": {
+     "source_id": "eia930",
+     "basis": "measured",
+     "basis_class": "measured",
+     "unit": "MW",
+     "as_of": "2026-11-18T04:15:00Z"
+    },
+    "load_factor": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "ratio",
+     "method": "min_mw / peak_mw",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "min_mw": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "MW",
+     "method": "minimum of the settled hourly demand points in the 24h series",
+     "as_of": "2026-11-18T03:00:00Z"
+    },
+    "peak_mw": {
+     "source_id": "eia930",
+     "basis": "derived",
+     "basis_class": "derived",
+     "unit": "MW",
+     "method": "maximum of the settled hourly demand points in the 24h series",
+     "as_of": "2026-11-18T03:00:00Z"
+    }
+   },
+   "caveats": [
+    {
+     "code": "preliminary",
+     "text": "EIA-930 hourly values are collected as reported by the balancing authorities and published in real time, so they can be anomalous and are corrected later by EIA; DC Hub serves the latest settled hour."
+    }
+   ],
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": "2026-11-18T03:00:00.000Z",
+    "evidence_as_of_basis": "OLDEST of 7 source timestamps in this response — an answer is no fresher than its stalest input",
+    "retrieved_at": "2026-11-18T04:45:38.679Z",
+    "data_basis": null,
+    "data_basis_basis": "no contract word applies: basis_class unknown, basis mixed; this server does not guess one",
+    "license_id": "composite",
+    "license_id_basis": "this response declares 4 layer licences; none of them is a licence for the whole",
+    "license_layers": [
+     {
+      "id": "public-domain",
+      "source_id": "eia930",
+      "name": "EIA-930 hourly RTO/BA feed (ERCO) + DC Hub grid intelligence",
+      "license_text": "public domain (US government)"
+     },
+     {
+      "id": "CC-BY-4.0",
+      "source_id": "dcpi",
+      "name": "DC Hub Data Center Power Index (DCPI)"
+     },
+     {
+      "id": "unstated",
+      "source_id": "iso_queues",
+      "name": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)"
+     },
+     {
+      "id": "unstated",
+      "source_id": "gridstatus",
+      "name": "gridstatus.io forward load, reserves and LMP"
+     },
+     {
+      "id": "composite",
+      "scope": "envelope"
+     }
+    ],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "preliminary",
+      "text": "EIA-930 hourly values are collected as reported by the balancing authorities and published in real time, so they can be anomalous and are corrected later by EIA; DC Hub serves the latest settled hour."
+     },
+     {
+      "code": "partial_preview",
+      "text": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total."
+     }
+    ],
+    "coverage": {
+     "status": "partial_preview",
+     "withheld_fields": [
+      "build_rate_pct",
+      "market_count",
+      "build_count",
+      "queue_depth_gw",
+      "data_center_share_pct",
+      "data_center_load",
+      "demand_24h",
+      "peak_mw",
+      "min_mw",
+      "load_factor",
+      "generation_mix_mw",
+      "generation_mix_pct"
+     ],
+     "basis": null
+    },
+    "source_owner": null,
+    "source_url": null,
+    "partner_credit": null,
+    "data_basis_by_field": {
+     "demand_mw": "measured",
+     "generation_mix": "measured",
+     "load_factor": "inferred",
+     "min_mw": "inferred",
+     "peak_mw": "inferred"
+    }
+   }
+  },
+  "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview (not the full dataset), as of 2026-11-18T03:00Z",
+  "citation": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — see https://dchub.cloud/data-sources",
+   "retrieved_at": "2026-11-18T04:45:38.679Z",
+   "cite_as": "DC Hub, dchub.cloud — PARTIAL preview (not the full dataset) (as of 2026-11-18T03:00Z)",
+   "completeness": "partial_preview",
+   "as_of": "2026-11-18T03:00:00Z"
+  },
+  "taste": {
+   "headline": {
+    "name": "demand_mw",
+    "value": 52574,
+    "unit": "MW",
+    "window": "2026-11-18T03",
+    "as_of": "2026-11-18T03:00:00Z",
+    "basis": "EIA-930 hourly demand for the period in `window` (UTC hour)"
+   },
+   "band": {
+    "constraint": null,
+    "excess_power": null,
+    "basis": "WITHHELD at this access level: DC Hub scores this ISO in the Data Center Power Index (DCPI), but its constraint and excess-power averages are not shown on a preview. Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each."
+   },
+   "share": {
+    "name": "renewable_share_pct",
+    "value": 38.6,
+    "unit": "%",
+    "window": "2026-11-18T04:15:00Z",
+    "as_of": "2026-11-18T04:15Z",
+    "basis": "wind + solar + hydro + geothermal share of primary generation, storage excluded"
+   },
+   "source": "EIA-930 hourly RTO/BA feed (ERCO) + DC Hub grid intelligence; DC Hub Data Center Power Index (DCPI); US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE); gridstatus.io forward load, reserves and LMP",
+   "cite_as": "DC Hub (dchub.cloud), as of 2026-11-18T03:00Z"
+  },
+  "withheld": [
+   {
+    "section": "dcpi_scores",
+    "count": 3
+   },
+   {
+    "section": "queue_and_time_to_power",
+    "count": 16
+   },
+   {
+    "section": "demand_history",
+    "count": 26
+   },
+   {
+    "section": "generation_mix_detail",
+    "count": 16
+   },
+   {
+    "section": "grid_stress",
+    "count": 1
+   },
+   {
+    "section": "capacity",
+    "count": 2
+   },
+   {
+    "section": "related_intel",
+    "count": 4
+   }
+  ],
+  "withheld_total": 68,
+  "free_preview_only": true,
+  "_taste_note": "Preview: `taste` is the one headline this answer publishes; `withheld` lists every other section with its count. Nothing is nulled in place. This result is partial: some fields are not included at this access level. A key with a bound email gets full answers, a key without one does not.",
+  "_build_rate_pct_withheld": true,
+  "_market_count_withheld": true,
+  "_build_count_withheld": true,
+  "_queue_depth_gw_withheld": true,
+  "_data_center_share_pct_withheld": true,
+  "_data_center_load_withheld": true,
+  "_demand_24h_withheld": true,
+  "_peak_mw_withheld": true,
+  "_min_mw_withheld": true,
+  "_load_factor_withheld": true,
+  "_generation_mix_mw_withheld": true,
+  "_generation_mix_pct_withheld": true,
+  "_operating_reserve_mw_withheld": true,
+  "_forward_load_mw_withheld": true,
+  "_committed_capacity_mw_withheld": true,
+  "_related_intel_withheld": true,
+  "preview_is_partial": true,
+  "completeness": {
+   "status": "partial",
+   "kind": "taste",
+   "withheld": [
+    "dcpi_scores",
+    "queue_and_time_to_power",
+    "demand_history",
+    "generation_mix_detail",
+    "grid_stress",
+    "capacity",
+    "related_intel"
+   ]
+  }
+ },
+ "queue_ercot": {
+  "ok": true,
+  "tool": "get_interconnection_queue",
+  "iso": "ERCOT",
+  "as_of": "2026-11-17",
+  "queue_basis": "large_load",
+  "queued_generation_gw_basis_note": "ERCOT's published active generation interconnection requests (ERCOT's own report: the GIS Summary or the Monthly Operational Overview, named in queued_generation_gw_source); separate from the large-load queue",
+  "last_refreshed": "2026-11-17T06:03:39.923279+00:00",
+  "refresh_cadence": "monthly",
+  "v": "published",
+  "provenance": {
+   "source": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — not relicensed by DC Hub; see provenance.attribution for each ISO's terms",
+   "cite_as": "DC Hub, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:45:37.236Z",
+   "as_of": "2026-10-31",
+   "as_of_basis": "OLDEST report date among the rows served: an answer is no fresher than its stalest input",
+   "as_of_range": {
+    "oldest": "2026-10-31",
+    "newest": "2026-11-17"
+   },
+   "basis_class": "published",
+   "basis_class_basis": "read from the backend provenance block",
+   "provenance_revision": "1.1",
+   "completeness": "partial_preview",
+   "preview": {
+    "reasons": [
+     "projects withheld",
+     "queued_load_data_center_gw withheld",
+     "queued_load_dc_share_pct withheld",
+     "large_load withheld",
+     "queued_large_load_gw withheld",
+     "top_subregions withheld",
+     "preview_is_partial flag set",
+     "unlock offer present"
+    ],
+    "withheld_fields": [
+     "projects",
+     "queued_load_data_center_gw",
+     "queued_load_dc_share_pct",
+     "large_load",
+     "queued_large_load_gw",
+     "top_subregions"
+    ],
+    "withholding_proven": true,
+    "size_trimmed": false,
+    "unlock_tool": "bind_email"
+   },
+   "preview_warning": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total.",
+   "tool": "get_interconnection_queue",
+   "attribution": "Interconnection-queue rows are each ISO's own published data, not relicensed by DC Hub; use them under each publisher's terms: ERCOT: ERCOT, Generation Interconnection Status Report (reuse allowed with credit and the publisher's notices kept; https://www.ercot.com/help/terms). DC Hub's own derived fields (for example estimated_ttp_months, fuel_class, coordinates and row sums) are CC-BY-4.0.",
+   "default_v": "published",
+   "fallback_url": "https://dchub.cloud",
+   "fetched_at": "2026-11-17T06:03:39.923279+00:00",
+   "method": "published ISO queue disclosures, ingested per-ISO; per-record v: published = the ISO's own figure, inferred = DC Hub derivation",
+   "provenance_version": 1,
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": "2026-10-31",
+    "evidence_as_of_basis": "OLDEST report date among the rows served: an answer is no fresher than its stalest input",
+    "retrieved_at": "2026-11-18T04:45:37.236Z",
+    "data_basis": "reported",
+    "data_basis_basis": "read from the backend-stated basis_class published",
+    "license_id": "composite",
+    "license_id_basis": "the envelope names a licence other than the default grant",
+    "license_layers": [
+     {
+      "id": "composite",
+      "scope": "envelope"
+     }
+    ],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "partial_preview",
+      "text": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total."
+     }
+    ],
+    "coverage": {
+     "status": "partial_preview",
+     "withheld_fields": [
+      "projects",
+      "queued_load_data_center_gw",
+      "queued_load_dc_share_pct",
+      "large_load",
+      "queued_large_load_gw",
+      "top_subregions"
+     ],
+     "basis": null
+    },
+    "source_owner": null,
+    "source_url": null,
+    "partner_credit": null
+   }
+  },
+  "taste": {
+   "headline": {
+    "name": "queued_generation_gw",
+    "value": 461.4,
+    "unit": "GW",
+    "window": "generation interconnection queue (requested generation; not load)",
+    "as_of": "2026-10-31",
+    "as_of_label": "as of Oct 2026 (ERCOT monthly)"
+   },
+   "project_count": {
+    "value": 1766,
+    "basis": "active projects DC Hub tracks in this ISO queue"
+   },
+   "band": null,
+   "band_basis": "UNMEASURED - this tool publishes no ISO band; the DCPI constraint band is on get_grid_intelligence.",
+   "source": {
+    "name": "ERCOT large-load queue (Senate presentation Jul 29 2026; June 19 LLWG) + generation queue (Oct 31 2026)",
+    "url": "https://www.ercot.com/files/docs/2026/06/18/June-19-LLWG-Report.pptx",
+    "as_of": "2026-10-31",
+    "report": "ERCOT GIS Report, October 2026 (posted 2026-11-02), Summary sheet (generation queue); ERCOT Senate presentation Jul 29 2026, June 2026 data (large load)"
+   },
+   "cite_as": "DC Hub, dchub.cloud"
+  },
+  "withheld": [
+   {
+    "section": "projects",
+    "count": 25
+   },
+   {
+    "section": "load_queue",
+    "count": 7
+   },
+   {
+    "section": "top_subregions",
+    "count": 1
+   }
+  ],
+  "withheld_total": 33,
+  "free_preview_only": true,
+  "_taste_note": "Preview: `taste` is the one headline this answer publishes; `withheld` lists every other section with its count. Nothing is nulled in place. This result is partial: some fields are not included at this access level. A key with a bound email gets full answers, a key without one does not.",
+  "_projects_withheld": true,
+  "_queued_load_data_center_gw_withheld": true,
+  "_queued_load_dc_share_pct_withheld": true,
+  "_large_load_withheld": true,
+  "_queued_large_load_gw_withheld": true,
+  "_top_subregions_withheld": true,
+  "preview_is_partial": true,
+  "completeness": {
+   "status": "partial",
+   "kind": "taste",
+   "withheld": [
+    "projects",
+    "load_queue",
+    "top_subregions"
+   ]
+  },
+  "citation": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "Mixed — not relicensed by DC Hub; see provenance.attribution for each ISO's terms",
+   "retrieved_at": "2026-11-18T04:45:37.236Z",
+   "cite_as": "DC Hub, dchub.cloud — PARTIAL preview (not the full dataset) (as of 2026-10-31)",
+   "completeness": "partial_preview",
+   "as_of": "2026-10-31"
+  }
+ },
+ "energy_va": {
+  "ok": true,
+  "tool": "get_energy_prices",
+  "filter": {
+   "iso": null,
+   "sector": "all",
+   "state": "VA"
+  },
+  "scope": "state",
+  "caller_tier": "anonymous",
+  "averaging_period": "2026",
+  "as_of": "2026-08-31",
+  "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+  "provenance": {
+   "source": "U.S. Energy Information Administration (EIA), retail sales of electricity",
+   "url": "https://dchub.cloud",
+   "license": "Public domain (U.S. government work)",
+   "cite_as": "DC Hub, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:41:38.884Z",
+   "as_of": "2026-08-31",
+   "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+   "basis_class": "measured",
+   "basis_class_basis": "read from the backend provenance block",
+   "provenance_revision": "1.1",
+   "completeness": "partial_preview",
+   "preview": {
+    "reasons": [
+     "min_cents_kwh withheld",
+     "max_cents_kwh withheld",
+     "industrial_rate_kwh withheld",
+     "retail_rate_kwh withheld",
+     "states_covered withheld",
+     "natural_gas_usd_mmbtu withheld",
+     "preview_is_partial flag set",
+     "unlock offer present"
+    ],
+    "withheld_fields": [
+     "min_cents_kwh",
+     "max_cents_kwh",
+     "industrial_rate_kwh",
+     "retail_rate_kwh",
+     "states_covered",
+     "natural_gas_usd_mmbtu"
+    ],
+    "withholding_proven": true,
+    "size_trimmed": false,
+    "unlock_tool": "unlock_more_data"
+   },
+   "preview_warning": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total.",
+   "tool": "get_energy_prices",
+   "averaging_period": "2026",
+   "data_through_month": "2026-08",
+   "method": "mean of EIA state retail rates (cents/kWh) over the filter's states (state), latest period only",
+   "refreshed_at": "2026-11-17T06:35:59.226538",
+   "source_url": "https://www.eia.gov/opendata/browser/electricity/retail-sales",
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": "2026-08-31",
+    "evidence_as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+    "retrieved_at": "2026-11-18T04:41:38.884Z",
+    "data_basis": "measured",
+    "data_basis_basis": "read from the backend-stated basis_class measured",
+    "license_id": "public-domain",
+    "license_id_basis": "the envelope names a licence other than the default grant",
+    "license_layers": [
+     {
+      "id": "public-domain",
+      "scope": "envelope"
+     }
+    ],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "partial_preview",
+      "text": "PARTIAL RESPONSE — data was withheld by tier gating. Do not present this as a complete dataset; say what was shown out of what total."
+     }
+    ],
+    "coverage": {
+     "status": "partial_preview",
+     "withheld_fields": [
+      "min_cents_kwh",
+      "max_cents_kwh",
+      "industrial_rate_kwh",
+      "retail_rate_kwh",
+      "states_covered",
+      "natural_gas_usd_mmbtu"
+     ],
+     "basis": null
+    },
+    "source_owner": "U.S. Energy Information Administration (EIA), retail sales of electricity",
+    "source_url": "https://www.eia.gov/opendata/browser/electricity/retail-sales",
+    "partner_credit": null
+   }
+  },
+  "_gated": true,
+  "taste": {
+   "headline": {
+    "name": "retail_rate_cents_kwh",
+    "value": 10.63,
+    "unit": "cents/kWh",
+    "sector": "all-sector average",
+    "window": "2026",
+    "averaging_period": "2026",
+    "as_of": "2026-08-31",
+    "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+    "basis": "EIA retail rate for the period in `window`"
+   },
+   "band": null,
+   "source": "EIA retail electricity rates (eia.gov)",
+   "source_url": "https://www.eia.gov/opendata/browser/electricity/retail-sales",
+   "cite_as": "DC Hub (dchub.cloud), as of 2026-08-31"
+  },
+  "withheld": [
+   {
+    "section": "rate_range",
+    "count": 2
+   },
+   {
+    "section": "other_sectors",
+    "count": 2
+   },
+   {
+    "section": "iso_footprint",
+    "count": 1
+   },
+   {
+    "section": "wholesale_and_gas",
+    "count": 1
+   }
+  ],
+  "withheld_total": 6,
+  "free_preview_only": false,
+  "_taste_note": "Preview: `taste` is the one rate this answer publishes; `withheld` lists the rest with counts. Nothing is nulled in place. This result is partial: some fields are not included at this access level.",
+  "_min_cents_kwh_withheld": true,
+  "_max_cents_kwh_withheld": true,
+  "_industrial_rate_kwh_withheld": true,
+  "_retail_rate_kwh_withheld": true,
+  "_states_covered_withheld": true,
+  "_natural_gas_usd_mmbtu_withheld": true,
+  "preview_is_partial": true,
+  "completeness": {
+   "status": "partial",
+   "kind": "taste",
+   "withheld": [
+    "rate_range",
+    "other_sectors",
+    "iso_footprint",
+    "wholesale_and_gas"
+   ]
+  },
+  "citation": {
+   "source": "DC Hub",
+   "url": "https://dchub.cloud",
+   "license": "Public domain (U.S. government work)",
+   "retrieved_at": "2026-11-18T04:41:38.884Z",
+   "cite_as": "DC Hub, dchub.cloud — PARTIAL preview (not the full dataset) (as of 2026-08-31)",
+   "completeness": "partial_preview",
+   "as_of": "2026-08-31"
+  }
+ },
+ "capacity_50mw_na": {
+  "caller_tier": "anonymous",
+  "can_see_pocket": false,
+  "citation": {
+   "source": "DC Hub Capacity Source",
+   "url": "https://dchub.cloud/listings",
+   "license": "CC-BY-4.0",
+   "retrieved_at": "2026-11-18T04:45:39.421Z",
+   "cite_as": "DC Hub Capacity Source, dchub.cloud",
+   "completeness": "unknown",
+   "license_url": "https://dchub.cloud/data-sources",
+   "redistribution": "permitted_with_attribution"
+  },
+  "count": 0,
+  "empty_reason": {
+   "code": "no_live_listings",
+   "message": "Capacity Source has no live listings yet: the first providers are being onboarded. The introduction terms do not hide listings: every caller sees every live listing's teaser, and accepting the terms opens a listing's specs.",
+   "register_interest": {
+    "mcp_tool": "request_capacity_intro",
+    "method": "POST",
+    "path": "/api/v1/listings/interest"
+   }
+  },
+  "filters": {
+   "min_mw": 50,
+   "regions": [
+    "north_america"
+   ]
+  },
+  "items": [],
+  "ok": true,
+  "pocket_locked_count": 0,
+  "program": {
+   "headline": "New data center capacity listings are coming soon",
+   "how_it_works": [
+    "Search listings by size (kW or MW) and location — region, country, state or market — and see when each was last updated, without an account.",
+    "Sign in with a free account, or connect an identified AI agent, and accept the introduction terms once to see a listing's specs.",
+    "Register for a listing. DC Hub checks the request, then sends the provider your company name and requirement; when the provider accepts, DC Hub shares the site details and contacts with both sides."
+   ],
+   "name": "DC Hub Capacity Source",
+   "note": "The first listings are being onboarded. Register a requirement to get first access when they open.",
+   "register_interest": {
+    "mcp_tool": "request_capacity_intro",
+    "method": "POST",
+    "path": "/api/v1/listings/interest"
+   },
+   "sellers": {
+    "disclosure": "Some listings are represented by Martone Advisors, DC Hub's affiliated advisory: https://dchub.cloud/listings/how-it-works#disclosure",
+    "list_free": {
+     "prefill": {
+      "example": "https://dchub.cloud/listings?company=Acme%20Power&city=Reno&state=NV&mw=20&available=2027-06&type=land#list-capacity",
+      "how": "Add what your human already told you as URL parameters before #list-capacity; the form opens filled in and they check it and submit. Leave out anything you do not know.",
+      "params": {
+       "available": "available from, YYYY-MM",
+       "city": "city",
+       "company": "company or developer name",
+       "country": "two-letter code, e.g. US",
+       "mw": "MW available, a number",
+       "state": "state or region, e.g. NV",
+       "type": "land | powered_shell | turnkey | colocation",
+       "utility": "serving utility"
+      }
+     },
+     "terms": "Free to list; a 2% service fee only if a deal closes.",
+     "url": "https://dchub.cloud/listings#list-capacity"
+    }
+   },
+   "status": "upcoming",
+   "summary": "Powered land, powered shells and turnkey capacity to buy or lease, for enterprise buyers and the AI agents that procure for them. Search by size and location; every listing shows when it was last updated. Sign in and accept the introduction terms once to see a listing's specs, then register for it: when the provider accepts, DC Hub shares the site details and contacts.",
+   "terms": {
+    "full_text": {
+     "method": "GET",
+     "path": "/api/v1/listings/terms"
+    },
+    "summary": "DC Hub records your registration in its lead register and sends the operator your company name and stated requirement so it can accept or decline the registration. Only if the operator accepts does DC Hub share your name, role, email and message with the operator, and the operator's identity, site details and contact with you. If it declines, neither side's contact details are shared. For 12 months you agree to pursue a listed opportunity through DC Hub rather than approaching its operator directly.",
+    "url": "https://dchub.cloud/listings#terms",
+    "version": "2026-11-11",
+    "who_sees_what": {
+     "before_operator_accepts": {
+      "buyer_sees": [
+       "listing teaser (public)",
+       "listing specs, only once signed in with the introduction terms accepted"
+      ],
+      "operator_sees": [
+       "buyer company name",
+       "stated requirement"
+      ]
+     },
+     "human_approval": "an agent sends a registration only after its human approves it and agrees to these terms",
+     "if_operator_accepts": {
+      "buyer_sees": [
+       "operator identity",
+       "site details",
+       "operator contact"
+      ],
+      "operator_sees": [
+       "buyer name",
+       "role",
+       "email address",
+       "message"
+      ]
+     },
+     "if_operator_declines": {
+      "buyer_sees": [
+       "no operator identity, site details or contact"
+      ],
+      "operator_sees": [
+       "nothing beyond the company name and requirement already sent"
+      ],
+      "shared": "neither side's contact details"
+     },
+     "licence": {
+      "confidential": [
+       "opened listing detail",
+       "matches",
+       "introductions"
+      ],
+      "confidential_redistribution": "not permitted",
+      "teaser": "public, quotable with attribution",
+      "url": "https://dchub.cloud/data-sources"
+     },
+     "through_dc_hub": "for 12 months from registration, a listed opportunity is pursued through DC Hub, not by approaching its operator directly"
+    }
+   }
+  },
+  "next_steps_note": "No live listing matches yet. Capacity Source is onboarding providers, so zero here does not mean the market has no capacity. This wall is identity, not payment. Call claim_free_key, then bind_email, then source_capacity. Bind only an email your human explicitly gives you.",
+  "listings_matching": 0,
+  "next_tool": "claim_free_key",
+  "provenance": {
+   "source": "DC Hub Capacity Source",
+   "url": "https://dchub.cloud/listings",
+   "license": "CC-BY-4.0",
+   "cite_as": "DC Hub Capacity Source, dchub.cloud",
+   "retrieved_at": "2026-11-18T04:45:39.421Z",
+   "as_of": null,
+   "as_of_basis": "UNMEASURED — this response carries no source timestamp. `retrieved_at` is when DC Hub served it, NOT when the data was collected. Do not cite it as a data date.",
+   "basis_class": "unknown",
+   "basis_class_basis": "no backend provenance block in this response names a basis class; this server does not guess one",
+   "provenance_revision": "1.1",
+   "completeness": "unknown",
+   "completeness_basis": "no gating marker in this response, and the caller tier does not by itself guarantee full depth — treat coverage as unverified.",
+   "tool": "source_capacity",
+   "license_url": "https://creativecommons.org/licenses/by/4.0/",
+   "redistribution": "permitted_with_attribution",
+   "evidence": {
+    "contract_revision": "1",
+    "evidence_as_of": null,
+    "evidence_as_of_basis": "UNMEASURED — this response carries no source timestamp. `retrieved_at` is when DC Hub served it, NOT when the data was collected. Do not cite it as a data date.",
+    "retrieved_at": "2026-11-18T04:45:39.421Z",
+    "data_basis": null,
+    "data_basis_basis": "no contract word applies: basis_class unknown; this server does not guess one",
+    "license_id": null,
+    "license_id_basis": "no single licence is stated for this response; provenance.license is the envelope default and is not a per-layer grant, so do not assume CC-BY-4.0 for any layer not listed in license_layers",
+    "license_layers": [],
+    "attribution_text": "DC Hub, dchub.cloud",
+    "limitations": [
+     {
+      "code": "coverage_unverified",
+      "text": "no gating marker in this response, and the caller tier does not by itself guarantee full depth — treat coverage as unverified."
+     },
+     {
+      "code": "evidence_as_of_unmeasured",
+      "text": "This response carries no collection date; retrieved_at is when DC Hub served it, not when the data was collected."
+     }
+    ],
+    "coverage": {
+     "status": "unknown",
+     "basis": "no gating marker in this response, and the caller tier does not by itself guarantee full depth — treat coverage as unverified."
+    },
+    "source_owner": null,
+    "source_url": null,
+    "partner_credit": null
+   }
+  },
+  "_source": "DC Hub Capacity Source — dchub.cloud",
+  "_cite": "DC Hub Capacity Source, dchub.cloud"
+ }
+}
