@@ -86,7 +86,8 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock } from './lib/keyless-first-full.mjs';
+import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -7809,6 +7810,7 @@ export { signalPaywall as _signalPaywallForTest, trackPaidHit as _trackPaidHitFo
 export const CALLER_TIER_HEADER = 'X-DCHub-Caller-Tier';
 export function _callerTierFor(c) {
   if (c && typeof c === 'object' && c.kff_full_depth === true) return KEYLESS_FIRST_FULL_STEP_TIER;   // a first-full plan's step
+  if (c && typeof c === 'object' && c.kff_email_depth === true) return 'free';   // M2.2 email_depth step: the email key's tier
   if (!c || typeof c !== 'object' || !c.api_key) return 'anonymous';
   const t = String(c.tier || 'free').trim().toLowerCase();
   return /^[a-z_]{1,32}$/.test(t) ? t : 'free';
@@ -26813,10 +26815,15 @@ function trackedTool(srv, name, description, schema, handler) {
     // one. c.tier carries it to the gate, the masks and the backend's caller-tier header; the telemetry row
     // keeps the caller's own tier (_trackTier). The plan's one charge still covers it.
     const _trackTier = tier;
+    // M2.2 (lib/first-plan-depth-test.mjs): a step of a plan in the email_depth arm is not promoted; it takes the
+    // email-bound free key's gate below ('step' seat), the depth a direct first-full call gets.
     if (_keylessFirstFullSeat(name, c) === 'step') {
-      c.kff_full_depth = true;
-      c.tier = KEYLESS_FIRST_FULL_STEP_TIER;
-      tier = c.tier;
+      if (c.kff_arm === KFF_ARM_EMAIL) c.kff_email_depth = true;
+      else {
+        c.kff_full_depth = true;
+        c.tier = KEYLESS_FIRST_FULL_STEP_TIER;
+        tier = c.tier;
+      }
     }
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
     // Returns isError=true with a friendly identification CTA. Counts the
@@ -27134,7 +27141,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
-      if (!c.api_key && c.kff_full_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+      if (!c.api_key && c.kff_full_depth !== true && c.kff_email_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall'; _limitHit(c, status);
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
@@ -27757,6 +27764,8 @@ function trackedTool(srv, name, description, schema, handler) {
           // The quota stamp (_buildQuotaHint) says this call IS the day's first full answer.
           if (_kffSeat !== 'step') c._kffServed = { tool: name, charged: _kffSeat === 'charge' };
           if (name === 'execute_plan') c._kffPlan = true;   // its steps carry the plan's token
+          // M2.2: a CHARGED first plan gets its depth-test arm (a QA observer and a step get none). Off / no salt: null.
+          if (name === 'execute_plan' && _kffSeat === 'charge') { const _arm = _firstPlanArm(c.client_ip); if (_arm) c.kff_arm = _arm; }
         }
       }
       if (_gateTier === 'free' && !c.api_key && !gate.trial_taste && gate.keyless_first_full !== true) {
@@ -29545,7 +29554,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       const _trackRow = {
         timestamp:   new Date().toISOString(),
         tool:        name,
-        params:      paramsForTrack(args, c.session_id, name),  // + _via_next_ask when this call took the last next_ask
+        params:      _withKffArm(paramsForTrack(args, c.session_id, name), c.kff_arm),  // + _via_next_ask when this call took the last next_ask; + kff_arm (M2.2)
         platform:    c.platform || 'unknown',
         client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     c.api_key || null,
@@ -35730,7 +35739,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
-      if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken();
+      if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken(Date.now(), c.kff_arm || null);
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -39827,6 +39836,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // And whether the plan is its caller's first full answer of the day (lib/keyless-first-full.mjs), the same way.
     const _planFirstFullTok = req.headers[KEYLESS_FIRST_FULL_PLAN_HEADER];
     delete req.headers[KEYLESS_FIRST_FULL_PLAN_HEADER];
+    const _planFirstFullArm = planFirstFullTokenArm(_planFirstFullTok);   // M2.2: the plan's depth-test arm, if any
     const _planFirstFull = _isLoopbackPeer(req) && consumePlanFirstFullToken(_planFirstFullTok);
     const sessionId = req.headers['mcp-session-id'];
     // [mcp-4xx] cause: a MCP-Protocol-Version later than the newest this SDK speaks got the SDK's
@@ -40925,6 +40935,7 @@ app.post(MCP_PATHS, async (req, res) => {
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
         ...(_planFirstFull ? { plan_first_full: true } : {}),   // a step of a first-full plan (lib/keyless-first-full.mjs)
+        ...(_planFirstFull && _planFirstFullArm ? { kff_arm: _planFirstFullArm } : {}),   // its depth-test arm (M2.2)
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
