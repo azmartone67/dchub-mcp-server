@@ -547,6 +547,7 @@ test/planner-538-pairs.test.mjs
 test/planner-540-power-markets.test.mjs
 test/planner-540-wholesale-context.test.mjs
 test/planner-540-xd-energy.test.mjs
+test/planner-544-deadline-market-lead.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

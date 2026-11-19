@@ -92,9 +92,11 @@ const RERUN_TOK = /pr1\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+/g;
 const rerunBody = (m, b) => {
   try { const { t, ...rest } = JSON.parse(Buffer.from(b, 'base64url').toString()); return 'RERUN.' + Buffer.from(JSON.stringify(rest)).toString('base64url'); } catch { return m; }
 };
-// What differs between two runs of the same call by design: relay tokens (session + time), timestamps, ids, timings.
+// What differs between two runs of the same call by design: relay tokens (session + time), timestamps, ids, timings,
+// and the planner version (a planner bump is not a wall change; 5.44 broke "byte for byte origin/main" on it alone).
 const norm = (r) => JSON.stringify(r)
   .replace(RERUN_TOK, rerunBody)
+  .replace(/(\\*"planner_version\\*":\\*")\d+\.\d+/g, '$1V')
   .replace(new RegExp(TOK.source + '(?:\\?[^"\\s\\\\]*)?', 'g'), 'RELAY')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
   .replace(/(\\?")(ms|elapsed_ms|duration_ms|took_ms|latency_ms)(\\?"):\d+/g, '$1$2$3:0')   // also in JSON inside a text block

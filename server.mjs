@@ -15694,6 +15694,9 @@ const _DCPI_PROSE_RULES = [
   [/\b(time[- ]to[- ]power|queue[- ]wait)(?:\s*(?:of|is|at|:))?\s*~?\s*\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?\s*(?:months?|mo)\b/gi,
     (_m, name) => `${name} withheld`],
   [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
+  // 5.44: the deadline comparison beside a market's time to power (lib/intent-answers.mjs deadlineSentence) says
+  // which side of the deadline the withheld figure falls; it goes with the figure.
+  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `Whether it meets the ${n}-month deadline asked is withheld at this access level.`],
   // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
   [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
 ];
@@ -23907,7 +23910,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.43';
+export const PLANNER_VERSION = '5.44';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -25094,7 +25097,12 @@ export function _planOneStateTtpSiting(text, d) {
     const states = Array.isArray(d.states) ? d.states : [];
     // "Dallas, TX" names its state beside the city (stateFromPlace), not in the named-states list.
     const one = states.length === 1 ? states[0] : (states.length === 0 ? (d.state || d.stateFromPlace || null) : null);
-    if (!one || !_SITING_TTP_RE.test(String(text || ''))) return false;
+    // 5.44 (Grok QA 2026-11-19): "fastest 300 MW data center site near Dallas Texas within 36 months" asks time to
+    // power by its deadline, in no _SITING_TTP_RE phrase, and fell to capacity_search (ERCOT-wide queue figure as
+    // the headline, no canvas, an unscoped retirement slice). A superlative of speed WITH a stated deadline is one.
+    const t = String(text || '');
+    const ttpAsked = _SITING_TTP_RE.test(t) || (!!(d.deadline && d.deadline.months) && _SITING_FASTER_RE.test(t));
+    if (!one || !ttpAsked) return false;
     const named = Array.isArray(d.__namedMarkets) ? d.__namedMarkets : [];
     // 5.36: a region of the state ("western Pennsylvania", "Southern Nevada": a corridor-table area of
     // 50 km or more) is a search over several places, like two named markets.
@@ -33592,6 +33600,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         : _mixAnswer || _coloAnswer || _energyAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class, place: _pl540,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
+            deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null,
+            named_markets: (_sig && Array.isArray(_sig.__namedMarkets)) ? _sig.__namedMarkets : [],
             state: (_sig && (_sig.state || _sig.stateFromPlace)) || null,
             states: (_sig && Array.isArray(_sig.states)) ? _sig.states.slice(0, _PLAN_STATE_FANOUT_CAP) : [] }, executed, fullByEntry)
           // 5.39: a cross-domain plan (capacity + grid, or a place's data centers + its power and prices) names both
