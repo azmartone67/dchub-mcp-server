@@ -128,12 +128,13 @@ describe('gap 3: every entity is read, and no slug that is not a market reaches 
 });
 
 describe('gap 5: a named campus is read by name', () => {
-  it('Stargate Abilene: facility search by name, the Abilene pipeline, the corpus, the Abilene DCPI card', () => {
+  it('Stargate Abilene: the name lookup first (pipeline + facility registry), the corpus, the Abilene DCPI card', () => {
+    // Owner note 2026-11-18 (feature 4): the lookup by name= replaced the free-text search and the market-wide pipeline.
     const p = _planQuery('Stargate Abilene campus status and capacity', {});
     expect(p.intent_class).toBe('named_campus');
-    expect(tools(p)).toEqual(['search_facilities', 'get_pipeline', 'semantic_search', 'get_market_dcpi_rank']);
-    expect(args(p, 'search_facilities')[0].query).toBe('Stargate Abilene');
-    expect(args(p, 'get_pipeline')[0]).toEqual({ market: 'abilene', state: 'TX' });
+    expect(tools(p)).toEqual(['get_pipeline', 'search_facilities', 'semantic_search', 'get_market_dcpi_rank']);
+    expect(args(p, 'search_facilities')[0]).toEqual({ name: 'Stargate Abilene' });
+    expect(args(p, 'get_pipeline')[0]).toEqual({ name: 'Stargate Abilene' });
     expect(tools(p)).not.toContain('hyperscaler_deals');
   });
   it('a size and a generic word are not a campus name', () => {
