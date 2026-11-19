@@ -23886,7 +23886,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.42';
+export const PLANNER_VERSION = '5.43';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the

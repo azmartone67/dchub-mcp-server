@@ -29,7 +29,7 @@ afterAll(async () => {
 describe('execute_plan, planner 5.27 (real server.mjs on loopback)', () => {
   it('Phoenix water + tax: get_tax_incentives state=AZ and get_water_risk location=phoenix both run', async () => {
     const o = await run('water risk and tax incentives for a data center in Phoenix');
-    expect(o.planner_version).toBe('5.42');
+    expect(o.planner_version).toBe('5.43');
     const tax = o.executed.find((e) => e.tool === 'get_tax_incentives');
     const water = o.executed.find((e) => e.tool === 'get_water_risk');
     expect(tax, steps(o)).toBeTruthy();
