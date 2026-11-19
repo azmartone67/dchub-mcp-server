@@ -274,6 +274,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, proWallLine as _proWallUserLine, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS, isNonUsMarket as _isNonUsMarket } from './lib/country-scope.mjs';
 import { parcelGpsHint as _parcelGpsHint } from './lib/parcel-gps-hint.mjs';
+import { daedalmapWildfireHint as _daedalmapWildfireHint } from './lib/daedalmap-wildfire-hint.mjs';
 import { gridReadingOf as _gridReadingOf } from './lib/plan-step-facts.mjs';
 import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generationMixAsk, generationMixSequence as _generationMixSequence,
   mixGrids as _mixGrids, buildGenerationMixAnswer as _buildGenerationMixAnswer, marketSlugGuard as _marketSlugGuardFor, marketSlugProblem as _marketSlugProblem,
@@ -33403,6 +33404,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             intent: a && a.intent, executed, isNonUsMarket: _isNonUsMarket });
         }
       } catch (_e) { _pgps = null; }
+      // DaedalMap Wildfires (owner 2026-11-19, lib/daedalmap-wildfire-hint.mjs): a plan that bound a place and already
+      // has a DC Hub climate or hazard read that returned data gets one next step naming where wildfire events and
+      // aggregates come from. Routing only: DC Hub never calls or proxies that server. Same surfaces as Parcel GPS.
+      let _dmw = null;
+      try {
+        if ((!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreHandoffOn())) {
+          _dmw = _daedalmapWildfireHint({ signals: _sig, geographyScope: sc.geography_scope || null, executed });
+        }
+      } catch (_e) { _dmw = null; }
       // 2026-11-12: a plan whose source_capacity found nothing closes on the register offer, ahead of
       // route_back and the complement (DC Hub's own path first). Every surface gets the sentence; the
       // structured field follows the answer-block gate.
@@ -33641,7 +33651,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // 5.39: a wholesale / LMP ask is told plainly what DC Hub serves instead.
           + (_wholesaleAsked(sc.intent) ? ' PRICE SCOPE — ' + _WHOLESALE_SCOPE_NOTE + ' Quote the retail rate as retail.' : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : '')
-          + (_pgps ? ' NEXT STEP — ' + _pgps.sentence : ''),
+          + (_pgps ? ' NEXT STEP — ' + _pgps.sentence : '')
+          + (_dmw ? ' NEXT STEP — ' + _dmw.sentence : ''),
         ...(_pairs ? { paired_sides: _pairs } : {}),
         ...((_capReg && _capRegisterOfferOn() && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
@@ -33652,6 +33663,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...(_rb ? { route_back: _rb.entries } : {}),
         ...(_ho ? { handoff: _ho.field } : {}),
         ...(_pgps ? { parcel_next_step: _pgps.field } : {}),
+        ...(_dmw ? { wildfire_next_step: _dmw.field } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
@@ -33764,7 +33776,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
           // Grok CLI note 2026-11-18 item 1: next_tools (the get_changes daily check-in) is the first answer's only way
           // back; compactFirstPlan does not copy it, so the day's best answer carried no return hook.
-          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'plan_id', 'paired_sides', 'next_tools']) {
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'wildfire_next_step', 'plan_id', 'paired_sides', 'next_tools']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
           // Grok live proof 2026-11-16 item 8: the description promises a replay on every envelope; the compact
