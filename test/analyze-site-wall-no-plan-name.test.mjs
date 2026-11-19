@@ -172,10 +172,9 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
       const link = sc.human_url;
       expect(link).toMatch(c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
         : /^https:\/\/dchub\.cloud\/u\/abcdef$/);
-      expect(sc.human_message).toBe('This is a preview, not the full site report. Unlock it free by email '
-        + '(a few free full site reports each month, no card): ' + link);
+      expect(sc.human_message).toBe('This is a preview, not the full site report. Get a key by email: ' + link);
       expect(sc.for_your_human.url).toBe(link);
-      expect(r.content[0].text).toContain('\n[Unlock the full site report free](' + link + ')\n');
+      expect(r.content[0].text).toContain('\n[Unlock the full site report](' + link + ')\n');
       expect(sc.copy_version).toBe('v15');
       return;
     }

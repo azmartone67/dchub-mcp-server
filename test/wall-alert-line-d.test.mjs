@@ -32,7 +32,7 @@ const UA = { 'user-agent': 'Claude-User' };
 const SHORT = 'https://dchub.cloud/u/abcdef';
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // C's first-wall line as it was before D (keyless-wall-email-first.test.mjs FIRST_LINE).
-const C_FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
+const C_FIRST_LINE = (link) => new RegExp('^Get a key by email: show your human this link → '
   + esc(link) + '\\. One email unlocks the full answer to this question\\.$');   // option A: no calls-per-day figure
 const D_LINE = (market, link) => 'Your human can get the full answer and an alert when ' + market + ' moves: ' + link;
 
@@ -129,7 +129,7 @@ describe('unit: switch, slug, display name, line', () => {
     expect(keylessCapEmailOnlyLine(SHORT, 50, 'Bad Slug')).toMatch(C_FIRST_LINE(SHORT));
     // the second wall of the day (the exit shown) never changes
     const r = keylessCapEmailResult({ name: 'find_sites', link: SHORT, exitShown: true, perDay: 50, market: 'dallas' });
-    expect(r.structuredContent.user_message).toBe('Keep going free by email → ' + SHORT);
+    expect(r.structuredContent.user_message).toBe('Get a key by email → ' + SHORT);
     const u = keylessSoftCapEmailUpgrade({ a: 1 }, { name: 'x', link: SHORT, exitShown: false, perDay: 50, market: 'dallas' });
     expect(u.user_message).toBe(D_LINE('Dallas', SHORT));
     expect(copyViolations(D_LINE('Northern Virginia', SHORT))).toEqual([]);
@@ -199,7 +199,7 @@ describe('2. switch on + a market arg', () => {
     }
     expect(copyViolations({ l: f.sc.user_message, t: f.text.split('\n')[0] })).toEqual([]);
     const s = await call('execute_plan', { intent: 'x', market: 'northern-virginia' }, { extraHdr: ip });
-    expect(s.sc.user_message).toBe('Keep going free by email → ' + SHORT);   // exit wall: unchanged copy
+    expect(s.sc.user_message).toBe('Get a key by email → ' + SHORT);   // exit wall: unchanged copy
     for (const rel of s.relays) expect(rel.fields[rel.fields.length - 1]).toBe('m-northern-virginia');
   });
   // (market_slug is covered at unit level: execute_plan's inputSchema has `market` only, and the SDK
