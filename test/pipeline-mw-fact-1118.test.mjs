@@ -41,8 +41,12 @@ describe('get_pipeline fact: live row shape', () => {
     const P = { ...PREVIEW, data: [{ ...ROW, capacity: null, confidence: 'curated' }, rep], _data_total_available: undefined,
       confidence_coverage: { curated_count: null, reported_count: null, basis: 'x' } };
     const f = factsFromStep('get_pipeline', P, { state: 'TX' });
-    expect(f[0].text).toBe(`TX data-center pipeline: 1 curated project on record; ${PIPELINE_MW_WITHHELD} for it; `
+    expect(f[0].text).toBe(`TX data-center pipeline: 1 curated project shown in this preview (the full count is withheld); ${PIPELINE_MW_WITHHELD} for it; `
       + '1 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
+  });
+  it('a preview with no total says the rows are shown, not on record (3 vs 22 in one keyless answer)', () => {
+    const f = factsFromStep('get_pipeline', { ...PREVIEW, _data_total_available: undefined }, { state: 'TX' });
+    expect(f[0].text).toBe(`TX data-center pipeline: 3 projects shown in this preview (the full count is withheld); ${PIPELINE_MW_WITHHELD} for them (DC Hub pipeline, as of 2026-11-18).`);
   });
   it('a full row with no stated size still says MW not held', () => {
     const f = factsFromStep('get_pipeline', { ...KEYED, data: [{ ...ROW, capacity: null }], pipeline: undefined }, { market: 'abilene' });
