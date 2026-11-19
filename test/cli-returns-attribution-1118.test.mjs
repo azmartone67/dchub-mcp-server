@@ -16,6 +16,8 @@ import { KEEP_KEYS } from '../lib/plan-compact.mjs';
 
 const SECRET = 'cli-returns-1118-internal-key-not-real';
 const FAKE_KEY = 'dch_live_cli_returns_1118_not_real_0000';
+const REUSED_KEY = 'dch_live_cli_returns_1118_reused_not_real_1';
+let claimReply = null;   // set by a test to stub a different /keys/claim answer
 const PLAN = { intent: 'Northern Virginia 100 MW data center: how is the market?' };
 
 let S, stub, httpServer, PORT;
@@ -28,7 +30,7 @@ beforeAll(async () => {
     stub = createServer((req, res) => {
       const p = new URL(req.url, 'http://stub').pathname;
       const send = (o) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-      if (p === '/api/v1/keys/claim') return send({ success: true, api_key: FAKE_KEY, daily_limit: 10 });
+      if (p === '/api/v1/keys/claim') return send(claimReply || { success: true, api_key: FAKE_KEY, daily_limit: 10 });
       if (p.startsWith('/api/v1/grid/intelligence/')) {
         return send({ iso: 'PJM', demand_mw: 92000, as_of: '2026-11-18T00:00:00Z', generation_mix: { NG: { mw: 40000 } } });
       }
@@ -157,5 +159,23 @@ describe('3) the key reply\'s "Full access" link is bound to the minted key', ()
     const fields = Buffer.from(m[2], 'base64url').toString().split('|');
     expect(fields[0]).toBe('developer');
     expect(fields[1]).toBe('k-' + createHash('sha256').update(FAKE_KEY).digest('hex'));
+  }, 60_000);
+
+  // Grok M1.1 (2026-11-19): when the backend dedupes the claim (reused:true) the reply returns the
+  // key the caller already holds, and the link must bind THAT key, not an empty or a fresh one.
+  it('a reused-key reply binds the reused key', async () => {
+    claimReply = { success: true, api_key: REUSED_KEY, reused: true, daily_limit: 10 };
+    try {
+      const s = await session('198.18.118.9', 'cursor');
+      const r = await s.call('get_api_key', { client_name: 'guard-reuse' });
+      expect(r.structuredContent.reused).toBe(true);
+      const text = r.content.map((b) => b.text || '').join('\n');
+      const m = /Full access: (https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]+)/.exec(text);
+      expect(m, 'a signed /go/c link follows "Full access:"').toBeTruthy();
+      const fields = Buffer.from(m[2], 'base64url').toString().split('|');
+      expect(fields[1]).toBe('k-' + createHash('sha256').update(REUSED_KEY).digest('hex'));
+    } finally {
+      claimReply = null;
+    }
   }, 60_000);
 });
