@@ -141,7 +141,8 @@ describe('grid / queue answers name source_capacity for that place', () => {
   it('an unwalled grid answer whose plain next_ask suggests another tool: next_call is still source_capacity', async () => {
     const { sc, nextCall } = await call('get_grid_intelligence', { region_id: 'ERCOT' }, { key: PRO_KEY });
     expect(sc.next_ask && sc.next_ask.free).not.toBe(true);
-    expect(sc.next_ask && sc.next_ask.tool).toBe('rank_markets');
+    // Owner 2026-11-18 (item 2, lib/agent-outreach.mjs): a grid answer for a known ISO suggests that grid's queue.
+    expect(sc.next_ask && sc.next_ask.tool).toBe('get_interconnection_queue');
     expect(nextCall).toMatchObject({ tool: 'source_capacity', arguments: { state: 'TX' },
       why: 'this answer names a grid: browse listed capacity in the same place' });
   }, 30_000);

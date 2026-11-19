@@ -226,10 +226,11 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
-import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
+import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, LAST_SESSION_LINE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
 // Daily habit (owner 2026-11-17): get_changes window/watchlist, dchub://daily, the daily next_tools entry, the one-call email ask.
 import { changesParams as _dhChangesParams, changesFallbackParams as _dhChangesFallback, attachDailyNext as _dhAttachDailyNext, dailyResourceText as _dhDailyResourceText, DAILY_RESOURCE_URI, dailyClaimAgentText as _dhClaimAgentText, dailyClaimAsk as _dhClaimAsk, withClaimFollowing as _dhWithClaimFollowing, normMarketSlug as _dhSlug, holdDailyInputs as _dhHoldDailyInputs } from './lib/daily-habit.mjs';
-import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
+import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY,
+         nextAskShownLogOn as _nextAskShownLogOn, holdTrackRow as _holdTrackRow, flushTrackRows as _flushTrackRows } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks, WALL_LINK_STATUSES as _WALL_LINK_STATUSES } from './lib/wall-link-track.mjs';
@@ -355,6 +356,9 @@ import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _r
          watchOneCallOn as _retWatchOneCallOn, WATCH_SOURCE as _RET_WATCH_SOURCE } from './lib/retention.mjs';
 import { resumeStateOn as _resumeOn, resumeDecision as _resumeDecision, appendAgentLine as _resumeAppend,
          resumeEventBody as _resumeEventBody, RESUME_TOOLS as _RESUME_TOOLS } from './lib/resume-state.mjs';
+import { sinceLastCheckOn as _sinceOn, sinceLastCheckQuery as _sinceQuery, sinceLastCheckFacts as _sinceFacts,
+         foldIntoResumeLine as _sinceFold, SINCE_FETCH_TIMEOUT_MS as _SINCE_TIMEOUT_MS,
+         changesLastSessionOn as _lastSessionOn, resolveChangesSince as _resolveChangesSince, isLastSession as _isLastSession } from './lib/since-last-check.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -13525,25 +13529,51 @@ export async function _resumeStateStep(result, name, env = process.env) {
     if (!standing || typeof standing !== 'object') return result;
     const d = _resumeDecision(standing);
     if (!d || !d.kind) return result;
-    const out = _resumeAppend(result, d.line);
+    // "Since you last asked" (owner 2026-11-18, lib/since-last-check.mjs): the market on record, read since the
+    // key's previous visit, folded into this same line as dated facts. Fail-soft and capped at 2.5 s; nothing
+    // real, no facts. Kill switch DCHUB_SINCE_LAST_CHECK=0.
+    const since = await _sinceLastCheckFor(standing, env);
+    let out = _resumeAppend(result, since && since.line ? _sinceFold(d.line, since.line) : d.line);
+    if (out !== result && since && since.line) out = _withSinceLastCheck(out, since);
     if (out !== result) {
       if (_RESUME_PENDING.size > 50000) _RESUME_PENDING.clear();
       _RESUME_PENDING.set(c.api_key, { kind: d.kind, tools: d.tools, at: Date.now() });
-      _recordResumeEvent(c, 'resume_shown', name, d.kind);
+      _recordResumeEvent(c, 'resume_shown', name, d.kind, since ? !!since.line : undefined);
     }
     return out;
   } catch (_) { return result; }
 }
-export function _resumeEventFor(c, event, name, kind) {
+// null when the lookup does not run (kill switch, no previous visit or no market on record); else the
+// lib/since-last-check.mjs decision ({line, facts, ...} or {reason}).
+async function _sinceLastCheckFor(standing, env = process.env) {
+  try {
+    if (!_sinceOn(env)) return null;
+    const q = _sinceQuery(standing);
+    if (!q) return null;
+    const body = await callAPI('/api/v1/changes/since', q.params, { timeout: _SINCE_TIMEOUT_MS });
+    return _sinceFacts(body, q.market);
+  } catch (_) { return { reason: 'unreadable' }; }
+}
+// The same facts for the agent, in structuredContent.since_last_check (no line: the text carries it once).
+function _withSinceLastCheck(result, since) {
+  try {
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    return { ...result, structuredContent: { ...sc, since_last_check: {
+      market: since.market, since: since.since, as_of: since.as_of, facts: since.facts,
+      cite_as: 'DC Hub (dchub.cloud), as of ' + since.as_of } } };
+  } catch (_) { return result; }
+}
+export function _resumeEventFor(c, event, name, kind, sinceFacts) {
   try {
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
     return _resumeEventBody({ c: c || {}, event, tool: name, kind, sessionId: _realSession((c || {}).session_id),
-                              isQa: _isQaCaller(c), platform: tagged.platform });
+                              isQa: _isQaCaller(c), platform: tagged.platform, sinceFacts });
   } catch (_) { return null; }
 }
-function _recordResumeEvent(c, event, name, kind) {
+function _recordResumeEvent(c, event, name, kind, sinceFacts) {
   try {
-    const body = _resumeEventFor(c, event, name, kind);
+    const body = _resumeEventFor(c, event, name, kind, sinceFacts);
     if (!body || !INTERNAL_KEY) return;
     fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
       method: 'POST', keepalive: true,
@@ -26164,9 +26194,10 @@ function _outreachStep(result, name, args) {
       market: (typeof c._wallMarket === 'string' && c._wallMarket) || '',
       siteFree: !c.api_key && _wfnSiteFullOn(),
     }) : result;
-    const out = stampOutreach(input, name, args, { nextAsk: !directory, citeUrl: !directory });
+    // keyed (owner 2026-11-18, item 3): a keyed caller's site answer may offer save_site (lib/agent-outreach.mjs).
+    const out = stampOutreach(input, name, args, { nextAsk: !directory, citeUrl: !directory, keyed: !!c.api_key });
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
-    if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);
+    if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool, Date.now(), ask.args);
     return out;
   } catch (_e) { return result; }
 }
@@ -26388,8 +26419,23 @@ function _sourceLineCb(name, fn) {
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
+      // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
+      _flushTrackRows(c, name, _final);
     }
   };
+}
+// The one send for a tool call's /api/v1/mcp/track row (lib/agent-outreach.mjs holdTrackRow). Held for the
+// outermost wrapper on the surfaces where the agent receives next_ask as built here; sent at once on the
+// directory / Claude / core profiles (each rebuilds or scrubs the result after this point and serves no
+// next_ask), on an execute_plan step (the plan's own call), and with DCHUB_NEXT_ASK_SHOWN_LOG=0.
+function _trackRowSend(c, payload) {
+  try {
+    const cc = c || {};
+    const hold = _nextAskShownLogOn() && !cc.loopback_step && cc.profile !== DIRECTORY_PROFILE
+      && cc.profile !== CLAUDE_PROFILE && cc.profile !== CORE_PROFILE;
+    if (hold && _holdTrackRow(cc, payload, trackToolCall)) return;
+  } catch (_) { /* fall through: send now */ }
+  trackToolCall(payload).catch(() => {});
 }
 // Note L1 + L2: the caller of this execute_plan is on a paid plan (starter or above), so it meets no wall and its
 // answer is left as it is (lib/neutral-cta.mjs). c.tier is read after the handler, so a paid lift inside the call counts.
@@ -26488,7 +26534,7 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
     // whether it showed the email ask (lib/answer-markers.mjs), for the session-ordered log.
-    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
+    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), (p) => _trackRowSend(c, p),
       _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
     // C3: the /mcp tool wrapper sends the row itself, off the result the agent receives (_finishWallRow).
     if (!deferRow) _finishWallRow(c, name, out);   // option E: after every step that can add an email ask
@@ -29435,9 +29481,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       };
       // Front desk: an execute_plan row whose call planned the one next-step line waits for _sourceLineCb, which
       // adds params._front_desk when the line went out (lib/dchub-services.mjs deferFrontDeskRow).
-      if (!parkWallTrack(c, _trackRow, trackToolCall)
-          && !(name === 'execute_plan' && c && c._frontDeskPlan && _fdDeferRow(c, _trackRow, trackToolCall))) {
-        trackToolCall(_trackRow).catch(() => {});
+      // mcp#1564 follow-up: every send goes through _trackRowSend, which holds the row until _sourceLineCb
+      // knows whether the served result carried a next_ask (params._next_ask_to).
+      const _send = (p) => _trackRowSend(c, p);
+      if (!parkWallTrack(c, _trackRow, _send)
+          && !(name === 'execute_plan' && c && c._frontDeskPlan && _fdDeferRow(c, _trackRow, _send))) {
+        _send(_trackRow);
       }
       // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs). Parked, not sent:
       // the email ask it names (option E) is marked by steps that run after this handler.
@@ -32283,7 +32332,7 @@ export const _INSTRUCTIONS = (() => {
   // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
   return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
-    + ' ' + DAILY_CHECKIN_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
+    + ' ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
@@ -32566,7 +32615,7 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // the tool whose description starts Use this when") is gone. The canon sentence that now opens this text says when to call
     // execute_plan, and a second, different rule beside it would contradict it; the 162 characters pay for the sentence
     // under the /mcp/grok budget (test/initialize-instructions-length). The freshness fact stays.
-    + 'Data moves daily: re-query. ' + DAILY_CHECKIN_LINE + ' '
+    + 'Data moves daily: re-query. ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
@@ -35727,19 +35776,34 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // Turns DC Hub from a stateless lookup into agent state. get_changes wraps
   // the public delta feed (free hook); the rest wrap PRO-gated persistence /
   // monitoring endpoints (backend enforces the tier gate; listed PRO_ONLY).
-  trackedTool(srv, 'get_changes', 'Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news, bill status changes on data-center bills (legislation_status_changes) — PLUS, for keyed callers with saved sites, a `portfolio` block answering "did MY sites move?": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Answers "what changed since I last looked", "anything new this week I should know about". window:\'1d\' is the daily check-in; watchlist narrows it to your market slugs. Try: get_changes since=7d.',
+  trackedTool(srv, 'get_changes', 'Use this when the user asks what changed in data center markets, facilities or deals since a date. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news, bill status changes on data-center bills (legislation_status_changes) — PLUS, for keyed callers with saved sites, a `portfolio` block answering "did MY sites move?": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Answers "what changed since I last looked", "anything new this week I should know about". window:\'1d\' is the daily check-in; watchlist narrows it to your market slugs. since:\'last_session\' returns what moved since your previous visit (a keyed caller\'s last session; 7d when there is none, and since_resolved says which). Try: get_changes since=7d.',
     { since: S.describe('Return changes since this ISO-8601 timestamp (YYYY-MM-DD or full datetime) or shorthand "24h"/"7d"; default 24h'),
       window: z.enum(['1d', '7d']).optional().describe('Rolling window instead of since: "1d" is the daily check-in, "7d" the week'),
       watchlist: z.array(z.string()).max(25).optional().describe('Market slugs to focus the changes on, e.g. ["northern-virginia","dallas"]'),
       limit: LIMIT },
     // Daily habit (owner 2026-11-17, lib/daily-habit.mjs): window + watchlist ride beside since. A backend that
     // rejects window (or ignores a 7d one) is asked once more with since=<now - window>.
-    async (a) => {
+    // since:"last_session" (owner 2026-11-18, lib/since-last-check.mjs): a keyed caller's previous visit
+    // (key_standing last_seen_at), 7d when none is on record or the caller has no key; since_resolved says which.
+    // Kill switch DCHUB_CHANGES_LAST_SESSION=0 passes the value through unchanged.
+    async (a0) => {
+      let a = a0;
+      let resolved = null;
+      if (_lastSessionOn()) {
+        const kc = getCtx() || {};
+        const ask = _isLastSession(a0 && a0.since);   // standing is read only for this value, never on a plain since
+        const standing = ask && kc.api_key ? await _keyStandingFull(kc.api_key).catch(() => null) : null;
+        resolved = ask ? _resolveChangesSince({ since: a0.since, keyed: !!kc.api_key, standing }) : null;
+        if (resolved) a = { ...a0, since: resolved.since };
+      }
       let out = await callAPI('/api/v1/changes/since', _dhChangesParams(a));
       const fb = _dhChangesFallback(a, out);
       if (fb) {
         const out2 = await callAPI('/api/v1/changes/since', fb);
         if (out2 && typeof out2 === 'object' && !Array.isArray(out2)) out = { ...out2, window_applied_as: 'since=' + fb.since };
+      }
+      if (resolved && out && typeof out === 'object' && !Array.isArray(out)) {
+        out = { ...out, since_resolved: { requested: 'last_session', used: resolved.since, basis: resolved.basis, note: resolved.note } };
       }
       return { content: [{ type: 'text', text: JSON.stringify(out) }] };
     });
