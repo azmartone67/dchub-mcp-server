@@ -339,6 +339,10 @@ import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _bu
   buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer } from './lib/energy-answers.mjs';
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
+import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, landSearchFirst as _landSearchFirst,
+  landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
+  LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
+import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -25356,7 +25360,14 @@ export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
           ? `The point for "${q}" came from a geocoder and stands for the market's town centre, not a parcel.`
           : `"${q}" is not a market DC Hub tracks; its point came from a geocoder and stands for the town, not a parcel.` });
     } else {
-      out.push({ query: q, resolved: false,
+      // 5.42: a step that can run without the point (a land search: find_sites state=<ST>) takes its fallback args.
+      let fellBack = 0;
+      for (const s of seq) {
+        if (!s || s.geocode !== q || !s.args_hint || !s.geocode_fallback || typeof s.geocode_fallback !== 'object') continue;
+        s.args_hint = { ...s.geocode_fallback };
+        fellBack += 1;
+      }
+      out.push({ query: q, resolved: false, ...(fellBack ? { fell_back_steps: fellBack } : {}),
         note: why || (ok ? `the geocoder placed "${q}" outside ${st} (${label}), so it was not used` : `the geocoder found no point for "${q}"`) });
     }
   }
@@ -25952,6 +25963,31 @@ export function _planQuery(intent, context) {
   try {
     const ls = top.cls.id === 'capacity_search' ? _landSiteStep(text, { ...d, state: _execIntentState(text, d) || d.state }, seq.map((x) => x.tool)) : null;
     if (ls) seq.push({ ...ls, step: seq.length + 1 });
+  } catch (_e) { /* routing must never throw */ }
+  // 5.42 (Grok LAND L2, 2026-11-18): "find land for 100 MW near Columbus" ran no find_sites (dc_power_place) or ran it
+  // last, state-wide (capacity_search). A land question with a size leads with find_sites around the place's point
+  // (60 km), else its state; the other steps follow in their order (lib/land-search.mjs).
+  try {
+    if (_LAND_FIRST_CLASSES.has(top.cls.id) && !_stateFan && !d.__stateCompare && _landSearchAsk(text, d)) {
+      let pl = null;
+      try { pl = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }); } catch (_e) { pl = null; }
+      const pt = _dcHostingPoint(d, pl);
+      const st = _execIntentState(text, d) || d.state || d.stateFromPlace || (pl && pl.state) || null;
+      // No point in the planner's tables but a named town or market: the point is geocoded at execution (B1,
+      // _planGeocodeTargets), and a miss falls back to the state search.
+      const geo = !pt && st ? _planGeocodeTargets([{ args_hint: { lat: '<site lat>', lon: '<site lon>' } }], text, d) : null;
+      const args = geo ? { lat: '<site lat>', lon: '<site lon>', radius_km: _LAND_RADIUS_KM } : _landSearchArgs(pt, st);
+      const label = (pt && pt.label) || (geo && `${geo.phrase}, ${geo.state}`) || (pl && pl.label) || null;
+      const fs = args ? _landSearchFirst(seq, args, `The land step, first: candidate SEARCH AREAS ${args.lat != null ? `within ${args.radius_km} km of ${label || 'the place'}` : `in ${args.state}`}, each anchored on a real substation with measured gas and fiber distance and its nearest market's DCPI verdict. A search area is not a parcel or land for sale; score a coordinate with analyze_site. Independent of the power reads: same wave.`) : null;
+      if (fs && label) fs.land_label = label;
+      if (fs && geo) fs.geocode_fallback = { state: st };
+    }
+  } catch (_e) { /* routing must never throw */ }
+  // 5.42 (Grok LAND L1): a site screen that names the parcel or transmission reads them (lib/site-screen-facts.mjs).
+  try {
+    if (top.cls.id === 'site_analysis' && d.coords) {
+      for (const st of _siteScreenSteps(text, d.coords, seq.map((x) => x.tool))) seq.push({ ...st, step: seq.length + 1 });
+    }
   } catch (_e) { /* routing must never throw */ }
   // 5.25: an intent that asks for alternatives gets the shortlist of other places (_alternativesStep).
   try {
@@ -32918,6 +32954,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.40: a one-place data-center + power plan reads up to six sides in one wave (market, headroom, state queue,
       // feeders, timeline, price): it runs up to 8 steps unless the caller set max_steps.
       if (sc.intent_class === 'dc_power_place' && !(parseInt(a && a.max_steps, 10) > 0)) maxSteps = _DC_POWER_PLACE_MAX_STEPS;
+      // 5.42: a land search (find_sites first) or a site screen that added the parcel / transmission reads runs up to 8
+      // steps unless the caller set max_steps, so the constraint leads after them are not cut.
+      if (!(parseInt(a && a.max_steps, 10) > 0) && (sc.recommended_sequence || []).some((x) => x && (x.land_search || x.site_screen))) {
+        maxSteps = Math.max(maxSteps, 8);
+      }
       // route_back (owner 2026-10-28): for an intent that asks for something DC Hub does not hold, name who
       // owns it, from the Works with registry. In-memory read, no network, no tool call; omitted entirely
       // when no need matches. Same surfaces as ranked_answer: no new fields on the directory profiles.
@@ -33430,7 +33471,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             ? _buildCrossDomainAnswer({ intent: sc.intent, intent_class: sc.intent_class, requested_mw: _sig && _sig.mw,
               deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl540 }, executed, fullByEntry)
             : null));
-      const _intentAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
+      const _intentAnswer0 = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _mixAnswer || _coloAnswer || _energyAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class, place: _pl540,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
@@ -33442,6 +33483,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 usMarketState: _planUsMarketState, stateScope: _planStateScope }) : null; } catch (_e) { _pl = null; }
               return _buildCrossDomainAnswer({ intent: sc.intent, intent_class: sc.intent_class, requested_mw: _sig && _sig.mw,
                 deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl }, executed, fullByEntry); })();
+      // 5.42 (Grok LAND L2): a land search leads with the areas find_sites named, or says none matched.
+      const _landStep = (sc.recommended_sequence || []).find((x) => x && x.land_search);
+      const _intentAnswer = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
+        ? _withLandLead(_intentAnswer0, _landSearchLead(executed, fullByEntry, _landStep.land_label)) : _intentAnswer0;
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
