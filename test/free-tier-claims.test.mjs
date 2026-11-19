@@ -123,7 +123,8 @@ describe("published calls/day claims", () => {
     expect(CANON.anonymous).toBeUndefined();
     expect(SNAP.allowance.anonymous.calls).toBeNull();
     // 2026-11-14: 9 after smithery.yaml dropped its pricing block and mcp-server.json the rule.
-    expect(claims().length).toBeGreaterThan(5);
+    // 2026-11-19: 5 after README's bind_email line dropped its calls/day figure (Grok item 13).
+    expect(claims().length).toBeGreaterThan(4);
   });
 
   it("the retired anonymous 5/day survives only where it is pinned as residue", () => {

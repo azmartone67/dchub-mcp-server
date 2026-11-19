@@ -17,6 +17,9 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL, CTA_KEYS, COMMERCE_KEY } from '../lib/neutral-cta.mjs';
+// Owner 2026-11-19: on the live handler the one route carries its wall tag (lib/wall-connect-tag.mjs).
+import { WALL_CONNECT_URL } from '../lib/wall-connect-tag.mjs';
+const ONE_ROUTE = new Set([CONNECT_URL, WALL_CONNECT_URL]);
 import { leanObject } from '../lib/lean-response.mjs';
 import { splitLeadingJson } from '../lib/facility-location.mjs';
 
@@ -135,11 +138,11 @@ function violations(r) {
   if (m) bad.push('banned: …' + s.slice(Math.max(0, m.index - 60), m.index + 60) + '…');
   for (const u of new Set(s.match(URL_RE) || [])) {
     const url = u.replace(/[.,;:]+$/, '');
-    if (CTA_LIKE.test(url) && url !== CONNECT_URL) bad.push('cta url: ' + url);
+    if (CTA_LIKE.test(url) && !ONE_ROUTE.has(url)) bad.push('cta url: ' + url);
   }
   const sc = r.structuredContent || {};
-  if (sc.human_url !== undefined && sc.human_url !== CONNECT_URL && !isWallRelay(sc.human_url)) bad.push('human_url: ' + sc.human_url);
-  if (sc.for_your_human && sc.for_your_human.url !== undefined && sc.for_your_human.url !== CONNECT_URL
+  if (sc.human_url !== undefined && !ONE_ROUTE.has(sc.human_url) && !isWallRelay(sc.human_url)) bad.push('human_url: ' + sc.human_url);
+  if (sc.for_your_human && sc.for_your_human.url !== undefined && !ONE_ROUTE.has(sc.for_your_human.url)
     && !isWallRelay(sc.for_your_human.url)) bad.push('for_your_human.url');
   // the relay link rides only in URL fields: no prose (a block's text outside its leading JSON) carries it
   for (const b of (r.content || [])) {
@@ -176,8 +179,9 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
     process.env.DCHUB_WALL_RELAY_URL = '0';
     try {
       const off = await plan({}, { planted: false, walled: true });
-      expect(off.structuredContent.human_url).toBe(CONNECT_URL);
-      expect(JSON.stringify(off)).not.toMatch(/via=mcp-wall/);
+      // Switched off: main's tagged /connect (lib/wall-connect-tag.mjs, owner 2026-11-19), with no relay and no &src.
+      expect(off.structuredContent.human_url).toBe(WALL_CONNECT_URL);
+      expect(JSON.stringify(off)).not.toMatch(/upgrade\/h\/|&src=/);
     } finally { delete process.env.DCHUB_WALL_RELAY_URL; }
   }, 120_000);
 

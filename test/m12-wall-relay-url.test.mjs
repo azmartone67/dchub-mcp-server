@@ -128,9 +128,10 @@ describe('M1.2 on /mcp (keyless)', () => {
     const sc = on.structuredContent;
     expect(sc.human_url).toMatch(TAGGED('get_interconnection_queue'));
     expect(sc.for_your_human.url).toBe(sc.human_url);
-    expect(off.structuredContent.human_url).toBe('https://dchub.cloud/connect');
+    // Switched off, the URL fields are main's tagged /connect (lib/wall-connect-tag.mjs, owner 2026-11-19), not the relay.
+    expect(off.structuredContent.human_url).toBe('https://dchub.cloud/connect?via=mcp-wall&wall=connect');
     expect(prose(on)).not.toMatch(TOK);   // prose never carries the relay
-    const back = JSON.parse(JSON.stringify(on).replace(WALL_RELAY, 'https://dchub.cloud/connect'));
+    const back = JSON.parse(JSON.stringify(on).replace(WALL_RELAY, 'https://dchub.cloud/connect?via=mcp-wall&wall=connect'));
     expect(same(norm(back), norm(off))).toBe(true);
     expect(prose(on).match(WORDING) || []).toEqual(prose(off).match(WORDING) || []);
   }, 120_000);
