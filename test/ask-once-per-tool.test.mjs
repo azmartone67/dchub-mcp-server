@@ -21,6 +21,8 @@ import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.m
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { FLOOR_EMAIL_LEAD, FLOOR_DIGEST_LEAD } from '../lib/wall-offer-floor.mjs';
+// 2026-11-19 (Grok item 13): keyless output drops the floor lead's "free" (lib/neutral-connect.mjs).
+const neutral = (lead) => lead.replace(/^(Next step for your user),\s*free\b/, '$1');
 import { KEY_LINE_RE } from '../lib/wall-key-line.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
@@ -128,7 +130,7 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(r3.text).not.toContain(RANK_EMAIL_ASK_LEAD);
     expect(count(r3.text, HUMAN)).toBe(0);
     expect(r3.text).not.toMatch(/`subscribe_digest`|Reply with your email/);
-    expect(count(r3.text, FLOOR_EMAIL_LEAD)).toBe(1);                   // one short line, not the full ask again
+    expect(count(r3.text, neutral(FLOOR_EMAIL_LEAD))).toBe(1);                   // one short line, not the full ask again
     expect(r3.ev).toBeTruthy();
     expect(r3.ev.email_ask).toBe('line');
     expect(r3.ev.offers_shown).toContain('email_unlock');               // C3: the row names what was delivered
@@ -151,7 +153,7 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(d1.ev && d1.ev.email_ask).toBe('key_line');
     expect(d1.ev.offers_shown).not.toContain('email_unlock');
     const d2 = await call('list_transactions');
-    expect(count(d2.text, FLOOR_DIGEST_LEAD)).toBe(1);
+    expect(count(d2.text, neutral(FLOOR_DIGEST_LEAD))).toBe(1);
     expect(count(d2.text, DIGEST)).toBe(1);
     expect(d2.text).not.toMatch(/`bind_email`|Reply with your email/);   // depth: never an email unlock
     expect(d2.ev && d2.ev.email_ask).toBe('digest_line');
@@ -189,7 +191,7 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
       expect(r2.text).toContain('sent the full ask earlier in this session');
       const d = await call('list_transactions');
       expect(d.text).not.toContain(DIGEST_LINE_LEAD);                    // the full digest ask rides the human line
-      expect(count(d.text, FLOOR_DIGEST_LEAD)).toBe(1);                  // the floor's one line still offers
+      expect(count(d.text, neutral(FLOOR_DIGEST_LEAD))).toBe(1);                  // the floor's one line still offers
       const gas = await session();
       expect(count((await gas('get_gas_intelligence')).text, RANK_EMAIL_ASK_LEAD)).toBe(1);
       expect(count((await gas('get_gas_intelligence')).text, RANK_EMAIL_ASK_LEAD)).toBe(1);
