@@ -239,6 +239,7 @@ test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-location-allowance.test.mjs
 test/facility-location-tier.test.mjs
+test/facility-names-1119.test.mjs
 test/facility-ref-name-resolution.test.mjs
 test/facility-row-as-of.test.mjs
 test/facts-eu-zone-autoheal-1023.test.mjs
@@ -371,6 +372,7 @@ test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
 test/kff-plan-full-depth-real-loopback.test.mjs
 test/kff-plan-preview-says-what-was-held-back.test.mjs
+test/kff-preview-reason-1119.test.mjs
 test/ladder-stage1.test.mjs
 test/land-site-screen-1119.test.mjs
 test/land-site-screen-e2e-1119.test.mjs
@@ -551,6 +553,7 @@ test/platform-header.test.mjs
 test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
 test/power-grid-listing.test.mjs
+test/power-place-slots-1119.test.mjs
 test/power-step-evidence.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
