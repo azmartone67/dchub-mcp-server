@@ -558,6 +558,7 @@ test/power-place-slots-1119.test.mjs
 test/power-step-evidence.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
+test/preview-scope-m21.test.mjs
 test/pricing-canon-and-go-links.test.mjs
 test/pro-tools-and-unlock-no-plan-name.test.mjs
 test/pro-trial-offer.test.mjs
