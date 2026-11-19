@@ -14,19 +14,32 @@ import { shortWallLinkStep } from '../lib/short-wall-link.mjs';
 
 const TOK = 'c2Vzcy0xfGdldF9waXBlbGluZXxmcmVlfDE3NjE2OTUwMDA.0123456789abcdef0123456789abcdef';
 const LONG = 'https://dchub.cloud/upgrade/h/' + TOK;
+// M1.2 (owner 2026-11-18): every wall type is tagged while DCHUB_WALL_RELAY_URL is on (the default); switched off, the
+// three below are the only tagged walls, exactly as before.
+const OFF = { DCHUB_WALL_RELAY_URL: '0' };
 
 describe('which statuses are tagged', () => {
-  it('trial_used, anon_daily_cap and the spent analyze_site run, nothing else', () => {
-    expect(T.wallTypeFor('trial_used')).toBe('trial_used');
-    expect(T.wallTypeFor('anon_daily_cap')).toBe('anon_daily_cap');
-    expect(T.wallTypeFor('lp_free_spent')).toBe('analyze_site_spent');
+  it('switch off: trial_used, anon_daily_cap and the spent analyze_site run, nothing else', () => {
+    expect(T.wallTypeFor('trial_used', OFF)).toBe('trial_used');
+    expect(T.wallTypeFor('anon_daily_cap', OFF)).toBe('anon_daily_cap');
+    expect(T.wallTypeFor('lp_free_spent', OFF)).toBe('analyze_site_spent');
     for (const s of ['pro_wall', 'lp_wall', 'anon_hard_wall', 'depth_teased', 'ok', '', undefined, null, '__proto__', 'constructor']) {
-      expect(T.wallTypeFor(s), String(s)).toBeNull();
+      expect(T.wallTypeFor(s, OFF), String(s)).toBeNull();
     }
     const on = { DCHUB_WALL_TAG_ALL: '1' };   // C3 (G10), off by default
     for (const s of ['depth_teased', 'ok', '', undefined, null, '__proto__', 'constructor', 'toString']) {
       expect(T.wallTypeFor(s, on), String(s)).toBeNull();
     }
+  });
+  it('M1.2 default (switch on): the other walls are tagged too, and a non-wall status still is not', () => {
+    for (const s of ['pro_wall', 'lp_wall', 'anon_hard_wall', 'trial_cap_exceeded', 'blocked_paid_only']) {
+      expect(T.wallTypeFor(s, {}), s).toBe(s);
+    }
+    for (const s of ['depth_teased', 'ok', '', undefined, null, '__proto__', 'constructor', 'toString']) {
+      expect(T.wallTypeFor(s, {}), String(s)).toBeNull();
+    }
+    expect(T.wallRelayUrlOn({})).toBe(true);
+    expect(T.wallRelayUrlOn(OFF)).toBe(false);
   });
   it('every wall type fits the backend shape', () => {
     for (const w of Object.values(T.WALL_TYPES)) expect(w).toMatch(/^[a-z][a-z0-9_]{1,31}$/);
@@ -41,9 +54,10 @@ describe('wallTypeForResult', () => {
   });
   it('a status wins, and nothing else is a wall type', () => {
     expect(T.wallTypeForResult('trial_used', spentBlock)).toBe('trial_used');
-    expect(T.wallTypeForResult('pro_wall', {})).toBeNull();
-    expect(T.wallTypeForResult('pro_wall', { structuredContent: { free_monthly_runs: { reason: 'other' } } })).toBeNull();
-    expect(T.wallTypeForResult('pro_wall', null)).toBeNull();
+    expect(T.wallTypeForResult('pro_wall', {}, OFF)).toBeNull();
+    expect(T.wallTypeForResult('pro_wall', { structuredContent: { free_monthly_runs: { reason: 'other' } } }, OFF)).toBeNull();
+    expect(T.wallTypeForResult('pro_wall', null, OFF)).toBeNull();
+    expect(T.wallTypeForResult('pro_wall', {}, {})).toBe('pro_wall');   // M1.2 default
     // C3 (G10, DCHUB_WALL_TAG_ALL=1): pro_wall carries its own tag, but the spent block still wins over it.
     const on = { DCHUB_WALL_TAG_ALL: '1' };
     expect(T.wallTypeForResult('pro_wall', {}, on)).toBe('pro_wall');
@@ -74,6 +88,60 @@ describe('tagRelayUrl', () => {
   });
   it('can fail: a wrong tag shape is caught by the same check', () => {
     expect(T.tagRelayUrl(LONG, 'trial_used')).not.toBe(LONG);
+  });
+});
+
+describe('M1.2: &src=<tool> and the plan\'s wall', () => {
+  it('src rides after the wall; an invalid tool name is left out', () => {
+    expect(T.tagRelayUrl(LONG, 'trial_used', 'get_interconnection_queue'))
+      .toBe(LONG + '?via=mcp-wall&wall=trial_used&src=get_interconnection_queue');
+    for (const bad of ['', undefined, 'Get-Queue', '9x', 'a'.repeat(70), 'x&via=evil']) {
+      expect(T.tagRelayUrl(LONG, 'trial_used', bad), String(bad)).toBe(LONG + '?via=mcp-wall&wall=trial_used');
+    }
+    expect(T.tagResultLinks({ content: [{ type: 'text', text: 'see ' + LONG }] }, 'pro_wall', 'analyze_site').content[0].text)
+      .toBe('see ' + LONG + '?via=mcp-wall&wall=pro_wall&src=analyze_site');
+  });
+  it('planWallSource: the first short step names the wall and the tool', () => {
+    expect(T.planWallSource({ executed: [{ tool: 'get_grid_data', status: 'executed', depth: 'full' },
+      { tool: 'get_interconnection_queue', status: 'executed', depth: 'preview' }] }))
+      .toEqual({ wall: 'plan_preview', src: 'get_interconnection_queue' });
+    expect(T.planWallSource({ executed: [{ tool: 'rank_markets', status: 'gated_preview' }] }))
+      .toEqual({ wall: 'gated_preview', src: 'rank_markets' });
+    expect(T.planWallSource({ executed: [{ tool: 'get_grid_data', status: 'executed', depth: 'full' }] })).toBeNull();
+    for (const j of [null, {}, { executed: 'x' }, { executed: [null, 1] }]) expect(T.planWallSource(j)).toBeNull();
+  });
+});
+
+describe('M1.2: neutral-cta keeps the relay page in the plan\'s URL fields', () => {
+  const TAGGED = LONG + '?via=mcp-wall&wall=plan_preview&src=get_interconnection_queue';
+  const plan = (url) => ({ _entity: 'plan_execution', executed: [{ tool: 'get_interconnection_queue', status: 'executed', depth: 'preview' }],
+    human_url: url, for_your_human: { text: 'Open ' + url + ' to see what your agent found.', url },
+    intent_answer: { relay: { url } }, note: 'see ' + url });
+  const res = (url) => ({ content: [{ type: 'text', text: JSON.stringify(plan(url)) }, { type: 'text', text: 'Open ' + url + '.' }],
+    structuredContent: plan(url) });
+  it('a /u/ link becomes the long URL it was minted from; text and other fields still read /connect', async () => {
+    const { neutralCtaStep, CONNECT_URL } = await import('../lib/neutral-cta.mjs');
+    const out = neutralCtaStep(res('https://dchub.cloud/u/abc234'), { env: {}, relay: { longFor: (u) => (u === 'https://dchub.cloud/u/abc234' ? TAGGED : undefined) } });
+    for (const sc of [out.structuredContent, JSON.parse(out.content[0].text)]) {
+      expect(sc.human_url).toBe(TAGGED);
+      expect(sc.for_your_human.url).toBe(TAGGED);
+      expect(sc.intent_answer.relay.url).toBe(TAGGED);
+      expect(sc.for_your_human.text).not.toContain('/upgrade/h/');
+      expect(sc.note).toBe('see ' + CONNECT_URL);
+    }
+    expect(out.content[1].text).toBe('Open ' + CONNECT_URL + '.');
+  });
+  it('no relay minted: the URL fields get the tagged /connect fallback', async () => {
+    const { neutralCtaStep } = await import('../lib/neutral-cta.mjs');
+    const out = neutralCtaStep(res('https://dchub.cloud/pricing'), { env: {}, relay: { longFor: () => undefined } });
+    expect(out.structuredContent.human_url).toBe('https://dchub.cloud/connect?via=mcp-wall&wall=connect&src=get_interconnection_queue');
+  });
+  it('DCHUB_WALL_RELAY_URL=0 or no relay option: byte-identical to the neutral rewrite before M1.2', async () => {
+    const { neutralCtaStep } = await import('../lib/neutral-cta.mjs');
+    const r = res('https://dchub.cloud/u/abc234');
+    const before = JSON.stringify(neutralCtaStep(r, { env: {} }));
+    expect(JSON.stringify(neutralCtaStep(r, { env: OFF, relay: { longFor: () => TAGGED } }))).toBe(before);
+    expect(JSON.parse(before).structuredContent.human_url).toBe('https://dchub.cloud/connect');
   });
 });
 
@@ -230,13 +298,15 @@ describe('the frozen ChatGPT profile is untouched', () => {
 });
 
 
-describe('C3 (2026-11-09, G10): every logged wall can be tagged, off by default', () => {
-  it('switch on: each wall status in QUOTA_WALL_STATUSES has a well-formed tag; off (default): the three', async () => {
+describe('C3 (2026-11-09, G10): every logged wall can be tagged', () => {
+  it('DCHUB_WALL_TAG_ALL=1 or the M1.2 default: each wall status in QUOTA_WALL_STATUSES has a well-formed tag; M1.2 off: the three', async () => {
     const { QUOTA_WALL_STATUSES } = await import('../lib/keyless-wall.mjs');
     const on = { DCHUB_WALL_TAG_ALL: '1' };
     for (const s of QUOTA_WALL_STATUSES) expect(T.wallTypeFor(s, on), s).toMatch(/^[a-z][a-z0-9_]{1,31}$/);
-    expect([...QUOTA_WALL_STATUSES].filter((s) => T.wallTypeFor(s, {})).sort())
+    expect([...QUOTA_WALL_STATUSES].filter((s) => T.wallTypeFor(s, OFF)).sort())
       .toEqual(['anon_daily_cap', 'lp_free_spent', 'trial_used']);
+    // M1.2: the default (DCHUB_WALL_RELAY_URL on) tags every one of them
+    for (const s of QUOTA_WALL_STATUSES) expect(T.wallTypeFor(s, {}), s).toMatch(/^[a-z][a-z0-9_]{1,31}$/);
     expect(T.wallTagAllOn({})).toBe(false);
   });
 });

@@ -242,7 +242,7 @@ import { servicesFor as _servicesFor, frontDeskIntentClass as _fdIntentClass, fr
 import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, withAnswerMarkers as _withAnswerMarkers } from './lib/answer-markers.mjs';
 import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
-import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
+import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
@@ -26380,7 +26380,8 @@ function _sourceLineCb(name, fn) {
       // Note L1 + L2 (2026-11-15): an execute_plan answer below a paid plan names no paid tier, price or upgrade page,
       // and its one call to action is https://dchub.cloud/connect (lib/neutral-cta.mjs). Last, after every other step.
       // Not on the frozen directory / Claude / core profiles or a clean platform (each keeps its own scrub).
-      if (name === 'execute_plan') _final = _neutralCtaStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), paid: _planCallerPaid(c) });
+      // M1.2 (owner 2026-11-18): its URL fields send the human to the tagged relay page (_planRelay).
+      if (name === 'execute_plan') _final = _neutralCtaStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform(), paid: _planCallerPaid(c), relay: _planRelay(c) });
       // Gemini traction spec (2026-11-16): a 3-line fact header (SOURCE/AS_OF, ENTITY, SUMMARY) is the FIRST key,
       // fact_header, of block 0's JSON and of structuredContent, read only from the plan's own result
       // (lib/plan-fact-header.mjs). Block 0 stays valid JSON. LAST, after every trim. Not on the directory / Claude /
@@ -26503,6 +26504,30 @@ export async function _directoryPartialLinkStep(result, name, c = getCtx() || {}
   } catch (_) { return result; }   // a link is never worth failing a response over
 }
 
+// M1.2 (Grok free-to-paid note, owner 2026-11-18): the wall's relay link names the tool that walled
+// (?via=mcp-wall&wall=<type>&src=<tool>, lib/wall-tag.mjs), every wall type is tagged, and an execute_plan answer is
+// tagged with the status and tool of its first short step (planWallSource). The long URL each /u/ link was minted
+// from is kept on the context (c._relayLongByShort) so lib/neutral-cta.mjs can put the relay page in the plan's URL
+// fields (_planRelay). Kill switch DCHUB_WALL_RELAY_URL=0: the wall type, mint and tag exactly as before.
+function _wallRelayTag(c, name, out) {
+  const mint = (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name));
+  const wall = wallTagOn() ? wallTypeForResult(c._wallStatus, out) : null;
+  if (!wallTagOn() || !wallRelayUrlOn()) return { mint, wall, src: '' };
+  const pw = name === 'execute_plan' ? planWallSource(out && out.structuredContent) : null;
+  return {
+    wall: wall || (pw ? pw.wall : null),
+    src: pw ? pw.src : name,
+    mint: async (u) => {
+      const s = await mint(u);
+      try { if (typeof s === 'string' && s !== u) (c._relayLongByShort || (c._relayLongByShort = new Map())).set(s, u); } catch (_) { /* best effort */ }
+      return s;
+    },
+  };
+}
+function _planRelay(c) {
+  return wallTagOn() ? { longFor: (u) => (c._relayLongByShort ? c._relayLongByShort.get(u) : undefined) } : null;
+}
+
 async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) {
   const c = getCtx() || {};
   let out;
@@ -26516,13 +26541,14 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
         && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {
       // Brain block 2026-10-28 (items 5, 6): the wall's relay link says which wall it came from
       // (?via=mcp-wall&wall=<type>, lib/wall-tag.mjs), tagged on the LONG url before it is shortened.
-      const _wallType = wallTagOn() ? wallTypeForResult(c._wallStatus, out) : null;
-      out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)), wall: _wallType });
-      if (_wallType) out = tagResultLinks(out, _wallType);   // any long relay link the step did not swap
+      // M1.2 (owner 2026-11-18): it also names the tool that walled (&src=<tool>), see _wallRelayTag.
+      const _rt = _wallRelayTag(c, name, out);
+      out = await shortWallLinkStep(out, { mint: _rt.mint, wall: _rt.wall, src: _rt.src });
+      if (_rt.wall) out = tagResultLinks(out, _rt.wall, _rt.src);   // any long relay link the step did not swap
       // 2026-11-05: note the session that was handed the wall link, so its later claim / bind is credited to
       // mcp-wall (callAPIWrite opts.wallVia). Never QA callers or the relay-readout exclusions.
-      if (_wallType && wallViaTagOn() && wallLinkIssued(out) && !_isQaCaller(c) && !_excludedFromRelayReadout(c)) {
-        _wallViaMemo.note(c.session_id, _wallType);
+      if (_rt.wall && wallViaTagOn() && wallLinkIssued(out) && !_isQaCaller(c) && !_excludedFromRelayReadout(c)) {
+        _wallViaMemo.note(c.session_id, _rt.wall);
       }
     }
     // lib/handoff.mjs: every wall / relay step has run, so this is the final word: the execute_plan complement

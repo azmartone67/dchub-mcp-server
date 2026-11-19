@@ -41,6 +41,9 @@ let relayMode = 'ok';           // ok | http500 | junk | throw | slow
 const relayPosts = [];          // { headers, body, signal }
 // MCP-1: the Land & Power keyless wall's link is the signed /upgrade/h relay page.
 const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/;
+// M1.2 (owner 2026-11-18): the long link a failed mint ships also carries the wall tag
+// (?via=mcp-wall&wall=pro_wall&src=analyze_site, lib/wall-tag.mjs); DCHUB_WALL_RELAY_URL=0 drops it, as before.
+const RELAY_TAGGED = new RegExp(RELAY.source + '(?:\\?via=mcp-wall&wall=[a-z_]+&src=[a-z_]+)?');
 let S, TOOLS, realFetch, prevInternal;
 let shortMode = 'ok';           // ok | http500 | junk | throw
 const shortPosts = [];          // { headers, body }
@@ -179,7 +182,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
 
   it('F5: a failed, junk, slow or switched-off mint ships the long relay link exactly as before', async () => {
     const norm = (r) => JSON.stringify(r)
-      .replace(new RegExp(RELAY.source, 'g'), 'RELAY')
+      .replace(new RegExp(RELAY_TAGGED.source, 'g'), 'RELAY')
       .replace(/sess-wall-user-line-\d+/g, 'SID')
       // CM-1: the wall is an isError result and now carries provenance, whose
       // retrieved_at is the serve time of each call, so it differs by design.
@@ -189,7 +192,8 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     expect(relayPosts.length).toBe(0);
     delete process.env.DCHUB_RELAY_SHORT_LINK;
     expect(firstLine(before)).toMatch(RELAY);
-    expect(before.structuredContent.for_your_human.url).toBe(firstLine(before).match(RELAY)[0]);
+    expect(before.structuredContent.for_your_human.url).toBe(firstLine(before).match(RELAY_TAGGED)[0]);
+    expect(before.structuredContent.for_your_human.url).toMatch(/\?via=mcp-wall&wall=pro_wall&src=analyze_site$/);
     for (const mode of ['http500', 'junk', 'throw', 'slow']) {
       relayMode = mode; relayPosts.length = 0;
       const t0 = Date.now();
@@ -197,8 +201,10 @@ describe('keyless analyze_site wall (Land & Power)', () => {
       expect(Date.now() - t0, mode).toBeLessThan(1500);
       expect(relayPosts.length, mode).toBe(1);
       expect(norm(r), mode).toBe(norm(before));
-      const href = firstLine(r).match(RELAY)[0];
-      expect(relayPosts[0].body.relay_url, mode).toBe(href);
+      const href = firstLine(r).match(RELAY_TAGGED)[0];
+      // M1.2: this line mints its /u link before the wall tag step runs (the call's wall status is not known yet), so
+      // the backend is sent the bare relay; the long link a failed mint ships then gains the tag.
+      expect(relayPosts[0].body.relay_url, mode).toBe(href.replace(/\?via=mcp-wall&.*$/, ''));
       expect(r.structuredContent.for_your_human.url, mode).toBe(href);
     }
   });

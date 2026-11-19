@@ -25,6 +25,9 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const BASE = 'https://backend.pc-arm-tag-visible-link.test';
 const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^\s"')\]]*)?/;
+// M1.2 (owner 2026-11-18): every wall's relay is also tagged ?via=mcp-wall&wall=<type>&src=<tool> (lib/wall-tag.mjs), so
+// the arm is the relay's FIRST parameter and the wall tag may follow it. DCHUB_WALL_RELAY_URL=0 restores the bare arm.
+const ARM_END = (arm) => new RegExp('\\?pc=' + arm + '(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$');
 // Every human checkout / plan surface a person could click.
 const CHECKOUT = /https?:\/\/(?:dchub\.cloud\/(?:go\/[cp]\/|upgrade\/h\/|u\/|pricing|checkout|redeem|signup)|buy\.stripe\.com|checkout\.stripe\.com)[^\s"')\]]*/g;
 let S, TOOLS, realFetch, prevInternal, prevBase;
@@ -111,14 +114,14 @@ describe('F2: the arm tag rides the link people see', () => {
     expect(r.structuredContent.paywall_contract).toBe('grok');
     const seen = r.content[0].text.match(RELAY);
     expect(seen, 'no /upgrade/h relay in content[0]').toBeTruthy();
-    expect(seen[0]).toMatch(/\?pc=grok$/);
+    expect(seen[0]).toMatch(ARM_END('grok'));
     const fyh = r.structuredContent.for_your_human;
     expect(fyh.url).toBe(seen[0]);
     expect(r.structuredContent.user_message).toContain(seen[0]);
     if (typeof fyh.markdown === 'string') expect(fyh.markdown.endsWith('(' + seen[0] + ')')).toBe(true);
     // one relay token, everywhere: no untagged copy of the same link anywhere
     const all = JSON.stringify(r);
-    const bare = seen[0].replace(/\?pc=grok$/, '');
+    const bare = seen[0].replace(/\?pc=grok(?:&.*)?$/, '');
     expect(all.split(bare).length - 1).toBe(all.split(seen[0]).length - 1);
   });
 
@@ -126,7 +129,7 @@ describe('F2: the arm tag rides the link people see', () => {
     const wall = { content: [{ type: 'text', text: 'body' }], structuredContent: { _wall: true } };
     const r = await S._ctxALS.run(seat(GROK), () => S._withWallUserLine(wall, 'analyze_site', { offer: 'pro' }));
     const seen = r.content[0].text.split('\n')[0].match(RELAY)[0];
-    expect(seen).toMatch(/\?pc=grok$/);
+    expect(seen).toMatch(ARM_END('grok'));
     expect(r.structuredContent.for_your_human.url).toBe(seen);
     expect(r.structuredContent.upgrade_url).toBe(seen);
     expect(r.structuredContent.for_your_human.markdown.endsWith('(' + seen + ')')).toBe(true);
@@ -149,7 +152,16 @@ describe('F2: the arm tag rides the link people see', () => {
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
     const r = await call('analyze_site', LOC, seat());
     const seen = r.content[0].text.match(RELAY)[0];
-    expect(seen).toMatch(/\?pc=v2$/);
+    expect(seen).toMatch(ARM_END('v2'));
+    expect(r.structuredContent.for_your_human.url).toBe(seen);
+  });
+
+  it('M1.2 switched off (DCHUB_WALL_RELAY_URL=0): the arm ends the seen relay, exactly as before', async () => {
+    process.env.DCHUB_WALL_RELAY_URL = '0';
+    let r;
+    try { r = await call('analyze_site', LOC, seat(GROK)); } finally { delete process.env.DCHUB_WALL_RELAY_URL; }
+    const seen = r.content[0].text.match(RELAY)[0];
+    expect(seen).toMatch(/\?pc=grok$/);
     expect(r.structuredContent.for_your_human.url).toBe(seen);
   });
 
@@ -178,6 +190,6 @@ describe('F2: the arm tag rides the link people see', () => {
     expect(r.structuredContent.for_your_human.url).toBe('https://dchub.cloud/u/abc234');
     const relayMint = mintBodies.find((b) => b && b.relay_url);
     expect(relayMint, 'the relay was sent for shortening').toBeTruthy();
-    expect(relayMint.relay_url).toMatch(/\/upgrade\/h\/[^?]+\?(?:.*&)?pc=grok$/);
+    expect(relayMint.relay_url).toMatch(/\/upgrade\/h\/[^?]+\?(?:.*&)?pc=grok(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/);
   });
 });
