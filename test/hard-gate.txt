@@ -238,6 +238,7 @@ test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-location-allowance.test.mjs
 test/facility-location-tier.test.mjs
+test/facility-names-1119.test.mjs
 test/facility-ref-name-resolution.test.mjs
 test/facility-row-as-of.test.mjs
 test/facts-eu-zone-autoheal-1023.test.mjs
