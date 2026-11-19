@@ -5,7 +5,7 @@
 //      dropped by lib/plan-compact.mjs KEEP_KEYS.
 //   2. A key reply gave Codex CLI no snippet and Copilot CLI the VS Code one (`servers` in .vscode/mcp.json).
 //   3. The key reply's "Full access" link reached Stripe with no client_reference_id (an empty ref).
-//   4. A wall's bare /connect link fields were counted on no channel.
+//   (Item 4, tagging the wall's /connect link, is held for an owner decision: see the PR.)
 //
 // Real server on a real port (execute_plan's steps loop back through /mcp), against a backend stub.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -13,7 +13,6 @@ import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import net from 'node:net';
 import { KEEP_KEYS } from '../lib/plan-compact.mjs';
-import { tagConnectFields, wallConnectTagStep, BARE_CONNECT_URL, WALL_CONNECT_URL } from '../lib/wall-connect-tag.mjs';
 
 const SECRET = 'cli-returns-1118-internal-key-not-real';
 const FAKE_KEY = 'dch_live_cli_returns_1118_not_real_0000';
@@ -159,41 +158,4 @@ describe('3) the key reply\'s "Full access" link is bound to the minted key', ()
     expect(fields[0]).toBe('developer');
     expect(fields[1]).toBe('k-' + createHash('sha256').update(FAKE_KEY).digest('hex'));
   }, 60_000);
-});
-
-describe('4) a wall\'s /connect link fields say where the click came from', () => {
-  it('human_url and for_your_human.url are tagged; other fields and prose are not', () => {
-    const o = { human_url: BARE_CONNECT_URL, for_your_human: { text: 'More detail is available at dchub.cloud/connect.', url: BARE_CONNECT_URL },
-      note: BARE_CONNECT_URL };
-    const t = tagConnectFields(o);
-    expect(t.human_url).toBe(WALL_CONNECT_URL);
-    expect(t.for_your_human).toEqual({ text: 'More detail is available at dchub.cloud/connect.', url: WALL_CONNECT_URL });
-    expect(t.note).toBe(BARE_CONNECT_URL);
-    expect(WALL_CONNECT_URL).toBe('https://dchub.cloud/connect?via=agent-referral&src=wall');
-    const other = { human_url: 'https://dchub.cloud/u/abc' };
-    expect(tagConnectFields(other)).toBe(other);
-  });
-
-  it('the step: the JSON block and structuredContent change by that URL only; prose blocks are byte-identical', () => {
-    const sc = { answer: 'x', human_url: BARE_CONNECT_URL };
-    const prose = 'Some fields aren\'t included in this answer; More detail is available at dchub.cloud/connect. ' + BARE_CONNECT_URL;
-    const r = { content: [{ type: 'text', text: prose }, { type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
-    const out = wallConnectTagStep(r, { env: {} });
-    expect(out.content[0].text).toBe(prose);
-    expect(out.content[1].text).toBe(JSON.stringify(sc).replace(BARE_CONNECT_URL, WALL_CONNECT_URL));
-    expect(out.structuredContent.human_url).toBe(WALL_CONNECT_URL);
-    expect(wallConnectTagStep(r, { env: { DCHUB_WALL_CONNECT_TAG: '0' } })).toBe(r);
-    expect(wallConnectTagStep(r, { skip: true, env: {} })).toBe(r);
-  });
-
-  it('live handler: a keyless preview\'s bare /connect fields are tagged; /mcp/chatgpt keeps the bare link', async () => {
-    const s = await session('198.18.118.9', 'github-copilot-developer', { ua: 'copilot-cli/0.0.360' });
-    await s.call('execute_plan', PLAN);
-    const sc = (await s.call('execute_plan', PLAN)).structuredContent || {};
-    const links = [sc.human_url, sc.for_your_human && sc.for_your_human.url].filter(Boolean);
-    expect(links).not.toContain(BARE_CONNECT_URL);
-    const c = await session('198.18.118.10', 'openai-mcp', { path: '/mcp/chatgpt' });
-    await c.call('execute_plan', PLAN);
-    expect(JSON.stringify(await c.call('execute_plan', PLAN))).not.toContain('src=wall');
-  }, 120_000);
 });

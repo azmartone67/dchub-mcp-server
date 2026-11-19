@@ -141,7 +141,8 @@ describe('persist_config carries a canonical VS Code snippet', () => {
     // it. gemini_cli/antigravity added 2026-08-31 with their snippets.
     const LABEL = { claude_desktop: 'Claude Desktop', claude_code: 'Claude Code',
                     cursor: 'Cursor', vscode: 'VS Code', cline: 'Cline', windsurf: 'Windsurf',
-                    gemini_cli: 'Gemini CLI', antigravity: 'Antigravity' };
+                    gemini_cli: 'Gemini CLI', antigravity: 'Antigravity',
+                    codex_cli: 'OpenAI Codex CLI', copilot_cli: 'GitHub Copilot CLI' };
     for (const c of clients) {
       expect(LABEL[c], `client '${c}' has no LABEL entry — this guard would assert includes('undefined')`)
         .toBeTruthy();
