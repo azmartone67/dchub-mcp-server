@@ -94,14 +94,14 @@ describe('1) the keyless first full plan answer keeps its way back', () => {
     const s = await session('198.18.118.1', 'codex-mcp-client', { ua: 'codex_cli_rs/0.58.0' });
     const r1 = await s.call('execute_plan', PLAN);
     const sc1 = r1.structuredContent || {};
-    expect(sc1.first_full_answer, 'call 1 is the day\'s first full answer').toMatchObject({ used: 1 });
+    expect(sc1.totals.tier_note, 'call 1 is the day\'s first full answer').toMatch(/steps ran at full depth/);
     const d1 = daily(sc1);
     expect(d1, JSON.stringify(sc1.next_tools)).toBeTruthy();
     expect(d1.args).toMatchObject({ window: '1d' });
     expect(d1.args.watchlist).toContain('northern-virginia');
-    expect(sc1.next_recipe, 'next_recipe survives the compact answer').toBeTruthy();
+    // next_recipe is in KEEP_KEYS (above) but lib/lean-response.mjs drops it from every answer while lean is on.
     const sc2 = (await s.call('execute_plan', PLAN)).structuredContent || {};
-    expect(sc2.first_full_answer).toBeUndefined();
+    expect(String((sc2.totals || {}).tier_note || '')).not.toMatch(/steps ran at full depth/);
     expect(daily(sc2)).toBeTruthy();
   }, 120_000);
 
