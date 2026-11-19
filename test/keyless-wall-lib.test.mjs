@@ -49,7 +49,7 @@ describe('the email-first cap wall', () => {
     base: { error: 'anon_hard_wall', limit: 300, credits_url: 'https://dchub.cloud/go/c/x.y', signup_url: 'https://dchub.cloud/signup' } });
   it('one offer line first, claim_free_key last, human_url = the one link', () => {
     const lines = r.content[0].text.split('\n\n');
-    expect(lines[0]).toBe('Keep going free by email → https://dchub.cloud/u/abcdef');
+    expect(lines[0]).toBe('Get a key by email → https://dchub.cloud/u/abcdef');
     expect(lines[lines.length - 1]).toMatch(/claim_free_key/);
     expect(lines.filter((l) => /claim_free_key/.test(l)).length).toBe(1);
     expect(r.structuredContent.human_url).toBe('https://dchub.cloud/u/abcdef');
@@ -94,7 +94,7 @@ describe('the email-first cap wall', () => {
     const t = keylessSoftCapEmailUpgrade({ data: [1, 2], _upgrade: { message: 'claim_free_key first', remaining_today: 0 } },
       { name: 'find_sites', link: 'https://dchub.cloud/u/abcdef' });
     expect(t.data).toEqual([1, 2]);
-    expect(t._upgrade.message.startsWith('Keep going free by email → https://dchub.cloud/u/abcdef')).toBe(true);
+    expect(t._upgrade.message.startsWith('Get a key by email → https://dchub.cloud/u/abcdef')).toBe(true);
     expect(t._upgrade.message.indexOf('claim_free_key')).toBeGreaterThan(0);
     expect(t.human_url).toBe('https://dchub.cloud/u/abcdef');
   });
@@ -173,7 +173,7 @@ describe('option C: the no-email exit waits for the second cap wall of the day (
   it('the first-wall line: the approved copy, the per-day number from the caller, no plan or price', () => {
     const l = keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', 50);
     // Option A (owner 2026-11-16): no calls-per-day figure in the line.
-    expect(l).toBe('Keep going free: show your human this link → https://dchub.cloud/u/abc. One email unlocks the full answer to this question.');
+    expect(l).toBe('Get a key by email: show your human this link → https://dchub.cloud/u/abc. One email unlocks the full answer to this question.');
     expect(keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', null)).not.toMatch(/\d+ calls/);
     expect(l).not.toMatch(/\$|\/mo|Developer|\bPro\b|claim_free_key/);
   });

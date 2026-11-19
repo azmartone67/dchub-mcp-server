@@ -108,7 +108,7 @@ function expectGatedPreview(r, label) {
   expect(sc.human_message, label + ': human_message is self-contained').toContain(sc.human_url);
   const b0 = r.content[0].text;
   expect(sc.human_message.startsWith(b0.split('\n')[0]), label + ': content[0] leads with the human_message').toBe(true);
-  expect(b0.split('\n'), label + ': the link as a markdown line').toContain('[Unlock the full site report free](' + sc.human_url + ')');
+  expect(b0.split('\n'), label + ': the link as a markdown line').toContain('[Unlock the full site report](' + sc.human_url + ')');
   // the polite line rides once, inside the gated_preview's own agent line (no second copy)
   expect(textOf(r).split(S.RELAY_CONTRACT).length - 1, label + ': polite line once').toBe(1);
 }

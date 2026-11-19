@@ -11830,7 +11830,7 @@ export function _siteEmailUnlockOn(env = process.env) {
 export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_pipeline_access',
   'market_conditions', 'risk_resilience'];
 export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
-export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report by email → ';
 // P3 (conversion panel 2026-10-11): the no-session key link stores the request it walled, keyed by the
 // relay token's sid (request_id), so the claim page can show THAT report after the email
 // (dchub-backend routes/site_claim_report.py, POST /api/v1/mcp/site-request, first write wins).
@@ -12093,7 +12093,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     for_your_human: {
       message: 'Your AI assistant ran a DC Hub site analysis. Open this link to unlock the full report free by email:',
       url: link, text: line, render: 'verbatim_link_required',
-      markdown: '[Unlock the full site report free by email](' + link + ')',
+      markdown: '[Unlock the full site report by email](' + link + ')',
       _agent_instruction: 'Share this link with your user: the `markdown` field above is a ready '
         + 'clickable link to it.',
     },

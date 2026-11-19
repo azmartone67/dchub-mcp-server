@@ -675,7 +675,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     const missing = hits.filter((p) => {
       const src = readFileSync(join(ROOT, p), 'utf8');
       if (p.endsWith('.mjs')) return !src.includes('FREE_DECISION_CLAUSE');
-      if (p === 'README.md') return !src.includes('an email adds 10 full answers/day each');
+      if (p === 'README.md') return !src.includes('More detail is available at dchub.cloud/connect');
       return !src.includes(CLAUSE_DOC);
     });
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);

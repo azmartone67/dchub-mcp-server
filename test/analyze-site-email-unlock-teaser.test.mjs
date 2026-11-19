@@ -160,8 +160,8 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
   it('the one link is the email unlock: a /u/ short of a signed relay token born with w-siteruns', async () => {
     const r = await call(null);
     const link = 'https://dchub.cloud/u/abcdef';
-    expect(r.sc.user_message).toBe('Unlock the full site report free by email → ' + link);
-    expect(r.text.split('\n')[0]).toBe('Unlock the full site report free by email → ' + link);
+    expect(r.sc.user_message).toBe('Unlock the full site report by email → ' + link);
+    expect(r.text.split('\n')[0]).toBe('Unlock the full site report by email → ' + link);
     expect(r.sc.human_url).toBe(link);
     // upgrade_url is moved under `upgrade` by the site envelope; wherever it is, it is the same link.
     expect(r.sc.upgrade_url ?? link).toBe(link);
@@ -207,7 +207,7 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
     const r = await call(null, ip);
     expect(r.siteHits).toBe(0);
     expect(r.sc.site_teaser).toBeUndefined();
-    expect(r.sc.user_message).toBe('Unlock the full site report free by email → https://dchub.cloud/u/abcdef');
+    expect(r.sc.user_message).toBe('Unlock the full site report by email → https://dchub.cloud/u/abcdef');
     expect(pageLinks(r.res)).toEqual(['https://dchub.cloud/u/abcdef']);
   });
 });
@@ -229,14 +229,14 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
     expect(r.sc.unlock_kind).toBe('email_key');
     expect(r.sc.human_url).toBeTruthy();
     expect(r.sc.next_tool).toBe('claim_free_key');
-    expect(r.text).toContain('Unlock the full site report free by email');
+    expect(r.text).toContain('Unlock the full site report by email');
     expect(JSON.stringify(r.res)).toContain('X-API-Key');
     expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
     expect(shortReqs.some((b) => b.relay_url && relayFields(b.relay_url).fields.includes('w-sitekey'))).toBe(true);
     // Measured live 2026-10-11 (QA headers, no session): the wall stamp rewrote this wall's person line
     // and agent line into "Start a 7-day trial" copy beside a link that opens a free-key page.
-    expect(r.sc.user_message).toMatch(/^Unlock the full site report free by email/);
-    expect(r.sc.for_your_human.text).toMatch(/^Unlock the full site report free by email/);
+    expect(r.sc.user_message).toMatch(/^Unlock the full site report by email/);
+    expect(r.sc.for_your_human.text).toMatch(/^Unlock the full site report by email/);
     for (const t of [r.sc.user_message, r.sc.for_your_human.text, r.sc.agent_message, r.text]) {
       expect(t, 'no trial or paid-plan ask on the free key-link wall').not.toMatch(/7-day|trial|paid DC Hub plan|needs a paid/i);
     }
@@ -251,7 +251,7 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
     expect(r.sc.free_key_unlock).toMatchObject({ tool: 'claim_free_key', email_required: false });
     expect(r.text).toContain('claim_free_key');
     expect(r.text).toContain('Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD.');
-    expect(r.text).not.toContain('Unlock the full site report free by email');
+    expect(r.text).not.toContain('Unlock the full site report by email');
     expect(r.text, 'one claim_free_key ask, not a preview one and a full one').not.toContain('free preview first');
     expect(JSON.stringify(r.res)).not.toContain('free preview first');
     expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
@@ -287,8 +287,8 @@ describe('paywall-contract arm on (DCHUB_PAYWALL_CONTRACT=on): the contract rewr
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
     const r = await call(null);
     const link = 'https://dchub.cloud/u/abcdef';
-    expect(r.text.split('\n')[0]).toBe('Unlock the full site report free by email → ' + link);
-    expect(r.sc.user_message).toBe('Unlock the full site report free by email → ' + link);
+    expect(r.text.split('\n')[0]).toBe('Unlock the full site report by email → ' + link);
+    expect(r.sc.user_message).toBe('Unlock the full site report by email → ' + link);
     expect(r.sc.site_teaser).toMatchObject({ verdict: 'BUILD', power_infrastructure: 'BUILD' });
     // Live 10-10 (arm v2): the contract rewrote the agent line to "after your user starts a paid
     // DC Hub plan, retry" and replaced the teaser line with "Free headline: ...". The email wall

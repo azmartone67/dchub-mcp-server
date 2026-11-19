@@ -114,14 +114,13 @@ for (const session of [true, false]) {
 
     it('human_message holds the one link, and content[0] carries it as a markdown link on its own line', () => {
       expect(r.sc.human_url).toBe(SHORT);
-      expect(r.sc.human_message).toBe('This is a preview, not the full site report. Unlock it free by email '
-        + '(a few free full site reports each month, no card): ' + SHORT);
+      expect(r.sc.human_message).toBe('This is a preview, not the full site report. Get a key by email: ' + SHORT);
       expect(r.sc.for_your_human).toMatchObject({ url: SHORT, text: r.sc.human_message });
       const b0 = r.res.content[0].text;
-      expect(b0.split('\n')[0]).toBe('This is a preview, not the full site report. Unlock it free by email (a few free full site reports each month, no card):');
+      expect(b0.split('\n')[0]).toBe('This is a preview, not the full site report. Get a key by email:');
       expect(b0.split(SHORT).length - 1, 'the link once in the text').toBe(1);
       expect(r.sc.user_message).toBe(r.sc.human_message);
-      expect(b0.split('\n')).toContain('[Unlock the full site report free](' + SHORT + ')');
+      expect(b0.split('\n')).toContain('[Unlock the full site report](' + SHORT + ')');
       expect(b0).toContain('Preview: site infrastructure verdict BUILD; power infrastructure BUILD. Missing from this preview: '
         + MISSING.join(', ') + '.');
       expect(pageLinks(r.res)).toEqual([SHORT]);
@@ -186,7 +185,7 @@ describe('kill switch', () => {
     // The relay stamp gives every wall a human_message (2026-10-11): here the wall's own line, not the preview's.
     expect(r.sc.human_message).toBe(r.sc.user_message);
     expect(r.sc.unlock_kind).toBe('email');
-    expect(r.res.content[0].text.startsWith('Unlock the full site report free by email → ')).toBe(true);
+    expect(r.res.content[0].text.startsWith('Unlock the full site report by email → ')).toBe(true);
   });
   it('DCHUB_SITE_EMAIL_UNLOCK=0: no email wall, so no gated_preview either', async () => {
     process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
@@ -229,7 +228,8 @@ describe('gatedPreviewStep (unit)', () => {
   it('agent text never hard-codes the monthly number, whatever the gate allows (owner 2026-10-11)', () => {
     for (const env of [{ DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '5' }, {}]) {
       const m = gatedPreviewHumanMessage(SHORT, env);
-      expect(m).toContain('a few free full site reports each month');
+      expect(m).toBe('This is a preview, not the full site report. Get a key by email: ' + SHORT);
+      expect(m).not.toMatch(/free|no card/i);
       expect(m).not.toMatch(/\b[0-9]+ (full )?reports?\b|\bthree\b/i);
     }
   });
