@@ -20,7 +20,8 @@
 //     sync-tools-manifest uses) AND the registry manifests
 //   - `long` is byte-equal to scripts/smithery_description.txt, so the file
 //     Smithery is pushed from and this one cannot drift
-//   - the heal engine and the daily job own the file, so a tool-count move heals it
+//   - the heal engine and the daily job own tool_count and endpoints; third-party
+//     description phrases stay count-free (a stale count there is a problem, not a heal)
 // HARD GATE (test/hard-gate.txt): qualifies because it is offline and reads
 // committed files only.
 import { describe, it, expect } from 'vitest';
@@ -93,6 +94,10 @@ describe('copy rules', () => {
   const BACKEND_BLURB_LEN = 118;
   const CURSOR_CAP = 280;
 
+  it('short is at most 160 characters (listing snapshot / context7 cap)', () => {
+    expect(COPY.short.length).toBeLessThanOrEqual(160);
+  });
+
   it('tight is at most TIGHT_MAX (160) characters', () => {
     expect(TIGHT_MAX).toBe(160);
     expect(COPY.tight.length).toBeLessThanOrEqual(TIGHT_MAX);
@@ -136,12 +141,34 @@ describe('copy rules', () => {
     }
   });
 
-  it('endpoints is exactly the approved line for the current tool count', () => {
+  it('endpoints is exactly the approved line for the current tool count, and stays off third-party description text', () => {
     expect(COPY.endpoints).toBe(endpointsLine(COPY.tool_count));
     expect(COPY.endpoints).toBe('94 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1'
       .replace(/^\d+/, String(COPY.tool_count)));
-    expect(COPY.long).toContain(COPY.endpoints);
-    expect(COPY.glama_400).toContain(COPY.endpoints);
+    expect(COPY.long).toContain(MCP_URL);
+    expect(COPY.long).toContain('https://dchub.cloud/api/v1');
+    expect(COPY.glama_400).toContain(MCP_URL);
+    expect(COPY.glama_400).toContain('https://dchub.cloud/api/v1');
+    expect(COPY.long).not.toContain(COPY.endpoints);
+    expect(COPY.glama_400).not.toContain(COPY.endpoints);
+  });
+
+  // Owner 2026-11-19: third-party directory phrases are count-free so a tool
+  // addition stops staling ~35-47 listings. tool_count and endpoints keep the
+  // served count for our own surfaces.
+  it('third-party description phrases are count-free (no tool counts, versions, or facility/asset floors)', () => {
+    const THIRD_PARTY = ['short', 'long', 'glama_400', 'tight', 'glama_live', 'mcpmarket_live', 'tagline'];
+    const TOOL_COUNT_PHRASE = /\b\d+(?: live| MCP| read-only)* tools\b/;
+    const VERSION = /\bv?\d+\.\d+\.\d+\b/;
+    const ASSET_FLOOR = /\b\d[\d,]*\+?\s+(?:mapped\s+)?(?:power,?\s+grid,?\s+gas(?:\s+and|,)\s+fiber\s+)?assets\b/i;
+    for (const k of THIRD_PARTY) {
+      expect(COPY[k], k).not.toMatch(TOOL_COUNT_PHRASE);
+      expect(COPY[k], k).not.toMatch(VERSION);
+      expect(COPY[k], k).not.toMatch(ASSET_FLOOR);
+    }
+    expect(SMITHERY_DESC).not.toMatch(TOOL_COUNT_PHRASE);
+    expect(SMITHERY_DESC).not.toMatch(VERSION);
+    expect(SMITHERY_DESC).not.toMatch(ASSET_FLOOR);
   });
 
   // Must-fail controls: the rules have to catch each banned shape, or the
@@ -214,7 +241,7 @@ describe('the Smithery description cannot drift from it', () => {
   // Owner request 2026-09-29: the Capacity Source line rides at the end of
   // `long` (so Smithery carries it too), worded exactly as given.
   it('long ends with the Capacity Source marketplace sentence', () => {
-    expect(COPY.long.endsWith(' Capacity Source adds a free capacity marketplace: operators list '
+    expect(COPY.long.endsWith(' Capacity Source adds a capacity marketplace: operators list '
       + 'data-center capacity at https://dchub.cloud/listings, and agents search it by size and '
       + 'location with source_capacity, then request an introduction with request_capacity_intro.'))
       .toBe(true);
@@ -313,11 +340,10 @@ describe('tagline (owner, 2026-10-09)', () => {
 });
 
 describe('the heal engine owns it', () => {
-  it('sync-tools-manifest heals its "N tools" phrases and its tool_count', () => {
-    const loop = SYNC.slice(SYNC.indexOf("for (const f of ['smithery.yaml', 'README.md'"),
-      SYNC.indexOf("'canonical/github_description.txt']) {") + 40);
-    expect(loop).toContain(`'${LISTING_COPY_PATH}'`);
+  it('sync-tools-manifest heals tool_count and endpoints, not third-party description phrases', () => {
     expect(SYNC).toMatch(/listing-copy\.json[\s\S]{0,1500}tool_count/);
+    expect(SYNC).toMatch(/listing-copy\.json[\s\S]{0,2500}endpoints/);
+    expect(SYNC).toMatch(/do not inject tool counts into third-party/);
   });
 
   it('daily-manifest-sync stages it in $OWNED, so a heal is not discarded', () => {
@@ -339,7 +365,7 @@ describe('read-back fingerprints', () => {
 
   it('include the tagline, the Capacity Source sentence of long, and capacity_blurb', () => {
     expect(fps).toContain(TAGLINE_FP);
-    expect(fps.some((f) => f.startsWith('capacity source adds a free capacity marketplace'))).toBe(true);
+    expect(fps.some((f) => f.startsWith('capacity source adds a capacity marketplace'))).toBe(true);
     expect(fps.some((f) => f.startsWith('capacity source by dc hub:'))).toBe(true);
   });
 

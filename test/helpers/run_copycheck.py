@@ -14,20 +14,15 @@ import ast, io, json, re, sys, types, urllib.request
 WF = ".github/workflows/smithery-freshness.yml"
 WANT = open("scripts/smithery_description.txt", encoding="utf-8").read()
 
-# ★2026-09-06 — DERIVED, not pinned. This read `WANT.replace("83 live MCP tools",
-#   ...)`. str.replace on a string that is not present is a silent no-op, so when
-#   the catalog moved 83 -> 85 the fixture injected NO stale marker, the checker
-#   correctly found none, and the test failed with "expected +0 to be 1" — a
-#   green-looking fixture that had quietly stopped constructing its own scenario.
-#   The count moves every time a tool is added; the PHRASE does not.
-#   Raising on a miss matters as much as the regex: a fixture that cannot build
-#   its scenario must fail loudly, not assert against nothing.
-# ★2026-09-28: the listing now says "92 MCP tools at https://dchub.cloud/mcp"
-#   (owner-requested copy); "live" is optional so either form builds the case.
-_m = re.search(r"\b\d+ (?:live )?MCP tools\b", WANT)
+# ★2026-09-06 — DERIVED, not pinned. This used to replace "83 live MCP tools".
+#   str.replace on a string that is not present is a silent no-op, so a fixture
+#   that cannot build its scenario must fail loudly, not assert against nothing.
+# ★2026-11-19: third-party Smithery copy is count-free, so the stale-marker
+#   swap is derived from a phrase that remains in the description.
+_m = re.search(r"No key needed to start\.", WANT)
 if not _m:
     raise SystemExit(
-        "run_copycheck fixture: no '<N> [live] MCP tools' phrase in "
+        "run_copycheck fixture: no 'No key needed to start.' phrase in "
         "scripts/smithery_description.txt — the stale scenario cannot be built, "
         "and injecting nothing would make the test assert against an empty case.")
 _TOOLS_PHRASE = _m.group(0)

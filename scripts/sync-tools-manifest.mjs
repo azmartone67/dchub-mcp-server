@@ -1128,11 +1128,12 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
                  'docs/contextual-triggers.md',   // ★2026-09-01: was in NO list; "70 live tools" since 07-08
                  'docs/distribution-targets.md', 'docs/canonical-workflows.md',
-                 'scripts/smithery_description.txt', 'dxt/manifest.json',
-                 // ★2026-09-28: the directory listing-copy source of truth
-                 // (canonical/listing-copy.json). Its `long` must equal
-                 // smithery_description.txt, so both heal in the same pass.
-                 'canonical/listing-copy.json',
+                 'dxt/manifest.json',
+                 // ★2026-11-19: do not inject tool counts into third-party
+                 // directory description text. canonical/listing-copy.json
+                 // (short/long/glama_400/tight/glama_live/mcpmarket_live) and
+                 // scripts/smithery_description.txt are count-free; tool_count
+                 // and endpoints are healed in the dedicated blocks below.
                  // ★2026-09-26: the Cursor Marketplace manifest. Its description is
                  // the listing copy Cursor reviews, and it sat at "91 tools" since
                  // it landed on 09-13 (#416) because no loop scanned it.
@@ -1187,9 +1188,10 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 }
 
 // ---- canonical/listing-copy.json tool_count --------------------------------
-// ★2026-09-28: the loop above heals the "N MCP tools" PROSE in this file; the
-// numeric `tool_count` field is not prose, so it is healed here. Anchored on
-// the one `"tool_count": N` line; a missing anchor is a PROBLEM, never a no-op.
+// ★2026-09-28 / 2026-11-19: third-party description prose in this file is
+// count-free and is not healed by the loop above. The numeric `tool_count`
+// field (our-surface) is healed here. Anchored on the one `"tool_count": N`
+// line; a missing anchor is a PROBLEM, never a no-op.
 {
   const LC = 'canonical/listing-copy.json';
   const lc = readCur(LC);
@@ -1201,6 +1203,52 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     problems.push(`${LC} tool_count ${lm[2]} != ${COUNT}`);
     if (FIX) pend(LC, lc.replace(LCRX, `$1${COUNT}$3`));
   }
+}
+
+// ---- canonical/listing-copy.json endpoints (our-surface field only) ---------
+// Heal the structured endpoints line when the tool count moves. Do not write
+// that line back into long / glama_400 / short / tight.
+{
+  const LC = 'canonical/listing-copy.json';
+  const lc = readCur(LC);
+  const EPRX = /^(  "endpoints": ")(\d+)( MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1)(",?)$/m;
+  const em = EPRX.exec(lc);
+  if (!em) {
+    problems.push(`${LC}: \`"endpoints": "N MCP tools at …"\` line NOT FOUND — re-anchor this heal`);
+  } else if (Number(em[2]) !== COUNT) {
+    problems.push(`${LC} endpoints tool count ${em[2]} != ${COUNT}`);
+    if (FIX) pend(LC, lc.replace(EPRX, `$1${COUNT}$3$4`));
+  }
+}
+
+// ---- count-free third-party directory phrases -------------------------------
+// Owner 2026-11-19: do not inject tool counts into third-party listing copy.
+// If a stale "N tools", version, or asset/facility floor reappears in those
+// phrases, fail; do not rewrite it to the current count.
+{
+  const THIRD_PARTY_COPY_FIELDS = ['short', 'long', 'glama_400', 'tight', 'glama_live', 'mcpmarket_live', 'tagline'];
+  const TOOL_COUNT_PHRASE = /\b\d+(?: live| MCP| read-only)* tools\b/;
+  const VERSION = /\bv?\d+\.\d+\.\d+\b/;
+  const ASSET_FLOOR = /\b\d[\d,]*\+?\s+(?:mapped\s+)?(?:power,?\s+grid,?\s+gas(?:\s+and|,)\s+fiber\s+)?assets\b/i;
+  const LC = 'canonical/listing-copy.json';
+  let listing;
+  try { listing = JSON.parse(readCur(LC)); } catch {
+    problems.push(`${LC}: unreadable when checking count-free third-party phrases`);
+    listing = null;
+  }
+  if (listing) {
+    for (const k of THIRD_PARTY_COPY_FIELDS) {
+      const s = String(listing[k] ?? '');
+      if (TOOL_COUNT_PHRASE.test(s)) problems.push(`${LC} ${k} has a tool-count phrase; third-party copy is count-free`);
+      if (VERSION.test(s)) problems.push(`${LC} ${k} has a version; third-party copy is count-free`);
+      if (ASSET_FLOOR.test(s)) problems.push(`${LC} ${k} has an asset/facility floor; third-party copy is count-free`);
+    }
+  }
+  const SD = 'scripts/smithery_description.txt';
+  const smithery = readCur(SD);
+  if (TOOL_COUNT_PHRASE.test(smithery)) problems.push(`${SD} has a tool-count phrase; third-party copy is count-free`);
+  if (VERSION.test(smithery)) problems.push(`${SD} has a version; third-party copy is count-free`);
+  if (ASSET_FLOOR.test(smithery)) problems.push(`${SD} has an asset/facility floor; third-party copy is count-free`);
 }
 
 // ---- smithery.yaml description — rendered from the one template -------------

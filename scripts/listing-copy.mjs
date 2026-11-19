@@ -14,13 +14,17 @@
 //   long        the Long description. Byte-equal to scripts/smithery_description.txt
 //               (trimmed), which smithery-freshness.yml pushes to Smithery, so the
 //               two cannot drift. test/listing-copy.test.mjs enforces it.
-//   glama_400   the Glama-sized description, at most GLAMA_MAX chars
+//               Count-free (owner 2026-11-19): no tool counts, facility/asset
+//               counts or versions in this or the other third-party phrases.
+//   glama_400   the Glama-sized description, at most GLAMA_MAX chars, count-free
 //   tight       the variant for tight caps (owner 2026-10-10), at most TIGHT_MAX
 //               chars: DCPI lead + the MCP URL. cursor_directory caps at 280, so
 //               it got `short` (no URL), plus the backend Capacity Source line
 //               (118) on the submitter path. TIGHT_MAX leaves room for that line.
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
-//   endpoints   exactly endpointsLine(tool_count)
+//               Kept for our own surfaces; not pasted into third-party directory
+//               description text.
+//   endpoints   exactly endpointsLine(tool_count); our-surface field only
 //   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
 //               price-free, and it names source_capacity and dchub.cloud/listings
 //   updated_at  YYYY-MM-DD of the last copy edit
