@@ -17,6 +17,9 @@ import net from 'node:net';
 import http from 'node:http';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL, CTA_KEYS, COMMERCE_KEY } from '../lib/neutral-cta.mjs';
+// Owner 2026-11-19: on the live handler the one route carries its wall tag (lib/wall-connect-tag.mjs).
+import { WALL_CONNECT_URL } from '../lib/wall-connect-tag.mjs';
+const ONE_ROUTE = new Set([CONNECT_URL, WALL_CONNECT_URL]);
 import { leanObject } from '../lib/lean-response.mjs';
 
 // This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
@@ -128,11 +131,11 @@ function violations(r) {
   if (m) bad.push('banned: …' + s.slice(Math.max(0, m.index - 60), m.index + 60) + '…');
   for (const u of new Set(s.match(URL_RE) || [])) {
     const url = u.replace(/[.,;:]+$/, '');
-    if (CTA_LIKE.test(url) && url !== CONNECT_URL) bad.push('cta url: ' + url);
+    if (CTA_LIKE.test(url) && !ONE_ROUTE.has(url)) bad.push('cta url: ' + url);
   }
   const sc = r.structuredContent || {};
-  if (sc.human_url !== undefined && sc.human_url !== CONNECT_URL) bad.push('human_url: ' + sc.human_url);
-  if (sc.for_your_human && sc.for_your_human.url !== undefined && sc.for_your_human.url !== CONNECT_URL) bad.push('for_your_human.url');
+  if (sc.human_url !== undefined && !ONE_ROUTE.has(sc.human_url)) bad.push('human_url: ' + sc.human_url);
+  if (sc.for_your_human && sc.for_your_human.url !== undefined && !ONE_ROUTE.has(sc.for_your_human.url)) bad.push('for_your_human.url');
   // An offer line states only canon's free offers: any call allowance is canon's "50 MCP calls/day with an email".
   for (const x of s.matchAll(/\d[\d,]*\s+(?:MCP\s+)?calls?\b[^."\\]{0,24}/gi)) if (!x[0].startsWith('50 MCP calls/day with an email')) bad.push('offer: ' + x[0]);
   return bad;

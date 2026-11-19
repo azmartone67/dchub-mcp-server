@@ -135,6 +135,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
@@ -26412,6 +26413,12 @@ function _sourceLineCb(name, fn) {
       // 2026-11-17 (owner): every pointer at the key tool names its listed name, get_api_key (lib/key-tool-name.mjs).
       // Not on the directory / Claude / core profiles (each scrubs the key tool out) or a loopback step.
       _final = _keyToolPointerStep(_final, { skip: !!c.loopback_step || ownScrub });
+      // Owner 2026-11-19 (Grok CLI note item 4): the plain /connect link a below-paid answer carries becomes
+      // /connect?via=mcp-wall&wall=connect so the click is counted (lib/wall-connect-tag.mjs). Prose unchanged. Not on
+      // the key / commerce tools (their /connect is a pointer, not a wall), the directory / Claude profiles
+      // (/mcp/chatgpt, /mcp/claude keep their reviewed copy) or a clean platform.
+      _final = _wallConnectTagStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
+        || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE });
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
