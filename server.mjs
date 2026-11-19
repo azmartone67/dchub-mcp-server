@@ -137,6 +137,7 @@ import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
+import { planOneLinkStep as _planOneLinkStep } from './lib/plan-one-link.mjs';
 import { previewScopeStep as _previewScopeStep } from './lib/preview-scope.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
@@ -23912,7 +23913,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.44';
+export const PLANNER_VERSION = '5.45';   // 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26529,6 +26530,10 @@ function _sourceLineCb(name, fn) {
       // (/mcp/chatgpt, /mcp/claude keep their reviewed copy) or a clean platform.
       _final = _wallConnectTagStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
         || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE });
+      // Grok weekly 2026-11-19 item 1: an execute_plan answer sends the human to ONE link, the one its human_url
+      // carries; every other /connect pointer in it becomes that link (lib/plan-one-link.mjs). After the /connect tag.
+      // Same skips as the neutral CTA step. Kill switch DCHUB_PLAN_ONE_LINK=0.
+      if (name === 'execute_plan') _final = _planOneLinkStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform() });
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
