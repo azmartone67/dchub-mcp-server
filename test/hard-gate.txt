@@ -436,6 +436,7 @@ test/named-absence.test.mjs
 test/named-constraint-routing.test.mjs
 test/named-project-lookup-1118.test.mjs
 test/neiso-alias.test.mjs
+test/neutral-connect-digest-free-1119.test.mjs
 test/neutral-connect-free-tier.test.mjs
 test/neutral-connect-key-fields-1117.test.mjs
 test/neutral-connect-option-a.test.mjs

@@ -222,7 +222,9 @@ describe('3. /mcp: a key past its daily allowance is offered only what it does n
       expect(prose, t).not.toContain('Share your email');
       expect(prose, t).not.toMatch(/`bind_email`|`claim_free_key`/);
       expect(prose, t).not.toContain(OAUTH_SIGNIN_URL);
-      expect(prose, t).toContain('Next step for your user, free: "DC Hub can email you a free weekly summary');
+      // 2026-11-19 (Grok item 13, owner go-ahead): the digest ask carries no "free" (lib/neutral-connect.mjs rewrites)
+      expect(prose, t).toContain('Next step for your user: "DC Hub can email you a weekly summary');
+      expect(prose, t).not.toMatch(/\bfree\b/i);
       expect(row && row.email_ask, t).toBe('digest_line');
       expect(row && row.offers_shown, t).toEqual(expect.arrayContaining(['digest']));
       expect(row && row.offers_shown, t).not.toEqual(expect.arrayContaining(['email_unlock']));
