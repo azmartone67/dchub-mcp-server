@@ -119,7 +119,8 @@ describe('decision 2: the free allowance is "a few", never a number, in agent te
   it('gated_preview lead and human_message, whatever the gate allows', () => {
     for (const env of [{}, { DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '3' }, { DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '7' }]) {
       const m = gatedPreviewHumanMessage('https://dchub.cloud/u/abc234', env);
-      expect(gatedPreviewLead(env)).toContain('a few free full site reports each month');
+      expect(gatedPreviewLead(env)).toBe('This is a preview, not the full site report. Get a key by email:');
+      expect(gatedPreviewLead(env)).not.toMatch(/free|no card/i);
       expect(m).not.toMatch(NUMERIC_ALLOWANCE);
     }
   });

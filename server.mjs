@@ -136,6 +136,7 @@ import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
+import { previewScopeStep as _previewScopeStep } from './lib/preview-scope.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
@@ -274,6 +275,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, proWallLine as _proWallUserLine, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { countryScopedPlan, US_ONLY_TOOLS as _US_ONLY_TOOLS, isNonUsMarket as _isNonUsMarket } from './lib/country-scope.mjs';
 import { parcelGpsHint as _parcelGpsHint } from './lib/parcel-gps-hint.mjs';
+import { daedalmapWildfireHint as _daedalmapWildfireHint } from './lib/daedalmap-wildfire-hint.mjs';
 import { gridReadingOf as _gridReadingOf } from './lib/plan-step-facts.mjs';
 import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generationMixAsk, generationMixSequence as _generationMixSequence,
   mixGrids as _mixGrids, buildGenerationMixAnswer as _buildGenerationMixAnswer, marketSlugGuard as _marketSlugGuardFor, marketSlugProblem as _marketSlugProblem,
@@ -11830,7 +11832,7 @@ export function _siteEmailUnlockOn(env = process.env) {
 export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_pipeline_access',
   'market_conditions', 'risk_resilience'];
 export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
-export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report by email → ';
 // P3 (conversion panel 2026-10-11): the no-session key link stores the request it walled, keyed by the
 // relay token's sid (request_id), so the claim page can show THAT report after the email
 // (dchub-backend routes/site_claim_report.py, POST /api/v1/mcp/site-request, first write wins).
@@ -12093,7 +12095,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     for_your_human: {
       message: 'Your AI assistant ran a DC Hub site analysis. Open this link to unlock the full report free by email:',
       url: link, text: line, render: 'verbatim_link_required',
-      markdown: '[Unlock the full site report free by email](' + link + ')',
+      markdown: '[Unlock the full site report by email](' + link + ')',
       _agent_instruction: 'Share this link with your user: the `markdown` field above is a ready '
         + 'clickable link to it.',
     },
@@ -26490,6 +26492,12 @@ function _sourceLineCb(name, fn) {
       // keeps its own copy). Kill switch DCHUB_NEUTRAL_CONNECT=0.
       _final = _neutralConnectStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
         || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || _planCallerPaid(c) });
+      // M2.1 (Grok free-to-paid note, owner 2026-11-18): a preview / walled answer says how much of its list it shows
+      // and which fields it withholds, in one neutral line plus structuredContent.preview_scope (lib/preview-scope.mjs).
+      // Not on /mcp/chatgpt (frozen), execute_plan (its steps speak for themselves), a loopback step or a clean
+      // platform. Kill switch DCHUB_PREVIEW_SCOPE=0.
+      _final = _previewScopeStep(_final, { skip: !!c.loopback_step || c.profile === DIRECTORY_PROFILE || _isCleanPlatform()
+        || name === 'execute_plan' || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) });
       // Grok colocation review (2026-11-17, "lead length" 12 of 12): execute_plan's block 0 is a plain-language answer
       // of at most 600 characters, and the plan's JSON moves to block 1 unchanged (structuredContent unchanged too).
       // A deliberate change to the block-0-is-JSON contract, for execute_plan only (lib/plan-lead-text.mjs). After
@@ -33429,6 +33437,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             intent: a && a.intent, executed, isNonUsMarket: _isNonUsMarket });
         }
       } catch (_e) { _pgps = null; }
+      // DaedalMap Wildfires (owner 2026-11-19, lib/daedalmap-wildfire-hint.mjs): a plan that bound a place and already
+      // has a DC Hub climate or hazard read that returned data gets one next step naming where wildfire events and
+      // aggregates come from. Routing only: DC Hub never calls or proxies that server. Same surfaces as Parcel GPS.
+      let _dmw = null;
+      try {
+        if ((!_isCleanPlatform() && _answerBlocksAllowed()) || !!(c && c.profile === CORE_PROFILE && _coreHandoffOn())) {
+          _dmw = _daedalmapWildfireHint({ signals: _sig, geographyScope: sc.geography_scope || null, executed });
+        }
+      } catch (_e) { _dmw = null; }
       // 2026-11-12: a plan whose source_capacity found nothing closes on the register offer, ahead of
       // route_back and the complement (DC Hub's own path first). Every surface gets the sentence; the
       // structured field follows the answer-block gate.
@@ -33667,7 +33684,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // 5.39: a wholesale / LMP ask is told plainly what DC Hub serves instead.
           + (_wholesaleAsked(sc.intent) ? ' PRICE SCOPE — ' + _WHOLESALE_SCOPE_NOTE + ' Quote the retail rate as retail.' : '')
           + (_rb ? ' ' + _rb.sentence : '') + (_ho ? ' ' + _ho.sentence : '')
-          + (_pgps ? ' NEXT STEP — ' + _pgps.sentence : ''),
+          + (_pgps ? ' NEXT STEP — ' + _pgps.sentence : '')
+          + (_dmw ? ' NEXT STEP — ' + _dmw.sentence : ''),
         ...(_pairs ? { paired_sides: _pairs } : {}),
         ...((_capReg && _capRegisterOfferOn() && !_isCleanPlatform() && _answerBlocksAllowed()) ? { capacity_register: _capReg.field } : {}),
         ...((sc.unresolved && !_isCleanPlatform() && _answerBlocksAllowed()) ? { unresolved: sc.unresolved } : {}),
@@ -33678,6 +33696,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...(_rb ? { route_back: _rb.entries } : {}),
         ...(_ho ? { handoff: _ho.field } : {}),
         ...(_pgps ? { parcel_next_step: _pgps.field } : {}),
+        ...(_dmw ? { wildfire_next_step: _dmw.field } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
@@ -33790,7 +33809,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
           // Grok CLI note 2026-11-18 item 1: next_tools (the get_changes daily check-in) is the first answer's only way
           // back; compactFirstPlan does not copy it, so the day's best answer carried no return hook.
-          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'plan_id', 'paired_sides', 'next_tools']) {
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'wildfire_next_step', 'plan_id', 'paired_sides', 'next_tools']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
           // Grok live proof 2026-11-16 item 8: the description promises a replay on every envelope; the compact

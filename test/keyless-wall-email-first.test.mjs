@@ -25,11 +25,11 @@ process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 // Wall email option C (owner 2026-10-26): an identity's first cap wall of the UTC day carries the
 // email link alone; the no-email claim_free_key exit returns from its second wall that day.
-const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
+const FIRST_LINE = (link) => new RegExp('^Get a key by email: show your human this link → '
   + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks the full answer to this question\\.$');   // option A: no calls-per-day figure
 // A tool an email does not open in full (server.mjs _emailOpensTool, 2026-11-10): the line names the daily
 // calls only, never "the full answer".
-const FREE_TIER_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
+const FREE_TIER_LINE = (link) => new RegExp('^Get a key by email: show your human this link → '
   + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks more answers\\.$');   // option A: no calls-per-day figure
 const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `get_api_key` (one call, no email).';
 // The anonymous-cap walls reset with the daily per-IP count (platform review 2026-11-14).
@@ -148,11 +148,11 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     const r = await call('find_sites', { state: 'TX', min_mw: 50 }, { extraHdr: ip });
     expect(r.status).toEqual(['anon_hard_wall']);
     expect(r.sc.unlock_kind).toBe('email_cap');
-    expect(r.sc.user_message).toBe('Keep going free by email → ' + SHORT);
+    expect(r.sc.user_message).toBe('Get a key by email → ' + SHORT);
     expect(r.sc.human_url).toBe(SHORT);
-    expect(r.text.split('\n')[0]).toBe('Keep going free by email → ' + SHORT);
+    expect(r.text.split('\n')[0]).toBe('Get a key by email → ' + SHORT);
     // claim_free_key only as the last line, after the email ask
-    expect(r.text.indexOf('get_api_key')).toBeGreaterThan(r.text.indexOf('Keep going free by email'));
+    expect(r.text.indexOf('get_api_key')).toBeGreaterThan(r.text.indexOf('Get a key by email'));
     expect(r.text.split('\n').find((l) => l.includes('get_api_key')))
       .toBe('If the user prefers not to give an email, call `get_api_key` (one call, no email).');
     expect(r.sc.remaining_this_month).toBe(0);
@@ -188,7 +188,7 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     anonCount = 999;
     process.env.DCHUB_WALL_NO_EMAIL_EXIT_DELAY = '0';
     const r = await call('find_sites', { state: 'TX' });
-    expect(r.sc.user_message).toBe('Keep going free by email → ' + SHORT);
+    expect(r.sc.user_message).toBe('Get a key by email → ' + SHORT);
     expect(r.text.split('\n').find((l) => l.includes('get_api_key'))).toBe(NO_EMAIL_LINE);
     expect(r.sc.next_tool).toBe('get_api_key');
   });
@@ -209,7 +209,7 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(r.status).toEqual(['anon_hard_wall']);
     expect(r.sc.unlock_kind).toBeUndefined();
     expect(r.text).toContain('claim_free_key');
-    expect(r.text).not.toContain('Keep going free by email');
+    expect(r.text).not.toContain('Get a key by email');
   });
 
   it('CONTROL: a tool outside the land/site set keeps the earlier wall', async () => {
@@ -217,7 +217,7 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     const r = await call('search_facilities', { query: 'ashburn' });
     expect(r.status).toEqual(['anon_hard_wall']);
     expect(r.sc.unlock_kind).toBeUndefined();
-    expect(r.text).not.toContain('Keep going free by email');
+    expect(r.text).not.toContain('Get a key by email');
   });
 
   it('kill switch DCHUB_KEYLESS_EMAIL_FIRST=0 restores the earlier wall', async () => {
@@ -226,7 +226,7 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     const r = await call('find_sites', { state: 'TX' });
     expect(r.status).toEqual(['anon_hard_wall']);
     expect(r.sc.unlock_kind).toBeUndefined();
-    expect(r.text).not.toContain('Keep going free by email');
+    expect(r.text).not.toContain('Get a key by email');
   });
 });
 
@@ -261,7 +261,7 @@ describe('C wide: every tool\'s soft cap is email first, except where the email 
     const r = await call('search_facilities', { query: 'ashburn' });
     expect(r.status).toEqual(['anon_daily_cap']);
     expect((r.sc._upgrade || {}).unlock_kind).not.toBe('email_cap');
-    expect(r.text).not.toContain('Keep going free');
+    expect(r.text).not.toContain('Get a key by email');
   });
   it('the hard wall keeps its land/site scope (the pack buys the day, #838)', async () => {
     anonCount = 999;
@@ -288,7 +288,7 @@ describe('A. anonymous soft cap: the preview stays, its nudge is email first', (
     expect(up.unlock_kind).toBe('email_cap');
     expect(up.next_tool).toBe('get_api_key');
     expect(up.message.endsWith(NO_EMAIL_LINE)).toBe(true);
-    expect(up.message.startsWith('Keep going free by email → ' + SHORT)).toBe(true);
+    expect(up.message.startsWith('Get a key by email → ' + SHORT)).toBe(true);
     expect(up.remaining_this_month).toBe(0);
     // the soft cap says today: its reset is the next UTC midnight, beside binding_limit anon_ip_daily
     expect(up.binding_limit).toBe('anon_ip_daily');

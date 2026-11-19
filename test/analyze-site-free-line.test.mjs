@@ -130,7 +130,8 @@ describe('repo docs', () => {
     expect(readme).not.toContain(CLAUSE);
     expect(readme).not.toContain(OWNER_LINE);
     expect(readme).toContain('`DCHUB_API_KEY` is optional');
-    expect(readme).toContain('an email adds 10 full answers/day each');
+    expect(readme).not.toContain('10 full answers/day');
+    expect(readme).toContain('More detail is available at dchub.cloud/connect');
     expect(readme).toMatch(/analyze_site: a few full site reports each month; after that, previews\./);
   });
   // 2026-11-14 (owner, MCP Ecosystem PR review): the publish surfaces (smithery.yaml, mcp-server.json, dxt, npm README) name no plan, free tier or pricing page.
