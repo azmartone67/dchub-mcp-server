@@ -29,12 +29,20 @@ describe('get_pipeline fact: live row shape', () => {
   it('reported rows (be#9030) are counted apart and their MW is never summed', () => {
     const rep = (mw, url) => ({ ...ROW, company: 'Microsoft', market: 'Texas', capacity: mw, confidence: 'reported', source_url: url });
     const MIXED = { ...KEYED, data: [{ ...ROW, capacity: 600.0, confidence: 'curated' }, rep(2670, 'https://x/1'), rep(1200, 'https://x/2')],
-      pipeline: undefined, total_count: 3, confidence_coverage: { curated: 1, reported: 2 } };
+      pipeline: undefined, total_count: 3, confidence_coverage: { curated_count: 6, reported_count: 19 } };
     const f = factsFromStep('get_pipeline', MIXED, { state: 'TX' });
-    expect(f[0].text).toBe('TX data-center pipeline: 1 curated project on record, 600 MW across the project that state a size; '
-      + '2 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
-    const only = factsFromStep('get_pipeline', { ...MIXED, data: [rep(2670, 'https://x/1')], total_count: 1, confidence_coverage: { curated: 0, reported: 1 } }, { state: 'TX' });
-    expect(only[0].text).toBe('TX data-center pipeline: 0 curated projects on record, 1 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
+    expect(f[0].text).toBe('TX data-center pipeline: 6 curated projects on record, 600 MW across the project that state a size; '
+      + '19 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
+    const only = factsFromStep('get_pipeline', { ...MIXED, data: [rep(2670, 'https://x/1')], total_count: 1, confidence_coverage: { curated: 0, reported: 4 } }, { state: 'TX' });
+    expect(only[0].text).toBe('TX data-center pipeline: 0 curated projects on record, 4 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
+  });
+  it('a preview with the coverage counts nulled counts the rows it shows, not a withheld total', () => {
+    const rep = { ...ROW, company: 'Microsoft', market: 'Texas', capacity: null, confidence: 'reported', source_url: 'https://x/1' };
+    const P = { ...PREVIEW, data: [{ ...ROW, capacity: null, confidence: 'curated' }, rep], _data_total_available: undefined,
+      confidence_coverage: { curated_count: null, reported_count: null, basis: 'x' } };
+    const f = factsFromStep('get_pipeline', P, { state: 'TX' });
+    expect(f[0].text).toBe(`TX data-center pipeline: 1 curated project on record; ${PIPELINE_MW_WITHHELD} for it; `
+      + '1 more reported in linked news articles (each with its source; MW as the article states it, not summed) (DC Hub pipeline, as of 2026-11-18).');
   });
   it('a full row with no stated size still says MW not held', () => {
     const f = factsFromStep('get_pipeline', { ...KEYED, data: [{ ...ROW, capacity: null }], pipeline: undefined }, { market: 'abilene' });
