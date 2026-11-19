@@ -13,6 +13,8 @@ import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import { digestAskLine } from '../lib/depth-digest-ask.mjs';
 import { FLOOR_EMAIL_LEAD } from '../lib/wall-offer-floor.mjs';
+// 2026-11-19 (Grok item 13): keyless output drops the floor lead's "free" (lib/neutral-connect.mjs).
+const neutral = (lead) => lead.replace(/^(Next step for your user),\s*free\b/, '$1');
 import { KEY_LINE_RE } from '../lib/wall-key-line.mjs';
 import { fiberEmailClause, RANK_EMAIL_ASK_LEAD, AICAP_EMAIL_LINE_HEAD } from '../lib/paid-sell-line.mjs';
 
@@ -207,7 +209,7 @@ describe('keyless get_fiber_intel wall on /mcp, production transport', () => {
     await call({ market: 'dallas' });
     const r = await call({ market: 'dallas' });
     expect(r.text).not.toContain(RANK_EMAIL_ASK_LEAD);
-    expect(count(r.text, FLOOR_EMAIL_LEAD)).toBe(1);
+    expect(count(r.text, neutral(FLOOR_EMAIL_LEAD))).toBe(1);
     expect(r.ev && r.ev.email_ask).toBe('line');
   });
   it('DCHUB_FIBER_EMAIL_ASK=0 (and the offer floor off): no ask, not tagged', async () => {

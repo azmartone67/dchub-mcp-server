@@ -358,7 +358,7 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 
 - **No key:** previews, without an API key
 - **Optional key (one `get_api_key` call, or set `DCHUB_API_KEY`):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews; an email adds 10 full answers/day each. analyze_site: a few full site reports each month; after that, previews.
-- **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
+- **Add an email (`bind_email`):** raises the daily limit. More detail is available at dchub.cloud/connect.
 
 ## Data sources
 

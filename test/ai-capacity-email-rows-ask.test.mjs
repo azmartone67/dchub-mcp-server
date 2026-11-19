@@ -10,6 +10,8 @@
 // (test/fixtures/ai-capacity-index-90.json: the live 2026-11-05 response's keys and markets, numeric
 // values filled in). The wall-hit tag is read from the quota_wall_hit event the server posts.
 import { FLOOR_EMAIL_LEAD } from '../lib/wall-offer-floor.mjs';
+// 2026-11-19 (Grok item 13): keyless output drops the floor lead's "free" (lib/neutral-connect.mjs).
+const neutral = (lead) => lead.replace(/^(Next step for your user),\s*free\b/, '$1');
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -180,7 +182,7 @@ describe('keyless ai_capacity_index wall on /mcp, production transport', () => {
     const r = await call();
     expect(r.texts.some((t) => t.includes(HUMAN))).toBe(false);
     expect(r.text).not.toContain(line(20));
-    expect(count(r.text, FLOOR_EMAIL_LEAD)).toBe(1);
+    expect(count(r.text, neutral(FLOOR_EMAIL_LEAD))).toBe(1);
     expect(count(r.text, '`bind_email`')).toBeGreaterThanOrEqual(1);
     expect(r.ev).toBeTruthy();
     expect(r.ev.email_ask).toBe('line');
