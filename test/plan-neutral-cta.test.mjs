@@ -21,6 +21,7 @@ import { neutralString, neutralCtaStep, NEUTRAL_GATED, CONNECT_URL, CTA_KEYS, CO
 import { WALL_CONNECT_URL } from '../lib/wall-connect-tag.mjs';
 const ONE_ROUTE = new Set([CONNECT_URL, WALL_CONNECT_URL]);
 import { leanObject } from '../lib/lean-response.mjs';
+import { splitLeadingJson } from '../lib/facility-location.mjs';
 
 // This file reads execute_plan step bodies and envelope keys, so it runs the full answer (what detail:"full" returns).
 // The compact default is covered by test/plan-compact-1117 and, through the real handler, test/plan-fact-header.
@@ -123,7 +124,13 @@ async function plan(extraHeaders = {}, { planted = false, walled = false, intent
   PLANTED_BACKEND = false; ANON_COUNT = 0;
   return msg && msg.result;
 }
-const surface = (r) => JSON.stringify((r.content || []).map((b) => b && b.text)) + JSON.stringify(r.structuredContent || {});
+// M1.2 (owner 2026-11-18, lib/neutral-cta.mjs RELAY_URL_FIELDS): the URL fields (human_url, for_your_human.url,
+// _upgrade.url, and a copy of the same link) send the human to the tagged relay page, or to the tagged /connect when no
+// relay was minted. That link is the one exception to "every CTA URL is /connect"; prose never carries it.
+// DCHUB_WALL_RELAY_URL=0 restores /connect there (the CONTROL below).
+const WALL_RELAY = /https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?via=mcp-wall&wall=[a-z_]+&src=[a-z_]+|connect\?via=mcp-wall&wall=connect&src=[a-z_]+)/g;
+const isWallRelay = (u) => typeof u === 'string' && new RegExp('^' + WALL_RELAY.source + '$').test(u);
+const surface = (r) => (JSON.stringify((r.content || []).map((b) => b && b.text)) + JSON.stringify(r.structuredContent || {})).replace(WALL_RELAY, 'WALL_RELAY');
 function violations(r) {
   const s = surface(r);
   const bad = [];
@@ -134,8 +141,18 @@ function violations(r) {
     if (CTA_LIKE.test(url) && !ONE_ROUTE.has(url)) bad.push('cta url: ' + url);
   }
   const sc = r.structuredContent || {};
-  if (sc.human_url !== undefined && !ONE_ROUTE.has(sc.human_url)) bad.push('human_url: ' + sc.human_url);
-  if (sc.for_your_human && sc.for_your_human.url !== undefined && !ONE_ROUTE.has(sc.for_your_human.url)) bad.push('for_your_human.url');
+  if (sc.human_url !== undefined && !ONE_ROUTE.has(sc.human_url) && !isWallRelay(sc.human_url)) bad.push('human_url: ' + sc.human_url);
+  if (sc.for_your_human && sc.for_your_human.url !== undefined && !ONE_ROUTE.has(sc.for_your_human.url)
+    && !isWallRelay(sc.for_your_human.url)) bad.push('for_your_human.url');
+  // the relay link rides only in URL fields: no prose (a block's text outside its leading JSON) carries it
+  for (const b of (r.content || [])) {
+    if (!b || typeof b.text !== 'string') continue;
+    const sp = splitLeadingJson(b.text);
+    const prose = sp && sp.json && typeof sp.json === 'object' ? sp.head + ' ' + sp.rest : b.text;
+    WALL_RELAY.lastIndex = 0;
+    if (WALL_RELAY.test(prose)) bad.push('relay in prose');
+  }
+  WALL_RELAY.lastIndex = 0;
   // An offer line states only canon's free offers: any call allowance is canon's "50 MCP calls/day with an email".
   for (const x of s.matchAll(/\d[\d,]*\s+(?:MCP\s+)?calls?\b[^."\\]{0,24}/gi)) if (!x[0].startsWith('50 MCP calls/day with an email')) bad.push('offer: ' + x[0]);
   return bad;
@@ -153,6 +170,19 @@ describe('execute_plan below a paid plan: neutral copy, one route to /connect (n
     // Option A (owner 2026-11-16, lib/neutral-connect.mjs): no credit, calls-per-day, free-key or listing-fee wording.
     const all = JSON.stringify([r.content, r.structuredContent]);
     expect(OPTION_A.filter((re) => re.test(all)).map(String)).toEqual([]);
+  }, 120_000);
+
+  it('M1.2: a keyless plan\'s human_url is the tagged relay page; DCHUB_WALL_RELAY_URL=0 restores /connect', async () => {
+    const on = await plan({}, { planted: false, walled: true });
+    expect(isWallRelay(on.structuredContent.human_url), on.structuredContent.human_url).toBe(true);
+    expect(on.structuredContent.human_url).toMatch(/[?&]via=mcp-wall&wall=[a-z_]+&src=[a-z_]+$|connect\?via=mcp-wall&wall=connect&src=[a-z_]+$/);
+    process.env.DCHUB_WALL_RELAY_URL = '0';
+    try {
+      const off = await plan({}, { planted: false, walled: true });
+      // Switched off: main's tagged /connect (lib/wall-connect-tag.mjs, owner 2026-11-19), with no relay and no &src.
+      expect(off.structuredContent.human_url).toBe(WALL_CONNECT_URL);
+      expect(JSON.stringify(off)).not.toMatch(/upgrade\/h\/|&src=/);
+    } finally { delete process.env.DCHUB_WALL_RELAY_URL; }
   }, 120_000);
 
   it('CONTROL: DCHUB_PLAN_NEUTRAL_CTA=0 brings the wording and the relay / pricing links back', async () => {

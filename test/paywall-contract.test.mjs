@@ -319,7 +319,7 @@ describe('G3: Grok gets no minted key and no session copy', () => {
     expect(r.result.isError).toBe(false);
     const urls = ctaUrls(r.body);
     expect(urls.length).toBeLessThanOrEqual(1);
-    if (urls.length) expect(urls[0]).toMatch(/\/upgrade\/h\/.*[?&]pc=grok(?:&via=mcp-wall&wall=[a-z_]+)?$/);
+    if (urls.length) expect(urls[0]).toMatch(/\/upgrade\/h\/.*[?&]pc=grok(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/);
     expect(r.sc.paywall_contract).toBe('grok');
   });
 });

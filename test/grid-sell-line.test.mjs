@@ -150,7 +150,7 @@ describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])
       const s = sc.user_message;
       expect(s).toMatch(/ERCOT/); expect(s).toContain('The full ERCOT brief is not in this preview; see what your agent found: '); expect(s).not.toMatch(/\$10/);
       expect(s).toMatch(/constraint/); expect(s).not.toMatch(/—/);
-      expect(s).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s]+[?&]buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
+      expect(s).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s]+[?&]buy=1(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/);
       expect(sc.for_your_human.text).toBe(s);
       expect(sc.for_your_human.url).toBe(s.slice(s.indexOf('https://')));
       expect(t).toContain(s);
@@ -259,7 +259,7 @@ describe('repeat keyless grid call in one session (fail 1)', () => {
     // the direct /go/c); still no second human line (the "sent the full ask earlier" note stands).
     expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(0);
-    expect(r2.structuredContent.for_your_human.url).toMatch(/[?&]buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
+    expect(r2.structuredContent.for_your_human.url).toMatch(/[?&]buy=1(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/);
   });
 });
 
@@ -314,7 +314,7 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     await S._ctxALS.run(s, () => S._goToolMark('get_fiber_intel', { metro: 'ashburn' }));
     const r = await callTool('get_fiber_intel', { metro: 'ashburn' }, s);
     const t = text(r), um = r.structuredContent.user_message;
-    expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The full fiber answer is not in this preview; see what your agent found: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/);
+    expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The full fiber answer is not in this preview; see what your agent found: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/);
     // Item 9 (owner 2026-11-11): the wall's own copy has no em dash; the fixed identity footer that closes it does.
     expect(um + t.slice(t.indexOf('get_fiber_intel returned')).replace(PREVIEW_FOOTER, '')).not.toMatch(/—/);
     expect(t).not.toMatch(/the lowest plan that returns them|payer checks out|Developer|claim_free_key/);
@@ -328,7 +328,7 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     expect(all[all.length - 1]).toBe(PREVIEW_FOOTER);
     const blocks = all.slice(0, -1);
     expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/);
-    expect(/\?buy=1(?:&via=mcp-wall&wall=[a-z_]+)?$/.test(blocks.slice(0, -1).join('\n').trimEnd())).toBe(true);   // the ask is last; the wall tag may follow buy=1
+    expect(/\?buy=1(?:&via=mcp-wall&wall=[a-z_]+(?:&src=[a-z_]+)?)?$/.test(blocks.slice(0, -1).join('\n').trimEnd())).toBe(true);   // the ask is last; the wall tag may follow buy=1
   });
   it('names the routes and geometry the gate cut when its markers are on the response', () => {
     const feat = { type: 'Feature', geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1], [2, 2]], _coordinates_total_in_pro: 6 }, properties: {} };

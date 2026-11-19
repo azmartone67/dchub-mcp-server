@@ -75,9 +75,9 @@ describe('execute_plan market_ranking envelope', () => {
   });
   it('the relay is the one link the response already carries', () => {
     const url = sc.ranked_answer.relay && sc.ranked_answer.relay.url;
-    // Note L1 + L2 (2026-11-15): below a paid plan the one link is /connect (lib/neutral-cta.mjs), still human_url's.
-    // Owner 2026-11-19: that link carries its wall tag (lib/wall-connect-tag.mjs).
-    expect(url).toBe('https://dchub.cloud/connect?via=mcp-wall&wall=connect');
+    // Note L1 + L2 (2026-11-15): below a paid plan the one link is human_url's. M1.2 (owner 2026-11-18): that link is
+    // the tagged relay page (or the tagged /connect when no relay was minted), lib/neutral-cta.mjs RELAY_URL_FIELDS.
+    expect(url).toMatch(/^https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?via=mcp-wall&wall=[a-z_]+&src=[a-z_]+|connect\?via=mcp-wall&wall=connect&src=[a-z_]+)$/);
     expect(url).toBe(sc.human_url);
   });
 });

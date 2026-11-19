@@ -732,7 +732,7 @@ describe('L) a fresh keyless session: the first execute_plan is full, the second
     // Option A (owner 2026-11-16): the offer names no allowance; it is the email line with the one /connect route.
     expect((r2.structuredContent || {}).user_message).toMatch(/email/i);
     expect((r2.structuredContent || {}).user_message).not.toMatch(/calls\/day|calls a day|free key|credits/i);
-    // Owner 2026-11-19: the /connect route carries its wall tag (lib/wall-connect-tag.mjs).
-    expect((r2.structuredContent || {}).human_url).toBe('https://dchub.cloud/connect?via=mcp-wall&wall=connect');
+    // M1.2 (owner 2026-11-18): the wall's one route is the relay page, tagged with this wall and the step that walled.
+    expect((r2.structuredContent || {}).human_url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?via=mcp-wall&wall=anon_daily_cap&src=[a-z_]+$/);
   }, 60_000);
 });

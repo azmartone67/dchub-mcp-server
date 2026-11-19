@@ -215,8 +215,18 @@ describe('4) a wall\'s /connect link says it came from an MCP wall', () => {
     const all = JSON.stringify(r);
     expect(all).not.toContain('"' + BARE_CONNECT_URL + '"');
     const sc = r.structuredContent || {};
-    if (sc.human_url) expect(sc.human_url).toBe(WALL_CONNECT_URL);
-    expect(all).toContain(WALL_CONNECT_URL);
+    // M1.2 (mcp#1566): with DCHUB_WALL_RELAY_URL on, the wall's link is the tagged relay page, or the tagged /connect
+    // (&src=<tool>) when no relay was minted. Switched off, it is this note's tagged /connect.
+    const RELAY = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?via=mcp-wall&wall=[a-z_]+&src=[a-z_]+$/;
+    if (sc.human_url && !RELAY.test(sc.human_url)) expect(sc.human_url.startsWith(WALL_CONNECT_URL), sc.human_url).toBe(true);
+    process.env.DCHUB_WALL_RELAY_URL = '0';
+    try {
+      const off = await s.call('execute_plan', PLAN);
+      const offAll = JSON.stringify(off);
+      expect(offAll).not.toContain('"' + BARE_CONNECT_URL + '"');
+      if ((off.structuredContent || {}).human_url) expect(off.structuredContent.human_url).toBe(WALL_CONNECT_URL);
+      expect(offAll).toContain(WALL_CONNECT_URL);
+    } finally { delete process.env.DCHUB_WALL_RELAY_URL; }
     const c = await session('198.18.118.10', 'openai-mcp', { path: '/mcp/chatgpt' });
     await c.call('execute_plan', PLAN);
     expect(JSON.stringify(await c.call('execute_plan', PLAN))).not.toContain('wall=connect');

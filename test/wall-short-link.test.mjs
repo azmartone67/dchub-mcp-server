@@ -256,10 +256,11 @@ describe('over the real app (stub backend, no network)', () => {
   it('the skips are wired: directory / Claude / core profiles, loopback and paid seats never reach either step', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    // the call sits inside the skip condition; 2026-10-28 it also carries the wall tag (lib/wall-tag.mjs)
+    // the call sits inside the skip condition; 2026-10-28 it also carries the wall tag (lib/wall-tag.mjs), and since
+    // M1.2 (2026-11-18) the tool that walled (_wallRelayTag)
     const head = "if (!c.loopback_step && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE\n"
       + "        && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {\n";
-    const call = "out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)), wall: _wallType });";
+    const call = "out = await shortWallLinkStep(out, { mint: _rt.mint, wall: _rt.wall, src: _rt.src });";
     expect(src).toContain(head);
     expect(src.split(head).length - 1, 'one skip block').toBe(1);
     expect(src.indexOf(call) - src.indexOf(head), 'the step is the first call inside the skip block').toBeGreaterThan(0);
