@@ -10080,6 +10080,24 @@ function _kffUsedPlanStep(out, c) {
     return _withFirstFullUsedBlock(out, q.full_answers_cap_today);
   } catch (_) { return out; }
 }
+// 5.43 (Grok daily note 2026-11-18, item 9): a keyless plan at preview depth says why, so a run at 00:33 UTC that met
+// a preview is readable: today's plan answer already used on this network or session, a QA-marked caller (never
+// served it), or an endpoint that does not serve it. '' when no reason applies.
+export function _kffPreviewReason(c) {
+  try {
+    if (!c || c.api_key) return '';
+    const seat = _keylessFirstFullSeat('execute_plan', c);
+    if (seat === 'charge') {
+      const q = _keylessFirstFullQuota(c, 'execute_plan');
+      return q && q.full_answers_remaining_today === 0
+        ? 'today\u2019s full plan answer without a key was used on this network (IP) or in this session; the next is after 00:00 UTC' : '';
+    }
+    if (seat) return '';
+    if (_isQaCaller(c) || c.qa_header === true || _selfTestTelemetryTag(c)) return 'a QA-marked caller is not served the first full plan answer';
+    if (c.profile && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE) return 'this endpoint does not serve the first full plan answer';
+    return '';
+  } catch (_) { return ''; }
+}
 // The email-bound free key's gate for this tool, when it is a plain answer this lane can serve:
 // allowed, not a paid taste, not capped by FREE_TIER_LIMITS. null otherwise.
 export function _keylessFirstFullGate(name, args) {
@@ -33594,7 +33612,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                       // a full answer", "an email raises the limit") are gone; the note says only the depth the steps ran at.
                       : (c && c._kffPlan === true
                         ? 'no key — steps ran at full depth'
-                        : 'no key — steps returned preview depth')) },
+                        : (() => { const why = _kffPreviewReason(c); return `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
         ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an

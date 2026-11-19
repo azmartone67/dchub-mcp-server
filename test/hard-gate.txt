@@ -371,6 +371,7 @@ test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
 test/kff-plan-full-depth-real-loopback.test.mjs
 test/kff-plan-preview-says-what-was-held-back.test.mjs
+test/kff-preview-reason-1119.test.mjs
 test/ladder-stage1.test.mjs
 test/land-site-screen-1119.test.mjs
 test/land-site-screen-e2e-1119.test.mjs

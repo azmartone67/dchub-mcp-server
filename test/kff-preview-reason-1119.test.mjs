@@ -1,0 +1,21 @@
+// kff-preview-reason-1119.test.mjs — Grok's daily MCP leadership note (2026-11-18) item 9: a keyless execute_plan that
+// came back at preview depth at 00:33 UTC said only "no key — steps returned preview depth". The note now says why:
+// today's plan answer already used, a QA-marked caller (never served it), or an endpoint that does not serve it.
+import { describe, it, expect } from 'vitest';
+import { _kffPreviewReason, _keylessFirstFullCharge } from '../server.mjs';
+
+describe('_kffPreviewReason', () => {
+  it('an unspent keyless caller has no reason; after the charge, the reason says it was used', async () => {
+    const c = { client_ip: '198.51.100.71', user_agent: 'Mozilla/5.0 agent' };
+    expect(_kffPreviewReason(c)).toBe('');
+    expect(await _keylessFirstFullCharge(c, 'execute_plan', 1)).toBe(true);
+    expect(_kffPreviewReason(c)).toMatch(/^today’s full plan answer without a key was used on this network \(IP\) or in this session; the next is after 00:00 UTC$/);
+  });
+  it('a QA-marked caller is told it is not served the first full plan answer', () => {
+    expect(_kffPreviewReason({ client_ip: '198.51.100.72', qa_header: true })).toBe('a QA-marked caller is not served the first full plan answer');
+  });
+  it('an endpoint outside the lane says so; a keyed caller has no reason', () => {
+    expect(_kffPreviewReason({ client_ip: '198.51.100.73', profile: 'chatgpt' })).toBe('this endpoint does not serve the first full plan answer');
+    expect(_kffPreviewReason({ client_ip: '198.51.100.74', api_key: 'k' })).toBe('');
+  });
+});
