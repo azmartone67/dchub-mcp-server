@@ -135,6 +135,7 @@ import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lea
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
+import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
@@ -4899,7 +4900,7 @@ export function _INSTR_TAIL_PACK(def) {
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
-  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}.`;
+  if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}. get_api_key and get_changes are callable by name even when not listed.`;
   if (def.light) return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}.`;
   return `\n\nENDPOINT SCOPE: /mcp/${def.pack} lists ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; discover_tools lists the rest.`;
 }
@@ -10190,8 +10191,10 @@ export function _freeDecisionClause() {
     ? _DECISION_TOOLS_LINE : 'Grid/queue/market-intel tools: previews. ' + INSTR_CONNECT_LINE;
 }
 // claim_free_key / bind_email `free_tier_rule` value: the enforced keyless clause, then what the key keeps.
+// Grok CLI note 2026-11-18 item 6 (Note F): the key reply's value no longer restates the keyless per-day clause
+// ("the first call each UTC day ..."); it says what the key keeps. The published canon rule is unchanged.
 export function _keyRuleValue() {
-  return _keyRuleText(KEYLESS_FIRST_FULL_CLAUSE);
+  return _keyRuleText('');
 }
 // ★2026-10-23 (owner growth freeze: emails captured): the benefit an email buys, in canon
 // numbers, so claim_free_key and bind_email LEAD with why a human should give one.
@@ -26412,6 +26415,11 @@ function _sourceLineCb(name, fn) {
       // 2026-11-17 (owner): every pointer at the key tool names its listed name, get_api_key (lib/key-tool-name.mjs).
       // Not on the directory / Claude / core profiles (each scrubs the key tool out) or a loopback step.
       _final = _keyToolPointerStep(_final, { skip: !!c.loopback_step || ownScrub });
+      // Grok CLI note 2026-11-18 item 4: a wall's bare /connect link fields (human_url, for_your_human.url) carry
+      // ?via=agent-referral&src=wall so the click is counted (lib/wall-connect-tag.mjs). Prose unchanged. Not on the
+      // directory / Claude profiles (/mcp/chatgpt, /mcp/claude keep their reviewed copy) or a clean platform.
+      _final = _wallConnectTagStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
+        || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE });
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -33651,7 +33659,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
         try {
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
-          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'plan_id', 'paired_sides']) {
+          // Grok CLI note 2026-11-18 item 1: next_tools (the get_changes daily check-in) is the first answer's only way
+          // back; compactFirstPlan does not copy it, so the day's best answer carried no return hook.
+          for (const k of ['rerun', 'grid_ranking', 'capacity_register', 'route_back', 'handoff', 'parcel_next_step', 'plan_id', 'paired_sides', 'next_tools']) {
             if (out[k] !== undefined && _final[k] === undefined) _final[k] = out[k];
           }
           // Grok live proof 2026-11-16 item 8: the description promises a replay on every envelope; the compact
@@ -37297,6 +37307,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
           snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
+        // The two coding CLIs (Grok CLI note 2026-11-18 item 2). Codex got no snippet of its own and Copilot CLI
+        // got the VS Code one (`servers` in .vscode/mcp.json), which Copilot CLI does not read. Checked 2026-11-19
+        // against the vendors' docs and our live /connect/codex and /connect/copilot-cli pages:
+        //   codex_cli    a [mcp_servers.<name>] table in ~/.codex/config.toml; url, plus http_headers (literal
+        //                values) or env_http_headers (header -> env var name). learn.chatgpt.com/docs/extend/mcp
+        //   copilot_cli  top-level mcpServers in ~/.copilot/mcp-config.json; type "http", url, headers, tools.
+        //                docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
+        codex_cli: {
+          label: 'OpenAI Codex CLI',
+          file: '~/.codex/config.toml (or .codex/config.toml in a trusted project)',
+          snippet: '[mcp_servers.dchub]\nurl = "' + _u + '"\nhttp_headers = { "X-API-Key" = "' + key + '" }',
+          note: 'To keep the key out of the file, use env_http_headers = { "X-API-Key" = "DCHUB_API_KEY" } instead of http_headers, and export DCHUB_API_KEY in the shell that starts codex.',
+        },
+        copilot_cli: {
+          label: 'GitHub Copilot CLI',
+          file: '~/.copilot/mcp-config.json',
+          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key }, tools: ['*'] } } }),
+        },
       },
       // CORRECTED 2026-08-18: this used to say email-bind was the only option
       // for a header-less host. It is not, and saying so cost us the whole
@@ -37315,6 +37343,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // text canon fences scan) is untouched.
   const _CLIENT_KEY_RULES = [
     [/claude[\s_-]*desktop/i, 'claude_desktop'], [/claude[\s_-]*code/i, 'claude_code'], [/cursor/i, 'cursor'],
+    // Copilot CLI (clientInfo github-copilot-developer, UA copilot-cli/) and Codex before the /copilot/ -> vscode rule.
+    [/copilot[\s_-]?cli|github-copilot-developer/i, 'copilot_cli'], [/codex/i, 'codex_cli'],
     [/vs[\s_-]*code|visual studio code|copilot/i, 'vscode'], [/\b(cline|roo)\b/i, 'cline'],
     [/windsurf|codeium/i, 'windsurf'], [/gemini/i, 'gemini_cli'], [/antigravity/i, 'antigravity'],
   ];
@@ -37800,7 +37830,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // who explicitly confirmed — routed through the suppression/unsubscribe-
         // compliant marketing choke-point. Pairs with the email-bind above.
         '📬 **Or let us remind you — ONE call.** If your human shares an email and wants a weekly *“what changed in the markets you queried”* digest, call `subscribe_digest` with {email}. We email a one-click confirm link (double opt-in) — they only get the digest after confirming, and every email has one-click unsubscribe. (This is the nudge that pulls your agent back when the data moves.)\n\n' +
-        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market); the key keeps them across sessions. Full access: ' + _subCheckoutUrl(DEVELOPER_URL + promoParam(), '');
+        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market); the key keeps them across sessions. Full access: ' + _keyBoundSubUrl(DEVELOPER_URL + promoParam(), key);
       return {
         content: [{ type: 'text', text }],
         structuredContent: {
@@ -37833,10 +37863,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // per-tool full-answer cap this server ENFORCES for this key today
           // (TRIAL_DAILY_FULL_CAP unbound, IDENTIFIED_DAILY_FULL_CAP bound).
           ...(((r && r.email_captured === true) || _freeKeyIsDaily()) ? {} : { free_calls_total: _rungNum('free') }),
-          daily_full_answers_per_tool: (r && r.email_captured === true)
-            ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP,
-          daily_limit_with_email:  _rungNum('identified'),
-          full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
+          // Grok CLI note 2026-11-18 item 6 (Note F): the agent-facing key reply states no per-day counts. The field
+          // names stay (clients read them) with null values; the server still enforces the same caps.
+          daily_full_answers_per_tool: null,
+          daily_limit_with_email:  null,
+          full_answers_per_tool_per_day_with_email: null,
           // Note F / option A (owner 2026-11-17): the field names stay (clients read them); the values say what the
           // key keeps, with no allowance, call count or pricing pointer (lib/continuity-ask.mjs).
           free_tier_rule:          _keyRuleValue(),
