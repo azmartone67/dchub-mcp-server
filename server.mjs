@@ -229,7 +229,8 @@ import { shapeFiberPayload } from './lib/fiber-payload.mjs';
 import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, LAST_SESSION_LINE, PLAN_SUFFIX, withPlanSuffix, stripPlanSuffix, PREVIEW_FOOTER, previewFooterOn, withPreviewFooter } from './lib/dchub-identity.mjs';
 // Daily habit (owner 2026-11-17): get_changes window/watchlist, dchub://daily, the daily next_tools entry, the one-call email ask.
 import { changesParams as _dhChangesParams, changesFallbackParams as _dhChangesFallback, attachDailyNext as _dhAttachDailyNext, dailyResourceText as _dhDailyResourceText, DAILY_RESOURCE_URI, dailyClaimAgentText as _dhClaimAgentText, dailyClaimAsk as _dhClaimAsk, withClaimFollowing as _dhWithClaimFollowing, normMarketSlug as _dhSlug, holdDailyInputs as _dhHoldDailyInputs } from './lib/daily-habit.mjs';
-import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
+import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY,
+         nextAskShownLogOn as _nextAskShownLogOn, holdTrackRow as _holdTrackRow, flushTrackRows as _flushTrackRows } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks, WALL_LINK_STATUSES as _WALL_LINK_STATUSES } from './lib/wall-link-track.mjs';
@@ -26418,8 +26419,23 @@ function _sourceLineCb(name, fn) {
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
+      // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
+      _flushTrackRows(c, name, _final);
     }
   };
+}
+// The one send for a tool call's /api/v1/mcp/track row (lib/agent-outreach.mjs holdTrackRow). Held for the
+// outermost wrapper on the surfaces where the agent receives next_ask as built here; sent at once on the
+// directory / Claude / core profiles (each rebuilds or scrubs the result after this point and serves no
+// next_ask), on an execute_plan step (the plan's own call), and with DCHUB_NEXT_ASK_SHOWN_LOG=0.
+function _trackRowSend(c, payload) {
+  try {
+    const cc = c || {};
+    const hold = _nextAskShownLogOn() && !cc.loopback_step && cc.profile !== DIRECTORY_PROFILE
+      && cc.profile !== CLAUDE_PROFILE && cc.profile !== CORE_PROFILE;
+    if (hold && _holdTrackRow(cc, payload, trackToolCall)) return;
+  } catch (_) { /* fall through: send now */ }
+  trackToolCall(payload).catch(() => {});
 }
 // Note L1 + L2: the caller of this execute_plan is on a paid plan (starter or above), so it meets no wall and its
 // answer is left as it is (lib/neutral-cta.mjs). c.tier is read after the handler, so a paid lift inside the call counts.
@@ -26518,7 +26534,7 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
   } finally {
     // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
     // whether it showed the email ask (lib/answer-markers.mjs), for the session-ordered log.
-    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
+    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), (p) => _trackRowSend(c, p),
       _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
     // C3: the /mcp tool wrapper sends the row itself, off the result the agent receives (_finishWallRow).
     if (!deferRow) _finishWallRow(c, name, out);   // option E: after every step that can add an email ask
@@ -29465,9 +29481,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       };
       // Front desk: an execute_plan row whose call planned the one next-step line waits for _sourceLineCb, which
       // adds params._front_desk when the line went out (lib/dchub-services.mjs deferFrontDeskRow).
-      if (!parkWallTrack(c, _trackRow, trackToolCall)
-          && !(name === 'execute_plan' && c && c._frontDeskPlan && _fdDeferRow(c, _trackRow, trackToolCall))) {
-        trackToolCall(_trackRow).catch(() => {});
+      // mcp#1564 follow-up: every send goes through _trackRowSend, which holds the row until _sourceLineCb
+      // knows whether the served result carried a next_ask (params._next_ask_to).
+      const _send = (p) => _trackRowSend(c, p);
+      if (!parkWallTrack(c, _trackRow, _send)
+          && !(name === 'execute_plan' && c && c._frontDeskPlan && _fdDeferRow(c, _trackRow, _send))) {
+        _send(_trackRow);
       }
       // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs). Parked, not sent:
       // the email ask it names (option E) is marked by steps that run after this handler.

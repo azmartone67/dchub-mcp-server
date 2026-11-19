@@ -9,7 +9,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import { nextAskFor, watchAskFor, watchSiteAskFor, WATCH_SITE_ASK_TOOLS, nextAskArgsOn, watchSiteAskOn,
-  nextAskArgsMatch, noteNextAsk, paramsForTrack, _resetOutreachForTest } from '../lib/agent-outreach.mjs';
+  nextAskArgsMatch, noteNextAsk, paramsForTrack, _resetOutreachForTest, NEXT_ASK_SHOWN_FIELD, nextAskShownLogOn,
+  servedNextAskTo, withNextAskShown, holdTrackRow, flushTrackRows } from '../lib/agent-outreach.mjs';
 
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {
@@ -55,6 +56,7 @@ afterEach(() => {
   delete process.env.DCHUB_NEXT_ASK_ARGS;
   delete process.env.DCHUB_WATCH_SITE_NEXT_ASK;
   delete process.env.DCHUB_WATCH_NEXT_ASK;
+  delete process.env.DCHUB_NEXT_ASK_SHOWN_LOG;
 });
 
 describe('next_ask args (pure)', () => {
@@ -140,6 +142,45 @@ describe('follow-through telemetry (pure)', () => {
     expect(paramsForTrack({ market_slug: 'x' }, 's3', 'get_market_dcpi_rank')).toEqual({ market_slug: 'x', _via_next_ask: 'rank_markets' });
     expect(paramsForTrack({ q: 1 }, 's3', 'search_facilities')).toEqual({ q: 1 });
     expect(nextAskArgsMatch({}, { a: 1 })).toBeNull();
+  });
+});
+
+describe('shown: the served call\'s own row names its next_ask (pure)', () => {
+  it('the field, the served tool, and a copy that leaves the handler\'s args alone', () => {
+    expect(NEXT_ASK_SHOWN_FIELD).toBe('_next_ask_to');
+    expect(servedNextAskTo({ structuredContent: { next_ask: { tool: 'rank_markets', question: 'q' } } })).toBe('rank_markets');
+    for (const r of [null, {}, { structuredContent: [] }, { structuredContent: { next_ask: {} } },
+      { structuredContent: { next_ask: { tool: 'Not A Tool!' } } }]) expect(servedNextAskTo(r)).toBeNull();
+    const args = { iso: 'PJM' };
+    const row = { tool: 'get_grid_data', status: 'ok', params: args };
+    const out = withNextAskShown(row, 'get_interconnection_queue');
+    expect(out.params).toEqual({ iso: 'PJM', _next_ask_to: 'get_interconnection_queue' });
+    expect(args).toEqual({ iso: 'PJM' });
+    expect(row.params).toBe(args);
+    expect(withNextAskShown({ tool: 't', params: undefined }, 'x').params).toEqual({ _next_ask_to: 'x' });
+  });
+  it('held rows leave on flush, marked for this tool only; an error row and a result with no next_ask are not marked', () => {
+    const sent = [];
+    const c = {};
+    holdTrackRow(c, { tool: 'a', status: 'ok', params: { q: 1 } }, (p) => sent.push(p));
+    holdTrackRow(c, { tool: 'b', status: 'ok', params: {} }, (p) => sent.push(p));
+    holdTrackRow(c, { tool: 'a', status: 'error', params: {} }, (p) => sent.push(p));
+    expect(sent).toHaveLength(0);
+    expect(flushTrackRows(c, 'a', { structuredContent: { next_ask: { tool: 'rank_markets' } } })).toBe(2);
+    expect(sent.map((r) => r.params._next_ask_to)).toEqual(['rank_markets', undefined]);
+    expect(flushTrackRows(c, 'b', { structuredContent: {} })).toBe(1);
+    expect(sent[2].params._next_ask_to).toBeUndefined();
+    expect(flushTrackRows(c, 'a', {})).toBe(0);   // sent once
+  });
+  it('a row nothing flushes still leaves, unmarked', async () => {
+    const sent = [];
+    holdTrackRow({}, { tool: 'a', status: 'ok', params: {} }, (p) => sent.push(p), { fallbackMs: 20 });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sent).toEqual([{ tool: 'a', status: 'ok', params: {} }]);
+  });
+  it('kill switch DCHUB_NEXT_ASK_SHOWN_LOG', () => {
+    expect(nextAskShownLogOn({})).toBe(true);
+    for (const v of ['0', 'off', 'false', 'no']) expect(nextAskShownLogOn({ DCHUB_NEXT_ASK_SHOWN_LOG: v })).toBe(false);
   });
 });
 
@@ -258,6 +299,25 @@ describe('next_ask args on /mcp', () => {
     expect(row, 'follow-up tracked').toBeTruthy();
     const params = typeof row.params === 'string' ? JSON.parse(row.params) : row.params;
     expect(params).toMatchObject({ iso: 'PJM', _via_next_ask: 'get_grid_data', _via_next_ask_args: 'all' });
+    // shown (mcp#1564 follow-up): the served call's own row names the next_ask it carried
+    const first = tracked.find((t) => t.tool === 'get_grid_data' && t.session_id === s.sid);
+    const p0 = typeof first.params === 'string' ? JSON.parse(first.params) : first.params;
+    expect(p0).toEqual({ iso: 'PJM', _next_ask_to: 'get_interconnection_queue' });
+    expect(params._next_ask_to).toBe('get_energy_prices');
+  }, 60_000);
+
+  it('kill switch DCHUB_NEXT_ASK_SHOWN_LOG=0: the row carries no _next_ask_to', async () => {
+    process.env.DCHUB_NEXT_ASK_SHOWN_LOG = '0';
+    const s = await session(KEY);
+    const r = await s.call('get_grid_data', { iso: 'ERCOT' });
+    expect(r.sc.next_ask && r.sc.next_ask.tool).toBe('get_interconnection_queue');
+    for (let i = 0; i < 40 && !tracked.some((t) => t.tool === 'get_grid_data' && t.session_id === s.sid); i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    const row = tracked.find((t) => t.tool === 'get_grid_data' && t.session_id === s.sid);
+    expect(row).toBeTruthy();
+    const p = typeof row.params === 'string' ? JSON.parse(row.params) : row.params;
+    expect(p._next_ask_to).toBeUndefined();
   }, 60_000);
 
   it('a keyed analyze_site answer offers save_site with the coordinate; keyless keeps compare_sites', async () => {
@@ -275,6 +335,18 @@ describe('next_ask args on /mcp', () => {
     expect(r.sc.next_ask && r.sc.next_ask.tool).toBe('compare_sites');
   }, 60_000);
 
+  it('/mcp/core: a core tool\'s delegated rows carry no _next_ask_to (the core answer serves no next_ask)', async () => {
+    const s = await session(KEY, '/mcp/core');
+    const r = await s.call('grid_power', { iso: 'PJM' });
+    expect(r.sc.next_ask).toBeUndefined();
+    for (let i = 0; i < 40 && !tracked.some((t) => t.session_id === s.sid && t.tool === 'get_grid_intelligence'); i++) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    const rows = tracked.filter((t) => t.session_id === s.sid);
+    expect(rows.map((t) => t.tool)).toContain('get_grid_intelligence');
+    for (const t of rows) expect(JSON.stringify(t.params || {}), t.tool).not.toContain('_next_ask_to');
+  }, 60_000);
+
   for (const path of ['/mcp/chatgpt', '/mcp/claude']) {
     it(`${path}: no next_ask args leak into the directory profile`, async () => {
       const s = await session(KEY, path);
@@ -282,6 +354,10 @@ describe('next_ask args on /mcp', () => {
       const pick = names.includes('search') ? ['search', { query: 'phoenix' }] : [names[0], {}];
       const r = await s.call(pick[0], pick[1]);
       expect(r.sc.next_ask, path).toBeUndefined();
+      await new Promise((res) => setTimeout(res, 300));
+      const rows = tracked.filter((t) => t.session_id === s.sid);
+      expect(rows.length, path + ' rows tracked').toBeGreaterThan(0);
+      for (const t of rows) expect(JSON.stringify(t.params || {}), path).not.toContain('_next_ask_to');
     });
   }
 });
