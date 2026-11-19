@@ -136,6 +136,7 @@ import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
 import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-provenance-once.mjs';
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
+import { previewScopeStep as _previewScopeStep } from './lib/preview-scope.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
@@ -26471,6 +26472,12 @@ function _sourceLineCb(name, fn) {
       // keeps its own copy). Kill switch DCHUB_NEUTRAL_CONNECT=0.
       _final = _neutralConnectStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform()
         || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || _planCallerPaid(c) });
+      // M2.1 (Grok free-to-paid note, owner 2026-11-18): a preview / walled answer says how much of its list it shows
+      // and which fields it withholds, in one neutral line plus structuredContent.preview_scope (lib/preview-scope.mjs).
+      // Not on /mcp/chatgpt (frozen), execute_plan (its steps speak for themselves), a loopback step or a clean
+      // platform. Kill switch DCHUB_PREVIEW_SCOPE=0.
+      _final = _previewScopeStep(_final, { skip: !!c.loopback_step || c.profile === DIRECTORY_PROFILE || _isCleanPlatform()
+        || name === 'execute_plan' || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) });
       // Grok colocation review (2026-11-17, "lead length" 12 of 12): execute_plan's block 0 is a plain-language answer
       // of at most 600 characters, and the plan's JSON moves to block 1 unchanged (structuredContent unchanged too).
       // A deliberate change to the block-0-is-JSON contract, for execute_plan only (lib/plan-lead-text.mjs). After
