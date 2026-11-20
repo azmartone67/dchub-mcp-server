@@ -185,7 +185,7 @@ describe('A) flag off: every response byte-identical, nothing written', () => {
   }
   it('the keyless preview it pins is a preview (the comparison above is not vacuous)', async () => {
     const r = await call('get_grid_data', seat());
-    expect(head(r).demand_mw).toBeNull();
+    expect(head(r).min_mw).toBeNull();
     expect(r.structuredContent.trial_preview).toBe(true);
   });
 });
@@ -230,26 +230,26 @@ describe('B) flag on: the free key answer twice per tool per IP, then the previe
   it('the budget is per IP: another IP gets its own two', async () => {
     flagOn();
     for (let i = 0; i < 3; i++) await call('get_grid_data', seat({ client_ip: '198.18.9.1' }));
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.9.2' }))).demand_mw).toBe(95021);
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.9.2' }))).min_mw).toBe(74723);
   });
   it('DCHUB_KEYLESS_FULL_TRIAL_CAP sets the per-tool budget (1 here; 0 = no trial)', async () => {
     flagOn({ DCHUB_KEYLESS_FULL_TRIAL_CAP: '1' });
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).demand_mw).toBe(95021);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).demand_mw).toBeNull();
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).min_mw).toBe(74723);
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).min_mw).toBeNull();
     process.env.DCHUB_KEYLESS_FULL_TRIAL_CAP = '0';
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.2' }))).demand_mw).toBeNull();
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.2' }))).min_mw).toBeNull();
   });
   it('/mcp/claude and /mcp/core seats are in the trial', async () => {
     flagOn();
     for (const profile of [CLAUDE_PROFILE, CORE_PROFILE]) {
       expect(profile, 'profile constant exported').toBeTruthy();
-      expect(head(await call('get_grid_data', seat({ profile }))).demand_mw, profile).toBe(95021);
+      expect(head(await call('get_grid_data', seat({ profile }))).min_mw, profile).toBe(74723);
     }
   });
   it('an execute_plan step (loopback IP) and a seat with no IP are not in the trial', async () => {
     flagOn();
     for (const client_ip of ['127.0.0.1', '::ffff:127.0.0.1', '::1', null]) {
-      expect(head(await call('get_grid_data', seat({ client_ip }))).demand_mw, String(client_ip)).toBeNull();
+      expect(head(await call('get_grid_data', seat({ client_ip }))).min_mw, String(client_ip)).toBeNull();
     }
   });
 });
@@ -270,7 +270,7 @@ describe('C) a tool outside the trial is unaffected', () => {
   }
   it('DCHUB_KEYLESS_FULL_TRIAL_TOOLS narrows the three and cannot add a tool', async () => {
     flagOn({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: 'get_facility, get_energy_prices,get_grid_intelligence' });
-    expect(head(await call('get_grid_data', seat())).demand_mw).toBeNull();
+    expect(head(await call('get_grid_data', seat())).min_mw).toBeNull();
     expect((await call('get_facility', seat())).isError).not.toBe(true);
     const s0 = seat({ client_ip: '198.18.21.1' });
     const on = norm(await call('get_energy_prices', s0), s0);
@@ -336,19 +336,19 @@ describe('E) QA and bot callers consume nothing and are tagged nothing', () => {
       const ip = '198.18.30.' + (Object.keys(QA_SEATS).indexOf(label) + 1);
       for (let i = 0; i < 3; i++) {
         const r = await call('get_grid_data', seat({ ...over, client_ip: ip, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
-        expect(head(r).demand_mw, `call ${i + 1}: an observer is never capped, because it is never charged`).toBe(95021);
+        expect(head(r).min_mw, `call ${i + 1}: an observer is never capped, because it is never charged`).toBe(74723);
       }
       await settle();
       expect(kftConsumes()).toEqual([]);
       expect(trialTracks()).toEqual([]);
       // and it did not spend the IP's budget for a real caller behind it
-      expect(head(await call('get_grid_data', seat({ client_ip: ip }))).demand_mw).toBe(95021);
+      expect(head(await call('get_grid_data', seat({ client_ip: ip }))).min_mw).toBe(74723);
     });
   }
   it('the override does nothing for a bot that is not a QA caller', async () => {
     flagOn();
     const r = await call('get_grid_data', seat({ user_agent: 'curl/8.4.0', [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
-    expect(head(r).demand_mw).toBeNull();
+    expect(head(r).min_mw).toBeNull();
   });
 });
 
@@ -433,10 +433,10 @@ describe('H) the funnel tag and the durable counter', () => {
     flagOn();
     const ip = '198.18.42.1';
     peekN.set(ipId(ip) + '|get_grid_data', 2);
-    expect(head(await call('get_grid_data', seat({ client_ip: ip }))).demand_mw).toBeNull();
+    expect(head(await call('get_grid_data', seat({ client_ip: ip }))).min_mw).toBeNull();
     peekN.set(ipId('198.18.42.2') + '|get_grid_data', 1);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).demand_mw).toBe(95021);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).demand_mw).toBeNull();
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).min_mw).toBe(74723);
+    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).min_mw).toBeNull();
   });
 });
 

@@ -111,12 +111,15 @@ describe('item 2: one rule decides the demand headline and the metrics', () => {
     (r.content || []).forEach((c, i) => { try { walk(JSON.parse(c.text), `content${i}`); } catch { /* prose */ } });
     expect(bad, label).toEqual([]);
   };
-  it.each([['AESO', AESO_DEMAND], ['XYZBA', BA_DEMAND]])('%s, keyless: a gated answer carries demand nowhere', async (iso, demand) => {
+  // Grok daily 2026-11-19 item 4 (owner 2026-11-20): a keyless answer keeps the public headline demand on
+  // every call. The 2026-10-22 rule still holds in its other half: the headline and the metric row agree.
+  it.each([['AESO', AESO_DEMAND], ['XYZBA', BA_DEMAND]])('%s, keyless: a gated answer shows demand in the headline and the metric row alike', async (iso, demand) => {
     const r = await call('get_grid_data', { iso }, SEATS.anonymous());
     expect(isGated(r), `${iso}: the keyless answer is expected to be a gated preview`).toBe(true);
-    demandNowhere(r, demand, iso);
-    // the stored metric rows still say what exists and when (unit, timestamp); only the value goes
     const sc = r.structuredContent || JSON.parse(r.content[0].text.slice(0, r.content[0].text.lastIndexOf('}') + 1));
+    expect(sc.demand_mw).toBe(demand);
+    if (sc.metrics && sc.metrics.demand_mw) expect(sc.metrics.demand_mw.value).toBe(demand);
+    // every other stored metric keeps what exists and when (unit, timestamp); only the value goes
     expect(sc.metrics.fuel_gas_mw).toEqual({ timestamp: T, unit: 'MW', value: null });
   });
   it.each(['anonymous', 'free', 'pro'])('%s: the headline and the metric row never disagree', async (who) => {

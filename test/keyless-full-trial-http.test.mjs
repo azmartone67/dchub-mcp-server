@@ -108,7 +108,7 @@ async function rpc(path, name, args, { ip = null, headers = {} } = {}) {
 }
 const kft = () => consumes.filter((w) => String(w.identity || '').startsWith('kft:'));
 const settle = () => new Promise((r) => setTimeout(r, 50));
-const FULL = '"demand_mw":95021';
+const FULL = '"min_mw":74723';   // a still-gated field: keyless keeps demand_mw (owner 2026-11-20)
 function norm(r, addr) {
   return JSON.stringify(r.result).split(addr).join('IP')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'TS')
