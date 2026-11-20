@@ -70,7 +70,7 @@ describe('item 1: the permitting answer', () => {
     ]);
     expect(a.kind).toBe('permitting');
     expect(a.headline).toMatch(/^54 data-center moratorium records on record \(6 shown\)/);
-    // 5.46 (Grok daily 11-19 item 2): only a row with its own source date (as_of) is ranked; the bulk-load
+    // 5.48 (Grok daily 11-19 item 2): only a row with its own source date (as_of) is ranked; the bulk-load
     // updated_at and an effective date alone never make a row "most recent" (test/grok-daily-1119b.test.mjs).
     const most = a.headline.split('Most recent by source date: ')[1].split(' (')[0];
     expect(most).toBe("Prince George's County, MD");

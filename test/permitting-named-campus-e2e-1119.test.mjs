@@ -7,7 +7,7 @@ import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-
 import { planLeadText } from '../lib/plan-lead-text.mjs';
 
 const PRO = { 'x-api-key': PRO_KEY, 'user-agent': 'dchub-qa-readonly', 'x-dc-client-ip': '203.0.113.37' };
-// 5.46 (Grok daily 2026-11-19 item 2): every row carries the bulk-load updated_at; "most recent" ranks by the row's own
+// 5.48 (Grok daily 2026-11-19 item 2): every row carries the bulk-load updated_at; "most recent" ranks by the row's own
 // as_of, and the one undated row is not ranked.
 const REC = (j, st, up, asOf) => ({ class: 'moratorium', jurisdiction: j, state: st, stage: 'enacted', scope: 'local', effective_date: null, as_of: asOf, updated_at: up });
 const MOR = { ok: true, class: 'moratorium', count: 54, records: [
