@@ -6,13 +6,17 @@
 // The line is CAPACITY_TEASER_LINE, byte-identical to the README line in mcp#1498.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE, capacityInventoryViolations } from '../lib/capacity-source-summary.mjs';
+import { CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE, CAPACITY_NOT_LISTINGS_LINE, capacityInventoryViolations } from '../lib/capacity-source-summary.mjs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 const LINE = 'New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 
 describe('the line itself', () => {
   it('is the canonical text', () => expect(CAPACITY_TEASER_LINE).toBe(LINE));
+  it('the not-listings line names no inventory count and carries no link', () => {
+    expect(capacityInventoryViolations(CAPACITY_NOT_LISTINGS_LINE)).toEqual([]);
+    expect(CAPACITY_NOT_LISTINGS_LINE).not.toMatch(/\d|https?:/);
+  });
   it('names no number, date, price or plan', () => {
     expect(capacityInventoryViolations(LINE)).toEqual([]);
     expect(LINE).not.toMatch(/\d|\$|\bMW\b|\bkW\b|\bpro\b|\bplan\b|\bprice|\bpricing\b|\bfree\b/i);
@@ -50,9 +54,10 @@ describe('live server (real server.mjs, stub backend)', () => {
   beforeAll(async () => {
     fence = fenceNetwork();
     H = await startHarness({ extraRoutes: (p, req) => {
+      // Capacity Source answers every caller (live 11-20: keyless source_capacity returns items [] too).
+      if (p.startsWith('/api/v1/listings')) return { status: 200, body: { ok: true, items: [], total: 0, as_of: AS_OF } };
       if (req.headers['x-api-key'] !== PRO_KEY) return undefined;
       if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
-      if (p.startsWith('/api/v1/listings')) return { status: 200, body: { ok: true, items: [], total: 0, as_of: AS_OF } };
       return { status: 200, body: clean() };
     } });
   }, 240_000);
@@ -91,6 +96,43 @@ describe('live server (real server.mjs, stub backend)', () => {
     expect(txt).not.toContain(LINE);
     expect(txt).not.toMatch(/browse https:\/\/dchub\.cloud\/(?!listings)/);
   }, 120_000);
+
+  // 2026-11-20: Gemini relayed pipeline projects and sites from a capacity plan as listed capacity while
+  // Capacity Source had no live listing. A no-fit plan now says the other rows are not for sale or lease.
+  it('a no-fit plan says its other rows are not listings, in answer_guide and intent_answer', async () => {
+    const out = await plan('where can I get 20 MW of data center capacity in Texas available by 2027');
+    expect(out.executed.some((e) => e.tool === 'source_capacity' && e.status === 'executed'), 'control: the step ran').toBe(true);
+    expect(out.answer_guide.split(CAPACITY_NOT_LISTINGS_LINE).length - 1).toBe(1);
+    expect(out.answer_guide.indexOf(CAPACITY_NOT_LISTINGS_LINE), 'ahead of the teaser').toBeLessThan(out.answer_guide.indexOf(LINE));
+    expect(out.intent_answer, 'control: this run carries intent_answer').toBeTruthy();
+    expect(out.intent_answer.not_established[0]).toBe(CAPACITY_NOT_LISTINGS_LINE);
+  }, 120_000);
+
+  it('the walled (keyless) form keeps the line whole', async () => {
+    const out = await plan('find 20 MW of colocation capacity in Dallas', { 'user-agent': 'test-client' });
+    expect(out.human_url, 'control: this run is a wall').toBeTruthy();
+    expect(out.answer_guide).toContain(CAPACITY_NOT_LISTINGS_LINE);
+  }, 120_000);
+
+  it('fires only when every source_capacity step found nothing', () => {
+    const sc = (result) => ({ tool: 'source_capacity', status: 'executed', result });
+    expect(H.S._capacityNotListings([sc({ ok: true, items: [] })])).toBe(CAPACITY_NOT_LISTINGS_LINE);
+    expect(H.S._capacityNotListings([sc({ ok: true, exact: [], bundles: [], shortfall: { mw: 20 } })])).toBe(CAPACITY_NOT_LISTINGS_LINE);
+    expect(H.S._capacityNotListings([sc({ ok: true, items: [{ slug: 'x' }] })]), 'a listing matched').toBeNull();
+    expect(H.S._capacityNotListings([sc({ ok: true, items: [] }), sc({ ok: true, items: [{ slug: 'x' }] })]), 'one step matched').toBeNull();
+    expect(H.S._capacityNotListings([sc(undefined)]), 'unreadable result is not a no-fit').toBeNull();
+    expect(H.S._capacityNotListings([{ tool: 'source_capacity', status: 'failed', result: { items: [] } }])).toBeNull();
+    expect(H.S._capacityNotListings([{ tool: 'get_pipeline', status: 'executed', result: { items: [] } }])).toBeNull();
+  });
+
+  it('_withNotListings adds the line once and leaves other answers alone', () => {
+    const ia = { headline: 'h', not_established: ['a'] };
+    const once = H.S._withNotListings(ia, CAPACITY_NOT_LISTINGS_LINE);
+    expect(once.not_established).toEqual([CAPACITY_NOT_LISTINGS_LINE, 'a']);
+    expect(H.S._withNotListings(once, CAPACITY_NOT_LISTINGS_LINE).not_established).toHaveLength(2);
+    expect(H.S._withNotListings(ia, null)).toBe(ia);
+    expect(ia.not_established, 'input not mutated').toEqual(['a']);
+  });
 
   it('DCHUB_CAPACITY_POINTERS=off removes it', async () => {
     process.env.DCHUB_CAPACITY_POINTERS = 'off';
