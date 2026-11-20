@@ -23,7 +23,7 @@ import { buildFiberAnswer } from '../lib/fiber-answer.mjs';
 const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed', result });
 const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 
-it('is planner 5.41', () => { expect(PLANNER_VERSION).toBe('5.43'); });
+it('is planner 5.41', () => { expect(PLANNER_VERSION).toBe('5.44'); });
 
 describe('1 Q-f: the Cermak building, not the operator row the search ranked first', () => {
   const SEARCH = { data: [

@@ -131,7 +131,7 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
       let o;
       beforeAll(async () => { o = await plan(q.args); }, 120_000);
 
-      it(`intent_class is ${q.cls}`, () => { expect(o.intent_class).toBe(q.cls); expect(o.planner_version).toBe('5.43'); });
+      it(`intent_class is ${q.cls}`, () => { expect(o.intent_class).toBe(q.cls); expect(o.planner_version).toBe('5.44'); });
 
       it('no step failed (no 404 step) and get_facility never ran on a market slug', () => {
         const bad = o.executed.filter((e) => e.status === 'failed');
