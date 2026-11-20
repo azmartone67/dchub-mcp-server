@@ -374,7 +374,7 @@ import { sinceLastCheckOn as _sinceOn, sinceLastCheckQuery as _sinceQuery, since
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
   buildCapacityPointer, capacityPointerLine, withCapacityLiveClause, capacityProcurementIntent,
-  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY, CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE,
+  buildCapacitySourceBlock, capacityRegisterLine, CAPACITY_ZERO_NOTE, CAPACITY_REGISTER_WHY, CAPACITY_TEASER_LINE, CAPACITY_TEASER_WALL_LINE, CAPACITY_NOT_LISTINGS_LINE,
   capacityStepIntent, capacityAvailableBy, capacityKwFromText, capacityRegionFromText, agentReferralIntent } from './lib/capacity-source-summary.mjs';
 export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, FOUNDING_URL, PRO_URL };
 
@@ -25015,6 +25015,25 @@ export function _capacityTeaser(executed) {
     return executed.some((e) => e && e.tool === 'source_capacity' && e.status === 'executed') ? CAPACITY_TEASER_LINE : null;
   } catch (_e) { return null; }
 }
+/**
+ * CAPACITY_NOT_LISTINGS_LINE when every executed source_capacity step found no fit, else null. Not behind
+ * DCHUB_CAPACITY_POINTERS: it is an accuracy line, not a pointer (and with pointers off there is no
+ * source_capacity step for it to read). Pure; never throws.
+ */
+export function _capacityNotListings(executed, fullOf) {
+  try {
+    if (!Array.isArray(executed)) return null;
+    const full = typeof fullOf === 'function' ? fullOf : () => undefined;
+    const sc = executed.filter((e) => e && e.tool === 'source_capacity' && e.status === 'executed');
+    return (sc.length && sc.every((e) => sourceCapacityNoFit(full(e) || e.result))) ? CAPACITY_NOT_LISTINGS_LINE : null;
+  } catch (_e) { return null; }
+}
+/** The intent_answer with the not-listings line added to not_established (once), or the answer unchanged. Pure. */
+export function _withNotListings(ia, line) {
+  if (!line || !ia || typeof ia !== 'object' || Array.isArray(ia)) return ia;
+  const ne = Array.isArray(ia.not_established) ? ia.not_established : [];
+  return ne.includes(line) ? ia : { ...ia, not_established: [line, ...ne] };
+}
 
 /**
  * The steps a plan should append because the INTENT NAMED those constraints and
@@ -33508,6 +33527,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 2026-11-16 (owner via Grok): a plan that ran source_capacity also carries the listings teaser
       // (CAPACITY_TEASER_LINE), on every surface. DCHUB_CAPACITY_POINTERS=off removes it with the rest.
       const _capTeaser = _capacityTeaser(executed);
+      // 2026-11-20: no listing matched, so say the plan's other rows are not capacity for sale or lease.
+      const _capNotListed = _capacityNotListings(executed, (e) => fullByEntry.get(e));
       // 2026-11-12 (owner via Grok, item 4): when the register offer is there, the capacity_no_fit
       // complement is not: a buyer with no listed match is offered DC Hub's own register path, not
       // outside procurement or brokerage desks. The market_answer complement is unchanged.
@@ -33731,6 +33752,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)),
                              sc.intent_class === 'market_ranking')
+          + (_capNotListed ? ' ' + _capNotListed : '')
           + (_capTeaser ? ' ' + _capTeaser : '')
           // Option A (owner 2026-11-16): Capacity Source is the teaser only, so the no-fit register offer (sentence and
           // capacity_register field) is not emitted. DCHUB_CAPACITY_REGISTER_OFFER=1 restores both.
@@ -33760,7 +33782,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...(() => { const _ra = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
-        ...(_intentAnswer ? { intent_answer: _intentAnswer } : {}),
+        ...(_intentAnswer ? { intent_answer: _withNotListings(_intentAnswer, _capNotListed) } : {}),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
         // converged ask). Static intent_class→recipe map; measurable because
