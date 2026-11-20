@@ -28900,11 +28900,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               : (_missedUpgradeFor(trimmed, undefined, { strict: true }) || _missedUpgradeFor(trimmed));
             trimmed._upgrade = _coachSellsPack ? {
               tier: 'anon_daily_cap',
-              message: _coachHead + ` Want more today? 💳 the ${PACK_PRICE} ${PACK_NAME} (usage capacity only, no subscription) or ${PRO_NAME} (${PRO_PRICE}) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.`,
+              // Owner 2026-11-20: no plan name or price here; the key tool and the pricing page.
+              message: _coachHead + ' For more today, relay the link in human_url to your human: it opens the DC Hub pricing page.',
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
-              credits_pitch: 'A one-time pack of 1,000 API credits, no subscription — the cheapest way to pay per call.',
             } : {
               tier: 'anon_daily_cap',
               message: _coachHead + ' ' + (_coachMissed ? _coachMissed.text : _wallCopy(_WALL_NEUTRAL_LINE, 'The full `' + name + '` depth comes with a paid DC Hub plan.'))
