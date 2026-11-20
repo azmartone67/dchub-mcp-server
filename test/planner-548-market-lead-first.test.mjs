@@ -1,4 +1,4 @@
-// planner-548-market-lead-first.test.mjs — planner 5.49 (owner "fix the rest", 2026-11-20), pure functions, no network.
+// planner-548-market-lead-first.test.mjs — planner 5.51 (owner "fix the rest", 2026-11-20), pure functions, no network.
 //
 // Live keyless on 5.46/5.47, "fastest place to get 300 MW within 18 months near Dallas": the headline opened
 // "Time to 300 MW of power for ERCOT (ISO): Dallas DCPI time-to-power …" and ended "dallas DCPI CAUTION.", which the
@@ -22,8 +22,8 @@ const ctx = { intent: BARE, intent_class: 'siting_search', constraint_iso: ['ERC
   deadline_months: 18, named_markets: ['dallas'], state: 'TX', states: ['TX'] };
 const MARKETS = 'Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).';
 
-describe('planner 5.49: a named market leads the time-to-power headline with its grid and verdict', () => {
-  it('PLANNER_VERSION is 5.49', () => { expect(PLANNER_VERSION).toBe('5.49'); });
+describe('planner 5.51: a named market leads the time-to-power headline with its grid and verdict', () => {
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.51'); });
 
   it('keyless: Dallas, ERCOT and the verdict lead; no ISO-first lead and no trailing slug verdict', () => {
     const h = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW).headline;

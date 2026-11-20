@@ -674,6 +674,7 @@ test/site-headline-envelope.test.mjs
 test/site-market-verdict.test.mjs
 test/site-owner-handoff-handler.test.mjs
 test/site-owner-handoff.test.mjs
+test/site-point-depth-1120.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs

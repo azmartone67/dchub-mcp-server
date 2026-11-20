@@ -16,7 +16,7 @@ describe('execute_plan 5.36: western Pennsylvania (real server.mjs on loopback)'
   it('runs the market card, canvas, region search and timeline, none unresolved', async () => {
     const o = sc(await H.call('/mcp', 'execute_plan', {
       intent: 'where in western Pennsylvania can I get 300 MW of power for a data center, and how soon' }, PRO));
-    expect(o.planner_version).toBe('5.49');
+    expect(o.planner_version).toBe('5.51');
     expect(o.intent_class, steps(o)).toBe('siting_search');
     const by = Object.fromEntries(o.executed.map((e) => [e.tool, e]));
     expect(Object.keys(by).sort(), steps(o)).toEqual(['find_sites', 'get_market_dcpi_rank',

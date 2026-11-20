@@ -17,10 +17,15 @@ beforeAll(async () => {
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: async (p, req, body, u) => {
     seen.push(p + (u && u.search ? u.search : ''));
+    // 5.50: the backend's flood_zone_at_point (FEMA NFHL) and the nearest transmission line.
+    if (p === '/api/v1/grid/transmission-proximity') return { status: 200, body: { available: true, line_count: 47, ehv_230kv_plus: 34, max_voltage_kv: 500,
+      nearest_km: 1.3, nearest: { distance_km: 1.3, from_sub: 'ASHBURN', to_sub: 'BEAUMEADE', voltage_kv: 230, operator: 'VIRGINIA ELECTRIC & POWER CO', line: 'VIRGINIA ELECTRIC & POWER CO' } } };
     if (p === '/api/v1/sites/find') return { status: 200, body: FIND };
     if (p === '/api/v1/site-planner/disaster-risk') return { status: 200, body: { success: true, coverage: 'validated',
       disaster_risk: { rating: 'Relatively Low' }, location: { county: 'Loudoun', state: 'Virginia' },
-      hazards: { 'Riverine Flooding': 'Relatively Moderate' }, source: 'FEMA National Risk Index (NRI), county-level' } };
+      hazards: { 'Riverine Flooding': 'Relatively Moderate' }, source: 'FEMA National Risk Index (NRI), county-level',
+      flood_zone_at_point: { status: 'measured', zone: 'X', zone_subtype: 'AREA OF MINIMAL FLOOD HAZARD', special_flood_hazard_area: false,
+        firm_panel: '51107C0261E', panel_effective_date: '2017-02-17', grain: 'point', source: 'FEMA National Flood Hazard Layer (NFHL), hazards.fema.gov' } } };
     if (p === '/api/v1/infrastructure') return { status: 200, body: { success: true,
       counts: { substations: 79, transmission_lines_eia: 14, gas_pipelines: 7 }, filter: { lat: 39.0186, lon: -77.458, radius_km: 10 } } };
     if (p === '/api/v1/analyze-parcel') return { status: 200, body: { _entity: 'parcel_analysis', total_acres: 41.2,
@@ -51,8 +56,20 @@ describe('execute_plan 5.42 (real server.mjs, stub backend)', () => {
     const ran = o.executed.filter((e) => e.status === 'executed' || e.status === 'gated_preview').map((e) => e.tool);
     expect(ran).toEqual(expect.arrayContaining(['analyze_parcel', 'get_infrastructure', 'get_disaster_risk', 'get_permitting_intel']));
     const ia = o.intent_answer;
-    expect(ia.headline).toMatch(/Flood: Loudoun County, Virginia rates riverine flooding Relatively Moderate/);
-    expect(ia.headline).toMatch(/Transmission: 79 substations, 14 transmission-line records \(EIA snapshot\), 7 gas-pipeline records within 10 km/);
+    // 5.50 (Grok daily 2026-11-19, item 13): the point's FEMA zone and the nearest line in km lead; county and counts follow.
+    expect(ia.headline).toMatch(/Flood: FEMA flood zone X \(area of minimal flood hazard\) at the point, outside the Special Flood Hazard Area \(FEMA NFHL, FIRM panel 51107C0261E, effective 2017-02-17\)\. County context: Loudoun County, Virginia rates riverine flooding Relatively Moderate/);
+    expect(ia.headline).toMatch(/Transmission: Nearest transmission line: 230 kV \(Virginia Electric & Power Co\), 1\.3 km from the point, measured to its ASHBURN substation endpoint \(EIA\/HIFLD\)\. Within the radius: 79 substations, 14 transmission-line records \(EIA snapshot\), 7 gas-pipeline records within 10 km/);
+    expect(ia.not_established.join(' ')).not.toMatch(/flood zone at the point .* is answered in analyze_site/i);
     expect(ia.evidence.join(' ')).toMatch(/Parcel: 41\.2 acres, parcel P-1/);
+    const dr = JSON.parse(JSON.stringify(o.executed.find((e) => e.tool === 'get_disaster_risk')));
+    expect(JSON.stringify(dr)).toMatch(/"flood_zone_at_point":\{[^}]*"status":"measured"/);
+    expect(seen.some((x) => x.startsWith('/api/v1/grid/transmission-proximity') && /lat=39\.0186/.test(x))).toBe(true);
+  }, 120_000);
+  it('a screen that names nothing still carries the nearest line (get_infrastructure always runs at a point)', async () => {
+    const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'screen a 100 MW site at 39.0438,-77.4874' }, PRO));
+    expect(o.intent_class).toBe('site_analysis');
+    expect(o.executed.map((e) => e.tool)).toContain('get_infrastructure');
+    expect(o.intent_answer.headline).toMatch(/Nearest transmission line: 230 kV .*1\.3 km from the point/);
+    expect(o.intent_answer.headline).toMatch(/FEMA flood zone X /);
   }, 120_000);
 });

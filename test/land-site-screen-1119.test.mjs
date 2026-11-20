@@ -111,13 +111,13 @@ describe('item 3: the site screen reads what it names', () => {
     expect(s.length).toBeLessThanOrEqual(8);
     expect(wellFormed(s)).toBe(true);
   });
-  it('only what was named, and only at a point', () => {
-    expect(siteScreenSteps('score this site for flood risk', PT, []).map((x) => x.tool)).toEqual([]);
+  it('the parcel only when named; get_infrastructure at every point (5.50: the nearest line in km); nothing without a point', () => {
+    expect(siteScreenSteps('score this site for flood risk', PT, []).map((x) => x.tool)).toEqual(['get_infrastructure']);
     // "at this parcel" names the place of a power question; it does not ask for the parcel's boundary
-    expect(siteScreenSteps('what power can I actually get at this parcel', PT, []).map((x) => x.tool)).toEqual([]);
-    expect(siteScreenSteps('parcel boundary and acreage', PT, []).map((x) => x.tool)).toEqual(['analyze_parcel']);
+    expect(siteScreenSteps('what power can I actually get at this parcel', PT, []).map((x) => x.tool)).toEqual(['get_infrastructure']);
+    expect(siteScreenSteps('parcel boundary and acreage', PT, []).map((x) => x.tool)).toEqual(['analyze_parcel', 'get_infrastructure']);
     expect(siteScreenSteps('nearest substations to this site', PT, []).map((x) => x.tool)).toEqual(['get_infrastructure']);
-    expect(siteScreenSteps('parcel acreage', PT, ['analyze_parcel'])).toEqual([]);
+    expect(siteScreenSteps('parcel acreage', PT, ['analyze_parcel', 'get_infrastructure'])).toEqual([]);
     expect(siteScreenSteps('parcel and transmission', null, [])).toEqual([]);
   });
 });

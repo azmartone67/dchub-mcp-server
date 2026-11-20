@@ -95,7 +95,7 @@ describe('plan_query router (pure)', () => {
     // schema_version stays 1. Exactly the split this assertion exists to prove.
     // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
     // 5.17: market_outlook binds every tracked DCPI market (owner priority 1, 2026-11-08).
-    expect(r.planner_version).toBe('5.49');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.51');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
@@ -456,12 +456,12 @@ describe('plan_query router (pure)', () => {
       expect(p.intent_class).toBe('site_analysis');
       expect(seq('what power can I actually get at this parcel', ctx)).toEqual([
         'analyze_site', 'get_composite_site_score', 'get_disaster_risk', 'get_water_risk',
-        'get_hosting_capacity']);
+        'get_hosting_capacity', 'get_infrastructure']);   // 5.50: every site screen at a point reads the nearest line
       expect(hcStep('what power can I actually get at this parcel', ctx).args_hint)
         .toMatchObject({ lat: 41.86, lon: -74.02, capacity_type: 'load' });
-      // Phoenix — nobody publishes there, so the plan is byte-for-byte the old one
+      // Phoenix — nobody publishes there, so no feeder read (5.50: the nearest-line read, as at every point)
       expect(seq('analyze the site at 33.45,-112.07')).toEqual([
-        'analyze_site', 'get_composite_site_score', 'get_disaster_risk', 'get_water_risk']);
+        'analyze_site', 'get_composite_site_score', 'get_disaster_risk', 'get_water_risk', 'get_infrastructure']);
     });
 
     it('a scheduled tool is never ALSO listed as a rejected alternative', () => {
