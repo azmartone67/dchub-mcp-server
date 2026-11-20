@@ -2,7 +2,7 @@
 
 DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.
 
-**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
+**[Data Center Power Index (DCPI)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
 New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.
 
@@ -66,9 +66,9 @@ https://dchub.cloud/connect
 
 ### Data reuse and agent authorization
 
-DCPI verdicts/composites for days from 2026-12-01 become CC-BY-4.0 after 30 days; earlier days, thresholds, methodology and monthly Rankings are CC-BY-4.0. Current values may be quoted with attribution for any number of markets in editorial work; bulk (full current list or a table of more than 25 markets in one piece) or recurring republication needs a DCPI licence. Sub-scores/detail are licensed separately. Facility/third-party layers retain upstream terms (OpenStreetMap: ODbL 1.0, attribution/share-alike). https://dchub.cloud/terms#dcpi-current-data · https://dchub.cloud/data-sources. Editorial work includes articles, reports, research notes, posts, presentations and AI answers. The editorial quote rule is separate from bulk/recurring redistribution rights. Attribution names DC Hub, the source link, method_version where provided and the data date. Sub-scores, risk/opportunity detail, narratives and forecasts are not CC-BY-4.0: eligible subscribers may use them internally and in client deliverables with attribution; republication or a third-party product/dataset requires a redistribution licence. DC Hub-derived grid analysis is open under its layer's terms, not a grant over raw system-operator readings. No blanket redistribution grant covers the facility inventory or unresolved upstream rights. Capacity Source teasers have their separate CC-BY-4.0 grant; opened details, matches and introductions remain confidential. Access/plan limits remain separate from content licences. An API CC-BY label does not override the current-value terms.
+DCPI verdicts/composites for days from 2026-12-01 become CC-BY-4.0 after 30 days; earlier days, thresholds, methodology and monthly Rankings are CC-BY-4.0. Current values may be quoted with attribution for any number of markets in editorial work; bulk (full current list or a table of more than 25 markets in one piece) or recurring republication needs a DCPI licence. Sub-scores/detail are licensed separately. Facility/third-party layers retain upstream terms (OpenStreetMap: ODbL 1.0, attribution/share-alike). https://dchub.cloud/terms#dcpi-current-data · https://dchub.cloud/data-sources. Editorial work includes articles, reports, research notes, posts, presentations and AI answers. The editorial quote rule is separate from bulk/recurring redistribution rights. Attribution names DC Hub, the source link, method_version where provided and the data date. Sub-scores, risk/opportunity detail, narratives and forecasts are not CC-BY-4.0: eligible subscribers may use them internally and in client deliverables with attribution; republication or a third-party product/dataset requires a redistribution licence. DC Hub-derived grid analysis is open under its layer's terms, not a grant over raw system-operator readings. No blanket redistribution grant covers the facility inventory or unresolved upstream rights. Capacity Source teasers have their separate CC-BY-4.0 grant; opened details, matches and introductions remain confidential. Access limits remain separate from content licences. An API CC-BY label does not override the current-value terms.
 
-DC Hub complements existing agents, platforms and tools with data center and energy intelligence. Within the user's request and client permissions, read-only research does not require separate approval for every lookup. Technical availability is not authorization: get_api_key creates a credential and needs user authorization; bind_email uses only an email the user explicitly provides for that purpose. Show the current introduction terms and call accept_capacity_terms only after the user agrees to that version. An existing key may be used only within delegated scope and budget; connection alone does not authorize new charges. Payments (including mpp_pay/mpp_credential), credit packs or subscriptions require the user's spending authorization and any client approval required. request_capacity_intro and standing introduction requests require the user's authorization to request contact/share the supplied details, as well as the applicable introduction terms; provider acceptance still controls release of provider contacts. A continuation named agent_autonomous describes a technical path, not permission to spend, accept terms or contact anyone.
+DC Hub complements existing agents, platforms and tools with data center and energy intelligence. Within the user's request and client permissions, read-only research does not require separate approval for every lookup. Technical availability is not authorization: get_api_key creates a credential and needs user authorization; bind_email uses only an email the user explicitly provides for that purpose. Show the current introduction terms and call accept_capacity_terms only after the user agrees to that version. An existing key may be used only within delegated scope; connection alone does not authorize new charges. Any payment action (including mpp_pay/mpp_credential) requires the user's spending authorization and any client approval required. request_capacity_intro and standing introduction requests require the user's authorization to request contact/share the supplied details, as well as the applicable introduction terms; provider acceptance still controls release of provider contacts. A continuation named agent_autonomous describes a technical path, not permission to spend, accept terms or contact anyone.
 
 MCP browse example: `source_capacity(min_mw=5, location="Germany")`. The MCP tool uses `location`, not the REST-only `country` filter.
 
@@ -194,7 +194,7 @@ Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use
 }
 ```
 
-`DCHUB_API_KEY` is optional: leave it empty for previews, or set a key from https://dchub.cloud/connect. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+`DCHUB_API_KEY` is optional. Set a key from https://dchub.cloud/connect if you have one. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
 
 ### Claude Code
 
@@ -348,17 +348,13 @@ Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `
 
 ## Privacy and data handling
 
-- **Per-call telemetry (first-party only).** Every tool call is logged to the DC Hub backend (`POST /api/v1/mcp/track`): timestamp, tool name, call parameters, detected client/platform, tier, session id, your API key (if you sent one), status and duration. It is used for rate limits, billing and quality. It is never sent to a third party, and there is no advertising or third-party analytics. Anonymous calls carry no key. Details: [SECURITY.md](SECURITY.md#outbound-network-calls).
-- **Email capture (`bind_email`) is optional.** The `bind_email` tool exists to raise your daily limit. If you call it, the email you pass is stored against your key, and you can ignore the tool. The server never asks for or collects an email any other way.
+- **Per-call telemetry (first-party only).** Every tool call is logged to the DC Hub backend (`POST /api/v1/mcp/track`): timestamp, tool name, call parameters, detected client/platform, session id, your API key (if you sent one), status and duration. It is used for rate limits and quality. It is never sent to a third party, and there is no advertising or third-party analytics. Anonymous calls carry no key. Details: [SECURITY.md](SECURITY.md#outbound-network-calls).
+- **Email capture (`bind_email`) is optional.** If you call it, the email you pass is stored against your key, and you can ignore the tool. The server never asks for or collects an email any other way.
 - **No install-time code.** Installing this package runs no scripts (no `preinstall`, `install`, `postinstall` or `prepare`). The git pre-commit hook for contributors is opt-in: `npm run hooks:install`.
 
 ## Keys
 
-`DCHUB_API_KEY` is optional.
-
-- **No key:** previews, without an API key
-- **Optional key (one `get_api_key` call, or set `DCHUB_API_KEY`):** previews, and every tool callable. analyze_site: a few full site reports each month; after that, previews. More detail is available at dchub.cloud/connect.
-- **Add an email (`bind_email`):** raises the daily limit. More detail is available at dchub.cloud/connect.
+`DCHUB_API_KEY` is optional. You can call `get_api_key` or set `DCHUB_API_KEY` from https://dchub.cloud/connect. `bind_email` is optional and uses only an email the user explicitly provides.
 
 ## Data sources
 
