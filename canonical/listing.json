@@ -1,6 +1,6 @@
 {
   "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. First live refresh 2026-10-09 (seed was Grok refresh-oct9 listing-copy.md; values were identical).",
-  "as_of": "2026-11-17T13:42:36Z",
+  "as_of": "2026-11-20T13:42:49Z",
   "auth": "None required to start (previews); claim_free_key returns a free key in one call; OAuth 2.0 supported",
   "canon_version": "1.0.0",
   "capacity_blurb": "Capacity Source by DC Hub: operators and brokers list available data-center capacity free; buyers and AI agents source it by size (kW or MW) and location with the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if the provider accepts.",
@@ -21,21 +21,21 @@
   "copy_source": {
     "path": "canonical/listing-copy.json",
     "repo": "azmartone67/dchub-mcp-server",
-    "sha256": "4ae0fc887092e5f016645dc84383f32cf3f026eb5321313fc256eee8915363f0"
+    "sha256": "622361bbcb18624adb43a1927907f4fbfacabb0aab915499b808381ba6feeb57"
   },
-  "copy_updated_at": "2026-11-15",
+  "copy_updated_at": "2026-11-19",
   "endpoint": "https://dchub.cloud/mcp",
-  "glama_400": "DC Hub is the live data layer for data-center siting that agents can query and cite. Its Data Center Power Index (DCPI) scores where data centers can get grid power across 300+ markets daily. Also 330,000+ mapped power, grid, gas and fiber assets. 97 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start.",
+  "glama_400": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices, site selection and power grid questions. The Data Center Power Index (DCPI) scores where data centers can get grid power across 300+ markets daily. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start.",
   "license": "CC-BY-4.0",
-  "long_description": "DC Hub is the live data layer for data-center site selection and the power, grid and energy behind it. DCPI scores grid power for data centers in 300+ markets. Agents can query it and cite it. It also covers 330,000+ mapped power, grid, gas and fiber assets and ISO interconnection queue snapshots, and carries live grid feeds from the seven US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), plus retail and wholesale electricity prices by state and ISO. Answers carry an as-of timestamp and a citation line. The server has 97 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start. Capacity Source adds a free capacity marketplace: operators list data-center capacity at https://dchub.cloud/listings, and agents search it by size and location with source_capacity, then request an introduction with request_capacity_intro.",
+  "long_description": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores 300+ markets. The Data Center Power Index (DCPI) is a daily score of where data centers can get grid power. Agents can query it and cite it. It covers mapped power, grid, gas and fiber assets and ISO interconnection queue snapshots, and carries live grid feeds from the seven US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), plus retail and wholesale electricity prices by state and ISO. Answers carry an as-of timestamp and a citation line. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start. Capacity Source adds a capacity marketplace: operators list data-center capacity at https://dchub.cloud/listings, and agents search it by size and location with source_capacity, then request an introduction with request_capacity_intro.",
   "name": "DC Hub Intelligence",
   "ok": true,
   "price_line": null,
   "registry_name": "cloud.dchub/mcp-server",
-  "short_description": "DC Hub is the live data layer for data-center site selection and the power, grid and energy behind it. DCPI scores grid power for data centers in 300+ markets.",
+  "short_description": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores 300+ markets.",
   "source_repo": "https://github.com/azmartone67/dchub-mcp-server",
   "tagline": "Live data center, power, grid, fiber and deal data for AI agents and site selection.",
-  "tight": "DC Hub is live data for data-center site selection. Its Data Center Power Index (DCPI) scores grid power in 300+ markets daily. MCP: https://dchub.cloud/mcp",
+  "tight": "DC Hub is the orchestration layer for data center and energy intelligence. Data Center Power Index (DCPI): 300+ markets daily. MCP: https://dchub.cloud/mcp",
   "tool_count": 97,
   "tool_counts": {
     "chatgpt": 65,
