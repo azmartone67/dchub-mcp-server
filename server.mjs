@@ -288,6 +288,7 @@ import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere a
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
+import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark, askedForEmailInProse as _askedForEmailInProse } from './lib/offers-shown.mjs';
@@ -33887,6 +33888,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           const _mm = Array.isArray(minted.metro_slug) ? minted.metro_slug : (minted.metro_slug ? [minted.metro_slug] : []);
           _dhAttachDailyNext(out, [_dhSlug(constraintSlug || ''), ..._mm.map((x) => _dhSlug(String(x || '')))].filter(Boolean).slice(0, 3));
         }
+      } catch (_e) { /* a hint never breaks an answer */ }
+      // Grok cold-start note 2026-11-20 fix 2 (lib/key-path-next.mjs): a keyless answer names the key tool, last, at most
+      // once per session, on the same surfaces.
+      try {
+        if (_keyPathNextOn() && c && !c.api_key && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
       } catch (_e) { /* a hint never breaks an answer */ }
       // A2: mint the Deal Desk Brief for the callers entitled to one. Attached
       // BEFORE the stringify so both halves of the response carry it.
