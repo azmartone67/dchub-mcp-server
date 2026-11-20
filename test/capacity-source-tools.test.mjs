@@ -1692,8 +1692,9 @@ describe('browse-path access block → next_steps', () => {
     const payload = JSON.parse((await browseResult(fixture)).content[0].text);
     expect(Object.keys(payload)).toEqual(
       // listings_matching / register_call: the honest count and, under LISTING_FEW, the person-approved register
-      // call (item 4, owner 2026-11-11); grid_check: both cards sit in one state, so the grid check for it (item 3).
-      [...Object.keys(fixture), 'listings_matching', 'register_call', 'grid_check', 'citation', 'provenance', '_source', '_cite', 'next_call']);   // next_call: lib/next-call.mjs, on every data answer (Brain block 2026-10-28 item 4)
+      // call (item 4, owner 2026-11-11); grid_check: both cards sit in one state, so the grid check for it (item 3);
+      // market_check: the market itself beside the register call (owner 2026-11-20).
+      [...Object.keys(fixture), 'listings_matching', 'register_call', 'market_check', 'grid_check', 'citation', 'provenance', '_source', '_cite', 'next_call']);   // next_call: lib/next-call.mjs, on every data answer (Brain block 2026-10-28 item 4)
     for (const [i, item] of payload.items.entries()) {
       expect(Object.keys(item), 'item ' + i).toEqual(Object.keys(fixture.items[i]));
     }

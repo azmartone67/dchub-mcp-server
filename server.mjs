@@ -9327,6 +9327,32 @@ export function _listingGridCheckLine(gc) {
     + gc.calls.map((c) => '`' + c.tool + (Object.keys(c.arguments).length ? ' ' + _callArgsText(c.arguments) : '') + '`').join(' · ') + '.';
 }
 
+// Owner 2026-11-20: an empty or thin capacity answer left a procurement buyer with nothing to read but the
+// register step. The market itself is not empty: the facilities already there and that market's supply,
+// vacancy and pricing are one call each, from the caller's own filters. With no place at all, the market
+// ranking for the size is the call. Read-only lookups, so no approval line (unlike register_call).
+export function _listingMarketCheck(args) {
+  const a = args && typeof args === 'object' ? args : {};
+  const market = _listingStr(a.market);
+  const st = _capacityStateCode(a.state);
+  const loc = _listingStr(a.location);
+  const mw = [a.target_mw, a.min_mw].map(Number).find((v) => Number.isFinite(v) && v > 0)
+    || [a.target_kw, a.min_kw].map((v) => Number(v) / 1000).find((v) => Number.isFinite(v) && v > 0);
+  const size = mw ? { min_capacity_mw: mw } : {};
+  const calls = [];
+  if (st) calls.push({ tool: 'search_facilities', arguments: { state: st, ...size } });
+  else if (market || loc) calls.push({ tool: 'search_facilities', arguments: { query: market || loc, ...size } });
+  if (market) calls.push({ tool: 'get_market_intel', arguments: { market: market.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') } });
+  if (!calls.length) {
+    calls.push({ tool: 'execute_plan', arguments: { intent: 'rank markets for a ' + (mw ? mw + ' MW ' : '') + 'data center requirement' } });
+  }
+  return { calls, why: 'the market is not empty: facilities already operating there, and its supply, vacancy and pricing' };
+}
+export function _listingMarketCheckLine(mc) {
+  return 'Meanwhile, the market itself (operators and supply already there, not listings): '
+    + mc.calls.map((c) => '`' + c.tool + ' ' + _callArgsText(c.arguments) + '`').join(' · ') + '.';
+}
+
 // The rendered lines for a 2xx match body.
 export function _matchLines(body) {
   const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
@@ -9446,6 +9472,8 @@ export function _matchToolResult(r, args) {
     if (!slugs.length || sf) {
       payload.register_call = _listingRegisterCall(args);
       tail.push(_listingRegisterLine(payload.register_call));
+      payload.market_check = _listingMarketCheck(args);
+      tail.push(_listingMarketCheckLine(payload.market_check));
     }
     const legs = [...(Array.isArray(scrubbed.exact) ? scrubbed.exact : []),
       ...(Array.isArray(scrubbed.bundles) ? scrubbed.bundles.flatMap((x) => (x && Array.isArray(x.legs) ? x.legs : [])) : [])];
@@ -9489,6 +9517,8 @@ export function _listingBrowseExtras(body, args) {
   if (n < LISTING_FEW) {
     fields.register_call = _listingRegisterCall(args);
     tail.push(_listingRegisterLine(fields.register_call));
+    fields.market_check = _listingMarketCheck(args);
+    tail.push(_listingMarketCheckLine(fields.market_check));
   }
   const gc = _listingGridCheck(args, rows);
   if (gc) { fields.grid_check = gc; tail.push(_listingGridCheckLine(gc)); }
