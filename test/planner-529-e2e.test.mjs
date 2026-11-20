@@ -38,7 +38,7 @@ afterAll(async () => {
 describe('execute_plan 5.29: the three re-check prompts (real server.mjs on loopback)', () => {
   it('"Texas or Arizona, 100 MW by 2028": siting_search, steps ran for TX and for AZ', async () => {
     const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'Texas or Arizona, 100 MW by 2028' }, PRO));
-    expect(o.planner_version).toBe('5.53');
+    expect(o.planner_version).toBe('5.54');
     expect(o.intent_class).toBe('siting_search');
     expect(ran(o).length, steps(o)).toBeGreaterThan(0);
     const geo = (e) => e.args && (e.args.state || e.args.region);
