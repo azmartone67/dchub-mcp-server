@@ -155,6 +155,19 @@ describe('find_sites free coarsening', () => {
       expect(JSON.stringify(out)).not.toMatch(/60\.4|24\.7/);
     }
   });
+  it('be#9111 distance_note: the preview keeps the caveat and drops the km (the backend\'s below-Pro wording)', () => {
+    const NOTE = 'This point is 120 km from the centre of the Midland–Odessa market, whose verdict and time to power it carries. They describe new power for that market, not this point: serving a load here may need new transmission line build, and the interconnection timeline can differ. Confirm with the serving utility.';
+    const p = payload();
+    p.candidates[0].market = { ...p.candidates[0].market, distance_note: NOTE };
+    for (const dp of [1, 2]) {
+      const m = H.S._coarsenFindSites(p, dp).candidates[0].market;
+      expect(m.distance_note).toBe(NOTE.replace('120 km from', 'well away from'));
+      expect(m.distance_note).not.toMatch(/\d/);
+      expect(m.distance_note).toContain('new transmission line build');
+    }
+    expect(H.S._previewDistanceNote('odd 37.5 km wording')).toBe('odd some distance wording');
+    expect(p.candidates[0].market.distance_note).toBe(NOTE);   // the input is not mutated
+  });
   it('a candidate without the blocks is left as it was', () => {
     const out = H.S._coarsenFindSites({ success: true, candidates: [{ lat: 1.23, lon: 4.56, next_calls: [] }] }, 1);
     expect(out.candidates[0].market).toBeUndefined();

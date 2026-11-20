@@ -14632,6 +14632,9 @@ function _findSitesCoarsenCoords(obj, dp = 1) {
   }
   return out;
 }
+// The backend's below-Pro wording (util/site_market_verdict.distance_note, full=False).
+export const _previewDistanceNote = (note) => note.replace(/\bThis point is \d+(?:\.\d+)? km from the centre of\b/, 'This point is well away from the centre of')
+  .replace(/\d+(?:\.\d+)?\s*km\b/g, 'some distance');
 export function _coarsenFindSites(payload, dp = 1) {
   const out = { ...payload };
   out.candidates = payload.candidates.map((cand) => {
@@ -14640,8 +14643,11 @@ export function _coarsenFindSites(payload, dp = 1) {
     c2.coordinate_precision_km = dp === 2 ? 1.1 : 11.0;
     // Grok QA 2026-10-23: the verdict and the time-to-power band are free; the months (a paid DCPI figure)
     // and the distance to the market centre (it would place the exact anchor) are not.
+    // be#9111 (Grok 2026-11-20 P1): market.distance_note states the same km in prose; a preview keeps the
+    // caveat in the backend's own below-Pro wording and drops the figure.
     if (cand.market && typeof cand.market === 'object' && !Array.isArray(cand.market)) {
       c2.market = { ...cand.market, distance_km: null };
+      if (typeof cand.market.distance_note === 'string') c2.market.distance_note = _previewDistanceNote(cand.market.distance_note);
     }
     if (cand.time_to_power && typeof cand.time_to_power === 'object' && !Array.isArray(cand.time_to_power)) {
       const t = cand.time_to_power;
