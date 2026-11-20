@@ -7,13 +7,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  DAEDALMAP_WILDFIRE_HINT, DAEDALMAP_MCP_URL, DAEDALMAP_NAME, DAEDALMAP_SITE_URL, DAEDALMAP_REGISTRY_NAME,
+  DAEDALMAP_WILDFIRE_HINT, DAEDALMAP_MCP_URL, DAEDALMAP_PACK_ID, DAEDALMAP_NAME, DAEDALMAP_SITE_URL, DAEDALMAP_REGISTRY_NAME,
   HAZARD_CLIMATE_TOOLS, daedalmapWildfireHint, boundLocation, hasHazardRead, daedalmapHintEnabled,
 } from '../lib/daedalmap-wildfire-hint.mjs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const EXACT = 'For wildfire events and aggregates at this location, use DaedalMap (https://app.daedalmap.com/mcp/wildfires).';
+const EXACT = 'For wildfire events and aggregates at this location, use DaedalMap (https://app.daedalmap.com/mcp, pack_id wildfires; other hazard packs are on the same endpoint, and some, wildfires among them, need a DaedalMap account). Agents call DaedalMap directly; DC Hub does not proxy it.';
 const PARCEL = 'For the official parcel polygon and cadastral reference, use Parcel GPS (https://mcp.parcelgps.com/mcp).';
 const ran = (tool, status = 'executed', args = {}) => ({ step: 1, tool, status, args, result: {} });
 const SAC = { __citySlug: 'sacramento-ca', __outlook: { slug: 'sacramento' }, stateFromPlace: 'CA' };
@@ -22,7 +22,11 @@ describe('DaedalMap wildfire hint: pure', () => {
   it('the sentence and constants are the approved wording', () => {
     expect(DAEDALMAP_WILDFIRE_HINT).toBe(EXACT);
     expect(DAEDALMAP_NAME).toBe('DaedalMap Wildfires');
-    expect(DAEDALMAP_MCP_URL).toBe('https://app.daedalmap.com/mcp/wildfires');
+    // DaedalMap's one endpoint since 2026-11-19; the pack is chosen by pack_id, never by path.
+    expect(DAEDALMAP_MCP_URL).toBe('https://app.daedalmap.com/mcp');
+    expect(DAEDALMAP_PACK_ID).toBe('wildfires');
+    expect(EXACT).toContain('(https://app.daedalmap.com/mcp, pack_id wildfires;');
+    expect(EXACT).toContain('DC Hub does not proxy it');
     expect(DAEDALMAP_SITE_URL).toBe('https://www.daedalmap.com');
     expect(DAEDALMAP_REGISTRY_NAME).toBe('com.daedalmap/wildfires');
   });
@@ -32,7 +36,7 @@ describe('DaedalMap wildfire hint: pure', () => {
       const h = daedalmapWildfireHint({ signals: SAC, executed: [ran(tool)] });
       expect(h, tool).not.toBeNull();
       expect(h.sentence).toBe(EXACT);
-      expect(h.field).toMatchObject({ name: DAEDALMAP_NAME, text: EXACT, mcp_url: DAEDALMAP_MCP_URL,
+      expect(h.field).toMatchObject({ name: DAEDALMAP_NAME, text: EXACT, mcp_url: DAEDALMAP_MCP_URL, pack_id: 'wildfires',
         registry_name: DAEDALMAP_REGISTRY_NAME, location: { kind: 'market', value: 'sacramento' } });
     }
   });
@@ -80,6 +84,8 @@ describe('DaedalMap wildfire hint: pure', () => {
     const code = raw.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
     expect(code).not.toMatch(/\bfetch\s*\(|node:http|node:https|callAPI|XMLHttpRequest|\bimport\s*\(/);
     expect(raw).not.toMatch(/partner/i);
+    // the retired per-pack URL (https://app.daedalmap.com/mcp/<pack>) is gone from the shipped code
+    expect(code).not.toMatch(/app\.daedalmap\.com\/mcp\/[a-z]/i);
     expect(raw).not.toMatch(/\$\d|\bpricing\b|\bper month\b|\bPro plan\b/i);
   });
 });
@@ -117,7 +123,7 @@ describe('DaedalMap wildfire hint: execute_plan end to end', () => {
     expect(hazardRan(sc).length, 'no hazard step ran: the hint would be absent for another reason').toBeGreaterThan(0);
     expect(sc.answer_guide).toContain(EXACT);
     expect(sc.answer_guide.split(EXACT)).toHaveLength(2);                  // once
-    expect(sc.wildfire_next_step).toMatchObject({ name: DAEDALMAP_NAME, text: EXACT, mcp_url: DAEDALMAP_MCP_URL });
+    expect(sc.wildfire_next_step).toMatchObject({ name: DAEDALMAP_NAME, text: EXACT, mcp_url: DAEDALMAP_MCP_URL, pack_id: 'wildfires' });
     expect(text).toContain(EXACT);
     // Routing only: nothing went to DaedalMap, and the stub backend saw no request for it.
     expect(fence.foreign.filter((u) => /daedalmap/i.test(String(u)))).toEqual([]);
