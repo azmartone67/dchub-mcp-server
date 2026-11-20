@@ -349,6 +349,7 @@ import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, lan
   landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
 import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs';
+import { nearestTransmission as _nearestTransmission, NEAREST_LINE_RADIUS_KM as _NEAREST_LINE_RADIUS_KM } from './lib/site-point-depth.mjs';
 import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
@@ -23957,7 +23958,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.48';   // 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.50';   // 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -24100,10 +24101,20 @@ export const _CAPACITY_STEP_MIN_MS = 6000;
 // 5 s the step reads timed_out (answer_guide says to call it directly; it is not reported as no data) and the
 // plan answers from its other steps. DCHUB_PLAN_SCOREBOARD_MS overrides (1000-20000).
 export const _EXEC_SCOREBOARD_MS_DEFAULT = 5000;
+// 5.50 (Grok daily 2026-11-19, item 13: "plan <= 5 s, now 6.6 s"): inside a plan, get_composite_site_score gets 4 s.
+// A site screen runs it beside analyze_site on the same point, and the pair contend for the same site score: measured
+// 2026-11-20, the plan's composite step took 12.4 s cold and 5.3 s warm while the tool alone answered in 1.4 s. The
+// screen's verdict comes from analyze_site; past 4 s the composite step reads timed_out (call it directly) and the
+// plan answers from its other steps. DCHUB_PLAN_COMPOSITE_MS overrides (1000-20000).
+export const _EXEC_COMPOSITE_MS_DEFAULT = 4000;
 export function _execStepCapMs(tool, env = process.env) {
-  if (tool !== 'get_grid_scoreboard') return _EXEC_STEP_TIMEOUT_MS;
-  const v = parseInt(String((env && env.DCHUB_PLAN_SCOREBOARD_MS) || ''), 10);
-  return Number.isFinite(v) && v >= 1000 && v <= _EXEC_STEP_TIMEOUT_MS ? v : _EXEC_SCOREBOARD_MS_DEFAULT;
+  const cap = (name, dflt) => {
+    const v = parseInt(String((env && env[name]) || ''), 10);
+    return Number.isFinite(v) && v >= 1000 && v <= _EXEC_STEP_TIMEOUT_MS ? v : dflt;
+  };
+  if (tool === 'get_grid_scoreboard') return cap('DCHUB_PLAN_SCOREBOARD_MS', _EXEC_SCOREBOARD_MS_DEFAULT);
+  if (tool === 'get_composite_site_score') return cap('DCHUB_PLAN_COMPOSITE_MS', _EXEC_COMPOSITE_MS_DEFAULT);
+  return _EXEC_STEP_TIMEOUT_MS;
 }
 export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEOUT_MS) {
   return Math.max(0, Math.min(stepMs, deadlineMs - elapsedMs));
@@ -36370,6 +36381,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const { lat, lon } = _extractCoordArgs(a);
       if (!Number.isFinite(lat) || !Number.isFinite(lon))
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      // 5.50: the backend's answer carries flood_zone_at_point (the FEMA NFHL zone at the point, fail-closed).
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/disaster-risk', {
         lat, lng: lon,
       })) }] };
@@ -36474,7 +36486,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       layer: S.describe('Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants'),
       min_voltage_kv: N.describe('Only include transmission/substations at or above this voltage in kV, e.g. 69'),
       limit: LIMIT },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', _foldCoordArgs(a))) }] }));
+    async (a) => {
+      const args = _foldCoordArgs(a);
+      const { lat, lon } = _extractCoordArgs(a || {});
+      // 5.50 (Grok daily 2026-11-19, item 13): at a point, the nearest transmission line in km joins the counts
+      // (the public transmission-proximity read; lib/site-point-depth.mjs).
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', args)) }] };
+      }
+      const [r, tx] = await Promise.all([
+        callAPI('/api/v1/infrastructure', args),
+        // A public route, read as one server-side lookup so it is not a second metered call on the caller's key.
+        callAPI('/api/v1/grid/transmission-proximity', { lat, lon, radius_km: _NEAREST_LINE_RADIUS_KM }, { internal: true, timeout: 4000 }).catch(() => null),
+      ]);
+      const out = r && typeof r === 'object' && !Array.isArray(r) && !r.error ? { ...r, nearest_transmission: _nearestTransmission(tx) } : r;
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   trackedTool(srv, 'get_fiber_intel', 'Use this when the user asks about fiber routes, carriers or connectivity for a market: long-haul, metro, dark or IX routes. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Without full access you get a sample of routes, not the full set; the full set needs a full-access key. Ex: "Zayo long-haul routes via Dallas."',
     { carrier: S.describe('Fiber carrier to filter on, e.g. Zayo, Lumen, Cogent, "Crown Castle", Windstream, GTT, Uniti; omit for all carriers'),
