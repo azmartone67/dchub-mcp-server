@@ -18,7 +18,7 @@ const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed'
 const NOW = Date.parse('2026-11-20T04:30:00Z');
 
 describe('planner 5.46: a bare city with a deadline and a speed superlative is a one-state siting question', () => {
-  it('PLANNER_VERSION is 5.48', () => { expect(PLANNER_VERSION).toBe('5.48'); });
+  it('PLANNER_VERSION is 5.50', () => { expect(PLANNER_VERSION).toBe('5.50'); });
 
   it.each([
     BARE,
