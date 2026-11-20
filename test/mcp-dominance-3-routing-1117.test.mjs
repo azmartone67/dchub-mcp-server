@@ -15,7 +15,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const args = (p, tool) => p.recommended_sequence.filter((s) => s.tool === tool).map((s) => s.args_hint);
 
 describe('5.37', () => {
-  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.48'); });
+  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.49'); });
   it('get_subsea_cables and get_infrastructure are on the execute_plan allowlist, and the new classes carry a why_live code', () => {
     expect(_EXEC_ALLOWED_TOOLS).toContain('get_subsea_cables');
     expect(_EXEC_ALLOWED_TOOLS).toContain('get_infrastructure');

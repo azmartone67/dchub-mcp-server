@@ -55,18 +55,19 @@ async function keylessGridData(iso = 'PJM') {
 }
 
 describe('keyless get_grid_data, end to end', () => {
-  it('the message matches the payload: no MW figure beside a null demand_mw', async () => {
+  it('the message matches the payload: the public EIA-930 headline demand is kept, the curve stays gated', async () => {
     const r = await keylessGridData();
     const sc = r.structuredContent;
-    expect(sc.demand_mw ?? null).toBeNull();           // demand is a Pro figure (test/gating.test.mjs)
-    expect(sc.message).not.toMatch(/92178|\d[\d,]*\s*MW/);
-    expect(sc.message).toMatch(/withheld on a keyless call/);
-    expect(JSON.stringify(r)).not.toContain('92178');
+    // Grok 2026-11-19 item 4 (owner 2026-11-20): every keyless call keeps demand_mw, not just the trial ones.
+    expect(sc.demand_mw).toBe(92178);
+    expect(sc.message).not.toMatch(/withheld on a keyless call/);
+    expect(Array.isArray(sc.demand_24h)).toBe(false);
   });
   it('every next step names get_grid_data and claim_free_key, not get_grid_intelligence, and no email requirement', async () => {
     const sc = (await keylessGridData()).structuredContent;
     expect(sc.message).toContain('get_api_key');
-    expect(sc.message).toContain('get_grid_data with iso=PJM');
+    // With demand shown the backend's sentence stands; the retry names the tool in agent_action.
+    expect(sc.agent_action.then).toContain('get_grid_data with iso=PJM');
     expect(sc.message).not.toMatch(/email[- ]only|dev key/i);
     if (sc.agent_action) { expect(sc.agent_action.then || '').toContain('get_grid_data'); expect(sc.agent_action.then || '').not.toContain('grid/intelligence'); }
     if (sc.email_capture) {

@@ -12,7 +12,7 @@ import { buildNamedCampusAnswer } from '../lib/named-project-facts.mjs';
 const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed', result });
 const L3 = 'Which US states, counties or cities have data center moratoriums or restrictive land-use rules right now?';
 
-it('is planner 5.42', () => { expect(PLANNER_VERSION).toBe('5.48'); });
+it('is planner 5.42', () => { expect(PLANNER_VERSION).toBe('5.49'); });
 
 describe('item 1: permitting routing', () => {
   it('the L3 intent routes to permitting and reads moratorium, legislation and zoning records', () => {
@@ -70,14 +70,12 @@ describe('item 1: the permitting answer', () => {
     ]);
     expect(a.kind).toBe('permitting');
     expect(a.headline).toMatch(/^54 data-center moratorium records on record \(6 shown\)/);
-    const most = a.headline.split('Most recent: ')[1].split('.')[0].split('; ');
-    expect(most).toHaveLength(5);
-    for (const m of most) expect(m).toMatch(/\((enacted|proposed), (effective|as of|record updated) \d{4}-\d{2}-\d{2}\)$/);
-    // the effective date is said as one; a source date as one; only then the record's update date
-    expect(a.headline).toMatch(/West Seneca, NY \(proposed, effective 2026-11-01\)/);
-    expect(a.headline).toMatch(/Prince George's County, MD \(enacted, as of 2026-10-25\)/);
-    expect(a.headline).toMatch(/Colfax County, NM \(enacted, record updated 2026-10-24\)/);
-    expect(a.headline).not.toMatch(/Milwaukee/);   // the oldest of six is cut
+    // 5.48 (Grok daily 11-19 item 2): only a row with its own source date (as_of) is ranked; the bulk-load
+    // updated_at and an effective date alone never make a row "most recent" (test/grok-daily-1119b.test.mjs).
+    const most = a.headline.split('Most recent by source date: ')[1].split(' (')[0];
+    expect(most).toBe("Prince George's County, MD");
+    expect(a.headline).toMatch(/Prince George's County, MD \(enacted, as of 2026-10-25\) \(5 undated records not ranked\)\./);
+    expect(a.headline).not.toMatch(/record updated|Milwaukee|Colfax|West Seneca/);
     expect(a.headline).toMatch(/No zoning-restriction record is published for the US/);
     expect(a.headline).toContain(BILLS_NOT_LOADED);
     expect(a.headline).not.toMatch(/\b0 data-center bills?\b/);
@@ -90,10 +88,11 @@ describe('item 1: the permitting answer', () => {
     expect(a.headline).toMatch(/^No data-center moratorium is published in DC Hub's permitting records in TX\./);
     expect(a.headline).toMatch(/3 data-center bills tracked in TX \(Open States, as of 2026-11-15\)\./);
   });
-  it('records with no source date say they are dated by the DC Hub update', () => {
+  it('records with no source date are not ranked, and say so', () => {
     const recs = MOR(2); recs.records = recs.records.slice(0, 2);
     const a = buildPermittingAnswer(ctx, [ex(1, 'get_permitting_intel', { class: 'moratorium' }, recs)]);
-    expect(a.not_established.join(' ')).toMatch(/dated by when DC Hub last updated it/);
+    expect(a.not_established.join(' ')).toMatch(/2 of the 2 moratorium records shown carry no source date/);
+    expect(a.headline).toMatch(/None of the records shown carries a source date, so none is listed as most recent\./);
   });
   it('another class is not answered here', () => {
     expect(buildPermittingAnswer({ intent_class: 'site_analysis' }, [ex(1, 'get_permitting_intel', { class: 'moratorium' }, MOR(54))])).toBe(null);

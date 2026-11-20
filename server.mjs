@@ -86,7 +86,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -349,6 +349,7 @@ import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, lan
   landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
 import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs';
+import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -15729,7 +15730,7 @@ const _DCPI_PROSE_RULES = [
   [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
   // 5.44: the deadline comparison beside a market's time to power (lib/intent-answers.mjs deadlineSentence) says
   // which side of the deadline the withheld figure falls; it goes with the figure.
-  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.48)
+  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.49)
   // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
   [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
 ];
@@ -16023,6 +16024,11 @@ const _TYPED_PREVIEW_FIELDS = {
   // there would unmask every one of them. This table is the tool-scoped lever
   // and is why it exists.
   get_interconnection_queue: new Set(['total']),
+  // Grok daily 2026-11-19 item 4 (owner 2026-11-20: "Yes, add it"): the backend serves the public EIA-930
+  // headline demand to anonymous callers on purpose, but this trim nulled it once the caller's keyless trial
+  // was spent, so the same ERCOT figure showed in one call and was withheld in the next. The 24h curve, mix
+  // and peaks stay gated.
+  get_grid_data: new Set(['demand_mw']),
 };
 const _NO_TYPED_PREVIEW = new Set();
 
@@ -23502,6 +23508,9 @@ export function _planSignals(intent, context) {
   // r-planner-v5.12: a named corridor place binds a point (see _PLAN_CORRIDOR_META).
   const corridor = _planCorridor(text);
   let coordsFromCorridor = false;
+  // 5.45 (Grok daily 2026-11-19, P1): a street address is the site. It is geocoded at execution
+  // (_planGeocodeTargets basis 'address'); the corridor point of the town it sits in is never used for it.
+  let __address = null;
   const coords = (() => {
     const lat = Number(c.lat ?? c.latitude), lon = Number(c.lon ?? c.lng ?? c.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
@@ -23510,6 +23519,8 @@ export function _planSignals(intent, context) {
       const a = Number(m[1]), b = Number(m[2]);
       if (Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
     }
+    __address = _streetAddressOf(text);
+    if (__address) return null;
     if (corridor) { coordsFromCorridor = true; return { lat: corridor.lat, lon: corridor.lon }; }
     return null;
   })();
@@ -23655,7 +23666,7 @@ export function _planSignals(intent, context) {
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
   const scopeWidenedOut = _coloScopeWidened(__colo, coords, scopeWidened);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro };
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address };
 }
 // The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
 // would carry without a colocation read. Pure; never throws.
@@ -23944,7 +23955,9 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.48';   // 5.48: a named-market time-to-power lead names the market, its grid and its verdict first. 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+// 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
+//         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
+export const PLANNER_VERSION = '5.49';   // 5.49: a named-market time-to-power lead names the market, its grid and its verdict first. 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -25423,6 +25436,18 @@ const _PLAN_POINT_PLACEHOLDER = /^<[^>]*\b(?:lat|lon|latitude|longitude)\b[^>]*>
 export function _planGeocodeTargets(seq, text, d) {
   try {
     if (!Array.isArray(seq) || !d || d.coords) return null;
+    // 5.45: a street address is geocoded as itself, ahead of the town or market it names.
+    if (d.__address && d.__address.query) {
+      const query = d.__address.query;
+      let n = 0;
+      for (const s of seq) {
+        const h = s && s.args_hint;
+        if (!h || typeof h !== 'object') continue;
+        const ph = (v) => typeof v === 'string' && _PLAN_POINT_PLACEHOLDER.test(v.trim());
+        if (ph(h.lat) && ph(h.lon)) { s.geocode = query; s.geocode_basis = 'address'; delete s.geocode_fallback; n += 1; }
+      }
+      return n ? { query, phrase: query, state: d.__address.state || null, basis: 'address', steps: n } : null;
+    }
     const up = _planUnmatchedPlace(text, d);
     const o = d.__outlook;
     const mk = !up && o && typeof o.name === 'string' && o.name && typeof o.state === 'string' && /^[A-Z]{2}$/.test(o.state)
@@ -25444,6 +25469,20 @@ export function _planGeocodeTargets(seq, text, d) {
 // lat/lon placeholders are replaced in a COPY of its args_hint. A miss, an error or a point outside the
 // named state leaves the placeholders, and the step is skipped as before (and `geocoded` says why).
 // fetchPoint(query) -> {lat, lng, label, source} | null; injectable for tests.
+// 5.45: the street-address outcome of _execGeocodePlan. A hit becomes the run's point (sig.coords, so every point
+// tool reads the address, not a market default); a miss is reported so the answer says the address was not located.
+export function _execAddressGeo(geocoded, sig) {
+  try {
+    const g = (Array.isArray(geocoded) ? geocoded : []).find((x) => x && x.basis === 'address');
+    if (!g) return null;
+    if (g.resolved === false) return { miss: true, query: g.query };
+    if (sig && typeof sig === 'object' && Number.isFinite(g.lat) && Number.isFinite(g.lon)) {
+      sig.coords = { lat: g.lat, lon: g.lon };
+      sig.radiusKm = null;
+    }
+    return { miss: false, query: g.query, lat: g.lat, lon: g.lon };
+  } catch (_e) { return null; }
+}
 export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
   const queries = [...new Set((Array.isArray(seq) ? seq : []).map((s) => s && s.geocode).filter((q) => typeof q === 'string' && q))];
   if (!queries.length) return null;
@@ -25459,8 +25498,12 @@ export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
     // The label must carry the state the text named, so "Springfield, MO" never lands in Illinois.
     const st = q.split(',').pop().trim().toUpperCase();
     const label = ok && typeof pt.label === 'string' ? pt.label : '';
-    const stateOk = ok && (!label || new RegExp('\\b(?:' + [st, ..._planStateNamesFor(st)].map((x) => x.replace(/\s+/g, '\\s+')).join('|') + ')\\b', 'i').test(label));
-    if (ok && stateOk) {
+    const isAddr = seq.some((s) => s && s.geocode === q && s.geocode_basis === 'address');
+    const stateOk = ok && (!label || (isAddr && !/^[A-Z]{2}$/.test(st)) || new RegExp('\\b(?:' + [st, ..._planStateNamesFor(st)].map((x) => x.replace(/\s+/g, '\\s+')).join('|') + ')\\b', 'i').test(label));
+    // 5.45: a street address must be placed AT the address: a label without its house number and street is the
+    // town's point (the geocoder's fallback), the very point the address ask must not read.
+    const addrOk = !isAddr || (ok && _addressPointOk(label, q));
+    if (ok && stateOk && addrOk) {
       const p = { lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5 };
       let steps = 0;
       for (const s of seq) {
@@ -25468,9 +25511,11 @@ export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
         s.args_hint = { ...s.args_hint, lat: p.lat, lon: p.lon };
         steps += 1;
       }
-      const basis = seq.some((s) => s && s.geocode === q && s.geocode_basis === 'market') ? 'market' : 'town';
+      const basis = isAddr ? 'address' : seq.some((s) => s && s.geocode === q && s.geocode_basis === 'market') ? 'market' : 'town';
       out.push({ query: q, lat: p.lat, lon: p.lon, ...(label ? { label } : {}), ...(pt.source ? { source: String(pt.source) } : {}),
-        basis, steps, note: basis === 'market'
+        basis, steps, note: basis === 'address'
+          ? `The point for "${q}" came from a geocoder that matched the street address (${label || 'no label'}).`
+          : basis === 'market'
           ? `The point for "${q}" came from a geocoder and stands for the market's town centre, not a parcel.`
           : `"${q}" is not a market DC Hub tracks; its point came from a geocoder and stands for the town, not a parcel.` });
     } else {
@@ -25481,8 +25526,9 @@ export async function _execGeocodePlan(seq, fetchPoint, timeoutMs = 4000) {
         s.args_hint = { ...s.geocode_fallback };
         fellBack += 1;
       }
-      out.push({ query: q, resolved: false, ...(fellBack ? { fell_back_steps: fellBack } : {}),
-        note: why || (ok ? `the geocoder placed "${q}" outside ${st} (${label}), so it was not used` : `the geocoder found no point for "${q}"`) });
+      out.push({ query: q, resolved: false, ...(isAddr ? { basis: 'address' } : {}), ...(fellBack ? { fell_back_steps: fellBack } : {}),
+        note: why || (ok && stateOk && !addrOk ? `the geocoder found the town, not the address (${label}), so the point was not used`
+          : ok ? `the geocoder placed "${q}" outside ${st} (${label}), so it was not used` : `the geocoder found no point for "${q}"`) });
     }
   }
   return out;
@@ -25720,7 +25766,7 @@ export function _planQuery(intent, context) {
     // v5.12: coordinates from the corridor table bind ARGUMENTS only; they are
     // not evidence that the question is about one parcel (same split as
     // isoFromPlace vs iso).
-    if (s.cls.id === 'site_analysis' && ((d.coords && !d.placeScope) || d.candidateId)) s.score += 2;
+    if (s.cls.id === 'site_analysis' && ((d.coords && !d.placeScope) || d.candidateId || d.__address)) s.score += 2;
     // ★★★[#209] A TYPED iso is SCOPE, not evidence about the question. It may
     //  RESCUE an intent the text could not route at all, but it must never
     //  OVERRULE a class the text itself established. Measured: adding iso=PJM
@@ -26099,8 +26145,10 @@ export function _planQuery(intent, context) {
   } catch (_e) { /* routing must never throw */ }
   // 5.42 (Grok LAND L1): a site screen that names the parcel or transmission reads them (lib/site-screen-facts.mjs).
   try {
-    if (top.cls.id === 'site_analysis' && d.coords) {
-      for (const st of _siteScreenSteps(text, d.coords, seq.map((x) => x.tool))) seq.push({ ...st, step: seq.length + 1 });
+    // 5.45: at a street address the point is geocoded at execution, so the screen steps wait on it.
+    const _scrPt = d.coords || (d.__address ? { lat: '<site lat>', lon: '<site lon>' } : null);
+    if (top.cls.id === 'site_analysis' && _scrPt) {
+      for (const st of _siteScreenSteps(text, _scrPt, seq.map((x) => x.tool))) seq.push({ ...st, step: seq.length + 1 });
     }
   } catch (_e) { /* routing must never throw */ }
   // 5.25: an intent that asks for alternatives gets the shortlist of other places (_alternativesStep).
@@ -27854,8 +27902,9 @@ function trackedTool(srv, name, description, schema, handler) {
       if (_gateTier === 'free' && !c.api_key) {
         const _kffSeat = _keylessFirstFullSeat(name, c);
         const _kffGate = _kffSeat ? _keylessFirstFullGate(name, gate.params || args) : null;
+        // Every charge is deferred (item 11, 2026-11-19): settled below once the answer is known to be full.
         if (_kffGate && (_kffSeat !== 'charge' || await _keylessFirstFullCharge(c, name, _keylessFirstFullCap(),
-          { defer: name === 'execute_plan' }))) {
+          { defer: true }))) {
           // keyless_full_trial: every check below that lets the trial's promoted call through (the
           // anonymous cap wall, the keyless trim, the free facility projection) lets this one through too.
           gate = { ..._kffGate, keyless_full_trial: true, keyless_first_full: true,
@@ -28727,6 +28776,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           if (c._kffServed && c._kffServed.tool === name) c._kffServed = { ...c._kffServed, charged: false, refunded: true };
         }
       }
+      // Grok daily 2026-11-19, item 11: a direct first full answer whose payload is still the data API's keyless
+      // stub (gated: true) is not full. No first_full_answer block, no funnel tag, and the seat is given back.
+      if (name !== 'execute_plan' && gate.keyless_first_full === true && c.loopback_step !== true) {
+        const _kffHeld = _kffResultHeldBack(result);
+        _keylessFirstFullSettle(c, !_kffHeld);
+        if (_kffHeld) {
+          gate = { ...gate, keyless_first_full_charged: false, keyless_first_full_held: true };
+          if (c._kffServed && c._kffServed.tool === name) c._kffServed = { ...c._kffServed, charged: false, refunded: true };
+        }
+      }
       // An error answer is returned as the tool built it. The over-cap and
       // capped rewrites below rebuild the result and dropped isError: live,
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
@@ -28738,7 +28797,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // The first full answer of the day: its own funnel tag (a QA observer and a plan step are tagged
       // nothing), and the block that says what it is. A plan's compact answer carries its own block.
       if (gate.keyless_first_full_charged === true) status = KEYLESS_FIRST_FULL_STATUS;
-      if (gate.keyless_first_full === true && c.loopback_step !== true && name !== 'execute_plan') _withFirstFullBlock(result, name);
+      if (gate.keyless_first_full === true && gate.keyless_first_full_held !== true && c.loopback_step !== true
+          && name !== 'execute_plan') _withFirstFullBlock(result, name);
       // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; each step was gated by its own
       // loopback call), so the keyed caller's bind_email / human-link line is stamped here. Steps
       // under the caller's key (owner 2026-11-11): the line names the steps that came back walled
@@ -32535,7 +32595,8 @@ export const _INSTRUCTIONS = (() => {
   // (test/problem-taxonomy.test.mjs).
   // Option A (owner 2026-11-16): the free-offer block and the analyze_site allowance sentence are replaced by the
   // neutral connect line (lib/neutral-connect.mjs): no prices, credits, free-key or calls-per-day wording here.
-  // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
+  // _INSTR_FREE_TIER no longer feeds the /mcp/builders page either (Grok 2026-11-19 item 9); it and
+  // _analyzeSiteFreeSentence stay exported for their tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
   return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
     + ' ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
@@ -33208,6 +33269,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           return g && !g.error && g.lat != null ? g : null;
         });
       } catch (_e) { _geocoded = null; }
+      // 5.45: the geocoded street address is the site's point for every point tool (_execInjectGeo reads _sig.coords).
+      const _addrGeo = _execAddressGeo(_geocoded, _sig);
       for (const wave of waves) {
         const doable = [];
         const deferred = [];
@@ -33623,6 +33686,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _geoLine = Array.isArray(_geocoded) && _geocoded.length
         ? 'PLACE — ' + _geocoded.map((g) => (g.resolved === false
           ? `"${g.query}" could not be placed (${g.note}); the steps that need a point did not run`
+            + (g.basis === 'address' ? '; say "The address could not be located; give lat/lon" and give no parcel, flood or site figure' : '')
+          : g.basis === 'address'
+            ? `the point-based steps read the geocoded street address "${g.query}" (${g.lat}, ${g.lon})`
           : g.basis === 'market'
             ? `the point-based steps read the geocoded town point of "${g.query}" (${g.lat}, ${g.lon}); say the figures are for the town centre, not a specific parcel`
             : `"${g.query}" is not a market DC Hub tracks, so the point-based steps read its geocoded town point (${g.lat}, ${g.lon}); say the figures are for that town, not a specific parcel`)).join('; ') + '.'
@@ -33680,8 +33746,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl }, executed, fullByEntry); })();
       // 5.42 (Grok LAND L2): a land search leads with the areas find_sites named, or says none matched.
       const _landStep = (sc.recommended_sequence || []).find((x) => x && x.land_search);
-      const _intentAnswer = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
+      const _intentAnswer1 = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
         ? _withLandLead(_intentAnswer0, _landSearchLead(executed, fullByEntry, _landStep.land_label)) : _intentAnswer0;
+      // 5.45: a street address that could not be located is said as such, with no site figure under it.
+      const _intentAnswer = (_addrGeo && _addrGeo.miss && !_isCleanPlatform() && _answerBlocksAllowed())
+        ? _addressMissAnswer(_addrGeo.query, _intentAnswer1) : _intentAnswer1;
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
@@ -35990,7 +36059,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // /grid/intelligence, the rest /grid/latest; an "unknown region" from the
       // EIA map falls through to /grid/latest before it is an error.
       const _raw = String(a.iso || 'pjm');
-      const _latest = () => callAPI(`/api/v1/grid/latest/${encodeURIComponent(_gridCode(_raw))}`);
+      // Grok daily 2026-11-19, item 11: the data API picks this route's payload from the caller's key, not from the
+      // forwarded caller tier, so a keyless first full answer (or a first-full plan's step) read its keyless stub
+      // while saying "full". Those two read it the way get_grid_intelligence always does (internal); the gate and
+      // masks this server applied (the email-bound free key's; the plan step's full depth) still decide the answer.
+      const _kc = getCtx() || {};
+      const _gdOpts = ((_kc._kffServed && _kc._kffServed.tool === 'get_grid_data') || _kc.kff_full_depth === true
+        || _kc.kff_email_depth === true) ? { internal: true } : {};   // kff_email_depth: M2.2's email_depth arm step
+      const _latest = () => callAPI(`/api/v1/grid/latest/${encodeURIComponent(_gridCode(_raw))}`, {}, _gdOpts);
       const _q = {};
       if (a.metric) _q.metric = a.metric;
       if (a.period) _q.period = a.period;
@@ -35998,7 +36074,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (_gridRoute(_raw) === 'latest') {
         data = await _latest();
       } else {
-        data = await callAPI(`/api/v1/grid/intelligence/${encodeURIComponent(_raw.toLowerCase())}`, _q);
+        data = await callAPI(`/api/v1/grid/intelligence/${encodeURIComponent(_raw.toLowerCase())}`, _q, _gdOpts);
         if (data && data.error === 'API 400' && /unknown region/i.test(String(data.detail || ''))) data = await _latest();
       }
       // An obvious typo of a US ISO ("ERCOTT") that no grid answers keeps its did-you-mean error.
@@ -39291,12 +39367,11 @@ app.get(DIRECTORIES_JSON_PATH, (req, res) => {
 });
 
 // /mcp/builders (owner 2026-10-20, ecosystem item 8): the upstream program page
-// for gateway and aggregator builders, plus its JSON twin. The free-tier line is
-// the server's own published rule (_INSTR_FREE_TIER), so the page never states a
-// limit the gate does not enforce. Like /mcp/directories: a page, not an endpoint.
+// for gateway and aggregator builders, plus its JSON twin. It states no limits or
+// allowances: the neutral /connect line stands where the free-tier rule did (Grok
+// 2026-11-19 item 9). Like /mcp/directories: a page, not an endpoint.
 const _buildersOpts = () => ({
   tools: CANONICAL_TOOL_COUNT,
-  freeTier: String(_INSTR_FREE_TIER || '').trim() || null,
 });
 app.get([BUILDERS_PATH, BUILDERS_PATH + '/'], (req, res) => {
   try {

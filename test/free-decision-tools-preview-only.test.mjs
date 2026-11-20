@@ -626,7 +626,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
   });
   it('initialize instructions (full, lean) carry the neutral connect line, not the offers, the labelled rule or the clause', () => {
     // Owner decision 2026-11-15 put the two offers here; option A (owner 2026-11-16) replaces them with the neutral
-    // connect line. _INSTR_FREE_TIER keeps the offers for the /mcp/builders page only. The decision-tools clause
+    // connect line. _INSTR_FREE_TIER keeps the offers but no page reads it (/mcp/builders dropped it, 2026-11-19). The decision-tools clause
     // still rides beside the rule on claim_free_key / bind_email (below).
     const OFFERS = '50 MCP calls/day with an email. 1 free Land & Power map search a month.';
     expect(S._INSTR_FREE_TIER.trim()).toBe(OFFERS);
