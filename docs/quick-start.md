@@ -30,7 +30,7 @@ VS Code, `.vscode/mcp.json`:
 }
 ```
 
-Windsurf / Devin Desktop, `mcp_config.json`:
+Windsurf / Devin Desktop. Add to `~/.config/devin/mcp_config.json` (current Windsurf), or `~/.codeium/windsurf/mcp_config.json` on older versions.
 
 ```json
 {

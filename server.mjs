@@ -81,6 +81,7 @@ import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_P
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
+import { WINDSURF_PERSIST_FILE } from './lib/windsurf-config-where.mjs';
 import { AGENT_DEMAND_TOOL, AGENT_DEMAND_PATH, AGENT_DEMAND_DESCRIPTION, agentDemandEnabled, agentDemandPayload } from './lib/agent-demand.mjs';
 import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLooksWalled, boundPlaces, stripHandoffIfPointered } from './lib/handoff.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
@@ -37599,12 +37600,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
           snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
         },
-        // Windsurf Cascade (2026-11-11, docs.devin.ai/windsurf/plugins/cascade/mcp): "Open MCP config
-        // file" opens ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/
-        // is now only the editor's MCP discovery file. serverUrl and url are both accepted.
+        // Windsurf (2026-11-20, docs.windsurf.com/windsurf/cascade/mcp): the user config is
+        // ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/ is the
+        // older path. Both named, current first, from lib/windsurf-config-where.mjs.
+        // serverUrl and url are both accepted.
         windsurf: {
           label: 'Windsurf',
-          file: "~/.config/devin/mcp_config.json (Cascade → MCP menu → Open MCP config file; %AppData%/devin/mcp_config.json on Windows)",
+          file: WINDSURF_PERSIST_FILE,
           snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
         // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
