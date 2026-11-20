@@ -15731,7 +15731,7 @@ const _DCPI_PROSE_RULES = [
   [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
   // 5.44: the deadline comparison beside a market's time to power (lib/intent-answers.mjs deadlineSentence) says
   // which side of the deadline the withheld figure falls; it goes with the figure.
-  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `Whether it meets the ${n}-month deadline asked is withheld at this access level.`],
+  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.51)
   // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
   [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
 ];
@@ -23958,7 +23958,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.50';   // 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.51';   // 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the

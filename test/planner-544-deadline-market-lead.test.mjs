@@ -35,7 +35,7 @@ const ctx = (over = {}) => ({ intent: DAL, intent_class: 'siting_search', constr
 const NOW = Date.parse('2026-11-19T23:00:00Z');
 
 describe('planner 5.44: routing', () => {
-  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.50'); });
+  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.51'); });
 
   it('the Dallas prompt reads Dallas, the TX canvas at 300 MW / 36 months, search areas and the timeline', () => {
     const p = _planQuery(DAL, {});
@@ -88,7 +88,7 @@ describe('planner 5.44: the answer leads with the named market and the deadline'
     const s = _scrubDcpiProse(a.headline);
     expect(s).not.toContain('37.9');
     expect(s).not.toMatch(/\b(?:past|within) the 36-month deadline/);
-    expect(s).toContain('Whether it meets the 36-month deadline asked is withheld at this access level.');
+    expect(s).toContain('The 36-month deadline check is withheld at this access level.');
     expect(s).toContain('Midland–Odessa (BUILD)');
   });
 
