@@ -21311,7 +21311,8 @@ export const _PLAN_CLASSES = [
       + (d.deadline && d.deadline.months ? ` energized within ${d.deadline.months} months` : '')
       + ' is answered per state: the markets there that DCPI rates for that size and deadline, the candidate search areas around real substations, and the dated power timeline. Each read takes the state itself, so no market has to be guessed first.',
     sequence: (d) => {
-      const st = d.state || d.stateFromPlace || null;
+      // 5.46: a one-state plan may take its state from the market it named (_planOneStateTtpSiting).
+      const st = _planLeadState(d);
       // 5.30: a one-state plan reads the DCPI card (verdict, time to power) of every market the
       // question named, up to three, before the state-wide reads. Never in a several-state fan-out.
       const named = !(d.__fanCount > 1) && Array.isArray(d.__namedMarkets) ? d.__namedMarkets.slice(0, 3) : [];
@@ -23913,7 +23914,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         facilities: Equinix DA11" -> "Equinix DA11") and leads side by side; a street address in a colocation ask
 //         ("near 350 E Cermak") is searched and profiled as the facility asked about; a colocation metro search is
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
-export const PLANNER_VERSION = '5.45';   // 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.46';   // 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -25099,7 +25100,9 @@ export function _planOneStateTtpSiting(text, d) {
   try {
     const states = Array.isArray(d.states) ? d.states : [];
     // "Dallas, TX" names its state beside the city (stateFromPlace), not in the named-states list.
-    const one = states.length === 1 ? states[0] : (states.length === 0 ? (d.state || d.stateFromPlace || null) : null);
+    // 5.46 (conductor live check 2026-11-20): "fastest place to get 300 MW within 18 months near Dallas" names no state,
+    // so it fell to capacity_search; the state of the one market it binds (dallas -> TX, _planLeadState) is that state.
+    const one = states.length === 1 ? states[0] : (states.length === 0 ? _planLeadState(d) : null);
     // 5.44 (Grok QA 2026-11-19): "fastest 300 MW data center site near Dallas Texas within 36 months" asks time to
     // power by its deadline, in no _SITING_TTP_RE phrase, and fell to capacity_search (ERCOT-wide queue figure as
     // the headline, no canvas, an unscoped retirement slice). A superlative of speed WITH a stated deadline is one.
@@ -25842,7 +25845,7 @@ export function _planQuery(intent, context) {
         for (const s of scored) if (s !== sit && (!best || s.score > best.score)) best = s;
         if (!best || best.score <= 0 || _SITING_STEALS.has(best.cls.id)) {
           sit.score = Math.max(best ? best.score : 0, 2) + 1.5;
-          sit.hits = [(d.states.length > 1 ? 'several named states (' + d.states.join(', ') : 'one named state, time to power asked (' + (d.states[0] || d.state || d.stateFromPlace)) + ')', Math.round(d.mw) + ' MW',
+          sit.hits = [(d.states.length > 1 ? 'several named states (' + d.states.join(', ') : 'one named state, time to power asked (' + (d.states[0] || _planLeadState(d))) + ')', Math.round(d.mw) + ' MW',
             ...(d.deadline && d.deadline.months ? ['deadline ' + d.deadline.by] : []),
             ...(best && best.score > 0 ? ['over ' + best.cls.id] : [])];
         }

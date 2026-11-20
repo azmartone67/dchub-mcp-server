@@ -149,8 +149,10 @@ async function armedPlan(arm, extra = {}) {
   } finally { off(); }
 }
 
-// What differs between two runs of the same call by design: relay tokens, timestamps, ids, timings.
+// What differs between two runs of the same call by design: relay tokens, timestamps, ids, timings, and the planner
+// version (a planner bump is not a depth change; 5.46 broke "byte for byte origin/main" on it alone, as 5.44 did m12's).
 const norm = (r) => JSON.stringify(r)
+  .replace(/(\\*"planner_version\\*":\\*")\d+\.\d+/g, '$1V')
   .replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^"\s\\]*)?/g, 'RELAY')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
   .replace(/pr1\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/g, 'RERUN')   // the rerun token carries its mint second
