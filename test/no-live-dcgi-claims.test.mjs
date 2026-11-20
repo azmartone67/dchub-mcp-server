@@ -211,9 +211,12 @@ describe('scripts/smithery_description.txt is the single origin the daily check 
   it('never states a tracked-feed COUNT (the deadman count moves; the sentence must not rot)', () => {
     expect(/\b\d+ tracked feeds\b/.test(txt)).toBe(false);
   });
-  it('leads with the owner-approved live-data-layer sentence (2026-09-28; "site selection" 2026-10-03)', () => {
+  it('leads with the orchestration-layer sentence and keeps "site selection" (2026-11-19; term kept since 2026-10-03)', () => {
     // 2026-10-03 (owner): #621's "siting" dropped Smithery's top buyer search
     // term — "site selection" fell #1 -> #17 (rank100.py, 09-29 vs 10-03).
-    expect(txt).toMatch(/^DC Hub is the live data layer for data-center site selection\b/);
+    // 2026-11-19 (owner): third-party copy leads with the orchestration layer
+    // and execute_plan, and stays count-free, but must still say "site selection".
+    expect(txt).toMatch(/^DC Hub is the orchestration layer for data center and energy intelligence\b/);
+    expect(txt).toMatch(/site selection/);
   });
 });

@@ -115,17 +115,23 @@ describe('tool-count patterns cover the adjective slot', () => {
     });
   }
 
-  it('both files that carried the rot are in the sweep that actually heals', () => {
+  it('contextual-triggers stays in the heal sweep; smithery_description is count-free and checked, not count-healed', () => {
     // MEASURED, because "in a scan list" is not the same as "scanned": dropping
     // docs/contextual-triggers.md from COVERAGE alone still detects the stale
     // count, but dropping it from the per-file sweep makes the detector go
     // silent. Only this list is load-bearing, so this is the one to pin — a
     // looser `SRC.includes(name)` passes while the file is effectively unscanned.
+    // ★2026-11-19: scripts/smithery_description.txt is third-party listing copy
+    // and must stay count-free, so it left the inject-and-heal sweep. A stale
+    // count there is a problem, not a rewrite to the current count.
     const at = SRC.indexOf("for (const f of ['smithery.yaml'");
     expect(at, 'per-file sweep not found — this test would be vacuous').toBeGreaterThan(-1);
     const sweep = SRC.slice(at, SRC.indexOf('])', at));
-    for (const f of ['scripts/smithery_description.txt', 'docs/contextual-triggers.md']) {
-      expect(sweep.includes(`'${f}'`), `${f} is absent from the sweep that heals tool counts`).toBe(true);
-    }
+    expect(sweep.includes("'docs/contextual-triggers.md'"),
+      'docs/contextual-triggers.md is absent from the sweep that heals tool counts').toBe(true);
+    expect(sweep.includes("'scripts/smithery_description.txt'"),
+      'smithery_description.txt must stay out of the inject-and-heal sweep').toBe(false);
+    expect(SRC).toMatch(/do not inject tool counts into third-party/);
+    expect(SRC).toContain("const SD = 'scripts/smithery_description.txt'");
   });
 });

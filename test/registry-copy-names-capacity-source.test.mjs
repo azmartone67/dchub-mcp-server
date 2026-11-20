@@ -46,9 +46,11 @@ describe('the Smithery listing body', () => {
   // site-selection copy (owner-requested, frz-smithery-description lifted for
   // it), which does not name Capacity Source. What it must state instead is the
   // canon endpoint sentence and the one price the owner allows (the $10 pack).
-  it('states the canon endpoints and the $10 pack, and no retired price wording', () => {
-    // the count is healed daily by sync-tools-manifest, so match it as \d+
-    expect(SMITHERY).toMatch(/\b\d+ MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1\b/);
+  it('states the canon endpoints without a tool count, and no retired price wording', () => {
+    // Owner 2026-11-19: third-party Smithery body is count-free. URLs stay.
+    expect(SMITHERY).toContain('https://dchub.cloud/mcp');
+    expect(SMITHERY).toContain('https://dchub.cloud/api/v1');
+    expect(SMITHERY).not.toMatch(/\b\d+ MCP tools\b/);
     // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): no plan, free tier or pricing page either.
     expect(SMITHERY).toContain('No key needed to start.');
     expect(SMITHERY).not.toMatch(/free[- ]tier|paid plans|dchub\.cloud\/pricing/i);
