@@ -6,8 +6,9 @@ import { readFileSync } from 'node:fs';
 import {
   BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, VIA_HEADER,
   renderBuildersPage, buildersJson, normalizeVia, viaFromRequest, smitheryProxyVia, SMITHERY_PROXY_VIA, SUGGESTED_TOOLS,
-  COMPOSE_KIT,
+  COMPOSE_KIT, BUILDERS_CONNECT_LINE, BUILDERS_CONNECT_URL,
 } from '../lib/builders-page.mjs';
+import { NEUTRAL_CONNECT_LINE } from '../lib/neutral-connect.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const EMOJI = /[\p{Extended_Pictographic}️⃣]/u;
@@ -15,6 +16,7 @@ const PRICE = /\$\s?\d|\/mo\b|per month|\b(pro|developer|starter|enterprise) (pl
 const RULE = 'Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day.';
 
 describe('renderBuildersPage', () => {
+  // A caller that still passes a free-tier rule gets no rule on the page (Grok 2026-11-19 item 9).
   const html = renderBuildersPage({ tools: 94, freeTier: RULE });
 
   it('covers composition, keyless previews, rate limits, attribution, citation and partner keys', () => {
@@ -25,9 +27,16 @@ describe('renderBuildersPage', () => {
     }
   });
 
-  it('quotes the published free-tier rule it is given, verbatim, and nothing when there is none', () => {
-    expect(html).toContain(RULE);
-    expect(renderBuildersPage({ tools: 94 })).not.toContain('free-tier rule, verbatim');
+  // Grok 2026-11-19 item 9: no free tier, calls/day, allowance or plan wording; the /connect line instead.
+  it('states no free-tier rule or allowance; points to /connect instead', () => {
+    expect(BUILDERS_CONNECT_LINE).toBe(NEUTRAL_CONNECT_LINE);
+    expect(BUILDERS_CONNECT_URL).toBe('https://dchub.cloud/connect');
+    for (const page of [html, renderBuildersPage({ tools: 94 })]) {
+      expect(page).not.toContain(RULE);
+      expect(page).not.toContain('free-tier rule');
+      expect(page).not.toMatch(/free[- ]tier|calls?\s*(\/|per|a)\s*day|claim_free_key|first call each UTC day|free key|50 MCP calls/i);
+      expect(page).toContain('<p class="note">More detail is available at <a href="https://dchub.cloud/connect">dchub.cloud/connect</a>.</p>');
+    }
   });
 
   it('names no plan or price, no facility count, and no emoji', () => {
@@ -71,13 +80,24 @@ describe('renderBuildersPage', () => {
   it('the JSON twin carries the same facts', () => {
     const j = buildersJson({ tools: 94, freeTier: RULE });
     expect(j.attribution.header).toBe(`${VIA_HEADER}: <your-name>`);
-    expect(j.keyless.free_tier_rule).toBe(RULE);
+    expect(j.keyless).not.toHaveProperty('free_tier_rule');
+    expect(j.keyless.more_detail).toBe(NEUTRAL_CONNECT_LINE);
+    expect(j.keyless.more_detail_url).toBe('https://dchub.cloud/connect');
+    expect(JSON.stringify(j)).not.toContain(RULE);
     expect(j.tools).toBe(94);
     expect(JSON.stringify(j)).not.toMatch(PRICE);
   });
 });
 
 describe('server wiring', () => {
+  it('the page options carry no free-tier rule (Grok 2026-11-19 item 9)', () => {
+    const opts = SRC.slice(SRC.indexOf('const _buildersOpts = () => ({'));
+    const body = opts.slice(0, opts.indexOf('});'));
+    expect(body).toContain('tools: CANONICAL_TOOL_COUNT');
+    expect(body).not.toContain('_INSTR_FREE_TIER');
+    expect(body).not.toContain('freeTier');
+  });
+
   it('serves both paths with a CSP that allows only the same-origin site nav script', () => {
     expect(SRC).toContain('app.get([BUILDERS_PATH, BUILDERS_PATH + \'/\']');
     expect(SRC).toContain('app.get(BUILDERS_JSON_PATH');

@@ -32461,7 +32461,8 @@ export const _INSTRUCTIONS = (() => {
   // (test/problem-taxonomy.test.mjs).
   // Option A (owner 2026-11-16): the free-offer block and the analyze_site allowance sentence are replaced by the
   // neutral connect line (lib/neutral-connect.mjs): no prices, credits, free-key or calls-per-day wording here.
-  // _INSTR_FREE_TIER still feeds the /mcp/builders page; _analyzeSiteFreeSentence stays exported for its tests.
+  // _INSTR_FREE_TIER no longer feeds the /mcp/builders page either (Grok 2026-11-19 item 9); it and
+  // _analyzeSiteFreeSentence stay exported for their tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
   return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
     + ' ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
@@ -39212,12 +39213,11 @@ app.get(DIRECTORIES_JSON_PATH, (req, res) => {
 });
 
 // /mcp/builders (owner 2026-10-20, ecosystem item 8): the upstream program page
-// for gateway and aggregator builders, plus its JSON twin. The free-tier line is
-// the server's own published rule (_INSTR_FREE_TIER), so the page never states a
-// limit the gate does not enforce. Like /mcp/directories: a page, not an endpoint.
+// for gateway and aggregator builders, plus its JSON twin. It states no limits or
+// allowances: the neutral /connect line stands where the free-tier rule did (Grok
+// 2026-11-19 item 9). Like /mcp/directories: a page, not an endpoint.
 const _buildersOpts = () => ({
   tools: CANONICAL_TOOL_COUNT,
-  freeTier: String(_INSTR_FREE_TIER || '').trim() || null,
 });
 app.get([BUILDERS_PATH, BUILDERS_PATH + '/'], (req, res) => {
   try {
