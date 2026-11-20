@@ -168,11 +168,13 @@ describe('DCHUB_WALL_RELAY_URL=0 is origin/main, byte for byte', () => {
       if (!O) { console.warn(`[m12-wall-relay-url] origin/main comparison not run: ${why}`); return; }
       hitsH.length = 0; hitsO.length = 0;
       process.env.DCHUB_WALL_RELAY_URL = '0';
+      // The keyless key-path entry (lib/key-path-next.mjs, 2026-11-20) is not this switch's; held off on both sides.
+      process.env.DCHUB_KEY_PATH_NEXT = '0';
       let here, main;
       try {
         here = await call(H, p, name, args, `198.51.91.${ipN}`);
         main = await call(O, p, name, args, `198.51.91.${ipN++}`);
-      } finally { delete process.env.DCHUB_WALL_RELAY_URL; }
+      } finally { delete process.env.DCHUB_WALL_RELAY_URL; delete process.env.DCHUB_KEY_PATH_NEXT; }
       expect(same(norm(here), norm(main))).toBe(true);
       expect(JSON.stringify(hitsH.map((b) => b && b.relay_url)).replace(TOK, 'RELAY'))
         .toBe(JSON.stringify(hitsO.map((b) => b && b.relay_url)).replace(TOK, 'RELAY'));

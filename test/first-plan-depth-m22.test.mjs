@@ -168,6 +168,8 @@ describe('off is origin/main, byte for byte (git-ref sandbox)', () => {
     it(`${label}: the first plan, its tracked rows and the backend's caller tier`, async () => {
       if (!O) { console.warn(`[first-plan-depth-m22] origin/main comparison not run: ${why}`); return; }
       set();
+      // The keyless key-path entry (lib/key-path-next.mjs, 2026-11-20) is not this switch's; held off on both sides.
+      process.env.DCHUB_KEY_PATH_NEXT = '0';
       try {
         const ip = ipIn(KFF_ARM_EMAIL);
         const fh = H.hits.length, fo = O.hits.length;
@@ -177,7 +179,7 @@ describe('off is origin/main, byte for byte (git-ref sandbox)', () => {
         expect(norm(here)).toBe(norm(main));
         expect(heardH).toEqual(heardO);
         expect(rowsNorm(await trackRows(H, fh))).toBe(rowsNorm(await trackRows(O, fo)));
-      } finally { off(); }
+      } finally { off(); delete process.env.DCHUB_KEY_PATH_NEXT; }
     }, 120_000);
   }
 });
