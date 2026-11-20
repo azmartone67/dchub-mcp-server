@@ -330,6 +330,7 @@ test/handshake-is-lean.test.mjs
 test/hard-gate-no-network.test.mjs
 test/hard-wall-completeness.test.mjs
 test/held-key-persists.test.mjs
+test/henry-hub-bare-ask-1120.test.mjs
 test/high-intent-needs-a-session.test.mjs
 test/honest-tier.test.mjs
 test/hosting-capacity.test.mjs
