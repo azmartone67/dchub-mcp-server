@@ -253,6 +253,7 @@ test/find-sites-free-coarsen.test.mjs
 test/find-sites-min-mw.test.mjs
 test/find-sites-target-mw-e2e.test.mjs
 test/findings-open-intake.test.mjs
+test/first-plan-depth-m22.test.mjs
 test/floor-masked-preview-offer.test.mjs
 test/for-your-human-soft.test.mjs
 test/forward-via-channel-to-claim.test.mjs
