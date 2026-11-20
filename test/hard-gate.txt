@@ -552,6 +552,7 @@ test/planner-540-xd-energy.test.mjs
 test/planner-544-deadline-market-lead.test.mjs
 test/planner-546-bare-city-and-withheld-lead.test.mjs
 test/planner-547-siting-oldest-input.test.mjs
+test/planner-548-market-lead-first.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

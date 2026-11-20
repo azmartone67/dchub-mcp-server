@@ -18,7 +18,7 @@ const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed'
 const NOW = Date.parse('2026-11-20T04:30:00Z');
 
 describe('planner 5.46: a bare city with a deadline and a speed superlative is a one-state siting question', () => {
-  it('PLANNER_VERSION is 5.47', () => { expect(PLANNER_VERSION).toBe('5.47'); });
+  it('PLANNER_VERSION is 5.47', () => { expect(PLANNER_VERSION).toBe('5.48'); });
 
   it.each([
     BARE,
@@ -56,7 +56,7 @@ describe('planner 5.46: a named market leads even when its time to power is with
 
   it('keyless: Dallas leads with its figure withheld, the deadline line, and the canvas markets', () => {
     const a = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW);
-    expect(a.headline).toContain(`Dallas DCPI time-to-power is withheld at this access level (${TTP_MARKET_FIELD}).`);
+    expect(a.headline).toContain('Dallas DCPI time-to-power is withheld at this access level.');   // 5.48: no field name
     expect(a.headline).toContain(deadlineWithheld(18));
     expect(a.headline).toContain('Markets DCPI-ranked for TX (site_selection_canvas): Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).');
     expect(a.headline).not.toContain('no time-to-power figure in this read');
