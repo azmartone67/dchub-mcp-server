@@ -193,6 +193,22 @@ describe('source_capacity: honest counts, a person-approved register call, the g
       { tool: 'get_grid_intelligence', arguments: { region_id: 'ERCOT' } }]);
     expect(text).toContain('Grid check for this location (time to power): `get_power_availability_timeline state="TX" mw=40` · `get_grid_intelligence region_id="ERCOT"`.');
     expect(text).not.toMatch(/no (?:data center )?capacity (?:exists|is available)|there is no capacity/i);
+    // Owner 2026-11-20: the market itself, so an empty answer is not a dead end for a buyer.
+    expect(head.market_check.calls).toEqual([{ tool: 'search_facilities', arguments: { state: 'TX', min_capacity_mw: 40 } },
+      { tool: 'get_market_intel', arguments: { market: 'dallas' } }]);
+    expect(text).toContain('Meanwhile, the market itself (operators and supply already there, not listings): '
+      + '`search_facilities state="TX" min_capacity_mw=40` · `get_market_intel market="dallas"`.');
+  }, 30_000);
+
+  it('no listing and no place: the market check is the market ranking for that size', async () => {
+    const { head, text } = await call('source_capacity', { region: 'north_america', min_kw: 500 });
+    expect(head.market_check.calls).toEqual([{ tool: 'execute_plan', arguments: { intent: 'rank markets for a 0.5 MW data center requirement' } }]);
+    expect(text).toContain('`execute_plan intent="rank markets for a 0.5 MW data center requirement"`');
+  }, 30_000);
+
+  it('free-text location only: search_facilities by that text, and no market slug is guessed', async () => {
+    const { head } = await call('source_capacity', { location: 'Northern Virginia' });
+    expect(head.market_check.calls).toEqual([{ tool: 'search_facilities', arguments: { query: 'Northern Virginia' } }]);
   }, 30_000);
 
   it('one listing: "Only 1 listing matches this search so far", and the register call still rides', async () => {
@@ -201,6 +217,7 @@ describe('source_capacity: honest counts, a person-approved register call, the g
     expect(text.split('\n')[0]).toBe('Only 1 listing matches this search so far (Capacity Source is onboarding providers).');
     expect(head.listings_matching).toBe(1);
     expect(head.register_call && head.register_call.needs_human_approval).toBe(true);
+    expect(head.market_check.calls[0].tool).toBe('search_facilities');
   }, 30_000);
 
   it('enough listings: the plain count, no register call, the grid check still there', async () => {
@@ -208,6 +225,7 @@ describe('source_capacity: honest counts, a person-approved register call, the g
     const { head, text } = await call('source_capacity', ARGS);
     expect(text.split('\n')[0]).toBe('4 listings match this search.');
     expect(head.register_call).toBeUndefined();
+    expect(head.market_check).toBeUndefined();
     expect(head.grid_check.calls[0].tool).toBe('get_power_availability_timeline');
   }, 30_000);
 });

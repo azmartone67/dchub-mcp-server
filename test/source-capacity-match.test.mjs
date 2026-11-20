@@ -306,6 +306,10 @@ describe('rendering a match', () => {
     expect(t).toContain('Scheduled capacity closes the gap by 2028-01.');
     expect(t).toContain('pass max_sites (and max_providers) above one');
     expect(t).toContain('request_capacity_intro without a slug');
+    // Owner 2026-11-20: no fit names the market itself, not only the register step.
+    expect(r.structuredContent.market_check.calls).toEqual([
+      { tool: 'execute_plan', arguments: { intent: 'rank markets for a 40 MW data center requirement' } }]);
+    expect(t).toContain('Meanwhile, the market itself (operators and supply already there, not listings)');
   });
 
   it('shortfall with available_by: best reachable by the requested month, not now', async () => {
