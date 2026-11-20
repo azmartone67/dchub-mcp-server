@@ -296,7 +296,7 @@ import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEma
 import { PACK_PRICE, PACK_NAME, PRO_NAME, PRO_PRICE } from './lib/wall-upgrade-offer.mjs';
 import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
-import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
+import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites, cutResultNearPoint as _cutResultNearPoint, NEAR_CUT_TOOLS as _NEAR_CUT_TOOLS } from './lib/siting-scope.mjs';
 import { cutRowsToSubmarket as _cutRowsToSubmarket } from './lib/submarket-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
@@ -15732,7 +15732,7 @@ const _DCPI_PROSE_RULES = [
   [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
   // 5.44: the deadline comparison beside a market's time to power (lib/intent-answers.mjs deadlineSentence) says
   // which side of the deadline the withheld figure falls; it goes with the figure.
-  [/\bThat is (?:past|within) the (\d+)-month deadline asked\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.51)
+  [/\bThat is (?:past|within) the (\d+)-month deadline asked(?:, by ~\d+ months?)?\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.51)
   // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
   [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
 ];
@@ -23057,6 +23057,48 @@ export function _execScopeOut(tool, out, sig, intentText) {
   }
   return scope;
 }
+// Grok QA 2026-11-19/20 (P2, capacity_search "near Dallas"): retirement rows are cut to the ONE named market's
+// coordinate (its DCPI card) after every wave, so Bexar County (San Antonio) rows are no longer read as Dallas's
+// (lib/siting-scope.mjs cutResultNearPoint). No named market, two or more, or no coordinate: nothing is cut.
+export function _planNearMarketCut(executed, fullByEntry, sig) {
+  const named = sig && Array.isArray(sig.__namedMarkets) ? sig.__namedMarkets.filter(Boolean) : [];
+  if (named.length > 1) return null;
+  const want = new Set([...named, sig && sig.__citySlug].filter(Boolean).map((x) => String(x).toLowerCase()));
+  if (!want.size || !Array.isArray(executed)) return null;
+  const read = (v) => {
+    if (typeof v === 'string') { try { return JSON.parse(v); } catch (_e) { return null; } }
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  };
+  let anchor = null;
+  for (const e of executed) {
+    if (!e || e.tool !== 'get_market_dcpi_rank' || e.status !== 'executed') continue;
+    const p = read((fullByEntry && fullByEntry.get(e)) || e.result);
+    if (!p || p.latitude == null || p.longitude == null) continue;
+    const slugs = [p.market_slug, p._requested_slug, p._canonical_slug, e.args && e.args.market_slug]
+      .filter(Boolean).map((x) => String(x).toLowerCase());
+    if (!slugs.some((x) => want.has(x))) continue;
+    anchor = { lat: p.latitude, lon: p.longitude, market: p.market_name || p.market_slug };
+    break;
+  }
+  if (!anchor) return null;
+  let cut = 0;
+  for (const e of executed) {
+    if (!e || !_NEAR_CUT_TOOLS[e.tool] || !(e.status === 'executed' || e.status === 'gated_preview')) continue;
+    let scope = null;
+    for (const [get, set] of [[() => e.result, (v) => { e.result = v; }],
+      [() => fullByEntry && fullByEntry.get(e), (v) => { if (fullByEntry && fullByEntry.has(e)) fullByEntry.set(e, v); }]]) {
+      const raw = get();
+      const obj = read(raw);
+      if (!obj) continue;
+      const r = _cutResultNearPoint(e.tool, obj, anchor, anchor.market);
+      if (!r.scope) continue;
+      set(typeof raw === 'string' ? JSON.stringify(r.result) : r.result);
+      scope = scope || r.scope;
+    }
+    if (scope) { e.near_scope = scope; cut += 1; }
+  }
+  return cut ? anchor : null;
+}
 // 5.26 (Grok live agent reviews 2026-11-13, item 2): a submarket-named run ("coming online in
 // Ashburn") keeps the pipeline and facility rows it can place in that city (lib/submarket-scope.mjs);
 // Manassas rows came back and were read as Ashburn. Places the planner knows by name (corridor
@@ -23959,7 +24001,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.52';   // 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.53';   // 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -33515,6 +33557,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // no fuel shares, nothing withheld) is a null step. It cost points as a row of nulls; it now says so in one line
       // and the lead leads with the honest scope line instead (lib/plan-lead-text.mjs).
       try { if (sc.geography_scope) _planSuppressNullGridSteps(executed, fullByEntry); } catch (_e) { /* additive */ }
+      try { _planNearMarketCut(executed, fullByEntry, _sig); } catch (_e) { /* additive */ }
       const replay = _planReplay(sc, _sig);
       // Grok live proof 2026-11-16 item 8: a stable id for the plan (lib/plan-replay-id.mjs).
       try { const _pid = _planIdOf({ intent: a && a.intent, context: a && a.context, intentClass: sc.intent_class, plannerVersion: replay.planner_version }); if (_pid) replay.plan_id = _pid; } catch (_e) { /* optional */ }
@@ -33748,7 +33791,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
             deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null,
-            named_markets: (_sig && Array.isArray(_sig.__namedMarkets)) ? _sig.__namedMarkets : [],
+            // Grok 2026-11-20 P2: a city the text names ("near Dallas") counts when no outlook market resolved.
+            named_markets: (_sig && Array.isArray(_sig.__namedMarkets) && _sig.__namedMarkets.length) ? _sig.__namedMarkets
+              : (_sig && _sig.__citySlug ? [_sig.__citySlug] : []),
             state: (_sig && (_sig.state || _sig.stateFromPlace)) || null,
             states: (_sig && Array.isArray(_sig.states)) ? _sig.states.slice(0, _PLAN_STATE_FANOUT_CAP) : [] }, executed, fullByEntry)
           // 5.39: a cross-domain plan (capacity + grid, or a place's data centers + its power and prices) names both

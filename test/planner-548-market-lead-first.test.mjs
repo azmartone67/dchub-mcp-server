@@ -23,7 +23,7 @@ const ctx = { intent: BARE, intent_class: 'siting_search', constraint_iso: ['ERC
 const MARKETS = 'Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).';
 
 describe('planner 5.51: a named market leads the time-to-power headline with its grid and verdict', () => {
-  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.52'); });
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.53'); });
 
   it('keyless: Dallas, ERCOT and the verdict lead; no ISO-first lead and no trailing slug verdict', () => {
     const h = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW).headline;
@@ -39,7 +39,7 @@ describe('planner 5.51: a named market leads the time-to-power headline with its
   it('keyed: the figure and the deadline line follow the same lead, and the scrub still withholds both below Pro', () => {
     const h = buildIntentAnswer(ctx, [dcpi(37.9), canvas, timeline], null, NOW).headline;
     expect(h).toContain('near Dallas (ERCOT), DCPI verdict CAUTION: Dallas DCPI time-to-power 37.9 months');
-    expect(h).toContain('That is past the 18-month deadline asked.');
+    expect(h).toContain('That is past the 18-month deadline asked, by ~20 months.');
     const scrubbed = _scrubDcpiProse(h);
     expect(scrubbed).not.toContain('37.9');
     expect(scrubbed).toContain(deadlineWithheld(18));
