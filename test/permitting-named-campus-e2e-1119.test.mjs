@@ -7,11 +7,13 @@ import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-
 import { planLeadText } from '../lib/plan-lead-text.mjs';
 
 const PRO = { 'x-api-key': PRO_KEY, 'user-agent': 'dchub-qa-readonly', 'x-dc-client-ip': '203.0.113.37' };
-const REC = (j, st, up) => ({ class: 'moratorium', jurisdiction: j, state: st, stage: 'enacted', scope: 'local', effective_date: null, updated_at: up });
+// 5.46 (Grok daily 2026-11-19 item 2): every row carries the bulk-load updated_at; "most recent" ranks by the row's own
+// as_of, and the one undated row is not ranked.
+const REC = (j, st, up, asOf) => ({ class: 'moratorium', jurisdiction: j, state: st, stage: 'enacted', scope: 'local', effective_date: null, as_of: asOf, updated_at: up });
 const MOR = { ok: true, class: 'moratorium', count: 54, records: [
-  REC('Colfax County', 'NM', '2026-10-24 17:08:31+00'), REC('West Seneca', 'NY', '2026-10-24 17:08:30+00'),
-  REC('Madison County', 'AR', '2026-10-24 17:08:29+00'), REC("Prince George's County", 'MD', '2026-10-24 17:08:28+00'),
-  REC('Howell Township', 'MI', '2026-10-24 17:08:26+00'), REC('Town of Beloit', 'WI', '2026-10-24 17:08:25+00')] };
+  REC('Colfax County', 'NM', '2026-10-24 17:08:31+00', '2026-03-02'), REC('West Seneca', 'NY', '2026-10-24 17:08:30+00', '2026-09-30'),
+  REC('Madison County', 'AR', '2026-10-24 17:08:29+00', '2026-06-11'), REC("Prince George's County", 'MD', '2026-10-24 17:08:28+00', '2026-10-25'),
+  REC('Howell Township', 'MI', '2026-10-24 17:08:26+00', null), REC('Town of Beloit', 'WI', '2026-10-24 17:08:25+00', '2026-08-14')] };
 const IGNORED = { success: true, count: 2, data: [{ name: 'Louisiana AI Campus', developer: 'Meta', state: 'LA' }, { name: 'Colossus 2 Expansion', developer: 'xAI', state: 'TN' }] };
 const seen = [];
 let H, fence;
@@ -42,7 +44,9 @@ describe('execute_plan 5.42 (real server.mjs, stub backend)', () => {
     expect(o.executed.some((e) => e.tool === 'discover_tools')).toBe(false);
     const lead = planLeadText(o);
     expect(lead).toMatch(/^54 data-center moratorium records on record/);
-    expect((lead.match(/\(enacted, record updated 2026-10-24\)/g) || []).length).toBe(5);
+    expect((lead.match(/\(enacted, as of 2026-\d\d-\d\d\)/g) || []).length).toBe(5);
+    expect(lead).toMatch(/Most recent by source date: Prince George's County, MD \(enacted, as of 2026-10-25\); West Seneca, NY/);
+    expect(lead).not.toMatch(/record updated|Howell/);
     expect(fence.foreign).toEqual([]);
   }, 120_000);
   it('a named campus whose lookup did not read by name says no record matched and names no other project', async () => {
