@@ -137,7 +137,7 @@ describe('dchub_services (item 1)', () => {
   it('names the eight owner-listed services, no price and no plan name anywhere', () => {
     const ids = DCHUB_SERVICES.map((s) => s.id);
     // sample_dataset: owner 2026-11-17 (daily habit), test/daily-habit.test.mjs pins its link and copy.
-    expect(ids).toEqual(['execute_plan', 'full_depth', 'advisory', 'capacity_source', 'deal_desk_brief', 'sample_dataset', 'excel_add_in', 'chatgpt_app', 'claude_app']);
+    expect(ids).toEqual(['execute_plan', 'full_depth', 'advisory', 'capacity_source', 'deal_desk_brief', 'sample_dataset', 'excel_add_in', 'chatgpt_app', 'claude_app', 'advertising']);
     expect(DCHUB_SERVICES.find((s) => s.id === 'full_depth').name).toBe('Full-depth answers');
     expect(DCHUB_SERVICES.find((s) => s.id === 'advisory').link).toMatch(/^https:\/\/dchub\.cloud\/advisory\?/);
     expect(JSON.stringify(servicesFor())).not.toMatch(NO_PRICE_OR_PLAN);
@@ -147,6 +147,9 @@ describe('dchub_services (item 1)', () => {
     expect(servicesFor('we want to lease 20 MW in Dallas').services[0].id).toBe('capacity_source');
     expect(servicesFor('a PDF to share with my board').services[0].id).toBe('deal_desk_brief');
     expect(servicesFor('I work in Excel all day').services[0].id).toBe('excel_add_in');
+    expect(servicesFor('we want to sponsor DC Hub; is there a media kit?').services[0].id).toBe('advertising');
+    expect(servicesFor('how do we advertise on DC Hub').services[0].id).toBe('advertising');
+    expect(DCHUB_SERVICES.find((s) => s.id === 'advertising').link).toBe('https://dchub.cloud/advertise?via=agent-referral&src=services');
     const none = servicesFor('zzqx');
     expect(none.need_matched).toBe(false);
     expect(none.services.map((s) => s.id)).toEqual(DCHUB_SERVICES.map((s) => s.id));
