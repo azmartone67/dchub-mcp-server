@@ -35,7 +35,7 @@ const ctx = (over = {}) => ({ intent: DAL, intent_class: 'siting_search', constr
 const NOW = Date.parse('2026-11-19T23:00:00Z');
 
 describe('planner 5.44: routing', () => {
-  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.52'); });
+  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.53'); });
 
   it('the Dallas prompt reads Dallas, the TX canvas at 300 MW / 36 months, search areas and the timeline', () => {
     const p = _planQuery(DAL, {});
@@ -58,7 +58,7 @@ describe('planner 5.44: the answer leads with the named market and the deadline'
   it('Dallas past the deadline: its own figure, the miss, and the TX canvas markets without Dallas', () => {
     const a = buildIntentAnswer(ctx(), [dcpi('dallas', 37.9), canvas(), queue], null, NOW);
     expect(a.headline).toContain('Dallas DCPI time-to-power 37.9 months');
-    expect(a.headline).toContain('That is past the 36-month deadline asked.');
+    expect(a.headline).toContain('That is past the 36-month deadline asked, by ~2 months.');
     expect(a.headline).toContain('Markets DCPI-ranked for TX within 36 months (site_selection_canvas): Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).');
     expect(a.headline).not.toContain('32.6');
     expect(a.time_to_power_basis).toEqual({ field: TTP_MARKET_FIELD, scope: 'market', market: 'dallas' });

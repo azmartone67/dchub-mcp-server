@@ -18,7 +18,7 @@ const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed'
 const NOW = Date.parse('2026-11-20T04:30:00Z');
 
 describe('planner 5.46: a bare city with a deadline and a speed superlative is a one-state siting question', () => {
-  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.52'); });
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.53'); });
 
   it.each([
     BARE,
@@ -67,7 +67,7 @@ describe('planner 5.46: a named market leads even when its time to power is with
 
   it('the withheld wording is what the prose scrub turns the keyed wording into', () => {
     const keyed = buildIntentAnswer(ctx, [dcpi(19.4), canvas, timeline], null, NOW).headline;
-    expect(keyed).toContain('That is past the 18-month deadline asked.');
+    expect(keyed).toContain('That is past the 18-month deadline asked, by ~1 month.');
     expect(_scrubDcpiProse(keyed)).toContain(deadlineWithheld(18));
     const keyless = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW).headline;
     expect(_scrubDcpiProse(keyless)).toBe(keyless);
