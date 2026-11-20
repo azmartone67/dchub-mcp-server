@@ -15993,6 +15993,11 @@ const _TYPED_PREVIEW_FIELDS = {
   // there would unmask every one of them. This table is the tool-scoped lever
   // and is why it exists.
   get_interconnection_queue: new Set(['total']),
+  // Grok daily 2026-11-19 item 4 (owner 2026-11-20: "Yes, add it"): the backend serves the public EIA-930
+  // headline demand to anonymous callers on purpose, but this trim nulled it once the caller's keyless trial
+  // was spent, so the same ERCOT figure showed in one call and was withheld in the next. The 24h curve, mix
+  // and peaks stay gated.
+  get_grid_data: new Set(['demand_mw']),
 };
 const _NO_TYPED_PREVIEW = new Set();
 
