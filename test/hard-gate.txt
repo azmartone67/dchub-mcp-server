@@ -250,6 +250,7 @@ test/fiber-bucket-contract.test.mjs
 test/fiber-email-ask.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
+test/find-sites-market-anchor-e2e-1120.test.mjs
 test/find-sites-min-mw.test.mjs
 test/find-sites-target-mw-e2e.test.mjs
 test/findings-open-intake.test.mjs
@@ -679,6 +680,7 @@ test/site-owner-handoff-handler.test.mjs
 test/site-owner-handoff.test.mjs
 test/site-point-depth-1120.test.mjs
 test/site-verdict-label.test.mjs
+test/siting-caveat-1120.test.mjs
 test/siting-email-seat.test.mjs
 test/siting-scope.test.mjs
 test/size-trim-not-tier-gating.test.mjs

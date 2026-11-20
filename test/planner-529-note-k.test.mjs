@@ -19,7 +19,7 @@ const statesOf = (p) => new Set(p.recommended_sequence.map((s) => s.state_fanout
 const PLACEHOLDER = /^<.*>$/;
 
 describe('planner 5.29: the three re-check prompts', () => {
-  it('PLANNER_VERSION is 5.30', () => { expect(PLANNER_VERSION).toBe('5.53'); });
+  it('PLANNER_VERSION is 5.30', () => { expect(PLANNER_VERSION).toBe('5.55'); });
 
   it('"Texas or Arizona, 100 MW by 2028": both states covered, every step runnable, size and deadline carried', () => {
     const p = _planQuery('Texas or Arizona, 100 MW by 2028', {});
