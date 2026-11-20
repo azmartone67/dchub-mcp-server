@@ -546,7 +546,7 @@ jobs:
               NOTE="$NOTE — SMITHERY_KEY_SCOPE: SMITHERY_API_KEY lacks ${KEY_SCOPE_MISSING}; owner: regenerate the key with that permission at smithery.ai and update the repo secret"
             fi
           fi
-          BODY=$(jq -cn --arg s "$STATUS" --arg n "$NOTE" '{feed:"smithery-freshness",status:$s,cadence_hours:24,note:$n}')
+          BODY=$(jq -cn --arg s "$STATUS" --arg n "$NOTE" '{feed:"smithery-freshness",status:$s,cadence_hours:192,note:$n}')
           echo "beat: $BODY"
           curl -fsS -X POST "https://dchub-backend-production.up.railway.app/api/v1/admin/ingest-runs/beat" \
             -H "Content-Type: application/json" \
