@@ -28,7 +28,7 @@ const Q_PHX = 'How long would it take to get power for a 100 MW data center in P
 const Q_DAL = 'How soon could a 50 MW data center in Dallas get power, and what do electricity prices look like there?';
 
 describe('planner 5.40 routing', () => {
-  it('is planner 5.40', () => { expect(PLANNER_VERSION).toBe('5.44'); });
+  it('is planner 5.40', () => { expect(PLANNER_VERSION).toBe('5.45'); });
 
   it('Columbus: dc_power_place reads the market, PJM headroom, the OH queue slice, AEP Ohio feeders and the OH timeline', () => {
     const p = _planQuery(Q_CMH, {});

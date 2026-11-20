@@ -140,7 +140,13 @@ describe('M1.2 on /mcp (keyless)', () => {
     // Switched off, the URL fields are main's tagged /connect (lib/wall-connect-tag.mjs, owner 2026-11-19), not the relay.
     expect(off.structuredContent.human_url).toBe('https://dchub.cloud/connect?via=mcp-wall&wall=connect');
     expect(prose(on)).not.toMatch(TOK);   // prose never carries the relay
-    const back = JSON.parse(JSON.stringify(on).replace(WALL_RELAY, 'https://dchub.cloud/connect?via=mcp-wall&wall=connect'));
+    // Grok weekly 2026-11-19 item 1 (lib/plan-one-link.mjs): with the relay in the URL fields the wall sentences name
+    // no URL of their own; putting them back too gives the switch-off answer.
+    const back = JSON.parse(JSON.stringify(on).replace(WALL_RELAY, 'https://dchub.cloud/connect?via=mcp-wall&wall=connect')
+      .replace(/Open the link for more detail\./g, 'Open https://dchub.cloud/connect for more detail.')
+      .replace(/the full answer is behind the link in human_url/g, 'the full answer is at https://dchub.cloud/connect')
+      .replace(/([Mm])ore detail is behind the link in human_url\./g, '$1ore detail is available at dchub.cloud/connect.'));
+    expect(JSON.stringify(on)).toMatch(/Open the link for more detail\./);   // the one-link step ran on this answer
     expect(same(norm(back), norm(off))).toBe(true);
     expect(prose(on).match(WORDING) || []).toEqual(prose(off).match(WORDING) || []);
   }, 120_000);
