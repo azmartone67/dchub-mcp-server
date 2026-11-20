@@ -86,7 +86,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -27797,8 +27797,9 @@ function trackedTool(srv, name, description, schema, handler) {
       if (_gateTier === 'free' && !c.api_key) {
         const _kffSeat = _keylessFirstFullSeat(name, c);
         const _kffGate = _kffSeat ? _keylessFirstFullGate(name, gate.params || args) : null;
+        // Every charge is deferred (item 11, 2026-11-19): settled below once the answer is known to be full.
         if (_kffGate && (_kffSeat !== 'charge' || await _keylessFirstFullCharge(c, name, _keylessFirstFullCap(),
-          { defer: name === 'execute_plan' }))) {
+          { defer: true }))) {
           // keyless_full_trial: every check below that lets the trial's promoted call through (the
           // anonymous cap wall, the keyless trim, the free facility projection) lets this one through too.
           gate = { ..._kffGate, keyless_full_trial: true, keyless_first_full: true,
@@ -28670,6 +28671,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           if (c._kffServed && c._kffServed.tool === name) c._kffServed = { ...c._kffServed, charged: false, refunded: true };
         }
       }
+      // Grok daily 2026-11-19, item 11: a direct first full answer whose payload is still the data API's keyless
+      // stub (gated: true) is not full. No first_full_answer block, no funnel tag, and the seat is given back.
+      if (name !== 'execute_plan' && gate.keyless_first_full === true && c.loopback_step !== true) {
+        const _kffHeld = _kffResultHeldBack(result);
+        _keylessFirstFullSettle(c, !_kffHeld);
+        if (_kffHeld) {
+          gate = { ...gate, keyless_first_full_charged: false, keyless_first_full_held: true };
+          if (c._kffServed && c._kffServed.tool === name) c._kffServed = { ...c._kffServed, charged: false, refunded: true };
+        }
+      }
       // An error answer is returned as the tool built it. The over-cap and
       // capped rewrites below rebuild the result and dropped isError: live,
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
@@ -28681,7 +28692,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // The first full answer of the day: its own funnel tag (a QA observer and a plan step are tagged
       // nothing), and the block that says what it is. A plan's compact answer carries its own block.
       if (gate.keyless_first_full_charged === true) status = KEYLESS_FIRST_FULL_STATUS;
-      if (gate.keyless_first_full === true && c.loopback_step !== true && name !== 'execute_plan') _withFirstFullBlock(result, name);
+      if (gate.keyless_first_full === true && gate.keyless_first_full_held !== true && c.loopback_step !== true
+          && name !== 'execute_plan') _withFirstFullBlock(result, name);
       // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; each step was gated by its own
       // loopback call), so the keyed caller's bind_email / human-link line is stamped here. Steps
       // under the caller's key (owner 2026-11-11): the line names the steps that came back walled
@@ -35930,7 +35942,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // /grid/intelligence, the rest /grid/latest; an "unknown region" from the
       // EIA map falls through to /grid/latest before it is an error.
       const _raw = String(a.iso || 'pjm');
-      const _latest = () => callAPI(`/api/v1/grid/latest/${encodeURIComponent(_gridCode(_raw))}`);
+      // Grok daily 2026-11-19, item 11: the data API picks this route's payload from the caller's key, not from the
+      // forwarded caller tier, so a keyless first full answer (or a first-full plan's step) read its keyless stub
+      // while saying "full". Those two read it the way get_grid_intelligence always does (internal); the gate and
+      // masks this server applied (the email-bound free key's; the plan step's full depth) still decide the answer.
+      const _kc = getCtx() || {};
+      const _gdOpts = ((_kc._kffServed && _kc._kffServed.tool === 'get_grid_data') || _kc.kff_full_depth === true
+        || _kc.kff_email_depth === true) ? { internal: true } : {};   // kff_email_depth: M2.2's email_depth arm step
+      const _latest = () => callAPI(`/api/v1/grid/latest/${encodeURIComponent(_gridCode(_raw))}`, {}, _gdOpts);
       const _q = {};
       if (a.metric) _q.metric = a.metric;
       if (a.period) _q.period = a.period;
@@ -35938,7 +35957,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (_gridRoute(_raw) === 'latest') {
         data = await _latest();
       } else {
-        data = await callAPI(`/api/v1/grid/intelligence/${encodeURIComponent(_raw.toLowerCase())}`, _q);
+        data = await callAPI(`/api/v1/grid/intelligence/${encodeURIComponent(_raw.toLowerCase())}`, _q, _gdOpts);
         if (data && data.error === 'API 400' && /unknown region/i.test(String(data.detail || ''))) data = await _latest();
       }
       // An obvious typo of a US ISO ("ERCOTT") that no grid answers keeps its did-you-mean error.

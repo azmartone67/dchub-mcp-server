@@ -372,6 +372,7 @@ test/keyless-wall-anon-cap-daily-reset.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
+test/kff-grid-data-backend-gate-1119.test.mjs
 test/kff-plan-full-depth-real-loopback.test.mjs
 test/kff-plan-preview-says-what-was-held-back.test.mjs
 test/kff-preview-reason-1119.test.mjs
