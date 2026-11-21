@@ -242,29 +242,57 @@ describe('flag on: the headline reaches the wall', () => {
   });
 });
 
+// #1604 (merged after this file) shares DCHUB_WALL_IDENTITY_V2: on a walled answer it adds a structured
+// email_ask naming get_api_key (server.mjs _wallIdentityV2Step, lib/wall-identity-v2.mjs withEmailAsk). That is
+// #1604's change, not the headline's, so these comparisons drop exactly that key on both sides, and say where it
+// appeared. Everything else must still match byte for byte (after norm).
+const _dropEmailAsk = (o) => {
+  if (!o || typeof o !== 'object' || Array.isArray(o) || !o.email_ask || o.email_ask.tool !== 'get_api_key') return [o, false];
+  const { email_ask: _ea, ...rest } = o; return [rest, true];
+};
+const withoutV2EmailAsk = (r) => {
+  const msg = r && r.msg ? JSON.parse(JSON.stringify(r.msg)) : r && r.msg;
+  let dropped = false;
+  const out = msg && msg.result;
+  if (out) {
+    if (out.structuredContent) { const [o, d] = _dropEmailAsk(out.structuredContent); out.structuredContent = o; dropped = dropped || d; }
+    for (const b of Array.isArray(out.content) ? out.content : []) {
+      if (!b || typeof b.text !== 'string' || !/^\s*\{/.test(b.text)) continue;
+      try { const [o, d] = _dropEmailAsk(JSON.parse(b.text)); if (d) { b.text = JSON.stringify(o); dropped = true; } } catch (_) { /* prose */ }
+    }
+  }
+  return [{ ...r, msg }, dropped];
+};
 describe('flag on leaves alone what already had its headline, and the surfaces it must not touch', () => {
   const same = async (tool, args, opts) => {
     const off = await call(H, tool, args, opts);
     process.env[FLAG] = '1';
     const on = await call(H, tool, args, opts);
     delete process.env[FLAG];
-    return [norm(on), norm(off)];
+    const [on2, onAsk] = withoutV2EmailAsk(on);
+    const [off2, offAsk] = withoutV2EmailAsk(off);
+    expect(offAsk).toBe(false);   // flag off: #1604's ask never appears
+    return [norm(on2), norm(off2), onAsk];
   };
   it('grid: the taste already carried demand + share with their hours and source', async () => {
-    const [on, off] = await same('get_grid_intelligence', { region_id: 'PJM' });
+    const [on, off, ask] = await same('get_grid_intelligence', { region_id: 'PJM' });
     expect(on).toBe(off);
+    expect(ask).toBe(true);   // keyless wall: #1604's email_ask
     expect(on).toContain('"demand_mw"');
   });
   it('queue, report-dated ISO (ERCOT): already dated', async () => {
-    const [on, off] = await same('get_interconnection_queue', { iso: 'ERCOT' });
+    const [on, off, ask] = await same('get_interconnection_queue', { iso: 'ERCOT' });
     expect(on).toBe(off);
+    expect(ask).toBe(true);
     expect(on).toContain('2026-09-30');
   });
-  for (const [label, opts] of [['/mcp/chatgpt', { path: '/mcp/chatgpt' }], ['a ChatGPT-identified client', { ua: 'openai-mcp/1.0.0' }],
-    ['a paid key', { key: PRO_KEY }], ['a free key that is not a trial', { key: FREE }]]) {
+  // The last field: whether #1604's email_ask lands there (a ChatGPT surface and a paid key: never; a free key's wall: yes).
+  for (const [label, opts, v2Ask] of [['/mcp/chatgpt', { path: '/mcp/chatgpt' }, false], ['a ChatGPT-identified client', { ua: 'openai-mcp/1.0.0' }, false],
+    ['a paid key', { key: PRO_KEY }, false], ['a free key that is not a trial', { key: FREE }, true]]) {
     it(`${label}: the all-ISO queue answer is unchanged`, async () => {
-      const [on, off] = await same('get_interconnection_queue', {}, opts);
+      const [on, off, ask] = await same('get_interconnection_queue', {}, opts);
       expect(on).toBe(off);
+      expect(ask).toBe(v2Ask);
     });
   }
 });
