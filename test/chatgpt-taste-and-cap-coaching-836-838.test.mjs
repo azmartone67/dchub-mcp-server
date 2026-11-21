@@ -364,14 +364,16 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     expect(S._relayTokenKind(sc.human_url)).not.toBe('w-capacity');
   });
 
-  it('anon search_facilities OVER the cap (not depth-teased): the pack pitch rides, the token is w-capacity', async () => {
+  // Owner 2026-11-20: the over-cap coaching names no plan or price and no credit pitch; it points to the key tool
+  // and the pricing page (pricing_url). The token is still w-capacity: the relay page is unchanged.
+  it('anon search_facilities OVER the cap (not depth-teased): no pack pitch in the message, the token is w-capacity', async () => {
     usage.count = 50;
     const r = await call('search_facilities', { query: 'ashburn' }, seat());
     const sc = r.structuredContent;
     expect(sc._upgrade && sc._upgrade.tier, 'the anon_daily_cap branch did not fire').toBe('anon_daily_cap');
-    expect(sc._upgrade.credits_pitch).toMatch(PACK_RE);
-    // Option A (owner 2026-11-16): the pack sentence in the message is the neutral connect line.
-    expect(sc._upgrade.message).toContain('More detail is available at dchub.cloud/connect.');
+    expect(sc._upgrade.credits_pitch).toBeUndefined();
+    expect(sc._upgrade.message).toContain('pricing page');
+    expect(sc._upgrade.message).not.toMatch(/\bPro\b|Credit Pack|1,000/);
     expect(sc._upgrade.message).not.toMatch(/\$\d|\/day|calls\/day/);
     expect(sc._upgrade.pack_opens).toBeUndefined();
     expect(sc._upgrade.binding_limit).toBe('anon_ip_daily');
@@ -389,15 +391,29 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     expect(textOf(r)).toMatch(PACK_RE);
   });
 
-  it('CONTROL — DCHUB_CAP_COACH_DEPTH=0: the depth-teased over-cap coaching sells the pack again', async () => {
+  it('CONTROL — DCHUB_CAP_COACH_DEPTH=0: the depth-teased over-cap coaching takes the capacity branch again', async () => {
     process.env.DCHUB_CAP_COACH_DEPTH = '0';
     usage.count = 50;
     const r = await call('get_gas_intelligence', { region: 'TX' }, seat());
     const sc = r.structuredContent;
     expect(sc._upgrade && sc._upgrade.tier).toBe('anon_daily_cap');
-    expect(sc._upgrade.credits_pitch).toMatch(PACK_RE);
-    expect(sc._upgrade.message).toContain('goes through');
+    expect(sc._upgrade.unlock_tool).toBe('unlock_more_data');
     expect(sc._upgrade.pack_opens).toBeUndefined();
+  });
+
+  // Owner 2026-11-20: a ChatGPT-identified client on /mcp keeps its own copy (no neutral-connect rewrite), so the
+  // source message itself must carry no plan name or price. It names the key tool and the pricing page (reached
+  // through human_url: the one-link rule converges every page link on it).
+  it('ChatGPT client OVER the cap (capacity branch): no plan name, price or credit pitch; key tool + pricing page', async () => {
+    usage.count = 50;
+    const r = await call('search_facilities', { query: 'ashburn' }, CHATGPT());
+    const u = r.structuredContent._upgrade;
+    expect(u && u.tier, 'the anon_daily_cap branch did not fire').toBe('anon_daily_cap');
+    expect(u.message).not.toMatch(/\$\s?\d|\bPro\b|Developer|Credit Pack|1,000|\/mo\b/);
+    expect(u.message).toMatch(/claim_free_key|get_api_key/);
+    expect(u.message).toContain('pricing page');
+    expect(u.credits_pitch).toBeUndefined();
+    expect(u.message).toContain('human_url');
   });
 
   it('a keyed free caller on get_gas_intelligence is not coached by the anonymous cap at all', async () => {

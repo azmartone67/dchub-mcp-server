@@ -46,7 +46,7 @@ Add your key as a header (claim one: `curl -X POST https://dchub.cloud/api/v1/ke
 | **Cursor** | Settings → MCP → Add, or `~/.cursor/mcp.json` |
 | **Cline / Roo** | the extension's MCP settings (`cline_mcp_settings.json`) |
 | **Continue** | `~/.continue/config.json` → `mcpServers` |
-| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
+| **Windsurf** | Add to `~/.config/devin/mcp_config.json` (current Windsurf), or `~/.codeium/windsurf/mcp_config.json` on older versions. |
 | **Zed** | `settings.json` → `context_servers` |
 
 After saving, restart the client. You'll see `search_facilities`, `get_market_intel`, `get_grid_data`, `analyze_site`, and 34 more. Try: *"Use DC Hub to find data-center capacity in Northern Virginia."*

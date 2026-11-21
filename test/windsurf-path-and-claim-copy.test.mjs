@@ -7,9 +7,18 @@
 // 2. The claude-variant high-intent line promised "a free 7-day/50-call trial key". The claim
 //    link now issues the caller's free, durable key (be#8702), not a 7-day trial.
 //
+// 3. (2026-11-20) Windsurf's docs (docs.windsurf.com/windsurf/cascade/mcp) name
+//    ~/.config/devin/mcp_config.json as the user config; ~/.codeium/windsurf/mcp_config.json is the
+//    older path. persist_config and the docs now name both, current first, from one module
+//    (lib/windsurf-config-where.mjs); the docs carry WINDSURF_WHERE_MD verbatim.
+//
 // Drives a real claim_free_key tools/call against a stub backend, as persist-config-vscode does.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import {
+  WINDSURF_CONFIG_PATH, WINDSURF_CONFIG_PATH_OLDER, WINDSURF_WHERE, WINDSURF_WHERE_MD, WINDSURF_PERSIST_FILE,
+} from '../lib/windsurf-config-where.mjs';
 
 let S, PORT, httpServer, stub, STUB_PORT;
 let stubHits = 0;
@@ -55,16 +64,49 @@ async function claim() {
   try { return JSON.parse((r.content || []).map((c) => c.text || '').join('')); } catch { return {}; }
 }
 
-describe('persist_config: Windsurf names the file Cascade opens', () => {
-  it('points at ~/.config/devin/mcp_config.json, not the ~/.codeium discovery file', async () => {
+// Current path first, older path second, the older one marked as such.
+function whereProblems(text) {
+  const p = [];
+  const i = text.indexOf(WINDSURF_CONFIG_PATH), j = text.indexOf(WINDSURF_CONFIG_PATH_OLDER);
+  if (i < 0) p.push('does not name ' + WINDSURF_CONFIG_PATH);
+  if (j < 0) p.push('does not name ' + WINDSURF_CONFIG_PATH_OLDER);
+  if (i >= 0 && j >= 0 && j < i) p.push('older path comes first');
+  if (!/current Windsurf/.test(text) || !/on older versions/.test(text)) p.push('does not say which path is current');
+  return p;
+}
+
+describe('the shared Windsurf sentence', () => {
+  it('is the wanted copy, current path first', () => {
+    expect(WINDSURF_WHERE).toBe('Add to ~/.config/devin/mcp_config.json (current Windsurf), or ~/.codeium/windsurf/mcp_config.json on older versions.');
+    expect(WINDSURF_WHERE_MD.replace(/`/g, '')).toBe(WINDSURF_WHERE);
+    expect(whereProblems(WINDSURF_WHERE)).toEqual([]);
+    expect(whereProblems(WINDSURF_PERSIST_FILE)).toEqual([]);
+  });
+  it('must-fail: old-first, one-path and unlabelled copies are caught', () => {
+    expect(whereProblems('Add to ~/.codeium/windsurf/mcp_config.json, or ~/.config/devin/mcp_config.json (current Windsurf) on older versions')).not.toEqual([]);
+    expect(whereProblems('~/.config/devin/mcp_config.json')).not.toEqual([]);
+    expect(whereProblems('~/.config/devin/mcp_config.json or ~/.codeium/windsurf/mcp_config.json')).not.toEqual([]);
+  });
+  for (const rel of ['docs/quick-start.md', 'integrations/mcp-clients/README.md']) {
+    it(`${rel} carries the shared sentence verbatim`, () => {
+      const md = readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+      expect(md).toContain(WINDSURF_WHERE_MD);
+      // the older path appears only inside the shared sentence
+      expect(md.split(WINDSURF_WHERE_MD).join('')).not.toContain(WINDSURF_CONFIG_PATH_OLDER);
+    });
+  }
+});
+
+describe('persist_config: Windsurf names the current and the older config file', () => {
+  it('points at ~/.config/devin/mcp_config.json first, ~/.codeium/windsurf as the older path', async () => {
     const before = stubHits;
     const sc = await claim();
     expect(stubHits, 'stub never called — DCHUB_API_BASE did not take, this guard ran nothing')
       .toBeGreaterThan(before);
     const ws = sc.persist_config?.clients?.windsurf;
     expect(ws, 'no windsurf entry in persist_config.clients').toBeTruthy();
-    expect(ws.file).toContain('~/.config/devin/mcp_config.json');
-    expect(ws.file).not.toContain('.codeium');
+    expect(ws.file).toBe(WINDSURF_PERSIST_FILE);
+    expect(whereProblems(ws.file)).toEqual([]);
     const cfg = JSON.parse(ws.snippet);
     expect(cfg.mcpServers.dchub.serverUrl).toContain('/mcp');
     expect(cfg.mcpServers.dchub.headers['X-API-Key']).toBe(FAKE_KEY);
