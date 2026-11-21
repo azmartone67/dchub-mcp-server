@@ -33957,9 +33957,8 @@ const _clientKeyFromNames = (...names) => {
   return null;
 };
 
-// Agent-incentive round (owner 2026-11-21): the ten-tool profile suggestion for /mcp sessions.
-// Appended on the default /mcp path only (not /mcp/grok, /mcp/claude, /mcp/chatgpt, /mcp/core or a pack path).
-export const _INSTR_TAIL_CORE_HINT = ' Hosts that load every tool up front can use https://dchub.cloud/mcp/core: ten read-only tools, plan_and_answer being the execute_plan planner.';
+// Owner 2026-11-21: /mcp instructions name no other connector URL (https://dchub.cloud/mcp is the one public endpoint),
+// so the ten-tool /mcp/core suggestion (agent-incentive round, mcp#1627) is no longer appended. _isDefaultMcpPath stays.
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
@@ -41887,7 +41886,6 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      try { if (_isDefaultMcpPath(req)) _instrTail += _INSTR_TAIL_CORE_HINT; } catch (_) { /* additive */ }
       const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });
       await mcpServer.connect(transport);
 
