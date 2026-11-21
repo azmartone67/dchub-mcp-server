@@ -111,7 +111,9 @@ describe('the handshake and execute_plan lead with energy', () => {
     const list = await rpc({ 'user-agent': 'node' }, { jsonrpc: '2.0', id: rid++, method: 'tools/list' });
     const ep = list.result.tools.find((t) => t.name === 'execute_plan');
     expect(ep.inputSchema.properties.intent.description).toMatch(/Examples: "how soon can a 100 MW load get power in ERCOT"/);
-    expect(ep.description).toMatch(/one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and energy infrastructure \(the Data Center Gas Index, DCGI\)/);
+    // 2026-11-21 (owner): the front door opens on power, grid, queue and time to power; gas and DCGI stay named.
+    expect(ep.description).toMatch(/^Answers any data center power, grid, interconnection queue, time-to-power/);
+    expect(ep.description).toMatch(/power generation, gas and energy infrastructure \(the Data Center Gas Index, DCGI\)/);
   }, 30_000);
 });
 

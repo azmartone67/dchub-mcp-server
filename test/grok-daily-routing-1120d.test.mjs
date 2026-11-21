@@ -18,7 +18,7 @@ import { siteScreenVerb } from '../lib/street-address.mjs';
 const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const ex = (step, tool, args, result, extra = {}) => ({ step, tool, args, status: 'executed', result, ...extra });
 
-it('is planner 5.56 or later (5.58; 5.56 routing + 5.57 answers)', () => { expect(PLANNER_VERSION).toBe('5.58'); });
+it('is planner 5.56 or later (5.58; 5.56 routing + 5.57 answers)', () => { expect(PLANNER_VERSION).toBe('5.59'); });
 
 const BEAUMEADE = 'Screen 21571 Beaumeade Circle, Ashburn, VA 20147 as a data center site: flood zone, zoning and parcel, nearby transmission and the grid context.';
 const GEO = { lat: 39.02219, lng: -77.45358, label: '21571 Beaumeade Cir, Ashburn, Virginia, 20147', source: 'ArcGIS World Geocoder' };
