@@ -27,6 +27,24 @@ describe('the line', () => {
     expect(c.line).toContain('For areas near Chicago, call find_sites market=chicago.');
   });
 
+  it('below full access (a preview result) the distance is said without a figure (mcp#1600)', () => {
+    const coarse = DOWNSTATE.map((c) => ({ ...c, coordinate_precision_km: 11 }));
+    for (const ex of [[dcpi(), fs({ candidates: coarse })], [dcpi(), fs({ candidates: DOWNSTATE, _gated: true })],
+      [dcpi(), fs({ candidates: DOWNSTATE }, 'gated_preview')]]) {
+      const c = sitingCaveat(ex, null, { namedMarkets: ['chicago'] });
+      expect(c.line).toMatch(/^3 of the 3 areas shown sit well away from Chicago, outside its metro area\. Chicago-area markets \(PJM\) read AVOID/);
+      expect(c.line).not.toMatch(/\d\s*km\b/);
+    }
+    // a full caller's 0.1 km precision keeps the figure
+    const full = sitingCaveat([dcpi(), fs({ candidates: DOWNSTATE.map((c) => ({ ...c, coordinate_precision_km: 0.1 })) })], null, { namedMarkets: ['chicago'] });
+    expect(full.line).toMatch(/100 km or more from Chicago \(up to about \d+ km\)/);
+  });
+
+  it('THE EXACT GROK POINT (41.787197, -89.710625) is far from Chicago', () => {
+    const c = sitingCaveat([dcpi(), fs({ candidates: [cand(41.787197, -89.710625, 'Rockford', 'CAUTION'), ...NEAR] })], null, { namedMarkets: ['chicago'] });
+    expect(c.line).toMatch(/^One of the 3 areas shown sits 100 km or more from Chicago \(up to about 170 km\)\. /);
+  });
+
   it('far from a named metro that is not AVOID: the distance and the call, no AVOID claim', () => {
     const c = sitingCaveat([dcpi('CAUTION'), fs({ candidates: DOWNSTATE })], null, { namedMarkets: ['chicago-il'] });
     expect(c.line).toMatch(/sit 100 km or more from Chicago/);
