@@ -87,7 +87,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullOn, keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack, planStepDepths as _kffPlanStepDepths, utcClock as _utcClock } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -10111,6 +10111,17 @@ export function _keylessFirstFullSeat(name, c, env = process.env) {
   };
   return _kffPlanStepSeatFor(name, c, deps) || _kffSeatFor(name, c, deps);
 }
+// Grok daily note 2026-11-20: when this replica served a bucket's first full answer (epoch ms), so a later preview
+// can say "used at HH:MM UTC". In-process only: a bucket spent on another replica reads "earlier today".
+const _kffChargedAt = new Map();
+// "HH:MM UTC" the caller's day's first full answer on `tool` was served here, or null (the earliest of its buckets).
+export function _kffUsedAt(c, tool) {
+  try {
+    const ks = [_keylessFirstFullDayKey(c, tool), _keylessFirstFullSessionDayKey(c, tool)].filter(Boolean).map((b) => b.key);
+    const ts = ks.map((k) => _kffChargedAt.get(k)).filter((t) => Number.isFinite(t));
+    return ts.length ? _utcClock(Math.min(...ts)) : null;
+  } catch (_) { return null; }
+}
 // The (IP, tool, UTC day) bucket of the first full answer: the charge below and the quota stamp read it.
 function _keylessFirstFullDayKey(c, tool) {
   const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
@@ -10138,10 +10149,13 @@ export async function _keylessFirstFullCharge(c, tool, cap, opts = {}) {
     const hydrating = Promise.all(buckets.map(({ id, key }) => _hydrateOnce(key, key, id, tool, cap)));
     if (FULL_CAP_PEEK_MS > 0) await hydrating;
     if (buckets.some(({ key }) => (_trialDayCounts.get(key) || 0) >= cap)) return false;
+    const _at = Date.now();
     for (const { id, key } of buckets) {
       _trialDayCounts.set(key, (_trialDayCounts.get(key) || 0) + 1);
+      if (!_kffChargedAt.has(key)) _kffChargedAt.set(key, _at);   // when the day's answer was served (the preview says so)
       if (!(opts && opts.defer)) _fullCapConsume(id, tool, cap);
     }
+    if (_kffChargedAt.size > 50000) _kffChargedAt.clear();   // unbounded-growth guard
     if (opts && opts.defer && c && typeof c === 'object') c._kffPending = { tool, cap, buckets };
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
     return true;
@@ -10158,6 +10172,7 @@ export function _keylessFirstFullSettle(c, used) {
       if (used) { _fullCapConsume(id, p.tool, p.cap); continue; }
       const n = _trialDayCounts.get(key) || 0;
       if (n > 0) _trialDayCounts.set(key, n - 1);
+      if (n <= 1) _kffChargedAt.delete(key);
     }
     return used ? 'committed' : 'refunded';
   } catch (_) { return null; }
@@ -10184,12 +10199,26 @@ export function _kffPreviewReason(c) {
     const seat = _keylessFirstFullSeat('execute_plan', c);
     if (seat === 'charge') {
       const q = _keylessFirstFullQuota(c, 'execute_plan');
-      return q && q.full_answers_remaining_today === 0
-        ? 'today\u2019s full plan answer without a key was used on this network (IP) or in this session; the next is after 00:00 UTC' : '';
+      if (!(q && q.full_answers_remaining_today === 0)) return '';
+      // Grok daily note 2026-11-20: say WHEN, so a run just after 00:00 UTC can tell its own earlier call spent it.
+      const at = _kffUsedAt(c, 'execute_plan');
+      return 'today\u2019s full plan answer without a key was used ' + (at ? 'at ' + at : 'earlier today')
+        + ' on this network (IP) or in this session; the next is after 00:00 UTC';
     }
     if (seat) return '';
+    // Grok daily note 2026-11-20 (4th report): every reason the lane refuses a keyless plan is said (the refusals of
+    // lib/keyless-full-trial.mjs keylessCallerSeat). The report's runner sent a User-Agent naming DC Hub,
+    // which the lane leaves out on purpose (our own callers); the note said only "steps returned preview depth".
+    // The two 5.43 reasons first, unchanged and in their order (/mcp/chatgpt is frozen in review: byte for byte).
     if (_isQaCaller(c) || c.qa_header === true || _selfTestTelemetryTag(c)) return 'a QA-marked caller is not served the first full plan answer';
     if (c.profile && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE) return 'this endpoint does not serve the first full plan answer';
+    // The lane switched off (DCHUB_KEYLESS_FIRST_FULL=0 or cap 0) is today's path byte for byte: no new reason.
+    if (!keylessFirstFullOn() || !(_keylessFirstFullCap() > 0)) return '';
+    let bot = false;
+    try { bot = !!isBotOrInternalCtxForSiteLane(c); } catch (_) { bot = true; }
+    if (bot) return 'this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer';
+    const ip = String(c.client_ip || '').trim();
+    if (!ip || /^(127\.|::1$|::ffff:127\.)/.test(ip)) return 'no caller network (IP) could be read, so the first full plan answer could not be counted';
     return '';
   } catch (_) { return ''; }
 }
@@ -16044,7 +16073,7 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   // its steps ran at full depth (KEYLESS_FIRST_FULL_STEP_TIER), so this walk at the caller's own tier
   // re-masked every DCPI score, time to power and queue wait they returned (measured live 2026-11-16 on
   // 2.12.58, ERCOT). The plan is the one full answer: no walk. Later plans today are previews again.
-  if (name === 'execute_plan' && c && c._kffPlan === true && !c.loopback_step) return result;
+  if (name === 'execute_plan' && c && c._kffPlan === true && c._kffPlanHeld !== true && !c.loopback_step) return result;
   let st = null;
   try { st = _muState(); } catch (_) { st = null; }
   const priorGates = !!(st && st.gates && st.gates.size > 0);
@@ -28141,7 +28170,7 @@ function trackedTool(srv, name, description, schema, handler) {
                    keyless_first_full_charged: _kffSeat === 'charge' };
           // The quota stamp (_buildQuotaHint) says this call IS the day's first full answer.
           if (_kffSeat !== 'step') c._kffServed = { tool: name, charged: _kffSeat === 'charge' };
-          if (name === 'execute_plan') c._kffPlan = true;   // its steps carry the plan's token
+          if (name === 'execute_plan') { c._kffPlan = true; c._kffPlanHeld = undefined; }   // its steps carry the plan's token
           // M2.2: a CHARGED first plan gets its depth-test arm (a QA observer and a step get none). Off / no salt: null.
           if (name === 'execute_plan' && _kffSeat === 'charge') { const _arm = _firstPlanArm(c.client_ip); if (_arm) c.kff_arm = _arm; }
         }
@@ -34162,6 +34191,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           _pairs = _pairLines(executed, (e) => fullByEntry.get(e));
         }
       } catch (_e) { _pairs = null; }
+      // Grok daily note 2026-11-20: a plan served as its caller's first full answer whose steps all came back held
+      // back (preview depth, or the data API's keyless stub) was not the day's full answer. It is not counted
+      // (c._kffPlanStepsRan below, the dispatch gives the seat back) and its tier_note says so; a plan with some
+      // held-back steps names them instead of saying "full depth" over them.
+      let _kffDepths = null;
+      try {
+        if (c && c._kffPlan === true && c.loopback_step !== true) {
+          _kffDepths = _kffPlanStepDepths(executed, (e) => fullByEntry.get(e));
+          if (!_kffDepths.full.length && _kffDepths.held.length) c._kffPlanHeld = true;
+        }
+      } catch (_e) { _kffDepths = null; }
       const out = {
         ...(_dcpiLead ? { dcpi_verdict: _dcpiLead } : {}),
         _entity: 'plan_execution', ok: true,
@@ -34206,9 +34246,18 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                       // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
                       // Grok re-run 2026-11-17 (option A): the allowance clauses ("the first keyless plan each UTC day is
                       // a full answer", "an email raises the limit") are gone; the note says only the depth the steps ran at.
+                      // Grok daily note 2026-11-20: the reason leads ("today's full plan answer ... was used at 00:12 UTC
+                      // ...; steps returned preview depth"), and a first-full plan says which steps came back held back.
                       : (c && c._kffPlan === true
-                        ? 'no key — steps ran at full depth'
-                        : (() => { const why = _kffPreviewReason(c); return `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
+                        ? (c._kffPlanHeld === true
+                          ? 'no key — every step came back at preview depth, so this plan was not counted as today\u2019s full plan answer; steps returned preview depth'
+                          : (_kffDepths && _kffDepths.held.length
+                            ? 'no key — steps ran at full depth except ' + [...new Set(_kffDepths.held)].join(', ') + ' (preview depth)'
+                            : 'no key — steps ran at full depth'))
+                        // The used case leads with its reason; every other reason keeps the 5.43 shape (in parentheses), so
+                        // /mcp/chatgpt (frozen in review) and the QA-marked note stay byte for byte.
+                        : (() => { const why = _kffPreviewReason(c); return /^today\u2019s full plan answer/.test(why) ? `no key — ${why}; steps returned preview depth`
+                          : `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
         ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
@@ -34350,7 +34399,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // seat is given back). A plan with no data says so, and more_detail.calls names the calls to make by
       // hand: each step's own arguments, then the concrete reads for the states the question named.
       const _dataRan = _planDataStepsRan(executed);
-      if (c) c._kffPlanStepsRan = _dataRan;
+      // A first-full plan whose every data step came back held back consumed nothing (Grok daily note 2026-11-20).
+      if (c) c._kffPlanStepsRan = c._kffPlanHeld === true ? 0 : _dataRan;
       const _hintOf = (e) => { const p = e && byStep.get(e.step); return p && p.tool === e.tool ? (p.args_hint || null) : null; };
       if (_dataRan === 0) {
         let _extra = [];
@@ -34369,7 +34419,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // as_of lead, each step keeps its key figures and first rows, and more_detail points at the full rows.
       // A plan with no data is not compacted: it was not the day's full answer (the dispatch gives the seat back).
       let _final = out;
-      if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
+      if (c && c._kffPlan === true && c._kffPlanHeld !== true && c.loopback_step !== true && _dataRan > 0) {
         try {
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
           // Grok CLI note 2026-11-18 item 1: next_tools (the get_changes daily check-in) is the first answer's only way

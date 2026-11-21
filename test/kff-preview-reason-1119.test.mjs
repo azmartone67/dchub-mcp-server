@@ -15,7 +15,7 @@ describe('_kffPreviewReason', () => {
     const c = { client_ip: '198.51.100.71', user_agent: 'Mozilla/5.0 agent' };
     expect(_kffPreviewReason(c)).toBe('');
     expect(await _keylessFirstFullCharge(c, 'execute_plan', 1)).toBe(true);
-    expect(_kffPreviewReason(c)).toMatch(/^today’s full plan answer without a key was used on this network \(IP\) or in this session; the next is after 00:00 UTC$/);
+    expect(_kffPreviewReason(c)).toMatch(/^today’s full plan answer without a key was used at \d\d:\d\d UTC on this network \(IP\) or in this session; the next is after 00:00 UTC$/);
   });
   it('a QA-marked caller is told it is not served the first full plan answer', () => {
     expect(_kffPreviewReason({ client_ip: '198.51.100.72', qa_header: true })).toBe('a QA-marked caller is not served the first full plan answer');
