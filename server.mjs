@@ -358,7 +358,11 @@ import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, lan
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
 import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs';
 import { nearestTransmission as _nearestTransmission, NEAREST_LINE_RADIUS_KM as _NEAREST_LINE_RADIUS_KM } from './lib/site-point-depth.mjs';
-import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer } from './lib/street-address.mjs';
+// 5.56 (Grok daily 2026-11-20, items 2-4): a named facility, a pipeline status ask, and both sides of a capacity ask.
+import { namedFacility as _namedFacility, buildNamedFacilityAnswer as _buildNamedFacilityAnswer } from './lib/named-facility.mjs';
+import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForState, capacityAsksOperational as _capacityAsksOperational, buildPipelineStatusAnswer as _buildPipelineStatusAnswer,
+  buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
+import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -21697,12 +21701,28 @@ export const _PLAN_CLASSES = [
             + (sm ? `A town is not a pipeline market, so the rows are cut to ${sm.city} after the call. ` : '')
             + 'A server older than the market/state filter drops them and reads the country.',
           args_hint: { ...(us ? { country: 'US' } : {}), ...pm, ...(construction ? { status: 'construction' } : {}), ...(sm ? { limit: 100 } : {}) } },
-        { step: 2, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
-          why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
-          args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } },
       ];
+      // 5.56 (Grok daily 2026-11-20, item 4): a question that asks the operational side ("operational versus under
+      // construction", "how much capacity") reads the market brief (get_market_intel): facilities tracked and the MW floor
+      // of those that report capacity, dated. The market the question named, else the state's tracked markets (at most
+      // two, each named, never summed as the state); a town keeps the facility search it can be cut to, a place with no
+      // tracked market keeps the search too, and a pipeline-only ask keeps its plan.
+      const intelMarkets = (sm || !d.__capOperational) ? [] : (pm.market ? [pm.market] : (st ? _marketsForState(st) : []));
+      if (intelMarkets.length) {
+        for (const mk of intelMarkets.slice(0, 2)) {
+          steps.push({ step: steps.length + 1, tool: 'get_market_intel', depends_on: [], estimated_calls: 1, operational_side: true,
+            why: `The operational side for ${mk}: facilities tracked and the MW of those that report capacity (a floor), dated.`
+              + (pm.market ? '' : ` ${st} is not one market, so its tracked markets are read one by one and never summed as the state.`)
+              + ' Independent of step 1, same wave.',
+            args_hint: { market: mk } });
+        }
+      } else {
+        steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
+          why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
+          args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } });
+      }
       if (capacityPointersEnabled()) {
-        steps.push({ step: 3, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
+        steps.push({ step: steps.length + 1, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
           why: 'Capacity listed for sale or lease (powered land, powered shells, turnkey, colocation) in the same place, matched on what each listing can deliver. Runs last.',
           args_hint: { ...(st ? { state: st } : (sm ? { market: sm.city } : {})), ...(d.mw ? { min_mw: d.mw } : {}) } });
       }
@@ -21716,8 +21736,8 @@ export const _PLAN_CLASSES = [
     alternatives: [
       { tool: 'get_power_pipeline', when: 'You want new POWER GENERATION coming online (EIA-860M planned generators), not data-center space.',
         rejected_because: 'The intent asked about data-center capacity; generation is the backup read, not the answer.' },
-      { tool: 'get_market_intel', when: 'You want one market\'s brief: tracked MW, pipeline and providers in one read.',
-        rejected_because: 'The pipeline and facility reads answer the capacity question row by row, and can be held to a submarket.' },
+      { tool: 'search_facilities', when: 'You want the operating facilities row by row (operator, status), or a town the market brief cannot be cut to.',
+        rejected_because: 'The market brief (get_market_intel) gives the operational count and its MW floor, dated; the facility search runs instead for a town or a place with no tracked market.' },
       { tool: 'get_retirement_headroom', when: 'The question is where GRID headroom opens for a new load.',
         rejected_because: 'Grid headroom is power capacity, not data-center capacity.' },
     ],
@@ -22464,17 +22484,35 @@ export const _PLAN_CLASSES = [
       [/\bunder\s+construction\b/i, 2], [/\boperational\b/i, 1.5],
     ],
     rationale: 'Search first to mint facility slugs, then the full-profile read keys on whichever slug you pick.',
-    sequence: (d) => [
-      { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
+    sequence: (d) => {
+      // 5.56 (Grok daily 2026-11-20, item 3): a status ask ("campuses under construction in Northern Virginia") is the
+      // construction pipeline, held to the place: get_pipeline with the status, not the registry of built facilities.
+      const ps = d.__pipelineStatus;
+      if (ps && !d.__facName) {
+        const st = d.state || d.stateFromPlace || (d.__facMetro && d.__facMetro.state) || null;
+        const o = d.__outlook && !d.__outlook.unresolved && typeof d.__outlook.intel === 'string' && /^[a-z0-9-]{2,60}$/.test(d.__outlook.intel) ? d.__outlook.intel : null;
+        return [{ step: 1, tool: 'get_pipeline', depends_on: [], estimated_calls: 1, pipeline_status: ps,
+          why: `The status the question asks for (${ps === 'any' ? 'every pipeline stage' : ps}): each project with its company, MW where served and expected completion${o ? `, held to the ${o} market` : ''}${st ? ` in ${st}` : ''}. Built facilities are not the answer to a status ask.`,
+          args_hint: { ...(st || o ? { country: 'US' } : {}), ...(ps !== 'any' ? { status: ps } : {}), ...(st ? { state: st } : {}), ...(o ? { market: o } : {}) } }];
+      }
+      // 5.56 (item 2): one named facility is searched by its name ("QTS Atlanta Metro"), the market as a filter; the
+      // executor ranks the rows by that name, so get_facility reads the best name match, not the first row.
+      const fn = d.__facName;
+      const metro = d.__facMetro ? d.__facMetro : {};
+      const searchArgs = fn ? { query: fn.name, ...(metro.state ? { state: metro.state } : {}) } : { ...metro };
+      return [
+      { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, ...(fn ? { named_facility: fn.name } : {}),
         why: 'Filter the full global facility dataset by location / capacity / operator / status — each row carries a slug.',
         // 5.32: a named metro is searched as the metro (query + its state), not left unscoped or widened to the state.
-        args_hint: { ...(d.__facMetro ? d.__facMetro : {}), ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
+        args_hint: { ...searchArgs, ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
       { step: 2, tool: 'get_facility', depends_on: [1], estimated_calls: 1,
-        why: 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
+        why: fn ? `Full profile for "${fn.name}": the search row whose name matches it best, not the first row.`
+          : 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
         // 5.32: the facility placeholder kind resolves only from search_facilities rows, never from the
         // market slug the intent named (get_facility{slug:"northern-virginia"} was a 404).
         args_hint: { slug: _FACILITY_SLUG_PLACEHOLDER } },
-    ],
+      ];
+    },
     alternatives: [
       { tool: 'semantic_search', when: 'The query is fuzzy natural language rather than structured filters.',
         rejected_because: 'The intent carried structured filters (place/operator/status) — exact filtering beats fuzzy retrieval when filters exist.' },
@@ -22483,7 +22521,7 @@ export const _PLAN_CLASSES = [
       { tool: 'score_facility', when: 'You want a 0-100 score for one existing facility.',
         rejected_because: 'The intent was discovery, not scoring one known facility.' },
       { tool: 'get_pipeline', when: 'You want the forward CONSTRUCTION pipeline, not existing facilities.',
-        rejected_because: 'The intent read as existing facilities, not the forward pipeline.' },
+        rejected_because: 'The intent read as existing facilities, not the forward pipeline (a status word such as under construction, planned or announced runs get_pipeline first).' },
     ],
     coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access.',
   },
@@ -23778,6 +23816,11 @@ export function _planSignals(intent, context) {
   // dc_capacity filters the pipeline to construction when asked).
   const __queueAsk = /\b(?:queues?|queued|interconnect(?:ion)?)\b/i.test(text);
   const __constructionAsk = /\b(?:under\s+construction|being\s+built)\b/i.test(text);
+  // 5.56 (Grok daily 2026-11-20, items 2 and 3): one named facility ("QTS Atlanta Metro") is searched by its name, and a
+  // status word (under construction, planned, announced, pipeline) is the pipeline status a facility question asks for.
+  const __facName = _namedFacility(text);
+  const __pipelineStatus = _pipelineStatusOf(text);
+  const __capOperational = _capacityAsksOperational(text);
   // 5.27 (live QA sweep 2026-11-14): an AI ask is a deployment-HORIZON question ("where can 100 MW
   // land in the next 90 days") only when it says so; otherwise it is a ranking by suitability
   // (rank_markets criteria=ai_ready). And the relative window the text names ("this week").
@@ -23804,7 +23847,7 @@ export function _planSignals(intent, context) {
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
   const scopeWidenedOut = _coloScopeWidened(__colo, coords, scopeWidened);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address };
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational };
 }
 // The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
 // would carry without a colocation read. Pure; never throws.
@@ -24095,7 +24138,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.55';   // 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.56';   // 5.56: a street address with a screen / site / evaluate verb is a site screen (site_analysis), never permitting; one named facility is searched by its name and read by its best name match, and its record leads; a status ask (under construction, planned, announced, pipeline) reads get_pipeline with the status and leads with the projects; a data-center capacity ask reads the market brief for the operational count and MW floor beside the construction pipeline (Grok daily 2026-11-20 items 1-4). 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26021,13 +26064,27 @@ export function _planQuery(intent, context) {
     const pz = scored.find((s) => s.cls.id === 'permitting');
     if (pz) {
       pz.score = 0; pz.hits = [];
-      const kind = d.coords ? null : _permittingAsk(text);
+      // 5.56 (Grok daily 2026-11-20, P1 regression): a street address with a screen / site / evaluate verb is the site, the
+      // same as a lat/lon: "Screen 21571 Beaumeade Circle ... flood zone, zoning and parcel" read "zoning" and routed to
+      // permitting (7.5 over site_analysis 6). The screen keeps its own permitting read (get_permitting_intel, state-held).
+      const addrScreen = !!d.__address && _siteScreenVerb(text);
+      const kind = (d.coords || addrScreen) ? null : _permittingAsk(text);
       let b = null; for (const s of scored) if (s !== pz && (!b || s.score > b.score)) b = s;
       const held = !!b && b.score > 0 && ['air_permits', 'incentives_tax', 'colocation', 'pricing_out_of_scope', 'named_campus', 'generation_mix', 'gas_price'].includes(b.cls.id);
       const open = !b || b.score <= 0 || ['facility_search', 'dc_capacity', 'market_outlook', 'market_ranking', 'site_analysis', 'deals_ma'].includes(b.cls.id);
       if (kind === 'strong' ? !held : (kind === 'weak' && open && !held)) {
         pz.score = Math.max(b ? b.score : 0, 2) + 1.5;
         pz.hits = [kind === 'strong' ? 'a moratorium / ban ask' : 'a data-center zoning, land-use or bill ask'];
+      }
+      // 5.56: the address screen wins over whatever it outscored only narrowly (water, grid wording in the same sentence);
+      // an air-permit, tax-incentive, colocation or entity ask keeps its class.
+      if (addrScreen && !held) {
+        const sa = scored.find((s) => s.cls.id === 'site_analysis');
+        if (sa) {
+          let o = null; for (const s of scored) if (s !== sa && s !== pz && (!o || s.score > o.score)) o = s;
+          if (!o || sa.score < o.score + 1.5) sa.score = Math.max(o ? o.score : 0, 2) + 1.5;
+          sa.hits = [...(sa.hits || []), 'a street address with a screen / site verb'];
+        }
       }
     }
   } catch (_e) { /* routing must never throw */ }
@@ -33523,7 +33580,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
               // 5.32: facility slugs from a facility search, kept apart from the market-slug pool.
               if (s.tool === 'search_facilities') {
-                const fs = _facilitySlugsFromSearch(out.full || out.result, Math.max(maxFan, 3), args && args.query);
+                const fs = _facilitySlugsFromSearch(out.full || out.result, Math.max(maxFan, 3), args && args.query, s.named_facility || null);
                 if (fs.length) {
                   const byStep = (minted.__facility_by_step = minted.__facility_by_step || {});
                   byStep[s.step] = fs;
@@ -33877,6 +33934,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           || _buildPermittingAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildNamedCampusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             campus: _sig && _sig.__campus ? _sig.__campus.name : null }, executed, fullByEntry)
+          // 5.56 (Grok daily 2026-11-20, items 2-4): a named facility leads with its record, a status ask with its
+          // projects, and a data-center capacity ask with its operational and build sides (power context after them).
+          || _buildNamedFacilityAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            facility: _sig && _sig.__facName ? _sig.__facName : null }, executed, fullByEntry)
+          || _buildPipelineStatusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            status: _sig && !(_sig.__facName) ? _sig.__pipelineStatus : null }, executed, fullByEntry)
+          || _buildCapacitySidesAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            state: _sig ? (_sig.state || _sig.stateFromPlace || null) : null }, executed, fullByEntry)
           || _buildGasPriceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildQueueWithdrawalsAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildQueueSliceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)

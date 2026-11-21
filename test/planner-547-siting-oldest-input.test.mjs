@@ -43,7 +43,7 @@ const plan = (tl) => {
 };
 
 describe('planner 5.47: the siting answer is dated by the operator report it quotes', () => {
-  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.55'); });
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.56'); });
 
   it('a published iso_reported date is the plan as_of, and the header names the TX timeline as that input', () => {
     const p = plan(timeline());
