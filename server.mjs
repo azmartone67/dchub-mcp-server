@@ -287,7 +287,7 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
@@ -11916,8 +11916,17 @@ export function _descFollowsSwitches(name, description) {
   }
   if (name !== 'analyze_site' || typeof description !== 'string') return description;
   const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
-  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(access);
-  return _gatedPreviewOnImpl() ? d.split(access).join(access + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
+  // 2026-11-20 (owner A1, "publish what is enforced"): the daily site lane serves the full report to
+  // the first DCHUB_KEYLESS_SITE_FULL_CAP calls per network per UTC day with no key. The description
+  // states it with the keyless wall's own sentence (lib/tier-canon.mjs), at the cap as it runs; ''
+  // when the lane is off or the cap is 0, so it never promises runs the gate does not serve.
+  const daily = _analyzeSiteDescDailySentence();
+  const served = daily ? access + ' ' + daily : access;
+  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(served);
+  return _gatedPreviewOnImpl() ? d.split(served).join(served + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
+}
+export function _analyzeSiteDescDailySentence(env = process.env) {
+  try { return _wfnSiteFullOn(env) ? _analyzeSiteKeylessDailySentence(_keylessSiteFullCap(env)) : ''; } catch (_) { return ''; }
 }
 // The counts the anonymous headline may carry: integers the backend's own
 // below-Pro preview (_site_score_preview) already publishes. Nothing else.
