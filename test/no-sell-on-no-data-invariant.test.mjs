@@ -113,7 +113,7 @@ async function callFresh(name, args) {
 }
 
 // Every piece of commerce the live 2026-09-24 ZZQX response carried.
-const COMMERCE = [/\/go\/c\//, /\/upgrade\/h\//, /\$\d/, /Free trial unlocked/i,
+const COMMERCE = [/\/go\/c\//, /\/upgrade\/h\//, /\$\d/, /(?:Free )?trial unlocked/i,
                   /For your human/i, /Tell your human/i, /"for_your_human"/, /buy\.stripe\.com/];
 const sold = (s) => COMMERCE.filter((re) => re.test(s)).map(String);
 

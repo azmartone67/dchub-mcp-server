@@ -91,7 +91,7 @@ describe('free key: 3 full analyze_site runs a month, then the preview', () => {
       expect(r.sc.overall_score, `run ${i}: the score is served`).toBe(83.7);
       expect(JSON.stringify(r.sc), `run ${i}: substation detail is served`).toContain('Test Sub XYZ');
       expect(r.sc.free_full_runs).toMatchObject({ used: i, limit: 3, remaining: 3 - i });
-      expect(r.text).toContain(`Free full site analysis ${i} of 3 this month`);
+      expect(r.text).toContain(`Full site analysis ${i} of 3 this month`);
     }
     const r4 = await call(FREE_KEY);
     expect(r4.status).not.toContain('lp_free_full');

@@ -11,9 +11,9 @@ import { describe, it, expect } from 'vitest';
 import { leanResponseStep } from '../lib/lean-response.mjs';
 
 const URL = 'https://dchub.cloud/u/c6qq88';
-const NOTE = 'Free full site analysis without a key: 1 of 2 today (UTC). 1 left today.'
-  + ' A free key (claim_free_key) adds monthly full analyses of its own.';
-const KEYED_NOTE = "Free daily full site analysis 2 of 2 today (UTC), after this key's monthly runs."
+const NOTE = 'Full site analysis without a key: 1 of 2 today (UTC). 1 left today.'
+  + ' A DC Hub key (claim_free_key) adds monthly full analyses of its own.';
+const KEYED_NOTE = "Daily full site analysis 2 of 2 today (UTC), after this key's monthly runs."
   + ' That was the last one today: the next analyze_site call returns the preview until UTC midnight.';
 const LOCK = '\u{1F512} This answer hid time to power. They come with the DC Hub plan that includes every tool → '
   + URL + ' The verdict, composite score and bands are not withheld.';

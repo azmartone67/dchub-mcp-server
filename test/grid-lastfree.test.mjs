@@ -92,7 +92,7 @@ describe('keyed free caller, three calls in one UTC day', () => {
       expect(r1.structuredContent._metered_trial.remaining_today).toBe(1);
       const sc = r2.structuredContent, t = text(r2);
       expect(sc._metered_trial.remaining_today).toBe(0);
-      expect(t).toContain('That was the last free full DC Hub grid brief on this key today.');
+      expect(t).toContain('That was the last included full DC Hub grid brief on this key today.');
       expect(sc.show_to_user).toBe(true);
       expect(sc.user_message).toContain('More full grid briefs on the same key');
       expect(sc.user_message).not.toMatch(/credits?|\$\d|calls?\/day/i);

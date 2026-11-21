@@ -125,7 +125,7 @@ async function anonCall(name, args) {
 }
 
 // Every piece of commerce the live ZZQX response carried.
-const COMMERCE = [/\/go\/c\//, /\/upgrade\/h\//, /\$10\b/, /Free trial unlocked/i,
+const COMMERCE = [/\/go\/c\//, /\/upgrade\/h\//, /\$10\b/, /(?:Free )?trial unlocked/i,
                   /For your human/i, /Tell your human/i, /for_your_human/, /Pro \$99/];
 const sold = (s) => COMMERCE.filter((re) => re.test(s)).map(String);
 

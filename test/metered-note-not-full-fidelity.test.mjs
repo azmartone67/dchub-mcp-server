@@ -13,7 +13,7 @@ describe('meteredTrialNote', () => {
     // Note V keyed follow-up (owner 2026-11-16): no trial, pack or payment wording on the free arm.
     expect(meteredTrialNote({ ...base, paidTaste: false, limited: false })).toBe(
       'Full-fidelity free answer 1 of 2 today — keep or summarize these results for your human. '
-      + 'After the last free call this tool returns a preview with one link for your human '
+      + 'After the last included call this tool returns a preview with one link for your human '
       + '(free: bind_email lifts your daily cap).');
     expect(meteredTrialNote({ ...base, paidTaste: false, limited: false, bound: true })).toMatch(/one link for your human\.$/);
     // /mcp/chatgpt (frozen for the OpenAI review) keeps the reviewed free-arm sentence byte-identical.

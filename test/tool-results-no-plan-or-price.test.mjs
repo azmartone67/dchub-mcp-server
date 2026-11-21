@@ -341,7 +341,7 @@ describe('must-fail controls: the scan catches the measured 2.12.55 copy', () =>
     expect(bad('{"ok":true,"result":{"tier_required":"lite-pro"}}')).not.toEqual([]);
   });
   it('passes what is not plan or price wording', () => {
-    for (const s of [FREE_OFFER_EMAIL, FREE_OFFER_LAND_POWER, 'a free key (claim_free_key) adds more',
+    for (const s of [FREE_OFFER_EMAIL, FREE_OFFER_LAND_POWER, 'a DC Hub key (claim_free_key) adds more',
       'for enterprise buyers and the agents that procure for them', 'withheld from this answer',
       'the 2027/2028 capacity auction', 'DC Hub plans the lookups']) expect(bad(s), s).toEqual([]);
   });

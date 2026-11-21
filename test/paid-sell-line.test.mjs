@@ -15,10 +15,10 @@ const env = (v) => { const p = process.env.DCHUB_PAID_SELL_LINE; if (v === undef
 describe('builders (pure)', () => {
   it('copy matches the handoff', () => {
     expect(marketIntelSellLine({ market: 'dallas', hid: parseHidList('coverage (%), rows total, total MW'), providersTotal: 10, timeToPower: true, url: U }))
-      .toBe('This free DC Hub preview of the Dallas market hides its total MW, time to power and 7 of the top 10 providers. The full Dallas market brief is not in this preview; see what your agent found: ' + U);
+      .toBe('This DC Hub preview of the Dallas market hides its total MW, time to power and 7 of the top 10 providers. The full Dallas market brief is not in this preview; see what your agent found: ' + U);
     const all = { _avg_time_to_power_months_in_pro: true, _queue_depth_gw_in_pro: true, _headroom_in_pro: true, _constraint_score_in_pro: true, _excess_power_score_in_pro: true, _grid_emergencies_30d_in_pro: true };
     expect(compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: [all, all], url: U }))
-      .toBe("This free DC Hub comparison of PJM and ERCOT hides each grid's time to power, queue depth, headroom, the constraint and excess power scores and 30-day grid emergencies. The full comparison is not in this preview; see what your agent found: " + U);
+      .toBe("This DC Hub comparison of PJM and ERCOT hides each grid's time to power, queue depth, headroom, the constraint and excess power scores and 30-day grid emergencies. The full comparison is not in this preview; see what your agent found: " + U);
     expect(rankMarketsSellLine({ criteria: 'best_overall', region: 'us', total: 10, shown: 3, scoreHidden: true, mwHidden: true, url: U }))
       .toBe("This free DC Hub best overall ranking of US markets shows 3 of 10 and hides each market's score and total MW. The full ranking is not in this preview; see what your agent found: " + U);
   });

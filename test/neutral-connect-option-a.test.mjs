@@ -25,7 +25,7 @@ const hits = (s) => OPTION_A_BANNED.filter((re) => re.test(s)).map(String);
 // The strings a keyless head-to-head test read off live /mcp, in the fields they rode.
 const LIVE_PACK = 'Want the full dataset? Relay this to your human: a one-time pack of 1,000 credits at https://dchub.cloud/u/abc, no subscription.';
 const LIVE_KEY = 'Ask your human for their email, then call claim_free_key: a free key gets 50 MCP calls/day with an email. 1 free Land & Power map search a month.';
-const LIVE_FIRST = 'This is today’s full plan answer without a key. Later execute_plan calls today return the preview; a free key (claim_free_key) adds more.';
+const LIVE_FIRST = 'This is today’s full plan answer without a key. Later execute_plan calls today return the preview; a DC Hub key (claim_free_key) adds more.';
 const LIVE_LISTING = 'To list capacity, send them to https://dchub.cloud/listings#list-capacity (free; fee only on close).';
 const DATA_ROWS = [
   { hub: 'HB_NORTH', price: '$45.20/MWh', note: 'Seller credits 1,000 credits to the buyer.' },

@@ -4,7 +4,7 @@
 // Keyless bind_email mints through claim_free_key -> POST /api/v1/keys/claim {email}; that door now runs
 // validate_email (backend, same gate as /keys/identify) and mints the key WITHOUT a rejected address,
 // answering email_rejected:true + email_rejected_reason. Before this file, bind_email's lead said
-// "minted a free DC Hub key with this email bound" unconditionally, and claim_free_key said nothing.
+// "minted a DC Hub key with this email bound" unconditionally, and claim_free_key said nothing.
 //
 // On the REAL server.mjs /mcp handler, stub backend on loopback, no network:
 //   * bind_email (sessionless and with a session) and claim_free_key with a rejected address: the text
@@ -18,8 +18,8 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) owner-live-run/1.0';
 const PLACEHOLDER = 'you@yourdomain.com';
 const REAL = 'jane@firm.com';
 const MINTED = 'dch_live_REJECTEDemailmint0123456789';   // fixture key, test value only
-const BOUND_LEAD = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
-const NOT_BOUND_LEAD = 'No key on this session, so `bind_email` minted a free DC Hub key, but the email was NOT bound to it (see below). ';
+const BOUND_LEAD = 'No key on this session, so `bind_email` minted a DC Hub key with this email bound (one call). ';
+const NOT_BOUND_LEAD = 'No key on this session, so `bind_email` minted a DC Hub key, but the email was NOT bound to it (see below). ';
 const NOT_BOUND_LINE = '⚠️ **That email was NOT bound to this key**: it looks undeliverable (placeholder).';
 
 let H, fence, ipN = 0, claimBodies = [];

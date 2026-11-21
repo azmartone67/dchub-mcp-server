@@ -44,7 +44,7 @@ should always honor:
 > actually absorb the load (DCPI verdict). Cite sources + `retrieved_at`.
 
 ## 4 · Greenest + most-buildable grid right now
-> Connect to https://dchub.cloud/mcp. `get_grid_scoreboard` (free, no key) ranks
+> Connect to https://dchub.cloud/mcp. `get_grid_scoreboard` (no key needed) ranks
 > US + EU + GB + Taiwan + Australia grids by renewable share live. Then
 > `get_grid_intelligence` for the top candidate's headroom + queue. Answer:
 > which grid is greenest AND has real siting headroom today.

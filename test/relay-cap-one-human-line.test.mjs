@@ -179,8 +179,8 @@ async function session(port, ip, extra = {}) {
 }
 
 const TELL = '**Tell your human:**';
-const ACK_BOUND = 'Free trial unlocked on THIS session';
-const ACK_MANUAL = 'Free trial key — works instantly';
+const ACK_BOUND = 'Trial unlocked on THIS session';
+const ACK_MANUAL = 'Trial key — works instantly';
 const count = (t, s) => t.split(s).length - 1;
 /** Prose lines that hand the human a payment link: what an agent relays. The JSON
  *  payload line is data (a trimmed row set can carry its own upgrade_url field). */

@@ -297,14 +297,14 @@ describe('keyless preview wall: trial_used', () => {
   it('on the unsplit shape the step really sees (JSON and wall in one block) the line sits between them', async () => {
     // This step runs before _splitHumanBlock, so on every transport block 0 is JSON + prose here; drive that shape.
     const json = JSON.stringify({ ok: true, rows: [] });
-    const text = json + '\n\n---\n\n\u{1F512} **Free-tier preview of `get_pipeline`.** Full results: the payer checks out in one click: x.'
+    const text = json + '\n\n---\n\n\u{1F512} **Preview of `get_pipeline`.** Full results: the payer checks out in one click: x.'
       + L.CLAIM_ALT_TAIL + '\n';
     const out = await S._ctxALS.run({ session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor', _wallStatus: 'trial_used' },
       async () => S._claimHandoffStep({ content: [{ type: 'text', text }], structuredContent: { ok: true } }, 'get_pipeline'));
     expect(out.content).toHaveLength(1);
     const t = out.content[0].text;
     expect(t.startsWith(json + '\n\n---\n\nFree, one call: ask your human for their email first, then call `claim_free_key`')).toBe(true);
-    expect(t).toMatch(/\.\n\n\u{1F512} \*\*Free-tier preview of `get_pipeline`\.\*\*/u);   // the wall's own header follows the line
+    expect(t).toMatch(/\.\n\n\u{1F512} \*\*Preview of `get_pipeline`\.\*\*/u);   // the wall's own header follows the line
     expect(t.indexOf('claim_free_key')).toBeLessThan(t.indexOf('the payer checks out'));
     expect(t).not.toContain('durable free-tier key');
     expect(isJson(t.slice(0, json.length))).toBe(true);

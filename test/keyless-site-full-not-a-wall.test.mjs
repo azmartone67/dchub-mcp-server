@@ -78,7 +78,7 @@ describe('/mcp: the free run carries no wall copy', () => {
     expect(sc.time_to_power).toMatchObject({ time_to_power_months: null, time_to_power_band: '24_to_48_months' });
     expect(JSON.stringify(r.msg.result)).not.toMatch(/paid data boundary|free-tier limit/);
     expect(JSON.stringify(r.msg.result)).not.toContain(WALL_NEXT_ASK_QUESTION);
-    expect(text).toContain('Time to power is shown as a band (24_to_48_months); the estimate in months is not part of the free run.');
+    expect(text).toContain('Time to power is shown as a band (24_to_48_months); the estimate in months is not part of the daily run.');
   });
 
   it('control: the wall past the cap still carries its wall copy', async () => {

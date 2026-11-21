@@ -447,8 +447,8 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
     const line = r.text.split('\n').find((l) => /This answer hid|is a preview on the free tier/.test(l));
     expect(line, r.text.slice(0, 600)).toBeTruthy();
     expect(line).toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options/);   // item 1 leftover (2026-10-17)
-    expect(line).not.toMatch(/\$10|Free full answers left today/);
-    expect(r.text).not.toMatch(/Free full answers left today/);
+    expect(line).not.toMatch(/\$10|(?:Free f|F)ull answers left today/);
+    expect(r.text).not.toMatch(/(?:Free f|F)ull answers left today/);
     expect(JSON.stringify(r.data)).not.toContain('dchub.cloud/go/c/');
     expect(new Set(r.text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})/g) || []).size).toBe(1);   // one distinct relay link (wall-to-paid P1: it also rides block 0's JSON as human_url)
     // the cascade's trial block tells the truth about depth: a trial key does not deepen it

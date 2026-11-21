@@ -84,7 +84,7 @@ describe('keyless: 2 full analyze_site answers per IP per UTC day, then the wall
       const r = await call({ ip });
       expect(isFull(r), `run ${i}: the full answer`).toBe(true);
       expect(r.sc.daily_site_runs).toMatchObject({ used: i, limit: 2, remaining: 2 - i });
-      expect(r.text).toContain(`Free full site analysis without a key: ${i} of 2 today (UTC).`);
+      expect(r.text).toContain(`Full site analysis without a key: ${i} of 2 today (UTC).`);
       expect(r.text).toContain('get_api_key');
       expect(r.status).toContain('keyless_full_trial');
       expect(r.charges).toHaveLength(1);
@@ -176,7 +176,7 @@ describe('a free key: monthly runs first, then the daily lane', () => {
     for (let i = 1; i <= 2; i++) {
       const r = await call({ key: FREE_KEY, ip });
       expect(isFull(r), `daily run ${i}`).toBe(true);
-      expect(r.text).toContain(`Free daily full site analysis ${i} of 2 today (UTC), after this key's monthly runs.`);
+      expect(r.text).toContain(`Daily full site analysis ${i} of 2 today (UTC), after this key's monthly runs.`);
       expect(r.text).not.toContain('claim_free_key');
     }
     const r3 = await call({ key: FREE_KEY, ip });

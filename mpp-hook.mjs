@@ -86,7 +86,7 @@ export const MPP_ARG_KEYS = Object.freeze([MPP_ARG_PAY, MPP_ARG_CRED]);
 export function mppArgShape() {
   return {
     [MPP_ARG_PAY]: z.boolean().optional().describe(
-      'Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.'),
+      'Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.'),
     [MPP_ARG_CRED]: z.string().optional().describe(
       'Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human\'s explicit approval of the charge.'),
   };
@@ -612,8 +612,8 @@ export async function mppPrewallOffer(name, remaining) {
     passive: true,
     free_full_answers_remaining: remaining,
     note: last
-      ? `This was your LAST free full \`${name}\` answer today. The next one is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`
-      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that each call is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`,
+      ? `This was your LAST included full \`${name}\` answer today. The next one is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`
+      : `${remaining} included full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that each call is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`,
   };
 }
 
@@ -653,6 +653,6 @@ export function mppUndercapOffer(name, remaining) {
     offer_type: 'under_cap',                   // passive — NOT pay-intent, NOT the near-wall pre_wall offer
     passive: true,
     ...(Number.isFinite(remaining) ? { free_full_answers_remaining: remaining } : {}),
-    note: `Heads up while your free \`${name}\` answers last: any call — including after today's free cap — can be paid in-turn with a per-call Stripe payment (no key, no subscription; see \`how\`; the amount is in price_usd).`,
+    note: `Heads up while your included \`${name}\` answers last: any call — including after today's cap — can be paid in-turn with a per-call Stripe payment (no key, no subscription; see \`how\`; the amount is in price_usd).`,
   };
 }

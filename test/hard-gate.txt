@@ -464,6 +464,7 @@ test/news-footer.test.mjs
 test/next-ask-args.test.mjs
 test/next-call.test.mjs
 test/no-dxt-so-links.test.mjs
+test/no-free-wording-1121.test.mjs
 test/no-hold-verdict.test.mjs
 test/no-inline-regex-modifiers.test.mjs
 test/no-live-dcgi-claims.test.mjs

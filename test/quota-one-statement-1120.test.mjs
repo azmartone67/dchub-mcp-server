@@ -52,11 +52,11 @@ describe('A1: analyze_site states the daily lane and the monthly runs', () => {
   });
   const lastRun = { used: 3, limit: 3, remaining: 0, resets_at: '2026-12-01T00:00:00Z' };
   it('last monthly run, lane serving: the next calls use today\'s daily runs', () => {
-    expect(S._lpFreeRunNote(lastRun, 2)).toBe('Free full site analysis 3 of 3 this month (UTC). '
-      + 'That was the last monthly one; the next analyze_site calls use today\'s free daily runs, then previews until UTC midnight.');
+    expect(S._lpFreeRunNote(lastRun, 2)).toBe('Full site analysis 3 of 3 this month (UTC). '
+      + 'That was the last monthly one; the next analyze_site calls use today\'s daily runs, then previews until UTC midnight.');
   });
   it('last monthly run, lane not serving: the preview until the month turns (still true there)', () => {
-    expect(S._lpFreeRunNote(lastRun, 0)).toBe('Free full site analysis 3 of 3 this month (UTC). '
+    expect(S._lpFreeRunNote(lastRun, 0)).toBe('Full site analysis 3 of 3 this month (UTC). '
       + 'That was the last one this month: the next analyze_site call returns the preview until 2026-12-01.');
     expect(S._lpFreeRunNote(lastRun)).toBe(S._lpFreeRunNote(lastRun, 0));
   });

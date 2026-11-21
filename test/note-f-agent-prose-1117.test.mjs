@@ -124,7 +124,7 @@ describe('the matchers can fail (not vacuous)', () => {
       'WHAT AN EMAIL GETS (no card): 50 calls/day (up to 10 full answers per tool per day)',
       'previews plus 2 full answers per tool per day, 50/day with an email',
       'With an email: 50 calls/day (up to 10 full answers per tool per day). Higher limits: dchub.cloud/pricing.',
-      'Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.',
+      'Grid/queue/market-intel tools: previews without an email; an email adds 10 full answers/day each.',
       '✅ **Free DC Hub dev key minted for `mcp-agent`**',
       'Your free key includes get_changes.',
       'relay the link in its human_url to your human (a one-time pack of 1,000 API credits).',
