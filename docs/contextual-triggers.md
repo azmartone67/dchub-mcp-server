@@ -34,7 +34,7 @@ Pattern: a short "Ask your AI" block with a **Copy** button next to each snippet
 
 ## Generic "get started" (docs, footer, email)
 > "Connect to the DC Hub MCP server at https://dchub.cloud/mcp (remote, no install)
-> and run `discover_tools` to see all 98 live tools, then `claim_free_key` so access
+> and run `discover_tools` to see all 98 live tools, then `get_api_key` so access
 > persists."
 
 ## Why this works

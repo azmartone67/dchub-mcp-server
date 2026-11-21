@@ -360,7 +360,7 @@ move every few days and a listing is edited by hand perhaps twice a year.
 - Use the short description + categories above. Confirm the tool list auto-populates from the manifest (98 tools).
 
 ### Glama (glama.ai/mcp/connectors/cloud.dchub/...)
-- Already indexed as a connector. Refresh so it picks up the current 98 tools (now incl. `get_grid_scoreboard`, `get_fiber_readiness`, `claim_free_key`).
+- Already indexed as a connector. Refresh so it picks up the current 98 tools (now incl. `get_grid_scoreboard`, `get_fiber_readiness`, `get_api_key`).
 - Long description + tags above lift the Glama quality score (target A).
 
 ### PulseMCP (pulsemcp.com/submit)
