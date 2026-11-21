@@ -115,9 +115,12 @@ describe.each(CASES.map((c) => [label(c), c]))('unlock_more_data response, %s', 
     expect(text).toMatch(/https:\/\/dchub\.cloud\//);
     expect(sc.human_message).toMatch(/https:\/\/dchub\.cloud\//);
     const credits = (sc.plans || []).find((p) => p.id === 'credits');
-    expect(credits && credits.label).toMatch(/^One-time pack of 1,000 API credits \(usage capacity, not a subscription; /);
-    if (c.reason) expect(sc.human_message).toContain('a one-time pack of 1,000 API credits (usage capacity, not a subscription)');
-    if (c.relay === '0' && !c.reason) expect(sc.human_message).toContain('**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**');
+    // Owner 2026-11-21 (decision 2): the pack is offered with no pack, credit or allowance wording.
+    expect(credits && credits.label).toMatch(/^Full answers in one checkout \(not a subscription; /);
+    if (c.reason) expect(sc.human_message).toContain('full answers in one checkout, no subscription');
+    if (c.relay === '0' && !c.reason) expect(sc.human_message).toContain('**Full answers in one checkout** (no subscription)');
+    // (the plan id / recommended value 'credits' is an identifier, not copy)
+    expect(JSON.stringify(sc).split('"credits"').join('""')).not.toMatch(/\bcredits?\b|credit pack|calls?\/day|\d\/day/i);
     // With the relay on, the one-link step still folds the unpriced pack rung into the plans page
     // (its regex knows both spellings), so the ladder line carries one link.
     if (c.relay === '1' && !c.reason) {

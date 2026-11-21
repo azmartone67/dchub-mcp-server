@@ -32,9 +32,10 @@ describe('unlock_more_data after a Pro-only wall', () => {
     expect(sc.human_message).not.toMatch(/very next query/);
     expect(sc.human_message).not.toMatch(/\bunlock/i);
     expect(sc.human_message).not.toMatch(/\$99|\$49/);
-    // the pack line says API capacity and sits AFTER the Pro line
+    // the pack line (a separate option, 2026-11-21: no pack or credit wording) sits AFTER the Pro line
     expect(sc.human_message.indexOf('This preview leaves out')).toBeGreaterThan(-1);
-    expect(sc.human_message.indexOf('This preview leaves out')).toBeLessThan(sc.human_message.indexOf('API capacity'));
+    expect(sc.human_message.indexOf('This preview leaves out')).toBeLessThan(sc.human_message.indexOf('**A separate option:**'));
+    expect(sc.human_message).not.toMatch(/credits?\b|credit pack/i);
   });
   it('a Pro-only tool named in reason is enough, with no prior wall in the session', () => {
     expect(_proTriggerTool('fresh-sid', 'I was running compare_sites')).toBe('compare_sites');
@@ -44,7 +45,8 @@ describe('unlock_more_data after a Pro-only wall', () => {
   it('no Pro trigger: the pack still leads, described as capacity, never as an unlock', () => {
     const r = run('no-wall-sid', {});
     const m = r.structuredContent.human_message;
-    expect(m).toContain('a one-time pack of 1,000 API credits (usage capacity, not a subscription)');
+    expect(m).toContain('**Full answers in one checkout** (no subscription)');   // 2026-11-21: no pack or credit wording
+    expect(m).not.toMatch(/credits?\b/i);
     expect(m).not.toContain('$');   // owner 2026-10-10: no amount in unlock_more_data's copy
     expect(m).not.toMatch(/\bunlock/i);
     expect(m).not.toMatch(/my very next query returns the complete data \(/);

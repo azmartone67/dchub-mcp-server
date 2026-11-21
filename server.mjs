@@ -1469,6 +1469,10 @@ function _subRungText(plan, url, what) {
 // unlock_more_data's copy states no amount (owner 2026-10-10): the checkout page shows the price.
 const _UNLOCK_PACK_TEXT = 'a one-time pack of 1,000 API credits (usage capacity, not a subscription)';
 const _UNLOCK_PACK_RUNG = '**' + _UNLOCK_PACK_TEXT + '**, credits don’t expire → ';
+// 2026-11-21 (owner decision 2: no prices, plan names, credits or calls-per-day in agent-facing copy): what
+// unlock_more_data says in place of the pack text on every profile but the frozen /mcp/chatgpt.
+const _UNLOCK_ACCESS_TEXT = 'full answers in one checkout, no subscription';
+const _UNLOCK_ACCESS_RUNG = '**Full answers in one checkout** (no subscription) → ';
 // v14 (owner 2026-10-10): every wall's pack rung states no amount either.
 const _PACK_RUNG = _UNLOCK_PACK_RUNG;
 
@@ -1515,7 +1519,10 @@ function _ladderText(toolName, tier, sessionId, offer) {
   }
   // Owner 2026-10-10: unlock_more_data (this function's only caller) names no amount; the checkout
   // page shows the price. Other walls keep _PACK_RUNG.
-  return _UNLOCK_PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')' + (dev ? ' · or ' + dev : '')
+  // 2026-11-21 (owner decision 2, agent copy): no credit pack, credit count or per-call credit rule here; the
+  // checkout page shows what the human buys. /mcp/chatgpt keeps its frozen line (_chatgptFrozenCopy).
+  const packRung = _chatgptFrozenCopy(_UNLOCK_ACCESS_RUNG + r.pack, _UNLOCK_PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')');
+  return packRung + (dev ? ' · or ' + dev : '')
     + (pro ? ' · for a human screening sites: ' + pro : '');
 }
 // Which rungs are ABOVE this caller (lib/upgrade-missed rungFloor, the same floor
@@ -1560,6 +1567,15 @@ export function _proWallLink(sid) {
   } catch (_) { return ''; }
 }
 
+// 2026-11-21 (owner decision 2): unlock_more_data's key line and what_unlocks name no allowance, credit pack or
+// rate limit; one neutral pointer to /connect (lib/neutral-connect.mjs INSTR_CONNECT_LINE). /mcp/chatgpt frozen.
+function _unlockKeyLine() {
+  return _chatgptFrozenCopy('*No payment needed yet? I can call `claim_free_key` for a DC Hub key (all tools). ' + INSTR_CONNECT_LINE + '*',
+    '*No payment needed yet? I can call `claim_free_key` for a DC Hub key — all tools, ' + _freeKeyAllowanceText() + '.*');
+}
+const _UNLOCK_WHAT_UNLOCKS = 'A paid DC Hub plan for agents: full grid intelligence (all ISOs/grids, not 1), full fiber depth and complete '
+  + 'result sets (not partial previews) on every tool outside the paid-plan tools. The DC Hub plan with every tool adds the '
+  + 'paid-plan tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export. ' + INSTR_CONNECT_LINE;
 export function _unlockMoreDataEnvelope(a) {
   const _ctx = getCtx();
   const _sid = (_ctx && _ctx.session_id) || '';
@@ -1653,15 +1669,16 @@ export function _unlockMoreDataEnvelope(a) {
     ? '✅ **This key already holds every DC Hub rung** — every tool, including the paid-plan tools, is served in full. Nothing more to add.'
     : _proLeadOn
       ? HUMAN_FIRST_MARKER + ' ' + proWallUserMessage(_proTool, _proLink) + '\n' +
-        '**API capacity, a separate option:** ' + _UNLOCK_PACK_TEXT + '; paid-plan tools not included → ' + credits + '\n' +
+        _chatgptFrozenCopy('**A separate option:** ' + _UNLOCK_ACCESS_TEXT + '; paid-plan tools not included → ',
+          '**API capacity, a separate option:** ' + _UNLOCK_PACK_TEXT + '; paid-plan tools not included → ') + credits + '\n' +
         '💳 I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
         (_offer.pack
-          ? '*No payment needed yet? I can call `claim_free_key` for a DC Hub key — all tools, ' + _freeKeyAllowanceText() + '.*'
+          ? _unlockKeyLine()
           : '')
     : HUMAN_FIRST_MARKER + ' ' + _ladder + '\n' +
     '💳 **Your human can open full DC Hub depth in one click.** I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
     (_offer.pack
-      ? '*No payment needed yet? I can call `claim_free_key` for a DC Hub key — all tools, ' + _freeKeyAllowanceText() + '.*'
+      ? _unlockKeyLine()
       : '');
   // Human-approval policy (owner 2026-10-20): the per-call rail is never advertised here.
   const _mppOn = MPP_SELF_PAY_ADVERTISED && mppEnabled();
@@ -1710,15 +1727,15 @@ export function _unlockMoreDataEnvelope(a) {
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
         // v13 (owner 2026-10-10): after a Pro-only wall this list names no plan either.
-        ...(_offer.pack ? [{ id: 'credits',   label: 'One-time pack of 1,000 API credits (usage capacity, not a subscription; paid-plan tools not included)',
-          best_for: 'API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets; paid-plan tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
+        ...(_offer.pack ? [{ id: 'credits',   label: _chatgptFrozenCopy('Full answers in one checkout (not a subscription; paid-plan tools not included)', 'One-time pack of 1,000 API credits (usage capacity, not a subscription; paid-plan tools not included)'),
+          best_for: _chatgptFrozenCopy('full answers on the paid-class tools outside the paid-plan and depth-tease sets; paid-plan tools not included; no subscription', 'API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets; paid-plan tools not included; credits don’t expire, no subscription'), checkout_url: credits }] : []),
         ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'A paid DC Hub plan for agents', best_for: 'agents and apps running daily — full depth on every tool except the paid-plan tools, cancel anytime', checkout_url: developer }] : []),
         ...((_offer.pro && !_proLeadOn) ? [{ id: 'pro',       label: 'A higher-volume DC Hub plan with every tool', best_for: 'a human screening real sites — the paid-plan tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
-      free_alternative: { tool: 'claim_free_key', note: 'a DC Hub key, no email, ' + _freeKeyAllowanceText() + ', all tools' },
+      free_alternative: { tool: 'claim_free_key', note: _chatgptFrozenCopy('a DC Hub key, no email, all tools. ' + INSTR_CONNECT_LINE, 'a DC Hub key, no email, ' + _freeKeyAllowanceText() + ', all tools') },
       // ladder stage 1: the pack and Developer open everything outside the Pro-only
       // set; only Pro opens that set. "every premium tool" was true of no rung below Pro.
-      what_unlocks: 'A paid DC Hub plan for agents: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the paid-plan tools, and higher rate limits. The one-time credit pack is API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets. The DC Hub plan with every tool adds the paid-plan tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
+      what_unlocks: _chatgptFrozenCopy(_UNLOCK_WHAT_UNLOCKS, 'A paid DC Hub plan for agents: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the paid-plan tools, and higher rate limits. The one-time credit pack is API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets. The DC Hub plan with every tool adds the paid-plan tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.'),
       binds_to_session: !!_sid,
       // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
       // was correctly !!_sid — so the ONE class that could not get a
@@ -1728,8 +1745,9 @@ export function _unlockMoreDataEnvelope(a) {
       after_checkout: _unlockBinds
         ? 'This session is served in full — call the tool again, no reconnect.'
         : 'No durable identity on this call (no API key, no MCP session), so the '
-          + 'checkout cannot bind to it. The pack mints a dch_live_ key and emails '
-          + 'it to the payer; send that key as X-API-Key to spend the credits. Call '
+          + 'checkout cannot bind to it. ' + _chatgptFrozenCopy('The checkout mints a dch_live_ key and emails '
+          + 'it to the payer; send that key as X-API-Key. ', 'The pack mints a dch_live_ key and emails '
+          + 'it to the payer; send that key as X-API-Key to spend the credits. ') + 'Call '
           + 'claim_free_key first if you want an identity to bind to BEFORE paying.',
     },
   };
@@ -14486,6 +14504,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // auto-trial cohort before, which is why 0 of 214 activated keys ever
   // identified.
   const boundCalls = mint.daily_calls_when_email_bound || 50;
+  // 2026-11-21 (owner decision 2): the trial's lines name no calls-per-day figure. These sentences carry the key value,
+  // so the neutral connect step keeps them whole (lib/neutral-connect.mjs); the figure goes at the source. The figure
+  // stays in structuredContent for machine consumers. /mcp/chatgpt keeps its frozen wording.
+  const _trialLeft = _chatgptFrozenCopy(days + 'd left', calls + ' calls/day, ' + days + 'd left');
   // r87-conv: when the trial was auto-bound to this session, drop the
   // "add header + reconnect" friction (the 94%-drop step) and tell the agent
   // to simply call again — the bound session already returns full data.
@@ -14502,10 +14524,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     : ' now for the full result';
   const leadBound =
     '✅ **Trial unlocked on THIS session — call `' + name + '` again' + _againLine + '. No header, no reconnect needed.**\n' +
-    '   Keep it across future sessions (one paste — Claude Code): `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` (' + calls + ' calls/day, ' + days + 'd left).\n';
+    '   Keep it across future sessions (one paste — Claude Code): `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` (' + _trialLeft + ').\n';
   const leadManual =
     '✅ **Trial key — works instantly, no signup. Add this header, reconnect, and call again:**\n' +
-    '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
+    '`X-API-Key: ' + mint.api_key + '`  (' + _trialLeft + ')\n' +
     '   **Keep it (one paste — Claude Code):** `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` — or save that header in your MCP client config. Do it once and previews stop.\n';
   // r-honest-cap: today's free full answers are USED — no retry promise at all.
   // Pack leads (house rule), then the FREE bind_email ladder. The key/persist
@@ -14526,8 +14548,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       // Item 3: on the grid/queue reads a bound email DOES open full answers (capped per day). The one
       // step to get there is the claim handoff line (_claimHandoffStep) on this same response, so this
       // line states the fact and names no second tool (one ask, not two).
-      ? '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left). A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + name + '` answers a day; without one, calling `' + name + '` again returns the same preview.\n'
-      : '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n') +
+      ? '   Your trial key is active (' + _trialLeft + '). A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + name + '` answers a day; without one, calling `' + name + '` again returns the same preview.\n'
+      : '   Your trial key is active (' + _trialLeft + ') and `bind_email` raises that CALL budget — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n') +
     '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + (_freePreviewOnlyTool(name) ? _freeDecisionRungText(name, mint.tier || 'trial', _sid) : _rungsText(name, mint.tier || 'trial')) + ' (' + _afterPayClause('', name) + ').\n';
   const leadRefused =
     '🔒 **This trial key is not active yet — it needs your human’s email first.**\n' +
@@ -21438,6 +21460,22 @@ export function _planWaterWhere(d) {
   return null;
 }
 
+// 2026-11-21 (owner decision 2): a plan's coverage note names no credit pack and no per-day figure. The class
+// table keeps the frozen wording /mcp/chatgpt serves; every other profile reads the note through these rewrites
+// (paid callers skip the neutral connect step, so the note is fixed here, not left to that step). The daily
+// allowance reads the way the get_fiber_intel note already words it ("a daily allowance of full answers").
+const _PLAN_COVERAGE_REWRITES = [
+  [/; a credit pack opens them per call, as full-access depth\./g, '; full access opens them.'],
+  [/; a credit pack or full access gets the full answer\./g, '; full access gets the full answer.'],
+  [/ gets \d[\d,]* full answers a day, then previews;/g, ' gets a daily allowance of full answers, then previews;'],
+  [/ Call quota on a DC Hub key: [^.]*\./g, ''],
+];
+export function _planCoverageNote(note, c) {
+  if (typeof note !== 'string' || !note) return note;
+  let t = note;
+  for (const [re, to] of _PLAN_COVERAGE_REWRITES) t = t.replace(re, to);
+  return _chatgptFrozenCopy(t, note, c);
+}
 export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
@@ -26724,7 +26762,7 @@ export function _planQuery(intent, context) {
       .map((a) => _planAlternativeReason(a, text))
       .filter((a) => !seq.some((s) => s.tool === a.tool))
       .filter((a, i, all) => all.findIndex((x) => x.tool === a.tool) === i),
-    coverage_notes: top.cls.coverage_notes,
+    coverage_notes: _planCoverageNote(top.cls.coverage_notes),
     matched_classes,
     ...(() => { const u = _planUnresolved(text, d, top.cls.id); return u ? { unresolved: u } : {}; })(),
     ...(_stateFan ? { state_fanout: _stateFan.scope } : {}),
@@ -31974,7 +32012,8 @@ const _ONE_LINK_RUNG_SEG_RE_G = /\s*·\s*(?:or|for a human screening sites:)\s*\
 // clause or the credit rule.
 // Also unlock_more_data's unpriced rung (_UNLOCK_PACK_RUNG, owner 2026-10-10), so its ladder line still
 // converges on the one link.
-const _ONE_LINK_PACK_RUNG_RE_G = /\*\*(?:\$10 one-time = 1,000 API credits|a one-time pack of 1,000 API credits \(usage capacity, not a subscription\))\*\*, credits don’t expire → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
+// 2026-11-21 (owner decision 2): and unlock_more_data's rung that names no pack or credits (_UNLOCK_ACCESS_RUNG).
+const _ONE_LINK_PACK_RUNG_RE_G = /(?:\*\*(?:\$10 one-time = 1,000 API credits|a one-time pack of 1,000 API credits \(usage capacity, not a subscription\))\*\*, credits don’t expire|\*\*Full answers in one checkout\*\* \(no subscription\)) → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
 // Note V keyed follow-up (owner 2026-11-16): the label names what the link opens, not plans (was "the plans that
 // include the full answer"), for every caller.
 const _ONE_LINK_PLANS_LABEL = '**the full answer** → ';
