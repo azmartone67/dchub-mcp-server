@@ -297,7 +297,7 @@ describe('end to end, keyless, compact', () => {
     beforeAll(async () => { ({ o, lead } = await plan({ intent: QA, detail: 'compact' })); }, 120_000);
     it('routes to capacity_grid on planner 5.40', () => {
       expect(o.intent_class).toBe('capacity_grid');
-      expect(o.planner_version).toBe('5.54');
+      expect(o.planner_version).toBe('5.55');
     });
     it('reads the shortlist, both finalist grids\' queue and headroom, and Capacity Source; nothing failed', () => {
       const ran = o.executed.filter((e) => e.status === 'executed' || e.status === 'gated_preview');

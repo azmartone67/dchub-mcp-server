@@ -347,6 +347,7 @@ import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _bu
   buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer } from './lib/energy-answers.mjs';
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
+import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
 import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, landSearchFirst as _landSearchFirst,
   landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
@@ -24012,7 +24013,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.54';   // 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.55';   // 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -33818,8 +33819,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _intentAnswer1 = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
         ? _withLandLead(_intentAnswer0, _landSearchLead(executed, fullByEntry, _landStep.land_label)) : _intentAnswer0;
       // 5.45: a street address that could not be located is said as such, with no site figure under it.
-      const _intentAnswer = (_addrGeo && _addrGeo.miss && !_isCleanPlatform() && _answerBlocksAllowed())
+      const _intentAnswer2 = (_addrGeo && _addrGeo.miss && !_isCleanPlatform() && _answerBlocksAllowed())
         ? _addressMissAnswer(_addrGeo.query, _intentAnswer1) : _intentAnswer1;
+      // 5.55 (Grok QA 2026-11-20 P2): a find_sites area far from the named metro, or an AVOID metro's areas, never
+      // reach the answer without one plain line saying so (lib/siting-caveat.mjs).
+      const _intentAnswer = (!_isCleanPlatform() && _answerBlocksAllowed())
+        ? _withSitingCaveat(_intentAnswer2, _sitingCaveat(executed, fullByEntry, {
+          namedMarkets: (_sig && Array.isArray(_sig.__namedMarkets) && _sig.__namedMarkets.length) ? _sig.__namedMarkets
+            : (_sig && _sig.__citySlug ? [_sig.__citySlug] : []) })) : _intentAnswer2;
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
@@ -36332,6 +36339,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       lon: N.describe('Longitude of a search centre, e.g. -77.48'),
       ...COORD_ALIASES,
       radius_km: N.describe('Search radius in km around lat/lon (default 80, clamped 5-400); ignored in state mode'),
+      // Grok QA 2026-11-20 (P2): a named metro centres the search (backend routes/find_sites.py market=).
+      market: S.describe('A DCPI market slug or name instead of lat/lon, e.g. chicago: the search is centred on that market (radius_km default 60). anchored_market names it; avoid_note says when it reads AVOID'),
       min_voltage_kv: N.describe('Only anchor on substations at or above this voltage in kV (default 115). 230+ for hyperscale, 500 for the largest campuses'),
       max_gas_km: N.describe('Drop candidates farther than this from the nearest gas pipeline. Applied ONLY if the gas layer answers — check constraint_coverage'),
       max_fiber_km: N.describe('Drop candidates farther than this from the nearest fiber route (CHORD approximation — see fiber_distance_basis). Applied ONLY if the fiber layer answers'),

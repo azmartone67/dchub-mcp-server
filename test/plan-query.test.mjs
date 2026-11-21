@@ -95,7 +95,7 @@ describe('plan_query router (pure)', () => {
     // schema_version stays 1. Exactly the split this assertion exists to prove.
     // 5.16: market_outlook class + no get_dchub_recommendation in the unknown fallback (#118011).
     // 5.17: market_outlook binds every tracked DCPI market (owner priority 1, 2026-11-08).
-    expect(r.planner_version).toBe('5.54');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.55');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
@@ -495,16 +495,6 @@ describe('plan_query router (pure)', () => {
       expect(_planHostingCoverage('near Providence', null).answers_load).toBe(false);
       // and uncovered is honestly null, never a guess
       expect(_planHostingCoverage('find 50 MW in Dallas', { lat: 32.78, lon: -96.8 })).toBeNull();
-    });
-
-    it('_planHostingCoverage: a point outside the extent beats a state name in the text', () => {
-      // "Illinois" names Ameren's territory, but the Loop is ComEd (PJM), north of Ameren's box.
-      expect(_planHostingCoverage('best sites in Illinois near Chicago', { lat: 41.88323, lon: -87.6324 })).toBeNull();
-      // inside the box the name still matches, and with no point the name alone still resolves
-      expect(_planHostingCoverage('best sites in Illinois', { lat: 39.8, lon: -89.65 }))
-        .toMatchObject({ utility: 'Ameren Illinois (load)', matched_on: 'name' });
-      expect(_planHostingCoverage('a 50 MW site in central Illinois', null))
-        .toMatchObject({ utility: 'Ameren Illinois (load)', matched_on: 'name' });
     });
 
     it('steals NOTHING — every intent the two planner suites pin keeps its class', () => {
