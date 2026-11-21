@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
+import { OAUTH_SIGNIN_RE } from '../lib/wall-oauth-lead.mjs';
 import { wallIdentityV2On, SIGNIN_LINE, emailAskLine, emailAskCall, wallMarketFrom, withSignInLine, withEmailAsk,
   signInEligible, EMAIL_ASK_LEAD } from '../lib/wall-identity-v2.mjs';
 import { BANNED_WORDING } from '../lib/keyless-plan-wording.mjs';
@@ -138,8 +139,9 @@ describe('lib/wall-identity-v2.mjs', () => {
     for (const v of [undefined, '', '0', 'false', 'off', 'no', '2', 'enabled']) expect(wallIdentityV2On({ DCHUB_WALL_IDENTITY_V2: v }), String(v)).toBe(false);
   });
   it('the copy is exactly the approved wording', () => {
-    expect(SIGNIN_LINE).toBe('Reconnect with https://dchub.cloud/mcp/oauth to keep your history and get fuller answers. One sign-in, no key to copy.');
-    expect(SIGNIN_LINE).not.toMatch(/\/mcp\/connect/);
+    expect(SIGNIN_LINE).toBe('Reconnect with https://dchub.cloud/mcp/oauth to keep your history and get fuller answers. One sign-in, no key to copy. If your user sets it up by hand: https://dchub.cloud/mcp/connect.');
+    // the /mcp/oauth URL stays in the line, so offers_shown still records 'oauth_signin'
+    expect(OAUTH_SIGNIN_RE.test(SIGNIN_LINE)).toBe(true);
     expect(emailAskLine('dallas')).toBe('Share an email with get_api_key to keep this answer and get a daily change note for Dallas.');
     expect(emailAskLine('northern-virginia')).toBe('Share an email with get_api_key to keep this answer and get a daily change note for Northern Virginia.');
     expect(emailAskLine('')).toBe('Share an email with get_api_key to keep this answer and get a daily change note.');
