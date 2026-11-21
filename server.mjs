@@ -2706,9 +2706,17 @@ export function _refreshRelayLine(result) {
 export const OPTIN_REQUEST_URL = 'https://dchub.cloud/api/v1/opt-in/request';
 export const OPTIN_SOURCE = 'paywall_optin_cta';
 export const OPTIN_CTA_TOOLS = Object.freeze(['get_grid_intelligence', 'get_fiber_intel']);
-export const OPTIN_NOTE_PREFIX = '\u{1F4D3} Power user? Get our free grid-data upgrade guide + early access to ' +
+export const OPTIN_NOTE_PREFIX = '\u{1F4D3} Power user? Get our grid-data upgrade guide + early access to ' +
   'new datasets — opt in (we email you a confirm link, unsubscribe anytime): ';
-export const OPTIN_VALUE = 'Free grid-data upgrade guide + early access to new datasets. ' +
+export const OPTIN_VALUE = 'Grid-data upgrade guide + early access to new datasets. ' +
+  'Double opt-in (we email a confirm link); one-click unsubscribe anytime. ' +
+  'Easy to ignore — your tool access is unchanged.';
+// 2026-11-21 no-"free" sweep: the two strings above match be#9157 byte for byte. /mcp/chatgpt is frozen
+// for OpenAI review, so an anonymous card built on that profile keeps the wording it served before
+// (_chatgptFrozenCopy, as mcp#1619 did). A keyed caller's card comes from the backend on every profile.
+const OPTIN_NOTE_PREFIX_CHATGPT_FROZEN = '\u{1F4D3} Power user? Get our free grid-data upgrade guide + early access to ' +
+  'new datasets — opt in (we email you a confirm link, unsubscribe anytime): ';
+const OPTIN_VALUE_CHATGPT_FROZEN = 'Free grid-data upgrade guide + early access to new datasets. ' +
   'Double opt-in (we email a confirm link); one-click unsubscribe anytime. ' +
   'Easy to ignore — your tool access is unchanged.';
 export function optinCtaEnabled(env = process.env) {
@@ -2722,12 +2730,12 @@ export function _optinUrl(toolName) {
   if (/^[a-z0-9_]{1,64}$/.test(t)) p.set('tool', t);
   return OPTIN_REQUEST_URL + '?' + p.toString();
 }
-export function _optinCtaCard(toolName) {
+export function _optinCtaCard(toolName, c) {
   const optin_url = _optinUrl(toolName);
   return {
     optin_url,
-    optin_note: OPTIN_NOTE_PREFIX + optin_url,
-    optin_value: OPTIN_VALUE,
+    optin_note: _chatgptFrozenCopy(OPTIN_NOTE_PREFIX, OPTIN_NOTE_PREFIX_CHATGPT_FROZEN, c) + optin_url,
+    optin_value: _chatgptFrozenCopy(OPTIN_VALUE, OPTIN_VALUE_CHATGPT_FROZEN, c),
     optin_double_opt_in: true,
     optin_source: OPTIN_SOURCE,
     optin_tool: toolName,
@@ -2798,7 +2806,7 @@ export async function _withOptinAsk(result, toolName, ctx, env = process.env, fe
     const sid = c.session_id || '';
     if (sid && _OPTIN_SENT.has(sid)) return result;
     // A keyed caller's card comes from the backend (tier + suppression); null = none.
-    const card = c.api_key ? await fetchCard(c.api_key, toolName) : _optinCtaCard(toolName);
+    const card = c.api_key ? await fetchCard(c.api_key, toolName) : _optinCtaCard(toolName, ctx);
     if (!card) return result;
     const line = '\n\n' + card.optin_note;
     const content = result.content.slice();

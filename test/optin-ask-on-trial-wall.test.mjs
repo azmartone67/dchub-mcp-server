@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import {
   _withOptinAsk, _fetchKeyedOptinCard, _optinCtaCard, _optinUrl, OPTIN_SOURCE, OPTIN_CTA_TOOLS, optinCtaEnabled,
 } from '../server.mjs';
+import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 
 // DCHUB_GRID_DECLUTTER=0: since 2026-10-03 the card is dropped from every gated wall by default
 // (owner: the wall already carries one pack ask); these tests pin the card's own machinery, so
@@ -85,6 +86,31 @@ describe('opt-in card on the anonymous FREE wall (flag on)', () => {
     expect(c.optin_source).toBe('paywall_optin_cta');
     expect(c.optin_tool).toBe('get_grid_intelligence');
     expect(c.optin_note.endsWith(c.optin_url)).toBe(true);
+  });
+
+  // The exact strings, pinned here because CI has no dchub-backend checkout for optin-cta-parity.
+  // They are byte-for-byte mcp_gatekeeper._optin_cta_block after be#9157 (no price-sense "free").
+  it('carries the backend note and value text, byte for byte', async () => {
+    const c = r.structuredContent.optin_cta;
+    expect(c.optin_note).toBe('\u{1F4D3} Power user? Get our grid-data upgrade guide + early access to ' +
+      'new datasets — opt in (we email you a confirm link, unsubscribe anytime): ' + c.optin_url);
+    expect(c.optin_value).toBe('Grid-data upgrade guide + early access to new datasets. ' +
+      'Double opt-in (we email a confirm link); one-click unsubscribe anytime. ' +
+      'Easy to ignore — your tool access is unchanged.');
+  });
+
+  // /mcp/chatgpt is frozen for OpenAI review: the anonymous card built there keeps its origin/main wording.
+  it('the frozen /mcp/chatgpt profile keeps the card it served before the sweep', () => {
+    const t = 'get_grid_intelligence';
+    for (const ctx of [{ profile: DIRECTORY_PROFILE }, { legacy_wall_copy: true }]) {
+      const c = _optinCtaCard(t, ctx);
+      expect(c.optin_note).toBe('\u{1F4D3} Power user? Get our free grid-data upgrade guide + early access to ' +
+        'new datasets — opt in (we email you a confirm link, unsubscribe anytime): ' + _optinUrl(t));
+      expect(c.optin_value.startsWith('Free grid-data upgrade guide + early access to new datasets. ')).toBe(true);
+    }
+    for (const ctx of [undefined, { profile: 'claude' }, { tier: 'anonymous' }]) {
+      expect(_optinCtaCard(t, ctx).optin_value.startsWith('Grid-data upgrade guide')).toBe(true);
+    }
   });
 
   it('appends the one-line note to the text a text-only relay keeps', async () => {

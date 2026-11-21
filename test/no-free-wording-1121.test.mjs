@@ -5,8 +5,9 @@
 //
 // Ignored on purpose: the tool NAME claim_free_key (an identifier) and <code> spans. Kept elsewhere and
 // NOT scanned here: the /mcp/chatgpt and directory-profile copy (frozen for OpenAI review), the
-// kill-switch *_LEGACY restores, pricing/checkout copy that names a plan or the credit pack, and the
-// opt-in card shared with dchub-backend mcp_gatekeeper. Tool descriptions on /mcp are scanned whole, with the
+// kill-switch *_LEGACY restores, and pricing/checkout copy that names a plan or the credit pack. The opt-in
+// card shared with dchub-backend mcp_gatekeeper IS scanned (both sides dropped "free" together, be#9157 +
+// this repo). Tool descriptions on /mcp are scanned whole, with the
 // non-price senses ("free text", "free grid capacity", "free up") taken out first. ANALYZE_SITE_FREE_LINE
 // (shared backend canon) lost its "free key" in #1617 / be#9147, so it is scanned too.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -134,8 +135,10 @@ describe('server.mjs exported copy', () => {
       ...Object.values(S.FREE_ANSWER_BY_TIER),
       S.SITE_KEY_LINK_MESSAGE, S.COMPARE_KEYLESS_MESSAGE, S.COMPARE_FREE_KEY_LINE,
       S.COMPOSITE_KEYLESS_MESSAGE, S.REPORT_KEYLESS_MESSAGE, S.SITE_NOSID_KEY_LINE,
-      // OPTIN_NOTE_PREFIX / OPTIN_VALUE are not here: the opt-in card is shared canon with dchub-backend
-      // mcp_gatekeeper._optin_cta_block (test/optin-cta-parity.test.mjs), changed only in both repos at once.
+      // The opt-in card is shared canon with dchub-backend mcp_gatekeeper._optin_cta_block
+      // (test/optin-cta-parity.test.mjs). It was left out of the 11-21 sweep until both sides moved
+      // together: be#9157 dropped "free" from the backend card, and this repo now matches it byte for byte.
+      S.OPTIN_NOTE_PREFIX, S.OPTIN_VALUE,
     ];
     expect(strings.filter((s) => typeof s === 'string' && s.length).length).toBeGreaterThan(10);
     expect(offenders(strings)).toEqual([]);
