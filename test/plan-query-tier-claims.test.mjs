@@ -112,22 +112,22 @@ const PHRASES = [
     re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a (?:\$10 )?credit pack\); (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'any-key-full',
-    re: /with no key a trimmed preview \(3 rows, MW withheld; MISO and SPP project names and queue ids held\); any key, a free one included, gets the full survivor set/,
+    re: /with no key a trimmed preview \(3 rows, MW withheld; MISO and SPP project names and queue ids held\); (?:any key, a free one included,|any DC Hub key) gets the full survivor set/,
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },
   // ladder stage 1 (2026-09-29): Starter is not sold, so the notes name Developer.
   // A grandfathered Starter key still gets these in full (the seat below).
   // Grok audit 2026-10-08 item 2: the $10 pack is API capacity and opens no depth-tease tool, so
   // the notes name Developer alone and the pack seat reads as the identified seat.
   { id: 'developer-full',
-    re: /no key or a free key gets a trimmed preview; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
+    re: /no key or a (?:free key|DC Hub key without full access) gets a trimmed preview; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
   { id: 'allowance-then-developer-full',
-    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
+    re: /with no key a trimmed preview; a (?:free|DC Hub) key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, P, F, F, F) },
   // A rationed paid-class tool that is NOT depth-teased (hyperscaler_deals): a credit still buys
   // the full call, so the pack seat reads full here.
   { id: 'pack-or-developer-full',
-    re: /no key or a free key gets a trimmed preview; a (?:\$10 )?credit pack or (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
+    re: /no key or a (?:free key|DC Hub key without full access) gets a trimmed preview; a (?:\$10 )?credit pack or (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer(?!, unlimited)/,
     fresh: m(P, P, F, F, F, F), spent: m(P, P, F, F, F, F) },
   // The pre-2026-10-08 wording for depth-tease tools (the pack sold as a depth plan), kept KNOWN
   // so re-inserting it on one of them is driven: the pack seat no longer gets those in full.
@@ -137,7 +137,7 @@ const PHRASES = [
   // ladder stage 1: grid/fiber intel are unlimited at Developer (and per call on
   // the pack). A grandfathered Starter key keeps its old daily allowance (spent → P).
   { id: 'allowance-then-developer-unlimited',
-    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer, unlimited/,
+    re: /with no key a trimmed preview; a (?:free|DC Hub) key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer, unlimited/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'legacy-allowance-then-pack-or-developer-unlimited',
     re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer, unlimited/,
@@ -151,12 +151,12 @@ const PHRASES = [
   { id: 'legacy-below-developer',
     re: /(?:(?:is|are) depth-teased below Developer(?: tier)?(?: \([^)]*\))?|(?:full )?depth(?: \(\$ aggregates\))? is Developer\+(?: \([^)]*\))?)/,
     fresh: m(P, P, P, P, F, F) },
-  { id: 'free-full', re: /(?:is|are) free \+ full(?: at every tier| for everyone| by design)?/i, free_full: true },
-  { id: 'free-friendly', re: /(?:is|are) free-tier friendly|(?:is|are) free citation hooks?|is free for everyone/, free_friendly: true },
+  { id: 'free-full', re: /(?:is|are) (?:free \+ full(?: at every tier| for everyone| by design)?|full (?:at every (?:tier|access level)(?: by design)?|for everyone))/i, free_full: true },
+  { id: 'free-friendly', re: /(?:is|are) free-tier friendly|(?:is|are) free citation hooks?|is free for everyone|works? at every access level|(?:is|are) citation hooks? at every access level|works for everyone/, free_friendly: true },
   { id: 'gas-econ-below-pro',
     re: /shows the EIA state gas prices \(delivered industrial, delivered electric, burner tip\) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the \$\/MWh table below the access level that includes every tool/, gas_below_pro: true },
   // Not about one tool: the free-key call quota, rendered from canon.
-  { id: 'free-key-quota', re: /Call quota on a free key: [^.]*\./, untooled: true },
+  { id: 'free-key-quota', re: /Call quota on a (?:free|DC Hub) key: [^.]*\./, untooled: true },
   { id: 'retirement-mw-below-developer',
     re: /lists retiring generators below (?:Developer|a paid plan|full access) too, but its MW figures \([^)]*\) are null below (?:Developer|a paid plan|full access), and below (?:Developer|a paid plan|full access) target_mw is held at 50; a (?:\$10 )?credit pack opens them per call, as (?:Developer|paid-plan|full-access) depth/,
     retirement_mw: true },
@@ -165,15 +165,15 @@ const PHRASES = [
 // Sentences with tier wording that name no tool, so no phrase can be scoped to
 // one. Exact text: any edit re-opens the question. NOT verified by this file.
 const UNSCOPED = new Set([
-  'Free-tier friendly citation hooks.',
-  'Discovery is free (anon gets sample rows; a free key unlocks full discovery).',
+  'Free-tier friendly citation hooks.', 'Citation hooks at every access level.',
+  'Discovery is free (anon gets sample rows; a free key unlocks full discovery).', 'Discovery is open to everyone (anon gets sample rows; a DC Hub key unlocks full discovery).',
   'Capacity MW / exact coordinates / deep specs are Developer+.',
   // v14 (owner 2026-10-10): the same sentence with no plan name.
   'Capacity MW / exact coordinates / deep specs need a paid DC Hub plan.',
   'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is paid.',
   // Note V keyed follow-up (owner 2026-11-16): the same two sentences with no plan wording.
   'Capacity MW / exact coordinates / deep specs need full access.',
-  'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access.',
+  'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access.', 'analyze_site without full access returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access.',
 ]);
 const VOCAB = /\b(?:Developer|Starter|Pro|paid|previews?|teased?|free|full depth)\b|\+ full/i;
 
@@ -382,7 +382,7 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
   it('the free-key call quota quoted in the notes is the canon helper', () => {
     const { quotas } = extractClaims();
     expect(quotas.length).toBeGreaterThanOrEqual(1);
-    for (const q of quotas) expect(q).toBe(`Call quota on a free key: ${_freeKeyAllowanceText()}.`);
+    for (const q of quotas) expect(q).toBe(`Call quota on a DC Hub key: ${_freeKeyAllowanceText()}.`);
   });
 
   it('"free + full" tools are in FREE_FULL_TOOLS and not paid-only', () => {

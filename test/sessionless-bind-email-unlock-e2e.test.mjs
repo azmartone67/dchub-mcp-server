@@ -98,7 +98,7 @@ describe('sessionless keyless: wall -> bind_email -> X-API-Key retry -> full ans
     expect(claimBodies.map((b) => b && b.email)).toEqual([EMAIL]);              // the mint carried the email
     expect(bind.sc.bind_email_path).toBe('keyless_mint_bind');
     expect(bind.sc.api_key).toBe(MINTED);
-    expect(bind.texts[0].startsWith('No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ')).toBe(true);
+    expect(bind.texts[0].startsWith('No key on this session, so `bind_email` minted a DC Hub key with this email bound (one call). ')).toBe(true);
     expect(keyFrom(bind)).toBe(MINTED);                                         // the instruction names the key and the header
     expect(bind.text.split('X-API-Key header (`X-API-Key:').length - 1).toBe(1);   // once
 

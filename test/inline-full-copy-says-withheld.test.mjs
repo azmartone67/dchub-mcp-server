@@ -103,7 +103,7 @@ describe('inline-full unlock copy says what the free answer withheld', () => {
     expect(text).toMatch(/total_mw/);
     expect(text).not.toContain('is FULL on this session now');
     expect(text).not.toMatch(/more full answer/);
-    expect(sc.retry_instructions).toMatch(/free answer/);
+    expect(sc.retry_instructions).toMatch(/\bmore answers? today on the trial\b/);
     expect(sc.retry_instructions).toMatch(/withheld at this tier/);
     expect(sc.retry_instructions).not.toMatch(/more full answer/);
   });
@@ -123,20 +123,20 @@ describe('inline-full unlock copy says what the free answer withheld', () => {
 describe('limitedAnswerCopy (pure)', () => {
   const mk = (extra) => ({
     content: [{ type: 'text', text: '{"a":1}' }, { type: 'text', text:
-      '✅ **Free trial unlocked on THIS session — call `rank_markets` again — you have 1 more full answer today on the free trial. No header.**\n'
-      + '→ `rank_markets` is FULL on this session now (free for 7 days, 1 full answer left today) — just call it again.\n' }],
+      '✅ **Trial unlocked on THIS session — call `rank_markets` again — you have 1 more full answer today on the trial. No header.**\n'
+      + '→ `rank_markets` is FULL on this session now (trial: 7 days, 1 full answer left today) — just call it again.\n' }],
     structuredContent: { inline_full: true,
-      retry_instructions: 'Call rank_markets again (you have 2 more full answers today on the free trial). If it is still gated...',
+      retry_instructions: 'Call rank_markets again (you have 2 more full answers today on the trial). If it is still gated...',
       provenance: { preview: { withholding_proven: true, withheld_fields: ['score', 'total_mw'] } }, ...extra },
   });
   it('rewrites the three phrasings with the withheld names, pluralising correctly', () => {
     const r = limitedAnswerCopy(mk());
     const t = r.content.map((c) => c.text).join('\n');
-    expect(t).toContain('is free on this session now, with score, total_mw withheld at this tier (free for 7 days, 1 free answer left today).');
-    expect(t).toContain('you have 1 more free answer today on the free trial (score, total_mw stay withheld at this tier)');
+    expect(t).toContain('is open on this session now, with score, total_mw withheld at this tier (trial: 7 days, 1 answer left today).');
+    expect(t).toContain('you have 1 more answer today on the trial (score, total_mw stay withheld at this tier)');
     expect(t).not.toMatch(/FULL|full answer/);
     expect(r.structuredContent.retry_instructions)
-      .toContain('(you have 2 more free answers today on the free trial; score, total_mw stay withheld at this tier)');
+      .toContain('(you have 2 more answers today on the trial; score, total_mw stay withheld at this tier)');
   });
   it('controls: no proven withholding, no inline_full, or no names leaves the result untouched', () => {
     for (const bad of [

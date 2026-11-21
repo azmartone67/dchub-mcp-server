@@ -6,7 +6,7 @@ import { day2DigestLine } from '../lib/grid-sell-line.mjs';
 describe('day2DigestLine (pure)', () => {
   it('names what was asked, asks for consent, points at subscribe_digest with a source, no link, no em dash', () => {
     const l = day2DigestLine({ tool: 'get_grid_intelligence', what: 'ERCOT' });
-    expect(l.human).toBe('Want a free weekly email on what moves in ERCOT? Give your agent your email and DC Hub sends one confirm link, no spam, one-click unsubscribe.');
+    expect(l.human).toBe('Want a weekly email on what moves in ERCOT? Give your agent your email and DC Hub sends one confirm link, no spam, one-click unsubscribe.');
     expect(l.agent).toContain('subscribe_digest');
     expect(l.agent).toContain('source=day2_grid');
     expect(l.agent).toMatch(/consent/);
@@ -98,7 +98,7 @@ describe('keyed free caller, grid calls in one UTC day', () => {
       expect(r1.structuredContent.for_your_human).toEqual({ text: r1.structuredContent.user_message });
       expect(text(r1)).toContain('subscribe_digest');
       expect(text(r2)).not.toContain('subscribe_digest');
-      expect(text(r2)).toContain('last free full');
+      expect(text(r2)).toContain('last included full');
     } finally { restore(); }
   });
   it('the kill switch removes it and leaves the answer untouched', async () => {

@@ -46,7 +46,7 @@ describe('the counted validate hop carries the key usage onto the ctx', () => {
 describe('the once-per-session bind line', () => {
   it('leads with the key usage when it is known', () => {
     const line = S._bindNoticeLine({ api_key: KEY, key_usage: { calls: 1234, since: '2026-09-12' } }, {});
-    expect(line).toMatch(/^🔑 This DC Hub key has made 1,234 calls since Sep 12 with no email on it\. Free: call `bind_email`/);
+    expect(line).toMatch(/^🔑 This DC Hub key has made 1,234 calls since Sep 12 with no email on it\. Optional: call `bind_email`/);
     expect(line).toContain('/day + make this key recoverable.');
     expect(line).not.toContain('human_url');
   });
@@ -60,7 +60,7 @@ describe('the once-per-session bind line', () => {
   });
 
   it('falls back to the old line with no usage, a tiny count, or no key', () => {
-    const old = /^🔑 Free: call `bind_email` with your human's email to lift your daily full-data cap to \d+\/day \+ make this key recoverable\.$/;
+    const old = /^🔑 Optional: call `bind_email` with your human's email to lift your daily full-data cap to \d+\/day \+ make this key recoverable\.$/;
     expect(S._bindNoticeLine({ api_key: KEY }, {})).toMatch(old);
     expect(S._bindNoticeLine({ api_key: KEY, key_usage: { calls: 1, since: '2026-10-01' } }, {})).toMatch(old);
     expect(S._bindNoticeLine({ key_usage: { calls: 50, since: '2026-10-01' } }, {})).toMatch(old);

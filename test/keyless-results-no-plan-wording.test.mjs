@@ -585,7 +585,7 @@ describe('must-fail controls: the scan catches each measured sentence', () => {
     expect(offenders({ structuredContent: { pricing: { rates_upgrade_url: 'https://dchub.cloud/connect' } } })).not.toEqual([]);
   });
   it('passes what is not plan or price wording', () => {
-    for (const s of ['DC Hub plans the lookups across markets', 'execute_plan', 'a free key (claim_free_key) adds more',
+    for (const s of ['DC Hub plans the lookups across markets', 'execute_plan', 'a DC Hub key (claim_free_key) adds more',
       'withheld from this answer', 'the 2027/2028 capacity auction', 'Open DC Hub: see what I found']) expect(bad(s), s).toEqual([]);
     expect(offenders({ structuredContent: { deals: [{ note: 'a $150M+ minimum' }] } })).toEqual([]);
   });

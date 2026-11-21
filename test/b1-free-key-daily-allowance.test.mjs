@@ -56,7 +56,7 @@ describe('B1 free-key copy follows the published shape', () => {
     expect(TC._freeKeyOfferText(LIFETIME)).toBe('10 calls to try');
     expect(TC._freeKeyAllowanceText(LIFETIME)).toBe('10 calls to try, 50/day with an email');
     expect(TC._unboundKeyLadderText(LIFETIME))
-      .toBe("10 free calls total, then results drop to previews until it's bound");
+      .toBe("10 calls total, then results drop to previews until it's bound");
     expect(TC._freeTierRuleText(LIFETIME)).toBe(B1_SENTENCE);
   });
 

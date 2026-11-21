@@ -201,7 +201,7 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     const b = await call('bind_email', { email: 'jane@firm.com' });
     expect(claims.length).toBe(1);
     expect(claims[0].email).toBe('jane@firm.com');
-    expect(b.text).toMatch(/minted a free DC Hub key with this email bound/);
+    expect(b.text).toMatch(/minted a DC Hub key with this email bound/);
     expect(b.text).toMatch(/already applied to THIS session/);
     const r = await call('get_grid_data');
     expect(r.sc.human_url).toBeFalsy();

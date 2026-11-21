@@ -152,7 +152,7 @@ function parseClause(line) {
   // Note V keyed follow-up (owner 2026-11-16): on /mcp the clause no longer names a plan. It says either
   // "a free DC Hub key returns them" (the free_key rung) or "those fields are withheld from this answer"
   // (a rung above the free key); the legacy plan-naming clauses are kept for the directory copy.
-  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:a paid DC Hub plan|the DC Hub plan with every tool|a free DC Hub key)|a free DC Hub key returns them|those fields are withheld from this answer) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
+  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:a paid DC Hub plan|the DC Hub plan with every tool|a free DC Hub key)|a (?:free )?DC Hub key returns them|those fields are withheld from this answer) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
   if (!m) return null;
   const parts = m[1].replace(/ and (?=[^,]*$)/, ', ').split(', ');
   let others = 0;
@@ -163,7 +163,7 @@ const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the plans that return them
 // The neutral clauses: the free key is still named (it is free); every rung above it reads "withheld", so the
 // rung is the LOWEST paid seat whose answer carries every stripped figure (found below), and the free key's
 // seat must still fall back to the preview (the rung-below check), which is what makes "withheld" true.
-const NEUTRAL_FREE = 'a free DC Hub key returns them';
+const NEUTRAL_FREE = 'a DC Hub key returns them';   // 2026-11-21 no-"free" sweep (was 'a free DC Hub key returns them')
 const NEUTRAL_WITHHELD = 'those fields are withheld from this answer';
 PLAN_RUNG[NEUTRAL_FREE] = 'free_key';
 const seatKey = (rung, tool) => ({ free_key: keyFor('FREE', tool), pack: keyFor('PACK', tool), developer: DEV_KEY, pro: PRO_KEY })[rung];
@@ -289,7 +289,7 @@ describe('relayMissedClause', () => {
   });
   it('neutral (/mcp, Note V 2026-11-16): names the fields, never a plan; the free key alone is named', () => {
     const n = { neutral: true };
-    expect(relayMissedClause(mu(['MW'], 'free_key'), n)).toBe('this answer hid MW; a free DC Hub key returns them');
+    expect(relayMissedClause(mu(['MW'], 'free_key'), n)).toBe('this answer hid MW; a DC Hub key returns them');
     for (const r of ['pack', 'developer', 'pro']) {
       const t = relayMissedClause(mu(['MW', 'scores'], r), n);
       expect(t).toBe('this answer hid MW and scores; those fields are withheld from this answer');

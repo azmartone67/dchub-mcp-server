@@ -170,9 +170,9 @@ describe('F8: the keyless Pro hint says who acts first', () => {
     const h = r.structuredContent.agent_hints.summary;
     expect(h.startsWith('Pro opens this tool; retry')).toBe(false);
     // Note V keyed follow-up (owner 2026-11-16): the hint names no plan; it still says do not retry now.
-    expect(h).toMatch(/^this call returns no more at this access level, so do not retry it now; use the free headline above and show your user the link in human_url\./);
+    expect(h).toMatch(/^this call returns no more at this access level, so do not retry it now; use the headline above and show your user the link in human_url\./);
     expect(contentText(r)).toContain('(agent: ' + h + ')');
-    expect(contentText(r)).toMatch(/Free headline: weakest factor /);   // the headline it points at is there
+    expect(contentText(r)).toMatch(/Headline: weakest factor /);   // the headline it points at is there
   });
 
   it('a Pro wall with no headline does not point at one', async () => {

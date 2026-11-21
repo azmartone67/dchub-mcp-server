@@ -47,10 +47,10 @@ describe('/mcp/claude keyless analyze_site wall carries the free unlock link', (
     expect(sc.site_teaser && sc.site_teaser.verdict).toBe('BUILD');   // the teaser is still there
     expect(sc.human_url).toMatch(LINK);
     expect(sc.unlock).toEqual({ url: sc.human_url, by: 'email', card_required: false });
-    expect(sc.human_message).toBe(`The full site report is free by email (no card): ${sc.human_url}`);
+    expect(sc.human_message).toBe(`The full site report needs only an email (no card): ${sc.human_url}`);
     const t = texts(r);
     expect(t.at(-1)).toBe(CLAUDE_PLANS_NOTICE);                        // the notice stays last
-    expect(t.at(-2)).toContain(`[Unlock the full site report free](${sc.human_url})`);
+    expect(t.at(-2)).toContain(`[Unlock the full site report](${sc.human_url})`);
     expect(t.filter((x) => x.includes(sc.human_url))).toHaveLength(1); // one link block
   }, 60_000);
 

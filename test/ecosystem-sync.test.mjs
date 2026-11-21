@@ -835,7 +835,7 @@ describe('tool descriptions: a listing with the right names and last week\'s tex
   // text with all 94 names, so every name/count check read in sync.
   const NEW_PARCEL = 'Use this when the user has a land parcel for a data center site: structured read of its boundary — '
     + 'pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED '
-    + 'parcel-boundary layer (free county/state GIS polygons, covering a set of priority data-center counties in VA, IL, '
+    + 'parcel-boundary layer (public county/state GIS polygons, covering a set of priority data-center counties in VA, IL, '
     + 'TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview). '
     + 'Returns total acres, member count and contiguity.';
   const OLD_PARCEL = NEW_PARCEL.replace('covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY',

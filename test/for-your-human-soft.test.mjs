@@ -68,7 +68,7 @@ describe('controls: the checkers see the old wording', () => {
     expect(OLD_ALLOWANCE).toMatch(NUMERIC_ALLOWANCE);
     expect('a free key adds 3 free full site reports each month').toMatch(NUMERIC_ALLOWANCE);
     expect('your next call returns the full report, three reports a month').toMatch(NUMERIC_ALLOWANCE);
-    expect('a few free full site reports each month').not.toMatch(NUMERIC_ALLOWANCE);
+    expect('a few full site reports each month').not.toMatch(NUMERIC_ALLOWANCE);
   });
   it('the literal extractor finds concatenated _agent_instruction strings', () => {
     const got = agentInstructionLiterals("x = { _agent_instruction: 'DO NOT summarize or paraphrase ' + 'this', y: 1 }");

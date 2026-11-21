@@ -251,7 +251,7 @@ describe('r-trial-sub-bind — no subscription link binds to a trial key', () =>
     const r = await call(h, ...GRID);
     expect(mintHits - before, 'the anonymous call did not reach the auto-mint cascade').toBe(1);
     expect(r.body).toContain(TRIAL);
-    expect(r.text).toContain('Free trial unlocked on THIS session');
+    expect(r.text).toContain('Trial unlocked on THIS session');
 
     expect(refsIn(r.body)).not.toContain('k-' + sha(TRIAL));
     const pro = goTokens(r.body).filter((t) => t.plan === 'pro');
@@ -311,10 +311,10 @@ describe('r-trial-refused — a mint the backend refuses is neither bound nor ad
       const seen = dataKeys.length;
       const r = await call(h, ...GRID);
       expect(mintHits - before).toBe(1);
-      expect(r.text).not.toContain('Free trial unlocked on THIS session');
+      expect(r.text).not.toContain('Trial unlocked on THIS session');
       expect(r.text).not.toContain('works instantly');
       expect(r.text).toContain('`bind_email`');
-      expect(r.text).toContain('This free trial key is not active yet');
+      expect(r.text).toContain('This trial key is not active yet');
 
       await call(h, ...GRID);
       expect(mintHits - before, 'a refused key was bound: the second call skipped the cascade').toBe(2);

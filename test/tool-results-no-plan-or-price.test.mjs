@@ -254,7 +254,7 @@ describe('initialize instructions: the neutral connect line, no offers, no tier 
   });
   it('the offers are the owner\'s exact phrases, and the email figure is the canon rung', () => {
     expect(FREE_OFFER_EMAIL).toBe('50 MCP calls/day with an email');
-    expect(FREE_OFFER_LAND_POWER).toBe('1 free Land & Power map search a month');
+    expect(FREE_OFFER_LAND_POWER).toBe('1 Land & Power map search a month');
     expect(TIER_CANON.calls_per_day.identified, 'the email rung moved: the owner rewords the offer').toBe(50);
   });
   for (const p of ['/mcp', '/mcp?catalog=full', '/mcp/oauth', '/mcp/grok']) {
@@ -341,7 +341,7 @@ describe('must-fail controls: the scan catches the measured 2.12.55 copy', () =>
     expect(bad('{"ok":true,"result":{"tier_required":"lite-pro"}}')).not.toEqual([]);
   });
   it('passes what is not plan or price wording', () => {
-    for (const s of [FREE_OFFER_EMAIL, FREE_OFFER_LAND_POWER, 'a free key (claim_free_key) adds more',
+    for (const s of [FREE_OFFER_EMAIL, FREE_OFFER_LAND_POWER, 'a DC Hub key (claim_free_key) adds more',
       'for enterprise buyers and the agents that procure for them', 'withheld from this answer',
       'the 2027/2028 capacity auction', 'DC Hub plans the lookups']) expect(bad(s), s).toEqual([]);
   });

@@ -735,7 +735,7 @@ describe('bind_email keyless mint+bind', () => {
     const r = await s.call('bind_email', { email: 'jane@firm.com' });
     expect(claimBody && claimBody.email, 'the mint carried the email').toBe('jane@firm.com');
     expect(identifyBody, 'nothing to bind on a keyless session, so no identify call').toBeNull();
-    expect(r.first.startsWith('No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ')).toBe(true);
+    expect(r.first.startsWith('No key on this session, so `bind_email` minted a DC Hub key with this email bound (one call). ')).toBe(true);
     expect(r.text).toContain(MINTED);
     expect(r.sc.bind_email_path).toBe('keyless_mint_bind');
   });

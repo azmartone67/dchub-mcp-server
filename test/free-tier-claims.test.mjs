@@ -232,7 +232,7 @@ describe("published full-answers claims", () => {
     expect(tierOf("Free to start (no key: previews; a free key: previews plus ")).toBe("keyed");
     expect(tierOf("Anonymous: previews plus ")).toBe("anonymous");
     // The decision-tool clause names the email rung (owner 2026-10-19 wording).
-    expect(tierOf("Grid/queue/market-intel tools: previews on free; an email adds ")).toBe("keyed");
+    expect(tierOf("Grid/queue/market-intel tools: previews with no email; an email adds ")).toBe("keyed");
     expect(tierOf("Grid/queue/market-intel tools: previews on free; ")).toBe("none");
   });
 
