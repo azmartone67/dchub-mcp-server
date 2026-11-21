@@ -181,6 +181,10 @@ import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAG
          MCP_OAUTH_RESOURCE, MCP_OAUTH_PRM, mcpOauthChallenge as _mcpOauthChallenge,
          isMcpOauthRequest as _isMcpOauthRequest,
          mcpOauthChallengeEligible as _mcpOauthChallengeEligible } from './lib/mcp-oauth-path.mjs';
+// DCHUB_LAZY_AUTH_V1 (default OFF): lazy OAuth at the wall on the generic /mcp (lib/lazy-auth.mjs).
+import { lazyAuthDecide as _lazyAuthDecide, noteLazyAuthChallenge as _lazyAuthNoteChallenge,
+         lazyAuthResponse as _lazyAuthResponse, withLazyAuthTrackArm as _withLazyAuthTrackArm,
+         countLazyAuthChallenge as _lazyAuthCount, LAZY_AUTH_4XX_REASON } from './lib/lazy-auth.mjs';
 // 2026-11-18: /mcp/gemini, /mcp/copilot, /mcp/perplexity, /mcp/cursor, /mcp/mistral serve the full /mcp
 // with an arrival source tag (lib/client-paths.mjs).
 import { CLIENT_PATHS } from './lib/client-paths.mjs';
@@ -5159,6 +5163,8 @@ async function trackToolCall(payload) {
   // 2026-10-16: our own test callers are written as 'dchub-internal' (see _selfTestTelemetryTag).
   try { payload = _tagOwnTestTelemetry(payload, getCtx()); } catch (_) { /* never block telemetry */ }
   try { const v = getVia(); if (v && payload && !payload.via) payload = { ...payload, via: v }; } catch (_) { /* never block telemetry */ }
+  // DCHUB_LAZY_AUTH_V1: a served eligible walled call carries its arm in params._lazy_auth (lib/lazy-auth.mjs).
+  try { const _lc = getCtx(); if (_lc && _lc.lazy_auth) payload = _withLazyAuthTrackArm(payload, _lc.lazy_auth); } catch (_) { /* never block telemetry */ }
   // 2026-11-02: bind_email / claim_free_key args carried the raw address into mcp_call_log.params.
   // Every logged call passes here, so this is the one place to redact it.
   try { if (payload && payload.params != null) payload = { ...payload, params: _redactEmails(payload.params) }; } catch (_) { /* never block telemetry */ }
@@ -41412,6 +41418,33 @@ app.post(MCP_PATHS, async (req, res) => {
         });
       }
     }
+    // DCHUB_LAZY_AUTH_V1 (lib/lazy-auth.mjs, default OFF): lazy OAuth at the wall, generic /mcp only. A keyless
+    // tools/call from an allow-listed client (default: the claude.ai connector) that the pre-check reads as walled
+    // is answered 401 + the /mcp PRM challenge, so the client shows its Connect card and retries the same call with
+    // the bearer (validated above by resolveWorkosBearer, audience https://dchub.cloud/mcp). 20% holdout and a
+    // per-identity bound are served as today; their arm rides ctx.lazy_auth onto the call's track row.
+    try {
+      const _laPlanStep = !!(_planLoopbackSid || _planLoopbackIp || _planWallSinkId || _planFirstFull
+        || _claudeLoopback || _coreLoopback || _legacyWallLoopback);
+      const _la = _lazyAuthDecide({
+        path: _normPath(req), method: req.body?.method, tool: String(req.body?.params?.name || ''),
+        hasCredential: !!apiKey || !!req.headers['x-api-key'] || !!req.headers['authorization'],
+        workosEnabled: _workosEnabled(), planStep: _laPlanStep,
+        clientName: _chClientName, isClaudeConnector: _isClaudeConnectorNow, ua: userAgent,
+        sessionId, callerKey: _challengeCallerKey(req.headers).key, gatedTools: PAID_ONLY_TOOLS,
+      });
+      if (_la.action === 'challenge'
+          && !(((await _getCredits({ api_key: '', session_id: _sessionIdToken(sessionId) || '' })).credits || 0) > 0)) {
+        _lazyAuthNoteChallenge(_la.identity);
+        _lazyAuthCount(_chBump, { claudeConnector: _isClaudeConnectorNow });   // retention: connector_call + stage 1
+        _mcp4xxCounter.note({ client: _mcp4xxClient(req), status: 401, reason: LAZY_AUTH_4XX_REASON });
+        const _lr = _lazyAuthResponse(req.body?.id);
+        res.set('WWW-Authenticate', _lr.headers['WWW-Authenticate']);
+        console.log(`[oauth] 401 lazy-auth → /mcp (no credential, walled tools/call tool=${String(req.body?.params?.name || '').slice(0, 60)})`);
+        return res.status(_lr.status).json(_lr.body);
+      }
+      if (_la.action === 'serve' && _la.arm) req._dchubLazyAuth = { arm: _la.arm, tool: String(req.body?.params?.name || '') };
+    } catch (_) { /* additive: the call is served as today */ }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
     // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
     // The true client IP rides in X-Forwarded-For (first hop). Capture it once
@@ -41488,7 +41521,8 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_demoted: _authDemotedFlag,   // r-auth-demoted: same per-request rule
         path: _normPath(req), source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
-        raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
+        raw_arg_keys: _rawArgKeysFromBody(req.body),
+        lazy_auth: req._dchubLazyAuth || null }, async () => {   // DCHUB_LAZY_AUTH_V1 arm (lib/lazy-auth.mjs)
         await transport.handleRequest(req, res, req.body);
       });
     }
@@ -41849,6 +41883,7 @@ app.post(MCP_PATHS, async (req, res) => {
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
+        lazy_auth: req._dchubLazyAuth || null,   // DCHUB_LAZY_AUTH_V1 arm (lib/lazy-auth.mjs)
       }, async () => {
         await ephTransport.handleRequest(req, res, body);
       });
