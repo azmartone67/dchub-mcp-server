@@ -5647,19 +5647,25 @@ export function _gatedAnswer(result, name, c) {
     return _wallCopyLooksPreview(result) || _isPreviewAnswerSc(sc) || sc._gated === true || _isRelayWall(sc, c || {});
   } catch (_) { return false; }
 }
-// What an email on the relay page really opens for this answer: 'email' (the full answer: the same rule the wall's
-// own email floor uses, _floorKindFor, plus the gates that masked THIS answer, _missedUpgradeFor) or 'licence'.
-// analyze_site's keyless email unlock (unlock_kind 'email') opens the full report.
+// What an email on the relay page really opens for this answer: 'email' (the full answer) or 'licence'. The server's
+// own rules, not new ones: a decision tool whose bound-email key gets full answers (_emailFullDecisionTool: the grid
+// and queue reads), else not a depth / Pro-only wall (_floorKindFor, the email floor's rule: get_market_dcpi_rank's
+// DCPI sub-scores read 'licence') AND an email opens the tool with nothing hidden past the free-key rung
+// (_capEmailOpens, the rung _missedUpgradeFor reads off THIS answer's gates),
+// analyze_site's keyless email unlock (unlock_kind email / email_key). Anything else, or unreadable: 'licence'.
 export function _wallUnlockFor(name, sc, c) {
   try {
     const s = (sc && typeof sc === 'object') ? sc : {};
-    if (name === 'analyze_site' && !(c && c.api_key) && s.unlock_kind === 'email') return _RE.UNLOCK_EMAIL;
+    if (name === 'analyze_site') {
+      return !(c && c.api_key) && /^email/.test(String(s.unlock_kind || '')) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
+    }
     if (name === 'execute_plan') return _planUnlockFor(s, c);
+    if (_emailFullDecisionTool(name, c)) return _RE.UNLOCK_EMAIL;
+    // A depth wall (the email floor's own rule, _floorKindFor: a backend-masked field such as the DCPI sub-scores
+    // is a depth gate the MCP-side rung cannot see) or a Pro-only tool: an email does not open it.
     const f = _floorKindFor(name, s, c);
     if (f.proOnly || f.rawDepth) return _RE.UNLOCK_LICENCE;
-    const mu = _missedUpgradeFor(s);
-    if (mu && mu.rung !== 'free_key') return _RE.UNLOCK_LICENCE;
-    return _RE.UNLOCK_EMAIL;
+    return _capEmailOpens(name, s) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
   } catch (_) { return _RE.UNLOCK_LICENCE; }   // unknown: promise nothing an email might not keep
 }
 // execute_plan: 'email' only when an email opens every step that came back at preview depth.
@@ -5667,19 +5673,20 @@ function _planUnlockFor(sc, c) {
   const ex = Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : [];
   const walled = ex.filter((e) => _execStepPreview(e.result, c));
   if (!walled.length) return _RE.UNLOCK_LICENCE;
-  return walled.every((e) => !_floorKindFor(e.tool, e.result || {}, c).depth) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
+  return walled.every((e) => _emailFullDecisionTool(e.tool, c) || !_floorKindFor(e.tool, e.result || {}, c).depth)
+    ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
 }
 // The signed relay URL for item 1: the token buildHumanRelay mints (session or its fallback id, tool, tier, time,
 // pk- / w- / m-), plus a- / c- / u- (lib/wall-relay-everywhere.mjs relayBindFields), landing query
 // ?via=mcp-wall&tool=<tool>&client=<client>. null without a signing secret.
-export function _relayEverywhereUrl(name, args, c, { unlock, client } = {}) {
+export function _relayEverywhereUrl(name, args, c, { unlock, client, sessionBound = false } = {}) {
   try {
     if (!process.env.DCHUB_INTERNAL_KEY) return null;
     let sid = (c && c.session_id) || '';
     if ((!sid || sid === 'no-session') && _relaySidFallbackOn()) sid = _anonAttribRef() || _requestFallbackSid();
     const tail = _relayMintKey(name, {})[1];
     const raw = `${sid || ''}|${name || ''}|${(c && c.tier) || 'free'}|${Math.floor(Date.now() / 1000)}` + tail
-      + '|' + _RE.relayBindFields({ args, client, unlock }).join('|');
+      + '|' + _RE.relayBindFields({ args, client, unlock, sessionBound }).join('|');
     return _signRelayPayload(raw) + '?' + _RE.relayLandingQuery({ tool: name, client });
   } catch (_) { return null; }
 }
@@ -5714,13 +5721,13 @@ export async function _relayEverywhereStep(result, name, args, c = getCtx()) {
     const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
     const unlock = _wallUnlockFor(name, sc, c);
     const client = _RE.relayClient({ platform: c.platform, userAgent: c.user_agent });
-    const longUrl = _relayEverywhereUrl(name, args, c, { unlock, client });
+    // Bound: a key in hand (the page binds the email to it), or a real transport session on a client that keeps it.
+    const sessionBound = !!c.api_key || (!_RE.freshSessionClient(client) && !!_realSession(c.session_id));
+    const longUrl = _relayEverywhereUrl(name, args, c, { unlock, client, sessionBound });
     if (!longUrl) return result;
     let link = longUrl;
     try { link = await _shortRelayPageLink(longUrl, name); } catch (_) { link = longUrl; }
     if (typeof link !== 'string' || !link) link = longUrl;
-    // Bound: a key in hand (the page binds the email to it), or a real transport session on a client that keeps it.
-    const sessionBound = !!c.api_key || (!_RE.freshSessionClient(client) && _realSession(c.session_id));
     const message = _RE.relayHumanMessage({ tool: name, link, unlock, sessionBound });
     let out = _RE.withRelayLink(result, { link, message, oldLink: typeof sc.human_url === 'string' ? sc.human_url : '' });
     out = _VF.withHonestPromises(out, { emailOpens: unlock === _RE.UNLOCK_EMAIL, sessionBound });
