@@ -321,6 +321,10 @@ import { keyMintVia } from './lib/via-tags.mjs';
 import { listingSrcFromRequest as _listingSrcFromRequest, rememberListingSrc as _rememberListingSrc,
   listingAttribution as _listingAttribution, applyListingSrcHeaders as _applyListingSrcHeaders } from './lib/via-src.mjs';
 import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.mjs';
+import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligible, withSignInLine as _wallIdWithSignIn,
+  withEmailAsk as _wallIdWithEmailAsk, emailAskLine as _wallIdEmailAskLine, emailAskCall as _wallIdEmailAskCall,
+  wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
+import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
 import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
@@ -5377,8 +5381,9 @@ function _planFloor(result, c) {
 // The free-key line's once-per-(session, tool) memo (note N item 1): a direct call only. An execute_plan step (loopback,
 // the caller's session id) neither reads nor marks it, as _ctxAskTool keeps steps off the per-tool memo.
 const _keyLineOncePerTool = (c) => _askPerToolOn() && !!c && !c.loopback_step;
-function _placeWallOffers(out, offers, name, c) {
+function _placeWallOffers(out, offers0, name, c) {
   let r = out;
+  const offers = _wallIdV2Offers(offers0, c);
   for (const o of offers) {
     if (o.place !== 'floor') continue;
     r = _withFloorLine(r, o.line);
@@ -5396,6 +5401,23 @@ function _placeWallOffers(out, offers, name, c) {
   for (const o of offers) if (o.place === 'lead') r = _withOauthLeadLine(r, o.line);
   for (const o of offers) if (o.place === 'below_link') r = _depthTrial(r, o.line);
   return r;
+}
+// DCHUB_WALL_IDENTITY_V2 (lib/wall-identity-v2.mjs): the email ask the floor places reads the V2 copy (the key line's
+// paragraph, or the email unlock line), its ask tag unchanged, and the old sign-in lead is not placed here (the V2
+// step places the V2 line after every rewrite). Grok keeps its G3 block. Flag off: the offers as they were.
+function _wallIdV2Offers(offers, c) {
+  try {
+    if (!_wallIdV2On() || !c || c._offerFloor === 'grok') return offers;
+    const ask = _wallIdEmailAskLine(c._wallIdMarket || '');
+    return offers.filter((o) => o.place !== 'lead').map((o) => {
+      if (o.kind === 'email_unlock' && o.place === 'floor') return { ...o, line: ask };
+      if (Array.isArray(o.kinds) && o.kinds.includes('email_key')) {
+        const line = String(o.line || '').replace(new RegExp(_KEY_LINE_RE.source), ask);
+        return line === o.line ? o : { ...o, line };
+      }
+      return o;
+    });
+  } catch (_) { return offers; }
 }
 function _wallIsWalled(out, name, c) {
   let walled = Array.isArray(c._pendingWallHits) && c._pendingWallHits.some((e) => e && !e.sent && e.name === name);
@@ -5449,6 +5471,34 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     const keyLineSent = _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
     return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
       link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent }), name, c);
+  } catch (_) { return result; }
+}
+// DCHUB_WALL_IDENTITY_V2 (lib/wall-identity-v2.mjs, default OFF): the sign-in line on a walled answer, placed LAST in
+// _sourceLineCb, after every rewrite (execute_plan's neutral CTA step turns /mcp/oauth into /connect, the one-route
+// builder drops the sign-in whenever the floor is eligible), so the URL reaches the agent and the wall row's
+// offers_shown, read from this result in _finishWallRow, names 'oauth_signin'. ONE line on an execute_plan answer
+// whose steps walled, none on a step. Not on /mcp/chatgpt or a ChatGPT client, Grok (its G3 block already names
+// /mcp/grok/oauth), the key / account tools, or a caller signed in or with an email on file. At most once per
+// (session, tool), like the free-key line and #1594's key entry; a sessionless caller gets it on every wall. The
+// wall's email ask reads the V2 copy and its structured email_ask names get_api_key with the call's market.
+export function _wallIdentityV2Step(result, name, c = getCtx()) {
+  try {
+    if (!_wallIdV2On() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (c.loopback_step || c.profile === DIRECTORY_PROFILE || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))
+      || _pcIsGrok(c.platform)) return result;
+    if (_FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key') return result;
+    let walled = _wallIsWalled(result, name, c);
+    if (!walled && name === 'execute_plan') {
+      try { const id = c._planWallSinkId; walled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { walled = false; }
+    }
+    if (!walled) return result;
+    const ent = _wallEnt(c);
+    if (ent.signedIn || ent.bound) return result;
+    let out = result;
+    if (_wallIdSignInEligible({ walled, workosEnabled: _workosEnabled(), signedIn: ent.signedIn, bound: ent.bound })
+      && !_askOnceSeen(c.session_id, 'oauth_v2', name)) out = _wallIdWithSignIn(out);
+    const asked = ['email_unlock', 'email_key'].some((k) => (_offersShown(out, c._emailAsk) || []).includes(k));
+    return _wallIdWithEmailAsk(out, c._wallIdMarket || '', { asked });
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -26665,6 +26715,7 @@ function _sourceLineCb(name, fn) {
       // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
       // a clean platform, or an execute_plan loopback step.
       // Item 2 (2026-11-11): the offer floor reads what lean left, so it runs after it (lib/wall-offer-floor.mjs).
+      if (_wallIdV2On()) c._wallIdMarket = _wallIdMarketFrom(args, c._wallIdPlanMarket || '');   // lib/wall-identity-v2.mjs
       const _floored = _wallOfferFloorStep(_done, name, c);
       _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
@@ -26733,6 +26784,8 @@ function _sourceLineCb(name, fn) {
       // carries; every other /connect pointer in it becomes that link (lib/plan-one-link.mjs). After the /connect tag.
       // Same skips as the neutral CTA step. Kill switch DCHUB_PLAN_ONE_LINK=0.
       if (name === 'execute_plan') _final = _planOneLinkStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform() });
+      // DCHUB_WALL_IDENTITY_V2 (default OFF): the sign-in line and the V2 email ask, after every rewrite above.
+      _final = _wallIdentityV2Step(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -27052,7 +27105,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const t0 = Date.now();
     let status = 'ok';
     try { c._askTool = name; } catch (_) { /* the wall's human line is capped per (session, this tool): _wallHumanLineAlreadySent */ }
-    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; c._offerFloor = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
+    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; c._offerFloor = undefined; c._wallIdMarket = undefined; c._wallIdPlanMarket = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
@@ -33990,6 +34043,19 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // once per session, on the same surfaces.
       try {
         if (_keyPathNextOn() && c && !c.api_key && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
+        // DCHUB_WALL_IDENTITY_V2: the plan's resolved market rides the key entry's args and its say line (one call
+        // mints, binds and follows it; lib/daily-habit.mjs). Flag off: untouched.
+        if (_wallIdV2On() && c) {
+          const _mmV2 = Array.isArray(minted.metro_slug) ? minted.metro_slug : (minted.metro_slug ? [minted.metro_slug] : []);
+          c._wallIdPlanMarket = [constraintSlug || '', ..._mmV2.map((x) => String(x || ''))];
+          const _kEntry = Array.isArray(out.next_tools) ? out.next_tools.find((e) => e && (e.tool === 'get_api_key' || e.tool === 'claim_free_key')) : null;
+          if (_kEntry) {
+            const _mV2 = _wallIdMarketFrom(a, c._wallIdPlanMarket);
+            const _call = _wallIdEmailAskCall(_mV2);
+            _kEntry.say = _call.copy;
+            if (_mV2) _kEntry.args = { ...(_kEntry.args || {}), market: _mV2 };
+          }
+        }
       } catch (_e) { /* a hint never breaks an answer */ }
       // A2: mint the Deal Desk Brief for the callers entitled to one. Attached
       // BEFORE the stringify so both halves of the response carry it.
