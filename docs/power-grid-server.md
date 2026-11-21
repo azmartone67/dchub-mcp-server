@@ -4,7 +4,7 @@ Grok MCP platform ranking plan, 2026-10-18, R2. Status: DRAFT PR; nothing publis
 
 ## What it is
 `https://dchub.cloud/mcp/power`, a pack path on the existing server (`MCP_PACKS` in `server.mjs`, `pack: power`).
-Same backend, same keys, same gates and free tier as `/mcp`. It is a **listing scope, not an entitlement scope**:
+Same backend, same keys, same gates and keyless access as `/mcp`. It is a **listing scope, not an entitlement scope**:
 it advertises 15 tools; `tools/call` still accepts any DC Hub tool by name under the caller's own key.
 
 15 tools = 11 listed + the 4-tool shared spine every pack carries (a pack must never be a dead end):

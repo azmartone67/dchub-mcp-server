@@ -1,8 +1,8 @@
 # One-click install — DC Hub MCP
 
 DC Hub is a **remote, hosted HTTP MCP server** — nothing to clone, build, or
-npm-install. Connect with the URL `https://dchub.cloud/mcp` (98 tools, free
-anonymous tier, no signup). Below are one-click deep links + copy-paste configs
+npm-install. Connect with the URL `https://dchub.cloud/mcp` (98 tools, keyless
+access, no signup). Below are one-click deep links + copy-paste configs
 for the major agent clients.
 
 > Acceptance test for any client: after connecting, ask **"list the dchub tools"** —
@@ -54,7 +54,7 @@ That file runs stdio servers only; for the hosted URL use Settings → Connector
 ```
 
 ## Paid tiers — connect at your full plan
-A bare `/mcp` URL connects at the free tier. To use a plan you paid for:
+A bare `/mcp` URL connects without a key. To use a plan you paid for:
 - **Claude.ai web** (no header field): put the key in the URL —
   `https://dchub.cloud/mcp?api_key=YOUR_KEY`
 - **Claude Desktop / Cursor / Cline**: send a header — `X-API-Key: YOUR_KEY`

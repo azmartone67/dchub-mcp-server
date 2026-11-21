@@ -251,7 +251,7 @@ describe('the Smithery description cannot drift from it', () => {
 describe('capacity_blurb', () => {
   it('is exactly the owner-given line (2026-09-29)', () => {
     expect(COPY.capacity_blurb).toBe('Capacity Source by DC Hub: operators and brokers list available '
-      + 'data-center capacity free; buyers and AI agents source it by size (kW or MW) and location with '
+      + 'data-center capacity (a fee applies only if a deal closes); buyers and AI agents source it by size (kW or MW) and location with '
       + 'the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if '
       + 'the provider accepts.');
   });

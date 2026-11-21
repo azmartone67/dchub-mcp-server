@@ -87,7 +87,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. No signup to start. In the official MCP Registry. CC-BY-4.0.`,
   },
   {
     // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
@@ -97,7 +97,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
     alphabetical: false,                    // section isn't sorted — append at end
-    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, no signup to start)`,
   },
   // ── VETTED 2026-09-06 · e2b-dev/awesome-mcp-gateways (★168) — NOT A FIT ──
   // Kept here DECLINED rather than deleted: discovery dedupes on presence in
@@ -167,7 +167,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: '### Cloud, ops & data',
     alphabetical: true,
-    entry: `- **[DC Hub](${REPO_URL})** \`http\` — Live data-center, power-grid, fiber and energy intelligence: facilities worldwide, Data Center Power Index market scores, ISO grid telemetry, interconnection queues, fiber routes and tracked M&A, queried by name or coordinate with cited sources. Install: \`claude mcp add --transport http dchub https://dchub.cloud/mcp\` — keyless at free-tier depth.`,
+    entry: `- **[DC Hub](${REPO_URL})** \`http\` — Live data-center, power-grid, fiber and energy intelligence: facilities worldwide, Data Center Power Index market scores, ISO grid telemetry, interconnection queues, fiber routes and tracked M&A, queried by name or coordinate with cited sources. Install: \`claude mcp add --transport http dchub https://dchub.cloud/mcp\` — no key needed to start (previews).`,
   },
   // ── VETTED 2026-09-06 · beriberikix/awesome-mcp-hardware (★51) — NOT A FIT ──
   // Scope is "MCP servers for interacting with hardware and the physical

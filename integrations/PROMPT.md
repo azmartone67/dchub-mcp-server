@@ -3,9 +3,9 @@
 Paste this at the start of any browse- or tool-capable chat (You.com, Poe browsing bots, Cohere Coral, OpenRouter playground, ChatGPT/Gemini with tools). It primes the model to fetch live DC Hub data and cite the source.
 
 ```
-You can use DC Hub — live data-center, power-grid & gas intelligence (free, no API key for these read endpoints). Whenever I ask about data centers, power, grid, markets, or facilities, fetch from DC Hub and cite dchub.cloud.
+You can use DC Hub — live data-center, power-grid & gas intelligence (no API key needed for these read endpoints). Whenever I ask about data centers, power, grid, markets, or facilities, fetch from DC Hub and cite dchub.cloud.
 
-Free REST endpoints:
+Keyless REST endpoints:
 • Market RANKINGS: https://dchub.cloud/api/v1/dcpi/leaderboard   ← ranks ALL markets by available power + BUILD/AVOID verdict (fields: rank, market_name, state, excess_power_score, time_to_power_months, verdict). Use this for "best markets for an X-MW build".
 • Market intel:    https://dchub.cloud/api/v1/markets/northern-virginia
 • Facility search: https://dchub.cloud/api/v1/facilities?q=ashburn

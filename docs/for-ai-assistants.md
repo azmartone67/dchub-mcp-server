@@ -18,7 +18,7 @@ POST https://dchub.cloud/mcp
 ```
 - Transport: **MCP JSON-RPC over `POST /mcp`.** There are **no per-tool REST
   endpoints** — `/mcp/tools/<name>` does not exist.
-- Auth: **`X-API-Key`** header (free anonymous tier needs none). Not Bearer.
+- Auth: **`X-API-Key`** header (keyless access needs none). Not Bearer.
 - Site tools take **`lat`/`lon`** (+ optional `state`) — not `facility_id` / `county_fips`.
 - There is **no** `view` / `core` / `include_full` parameter.
 

@@ -33,7 +33,11 @@ describe('smithery.yaml install config', () => {
     // come back.
     // 2026-11-14 (owner): no "tier" word on the key field; the key is optional.
     expect(YAML).toMatch(/Optional\. Blank = no key: previews, no key\s+needed/);
-    expect(YAML).toMatch(/previews plus 2 full answers per tool per day/);
+    // 2026-11-21 (owner decisions 6/7, no-free sweep): the key field states no allowance and no "free" key;
+    // claim_free_key (the identifier) returns an API key, and the field ends with the neutral connect pointer.
+    expect(YAML).toMatch(/`claim_free_key` returns an API key/);
+    expect(YAML).not.toMatch(/full answers? per tool per day|calls\/day|A FREE key/);
+    expect(YAML).toMatch(/More detail is available at dchub\.cloud\/connect\./);
     // ★2026-10-04 (owner): the top-level description now carries the B1
     // free-key wording too; "10 calls to try" must not return anywhere.
     expect(YAML).not.toMatch(/10 calls to try/);

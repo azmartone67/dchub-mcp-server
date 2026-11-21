@@ -20,9 +20,9 @@ pip install -U langchain-dchub
 
 A key is optional.
 
-No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.
+No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.
 
-Get a free key at <https://dchub.cloud/signup>, then:
+Get an API key at <https://dchub.cloud/signup> (or call `claim_free_key`, which returns an API key), then:
 
 ```bash
 export DCHUB_API_KEY="dch_live_..."

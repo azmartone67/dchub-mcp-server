@@ -1,6 +1,6 @@
 # Integrate DC Hub from any agent platform
 
-**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **98 MCP tools**, a global data-center facility map, DCPI market scores, grid telemetry across the 7 US ISOs, interconnection queues, fiber, and M&A. **Free tier, no signup.** Every response cites `dchub.cloud`.
+**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **98 MCP tools**, a global data-center facility map, DCPI market scores, grid telemetry across the 7 US ISOs, interconnection queues, fiber, and M&A. **No signup to start.** Every response cites `dchub.cloud`.
 
 There are three ways in. Pick the row that matches your platform.
 
@@ -10,7 +10,7 @@ There are three ways in. Pick the row that matches your platform.
 |---|---|---|
 | **1. MCP server** (recommended — all 98 tools) | Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed, any MCP client | Point your client at **`https://dchub.cloud/mcp`** (Streamable HTTP). See [`mcp-clients/`](./mcp-clients/). |
 | **2. SDK** (hides the handshake) | Python / Node apps | `pip install dchub` · `npm i dchub` |
-| **3. REST + tool-use** (function calling) | OpenAI, Cohere, Gemini, OpenRouter, Mistral, custom bots | Call the free REST endpoints below, or register them as tools. |
+| **3. REST + tool-use** (function calling) | OpenAI, Cohere, Gemini, OpenRouter, Mistral, custom bots | Call the keyless REST endpoints below, or register them as tools. |
 
 ## Platform guides
 
@@ -30,7 +30,7 @@ There are three ways in. Pick the row that matches your platform.
 | LangChain (PyPI package) | [`langchain-dchub/`](./langchain-dchub/) | `pip install langchain-dchub`: typed tools + `DCHubToolkit` |
 | LlamaIndex | [`llamaindex/`](./llamaindex/) | `FunctionTool` |
 
-## Free REST endpoints (no key)
+## Keyless REST endpoints (no key)
 
 ```
 GET  https://dchub.cloud/api/v1/markets/northern-virginia     # market intel
@@ -41,8 +41,8 @@ GET  https://dchub.cloud/api/v1/ai-agents.json               # machine-readable 
 POST https://dchub.cloud/mcp                                  # the full 98-tool MCP server
 ```
 
-## Free vs. paid
-- **Free tier:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional, raises limits + saves it):
+## Access and keys
+- **Access:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional; it keeps saved work across sessions):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
 - **Paid tools** (e.g. `analyze_site`, `compare_sites`, `get_grid_intelligence`, `get_interconnection_queue`): pass the key as **`X-API-Key`** header (REST) or in your MCP client config.
 

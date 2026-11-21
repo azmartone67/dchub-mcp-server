@@ -76,7 +76,7 @@ the two routes are told apart. This copy shipped untagged for about an hour on
 2026-09-05; `test/listing-paste-single-origin.test.mjs` R4 rejected the bare
 form in a "connect direct and keyless" line until the 2026-09-28 short copy. Their own pricing FAQ: *"RPC usage is billed to the account
 making the calls"* — so every agent arriving through their gateway spends its own
-RPCs to reach us, on top of our free tier.
+RPCs to reach us, on top of our keyless access.
 
 ## 3 · Keywords / tags — broad terms FIRST
 
