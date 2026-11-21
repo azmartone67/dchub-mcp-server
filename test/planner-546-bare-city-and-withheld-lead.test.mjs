@@ -18,7 +18,7 @@ const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed'
 const NOW = Date.parse('2026-11-20T04:30:00Z');
 
 describe('planner 5.46: a bare city with a deadline and a speed superlative is a one-state siting question', () => {
-  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.57'); });
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.58'); });
 
   it.each([
     BARE,
@@ -36,7 +36,8 @@ describe('planner 5.46: a bare city with a deadline and a speed superlative is a
   });
 
   it.each([
-    'fastest place to get 300 MW near Dallas',        // no deadline: keeps its class
+    // 'fastest place to get 300 MW near Dallas' (no deadline) became siting_search in 5.58 (owner 2026-11-21).
+    'fastest place to get 300 MW in Dallas',          // no deadline, no proximity wording: keeps its class
     'how fast can 300 MW near Abilene TX get power',  // one market, no superlative
   ])('%s does not become siting_search', (t) => {
     expect(_planQuery(t, {}).intent_class).not.toBe('siting_search');
