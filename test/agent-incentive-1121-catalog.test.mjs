@@ -18,10 +18,9 @@ describe('no per-day or plan lines in these tool descriptions', () => {
   }
 });
 
-describe('ten-tool profile suggestion', () => {
-  it('is appended on /mcp only', () => {
-    expect(S._INSTR_TAIL_CORE_HINT).toContain('https://dchub.cloud/mcp/core');
-    expect(S._INSTR_TAIL_CORE_HINT).not.toMatch(/free|\$|per day|credits?/i);
+describe('ten-tool profile suggestion (removed, owner 2026-11-21: /mcp names no other connector URL)', () => {
+  it('is no longer exported or appended; the /mcp path helper stays', () => {
+    expect(S._INSTR_TAIL_CORE_HINT).toBeUndefined();
     expect(S._isDefaultMcpPath({ path: '/mcp' })).toBe(true);
     expect(S._isDefaultMcpPath({ path: '/mcp/' })).toBe(true);
     for (const p of ['/mcp/chatgpt', '/mcp/claude', '/mcp/grok', '/mcp/core', '/mcp/registry', '/mcp/oauth']) {
