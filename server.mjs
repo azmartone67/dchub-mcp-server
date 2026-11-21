@@ -25318,7 +25318,12 @@ export function _planOneStateTtpSiting(text, d) {
     // power by its deadline, in no _SITING_TTP_RE phrase, and fell to capacity_search (ERCOT-wide queue figure as
     // the headline, no canvas, an unscoped retirement slice). A superlative of speed WITH a stated deadline is one.
     const t = String(text || '');
-    const ttpAsked = _SITING_TTP_RE.test(t) || (!!(d.deadline && d.deadline.months) && _SITING_FASTER_RE.test(t));
+    const ttpAsked = _SITING_TTP_RE.test(t) || (!!(d.deadline && d.deadline.months) && _SITING_FASTER_RE.test(t))
+      // 5.58 (owner 2026-11-21, "Yes, route them"): a speed superlative about a site NEAR one named metro is a siting
+      // search with or without a deadline. "fastest 100 MW site near Columbus, Ohio" fell to site_analysis, which
+      // screened the city centre as if it were the site; "fastest place to get 300 MW near Dallas" fell to
+      // capacity_search (ERCOT-wide queue, no search areas). 5.44 and 5.46 had kept these on their class.
+      || (_SITING_FASTER_RE.test(t) && !!_nearMetroSlug(t, d.__namedMarkets));
     if (!one || !ttpAsked) return false;
     const named = Array.isArray(d.__namedMarkets) ? d.__namedMarkets : [];
     // 5.36: a region of the state ("western Pennsylvania", "Southern Nevada": a corridor-table area of

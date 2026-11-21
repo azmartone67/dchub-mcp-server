@@ -77,10 +77,25 @@ describe('planner 5.58: a siting search near one named metro is centred on it', 
     expect(fsArgs(p), show(p)).toEqual({ market: 'phoenix', state: 'AZ', radius_km: 80 });
   });
 
-  it('no deadline and no time-to-power words: the class 5.44 / 5.46 pinned stands (it runs no find_sites to anchor)', () => {
-    const p = _planQuery('fastest place to get 300 MW near Dallas', {});
-    expect(p.intent_class).not.toBe('siting_search');
-    expect(p.recommended_sequence.map((s) => s.tool)).not.toContain('find_sites');
+  // Owner 2026-11-21 ("Yes, route them"): a speed superlative near one metro is a siting search with no deadline too.
+  it.each([
+    ['fastest 100 MW site near Columbus, Ohio', 'columbus', 'OH'],
+    ['fastest place to get 300 MW near Dallas', 'dallas', 'TX'],
+    ['fastest 300 MW data center site near Dallas Texas', 'dallas', 'TX'],
+    ['quickest 50 MW site around Atlanta', 'atlanta', 'GA'],
+  ])('no deadline: %s is a siting search around the metro, not a screen of its centre', (q, slug, st) => {
+    const p = _planQuery(q, {});
+    expect(p.intent_class, show(p)).toBe('siting_search');
+    expect(fsArgs(p), show(p)).toEqual({ market: slug, state: st });
+    expect(p.recommended_sequence.map((s) => s.tool)).not.toContain('analyze_site');
+  });
+
+  it.each([
+    ['fastest 100 MW site in Dallas', 'no proximity wording'],
+    ['what is the fastest way to power 200 MW near Chicago', 'no siting word'],
+    ['Fastest grid power in Texas', 'no size, no metro'],
+  ])('no deadline: %s keeps its class (%s)', (q) => {
+    expect(_planQuery(q, {}).intent_class).not.toBe('siting_search');
   });
 
   it('"in Dallas: any faster sites?" asks for alternatives: the search stays state-wide', () => {

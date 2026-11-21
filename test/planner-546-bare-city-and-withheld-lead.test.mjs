@@ -36,7 +36,8 @@ describe('planner 5.46: a bare city with a deadline and a speed superlative is a
   });
 
   it.each([
-    'fastest place to get 300 MW near Dallas',        // no deadline: keeps its class
+    // 'fastest place to get 300 MW near Dallas' (no deadline) became siting_search in 5.58 (owner 2026-11-21).
+    'fastest place to get 300 MW in Dallas',          // no deadline, no proximity wording: keeps its class
     'how fast can 300 MW near Abilene TX get power',  // one market, no superlative
   ])('%s does not become siting_search', (t) => {
     expect(_planQuery(t, {}).intent_class).not.toBe('siting_search');
