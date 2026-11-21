@@ -287,7 +287,7 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
@@ -11116,7 +11116,11 @@ export function _sitingPreviewUpgrade(name, seat, fr) {
 }
 const _lpMonthDay = (iso) => String(iso || '').slice(0, 10) || 'the 1st of next month';
 // One line on a full answer served from the monthly allowance. No plan name or price (mcp#891).
-export function _lpFreeRunNote(fr) {
+// dailyCap (owner 2026-11-20, A1): the daily site lane's cap when it would serve THIS keyed caller once the
+// monthly runs are spent (server.mjs _lpKeyedDailyCap), else 0. With the lane serving, the last monthly run's
+// note says the next calls use today's daily runs; without it (/mcp/chatgpt, a bot, the lane off) the note
+// keeps saying the preview follows until the month turns, which is then true.
+export function _lpFreeRunNote(fr, dailyCap = 0) {
   // A report from the purchased pack: no monthly count, no price, no plan name (mcp#891).
   if (fr && fr.source === 'purchased') {
     const left = Number.isInteger(fr.purchased_remaining) ? fr.purchased_remaining : null;
@@ -11125,12 +11129,19 @@ export function _lpFreeRunNote(fr) {
   }
   const tail = fr.remaining > 0
     ? `${fr.remaining} left; the count resets ${_lpMonthDay(fr.resets_at)}.`
-    : `That was the last one this month: the next ${'analyze_site'} call returns the preview until ${_lpMonthDay(fr.resets_at)}.`;
+    : (Number.isInteger(dailyCap) && dailyCap > 0
+      ? 'That was the last monthly one; the next analyze_site calls use today\'s free daily runs, then previews until UTC midnight.'
+      : `That was the last one this month: the next ${'analyze_site'} call returns the preview until ${_lpMonthDay(fr.resets_at)}.`);
   return `Free full site analysis ${fr.used} of ${fr.limit} this month (UTC). ${tail}`;
 }
-export function _withLpFreeRun(result, fr) {
+// The daily lane's cap for a keyed caller below Pro (the lane serves keys once their monthly runs are
+// spent: _keylessSiteFull(..., keyed=true)), 0 when the lane would not seat this caller.
+export function _lpKeyedDailyCap(c, name = 'analyze_site') {
+  try { return (c && _keylessSiteFullSeat(name, c, true)) ? _keylessSiteFullCap() : 0; } catch (_) { return 0; }
+}
+export function _withLpFreeRun(result, fr, dailyCap = 0) {
   if (!result || typeof result !== 'object') return result;
-  const note = _lpFreeRunNote(fr);
+  const note = _lpFreeRunNote(fr, dailyCap);
   const block = fr.source === 'purchased'
     ? { source: 'purchased', purchased_remaining: Number.isInteger(fr.purchased_remaining) ? fr.purchased_remaining : null,
         basis: 'site report pack: one report per delivered full answer; does not expire' }
@@ -27558,7 +27569,7 @@ function trackedTool(srv, name, description, schema, handler) {
               // An error or a non-answer does not spend the month's run (or the pack's report).
               if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release', _fr.charge_ref); return _full; }
               status = 'lp_free_full';
-              return _withLpFreeRun(withCitation(_full, name), _fr);
+              return _withLpFreeRun(withCitation(_full, name), _fr, _lpKeyedDailyCap(c, name));
             }
           }
           // The daily site lane (owner 2026-11-01): a key whose monthly runs did not serve this call
@@ -32651,8 +32662,9 @@ export function _sitingFreeClause(env = process.env) {
 // text never promises runs the gate does not grant. The lean handshake does not carry it yet:
 // at 93 characters it puts /mcp/grok and every pack path over the 2,048 budget
 // (test/initialize-instructions-length.test.mjs), an owner call.
+// 2026-11-20 (owner A1): the sentence states the daily site lane's cap as it runs (0 when the lane is off).
 export function _analyzeSiteFreeSentence(env = process.env) {
-  return _lpFreeRunsOn(env) ? ANALYZE_SITE_FREE_LINE : '';
+  return _lpFreeRunsOn(env) ? _analyzeSiteFreeLineFor(_wfnSiteFullOn(env) ? _keylessSiteFullCap(env) : 0) : '';
 }
 export const _INSTRUCTIONS = (() => {
   let facts = null;

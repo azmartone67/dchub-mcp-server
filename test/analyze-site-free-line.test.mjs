@@ -29,7 +29,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OWNER_LINE = 'analyze_site: a free key gets a few free full site reports each month; after that, previews.';
+// ★2026-11-20 (owner, quota one-statement A1: "keep enforcement as it is and publish it"): the line states the daily
+// site lane (2 a day per network with no key, lib/keyless-full-trial.mjs) and keeps "a few" for the monthly runs.
+const OWNER_LINE = 'analyze_site: 2 full site reports a day without a key; a free key adds a few each month; after that, previews until UTC midnight.';
+const LANE_OFF_LINE = 'analyze_site: a free key gets a few full site reports each month; after that, previews.';
 // Item 3 (owner draft 2026-10-16): the decision-tools clause now states the email allowance.
 const CLAUSE = 'previews on free; an email adds 10 full answers/day each';
 
@@ -71,9 +74,11 @@ afterAll(async () => {
 });
 
 describe('the sentence', () => {
-  it('is the owner wording, byte for byte, with no number', () => {
+  it('is the owner wording, byte for byte; its only number is the daily lane cap, never the monthly count', () => {
     expect(TC.ANALYZE_SITE_FREE_LINE).toBe(OWNER_LINE);
-    expect(TC.ANALYZE_SITE_FREE_LINE).not.toMatch(/\d/);
+    expect(TC.ANALYZE_SITE_FREE_LINE.match(/\d+/g)).toEqual(['2']);
+    expect(TC.analyzeSiteFreeLine(0)).toBe(LANE_OFF_LINE);
+    expect(TC.analyzeSiteFreeLine(1)).toBe('analyze_site: 1 full site report a day without a key; a free key adds a few each month; after that, previews until UTC midnight.');
   });
   it('never joins the pinned rule', () => {
     expect(TC._freeTierRuleText()).not.toContain('site reports');
@@ -82,6 +87,10 @@ describe('the sentence', () => {
   });
   it('follows the monthly free runs switch', () => {
     expect(S._analyzeSiteFreeSentence({})).toBe(OWNER_LINE);
+    // the daily lane off, or its cap 0: no daily figure is promised
+    expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL: '0' })).toBe(LANE_OFF_LINE);
+    expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '0' })).toBe(LANE_OFF_LINE);
+    expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '3' })).toContain('analyze_site: 3 full site reports a day without a key;');
     for (const off of ['0', 'false', 'no', 'OFF']) {
       expect(S._analyzeSiteFreeSentence({ DCHUB_LP_FREE_RUNS: off }), off).toBe('');
     }

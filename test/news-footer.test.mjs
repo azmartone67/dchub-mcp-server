@@ -18,7 +18,7 @@ describe('withNewsFooter: one trailing text item, nothing else touched', () => {
   it('appends exactly the owner line and leaves structuredContent and block 0 identical', () => {
     const r = res(sc);
     const out = withNewsFooter(r);
-    expect(NEWS_FOOTER_LINE).toBe('Watching a site? Your DC Hub key includes one full power and queue analysis for any address.');
+    expect(NEWS_FOOTER_LINE).toBe('Watching a site? Your DC Hub key includes a few full site analyses a month for any address.');   // owner 2026-11-20 (A1)
     expect(out.content).toHaveLength(2);
     expect(out.content[1]).toEqual({ type: 'text', text: NEWS_FOOTER_LINE });
     expect(out.content[0]).toBe(r.content[0]);
