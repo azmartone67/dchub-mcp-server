@@ -326,6 +326,7 @@ import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.m
 import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligible, withSignInLine as _wallIdWithSignIn,
   withEmailAsk as _wallIdWithEmailAsk, emailAskLine as _wallIdEmailAskLine, emailAskCall as _wallIdEmailAskCall,
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
+import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
@@ -5505,6 +5506,32 @@ export function _wallIdentityV2Step(result, name, c = getCtx()) {
       && !_askOnceSeen(c.session_id, 'oauth_v2', name)) out = _wallIdWithSignIn(out);
     const asked = ['email_unlock', 'email_key'].some((k) => (_offersShown(out, c._emailAsk) || []).includes(k));
     return _wallIdWithEmailAsk(out, c._wallIdMarket || '', { asked });
+  } catch (_) { return result; }
+}
+// DCHUB_WALL_IDENTITY_V2 + DCHUB_WALL_COPY_V2 (lib/wall-copy-v2.mjs; owner 2026-11-21 "fix above"): the rest of a
+// keyless / trial-key wall reads the v2 copy: no "free", allowance figure or payment wording, human links go to
+// https://dchub.cloud/mcp/connect, a keyless ask names get_api_key, next_ask.free is dropped, and the headline (with
+// its date and Source line) comes before the sign-in line. Runs right after _wallIdentityV2Step. Grok's G3 wall gets
+// the same copy, keeps its /mcp/grok/oauth line (plus the /mcp/connect page) and, on execute_plan, the one
+// get_api_key ask. Never on /mcp/chatgpt or a ChatGPT client, the directory / Claude / core profiles, a clean
+// platform, an execute_plan step, the key / account tools, or a paid / non-trial key. Gating is untouched.
+export function _wallCopyV2Step(result, name, c = getCtx()) {
+  try {
+    if (!_wallIdV2On() || !_wallCopyV2On() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (c.loopback_step || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE
+      || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return result;
+    if (_FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key') return result;
+    const trial = c.is_trial === true || /^dch_trial_/.test(String(c.api_key || ''));
+    if (c.api_key && !trial) return result;
+    let walled = _wallIsWalled(result, name, c);
+    if (!walled && name === 'execute_plan') {
+      try { const id = c._planWallSinkId; walled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { walled = false; }
+    }
+    if (!walled && !_wallCopyLooksPreview(result)) return result;
+    const grok = !!_pcIsGrok(c.platform);
+    const market = c._wallIdMarket || '';
+    return _wallCopyV2(result, { keyless: !c.api_key, grok,
+      planAsk: grok && name === 'execute_plan' ? { line: _wallIdEmailAskLine(market), call: _wallIdEmailAskCall(market) } : null });
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -26986,6 +27013,8 @@ function _sourceLineCb(name, fn) {
       if (name === 'execute_plan') _final = _planOneLinkStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform() });
       // DCHUB_WALL_IDENTITY_V2 (default OFF): the sign-in line and the V2 email ask, after every rewrite above.
       _final = _wallIdentityV2Step(_final, name, c);
+      // DCHUB_WALL_COPY_V2 (default on under the v2 flag): the rest of the wall reads the v2 copy (lib/wall-copy-v2.mjs).
+      _final = _wallCopyV2Step(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -39879,6 +39908,18 @@ app.get([CONNECT_PATH, CONNECT_PATH + '/'], (req, res, next) => {
   } catch (e) {
     return next();
   }
+});
+
+// POST /mcp/connect (owner 2026-11-21, outside test: it answered Express's 404 "Cannot POST /mcp/connect"): an MCP
+// client that saved the page URL as its server URL gets exactly what POST /mcp gives (same handler, same gating:
+// keyless /mcp is never gated). DELETE (session close) follows it. The browser page above is GET/HEAD only.
+// Express re-reads req.url at every later layer, so the /mcp middlewares and handler below see a plain /mcp request.
+app.all([CONNECT_PATH, CONNECT_PATH + '/'], (req, res, next) => {
+  if (req.method !== 'POST' && req.method !== 'DELETE') return next();
+  const q = req.url.indexOf('?');
+  req.url = '/mcp' + (q >= 0 ? req.url.slice(q) : '');
+  req.originalUrl = req.url;
+  return next();
 });
 
 app.get('/health', (req, res) => {

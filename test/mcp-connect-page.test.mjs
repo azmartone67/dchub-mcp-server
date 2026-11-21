@@ -51,8 +51,14 @@ describe('flag off: /mcp/connect is unchanged', () => {
 describe('flag on: only a browser GET gets the page', () => {
   beforeAll(() => { process.env[FLAG] = '1'; });
 
-  it('POST is unchanged', async () => {
-    await isExpress404(await post(CONNECT_PATH), 'POST');
+  // Owner 2026-11-21 ("fix above"): POST /mcp/connect answers exactly like POST /mcp (it was Express's 404), with the
+  // flag on or off; the page itself stays GET/HEAD only.
+  it('POST answers like POST /mcp, never the 404', async () => {
+    const a = await post(CONNECT_PATH);
+    const b = await post('/mcp');
+    expect(a.status).not.toBe(404);
+    expect(a.status).toBe(b.status);
+    expect(await a.text()).not.toContain(`Cannot POST ${CONNECT_PATH}`);
   });
 
   it.each(['application/json', '*/*', 'application/json, text/event-stream', 'text/event-stream', 'text/html, text/event-stream'])(
