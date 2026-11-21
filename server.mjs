@@ -10203,13 +10203,14 @@ export function _kffPreviewReason(c) {
         + ' on this network (IP) or in this session; the next is after 00:00 UTC';
     }
     if (seat) return '';
-    // Grok daily note 2026-11-20 (4th report): every reason the lane refuses a keyless plan is said, in the order
-    // lib/keyless-full-trial.mjs keylessCallerSeat checks them. The report's runner sent a User-Agent naming DC Hub,
+    // Grok daily note 2026-11-20 (4th report): every reason the lane refuses a keyless plan is said (the refusals of
+    // lib/keyless-full-trial.mjs keylessCallerSeat). The report's runner sent a User-Agent naming DC Hub,
     // which the lane leaves out on purpose (our own callers); the note said only "steps returned preview depth".
-    if (!keylessFirstFullOn() || !(_keylessFirstFullCap() > 0)) return 'the first full plan answer without a key is switched off on this server';
-    if (c.profile === DIRECTORY_PROFILE || c.legacy_wall_copy === true) return 'this endpoint does not serve the first full plan answer';
-    if (c.profile && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE) return 'this endpoint does not serve the first full plan answer';
+    // The two 5.43 reasons first, unchanged and in their order (/mcp/chatgpt is frozen in review: byte for byte).
     if (_isQaCaller(c) || c.qa_header === true || _selfTestTelemetryTag(c)) return 'a QA-marked caller is not served the first full plan answer';
+    if (c.profile && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE) return 'this endpoint does not serve the first full plan answer';
+    // The lane switched off (DCHUB_KEYLESS_FIRST_FULL=0 or cap 0) is today's path byte for byte: no new reason.
+    if (!keylessFirstFullOn() || !(_keylessFirstFullCap() > 0)) return '';
     let bot = false;
     try { bot = !!isBotOrInternalCtxForSiteLane(c); } catch (_) { bot = true; }
     if (bot) return 'this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer';
@@ -34016,7 +34017,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                           : (_kffDepths && _kffDepths.held.length
                             ? 'no key — steps ran at full depth except ' + [...new Set(_kffDepths.held)].join(', ') + ' (preview depth)'
                             : 'no key — steps ran at full depth'))
-                        : (() => { const why = _kffPreviewReason(c); return why ? `no key — ${why}; steps returned preview depth` : 'no key — steps returned preview depth'; })())) },
+                        // The used case leads with its reason; every other reason keeps the 5.43 shape (in parentheses), so
+                        // /mcp/chatgpt (frozen in review) and the QA-marked note stay byte for byte.
+                        : (() => { const why = _kffPreviewReason(c); return /^today\u2019s full plan answer/.test(why) ? `no key — ${why}; steps returned preview depth`
+                          : `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
         ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an

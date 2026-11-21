@@ -10,8 +10,8 @@
 //
 // What this pins:
 //   A) planStepDepths / utcClock, pure.
-//   B) _kffPreviewReason names every refusal (our own User-Agent, lane off, no IP) and says WHEN the day's plan
-//      answer was used.
+//   B) _kffPreviewReason names every refusal (our own User-Agent, no IP) and says WHEN the day's plan answer was
+//      used; with the lane switched off it stays silent (the switch's contract: today's path, byte for byte).
 //   C) end to end through execute_plan (in-process loopback steps): the reporter's UA, an outside caller's call 1
 //      and call 2, and a first-full plan whose every step comes back as the data API's keyless stub, which is not
 //      counted (no first_full_answer, no durable consume, no funnel tag; the next plan is still full).
@@ -147,14 +147,12 @@ describe('B) _kffPreviewReason names every refusal and when the day\'s plan answ
     expect(S._kffPreviewReason({ client_ip: '198.51.100.81', user_agent: REPORTER_UA }))
       .toBe('this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer');
   });
-  it('the lane switched off, or a cap of 0, is said', () => {
+  it('the lane switched off, or a cap of 0, is today\'s path byte for byte: no reason', () => {
     process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
-    expect(S._kffPreviewReason({ client_ip: '198.51.100.82', user_agent: 'Mozilla/5.0' }))
-      .toBe('the first full plan answer without a key is switched off on this server');
+    expect(S._kffPreviewReason({ client_ip: '198.51.100.82', user_agent: REPORTER_UA })).toBe('');
     delete process.env.DCHUB_KEYLESS_FIRST_FULL;
     process.env.DCHUB_KEYLESS_FIRST_FULL_CAP = '0';
-    expect(S._kffPreviewReason({ client_ip: '198.51.100.82', user_agent: 'Mozilla/5.0' }))
-      .toBe('the first full plan answer without a key is switched off on this server');
+    expect(S._kffPreviewReason({ client_ip: '198.51.100.82', user_agent: REPORTER_UA })).toBe('');
   });
   it('no readable caller IP is said', () => {
     expect(S._kffPreviewReason({ user_agent: 'Mozilla/5.0' }))
@@ -188,7 +186,7 @@ describe('C) execute_plan detail:"full" end to end', () => {
     loopback.emulate = true; loopback.ip = ip;
     const r = await plan(seat({ client_ip: ip, user_agent: REPORTER_UA, platform: 'mcp', client_name_raw: null, session_id: null }));
     expect(head(r).first_full_answer).toBeUndefined();
-    expect(tierNote(r)).toBe('no key — this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer' + PREVIEW_TAIL);
+    expect(tierNote(r)).toBe('no key — steps returned preview depth (this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer)');
   }, 90_000);
 
   it('C2: an outside keyless caller: call 1 is full depth, call 2 says when the day\'s answer was used', async () => {
