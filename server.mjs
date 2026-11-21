@@ -407,6 +407,17 @@ export { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 // "tool not found". Call-time only — aliases NEVER appear in tools/list, and
 // every hit is logged so we can grow this map from what agents actually type.
 // (Keys must NOT collide with a real tool name; values MUST be real tools.)
+// Agent-incentive round (owner 2026-11-21; HOLD until after the Nov 23 launch): `answer_question` resolves to
+// execute_plan on the default /mcp path only. Not in TOOL_ALIASES, which applies on every path but /mcp/core.
+export const ANSWER_QUESTION_ALIAS = 'answer_question';
+export function _answerQuestionAlias(req) {
+  try {
+    if (!req || !req.body || req.body.method !== 'tools/call' || !req.body.params) return false;
+    if (req.body.params.name !== ANSWER_QUESTION_ALIAS) return false;
+    return !!req.path && String(req.path).replace(/\/+$/, '') === '/mcp';
+  } catch (_) { return false; }
+}
+
 const TOOL_ALIASES = {
   // ★2026-09-06: standing_intent was SPLIT (register/list/delete). Its default
   //   action was `register`, so that is where the retired name points. An old
@@ -40745,6 +40756,19 @@ app.post(MCP_PATHS, async (req, res) => {
         if (_canon) {
           console.log(`[alias] ${req.body.params.name} → ${_canon} sid=${_logId((sessionId || ''))}`);
           req.body.params.name = _canon;
+        }
+        // Agent-incentive round (owner 2026-11-21; HOLD until after the Nov 23 launch): agents that guess a generic
+        // `answer_question` tool reach execute_plan, on the default /mcp path ONLY (never /mcp/chatgpt, /mcp/claude,
+        // /mcp/grok, /mcp/core or a pack path). Call-time only: never listed, so no tool count moves.
+        const _aq = _answerQuestionAlias(req);
+        if (_aq) {
+          console.log(`[alias] answer_question → execute_plan (/mcp) sid=${_logId((sessionId || ''))}`);
+          req.body.params.name = 'execute_plan';
+          const _a = req.body.params.arguments;
+          if (_a && typeof _a === 'object' && !Array.isArray(_a) && _a.intent === undefined) {
+            const _q = (typeof _a.question === 'string' && _a.question) || (typeof _a.query === 'string' && _a.query) || null;
+            if (_q) { _a.intent = _q; delete _a.question; delete _a.query; }
+          }
         }
       }
       // r-argalias: normalize GUESSED argument names on the same mutation of
