@@ -99,7 +99,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key
 
-The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: 2 full site reports a day without a key; a free key adds a few each month; after that, previews until UTC midnight. To raise limits, get a free key
+The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 
