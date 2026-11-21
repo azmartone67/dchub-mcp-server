@@ -248,12 +248,13 @@ import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, w
 import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
-import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
+import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor, usableSessionId } from './lib/wall-via-tag.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
          keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
 import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
+import * as _WD from './lib/wall-device-match.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -6811,6 +6812,7 @@ const _TRACK_AUTH_CHANNELS = new Set(['header', 'bearer', 'query', 'inline_argum
 export function _trackAuthChannel(c) {
   if (!c) return null;
   if (c.auth_oauth === true) return 'oauth';
+  if (c.device_match === true) return 'device_match';   // wall identity v2: a keyless call served as its pair's key
   const src = String(c.auth_source || '');
   if (!_TRACK_AUTH_CHANNELS.has(src)) return null;
   if (src === 'none' && c.api_key) return 'session';
@@ -13588,6 +13590,69 @@ function _keylessReturnStep(result, name, c, env) {
 }
 export function _setKeylessReturnLookupForTest(lookup) {
   _keylessReturning = _createReturningCache({ lookup }); _KEYLESS_ONCE.clear();
+}
+// Wall identity v2, device match (owner relay 2026-11-20, item 3): a key minted at a wall is recorded against the
+// caller's (client name, IP /24 or /48) pair; a later KEYLESS call from that exact pair within 30 days is served as
+// that key with one welcome line, and the key never reaches the answer. All policy in lib/wall-device-match.mjs.
+// Inert unless DCHUB_WALL_IDENTITY_V2 AND DCHUB_WALL_IDENTITY_V2_DEVICE_MATCH are on. Three hooks: the top and the
+// end of _sourceLineCb, and claim_free_key's fresh mint. Never awaited on the request path.
+async function _wdPost(path, body) {
+  const r = await fetch(new URL(path, API_BASE).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(2500),
+  });
+  return r.ok ? r.json() : null;
+}
+const _wdLookup = async (p) => {
+  const j = await _wdPost('/api/v1/mcp/wall-device/lookup', { client_name: p.client_name, ip_prefix: p.ip_prefix });
+  return j && j.match === true && typeof j.api_key === 'string' ? j.api_key : null;
+};
+let _wdCache = _WD.createMatchCache({ lookup: _wdLookup });
+const _wdWallPairs = _WD.createWallPairMemo();
+const _wdLineSession = _WD.createOnce();                         // the welcome line: once per transport session
+const _wdLinePair = _WD.createOnce({ ttlMs: 3600_000 });         // ... or once per pair per hour (no session)
+const _wdReturnDay = _WD.createOnce();                           // the return event: once per pair per UTC day
+const _wdIsBot = (c) => isBotOrInternalCtx(c) || _isQaCaller(c);
+// ChatGPT surfaces get none of this (the /mcp/chatgpt directory profile and any clean platform), nor a loopback step.
+const _wdExcluded = (c) => !!c.loopback_step || c.profile === DIRECTORY_PROFILE || _isCleanPlatform()
+  || /chatgpt|openai/i.test(String(c.platform || ''));
+export function _deviceMatchEnter(c, name) {
+  const m = _WD.matchFor(c, name, { cache: _wdCache, isBot: _wdIsBot, excluded: _wdExcluded });
+  if (!m) return false;
+  c.api_key = m.key; c.tier = 'free'; c.is_trial = false; c.device_match = true; c._wdPair = m.pair;
+  if (_wdReturnDay.take(m.pair.k + ':' + new Date().toISOString().slice(0, 10))) {
+    _wdPost('/api/v1/mcp/wall-device/return', { api_key: m.key, client_name: m.pair.client_name,
+      ip_prefix: m.pair.ip_prefix, tool: String(name || '').slice(0, 80), method: _WD.METHOD }).catch(() => {});
+  }
+  return true;
+}
+export function _deviceMatchExit(result, name, c) {
+  try {
+    if (c && c.device_match === true) {
+      const sid = usableSessionId(c.session_id);
+      const line = sid && !_GROK_RELAY_PLATFORMS.has(c.platform) ? _wdLineSession.take(sid) : _wdLinePair.take(c._wdPair && c._wdPair.k);
+      return _WD.finishMatchedAnswer(result, c.api_key, { showLine: line });
+    }
+    // A keyless wall: remember the pair for a hosted client whose claim arrives in another transport session.
+    if (c && !c.api_key && _WD.recordOn() && result && result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent) && _isRelayWall(result.structuredContent, c)) {
+      _wdWallPairs.note(_WD.pairOf(c, { isBot: _wdIsBot }));
+    }
+  } catch (_) { /* never fail an answer over this */ }
+  return result;
+}
+export function _deviceMatchRecord(c, key) {
+  const pair = _WD.recordFor(c, key, { walledSession: !!(c && _wallViaMemo.get(c.session_id)), wallPairs: _wdWallPairs,
+    isBot: _wdIsBot, excluded: _wdExcluded });
+  if (!pair) return false;
+  _wdCache.forget(pair);
+  _wdPost('/api/v1/mcp/wall-device/record', { api_key: key, client_name: pair.client_name, ip_prefix: pair.ip_prefix })
+    .catch(() => {});
+  return true;
+}
+export function _setDeviceMatchLookupForTest(lookup) {
+  _wdCache = _WD.createMatchCache({ lookup: lookup || _wdLookup });
+  _wdWallPairs.clear(); _wdLineSession.clear(); _wdLinePair.clear(); _wdReturnDay.clear();
 }
 export async function _returnNudgeStep(result, name, env = process.env) {
   try {
@@ -26713,6 +26778,7 @@ function _sourceLineCb(name, fn) {
   // human line (lib/lean-response.mjs); it skips the directory / Claude / core profiles and ChatGPT.
   return async (args, extra) => {
     const c = getCtx() || {};
+    _deviceMatchEnter(c, name);   // wall identity v2 device match: inert unless both flags are on
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
@@ -26798,6 +26864,8 @@ function _sourceLineCb(name, fn) {
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
+      // Wall identity v2 device match: the matched key never reaches the answer; one welcome line. The LAST rewrite.
+      _final = _deviceMatchExit(_final, name, c);
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -38128,6 +38196,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
       if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
+      if (key) { try { _deviceMatchRecord(getCtx(), key); } catch (_) {} }   // wall identity v2: both flags, walled callers only
       if (!key && r && r.error === 'email_has_key') return _emailHasKeyReply(r, false);
       // E4 (owner 2026-11-14): the backend no longer hands an email-less caller another caller's unused key. At its
       // per-IP caps it answers 429 (unused_key_cap / mint_rate_limited); say what to do instead of "Could not mint".
