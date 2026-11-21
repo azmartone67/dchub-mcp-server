@@ -161,7 +161,10 @@ const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/(\\?")(ms|elapsed_ms|duration_ms|took_ms|latency_ms|wall_ms)(\\?"):\d+/g, '$1$2$3:0')
   .replace(/(plan|req|sess|run|rp|hp)[-_][A-Za-z0-9-]{6,}/g, '$1-ID')
   .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID')
-  .replace(/("id":)\d+/g, '$1N');
+  .replace(/("id":)\d+/g, '$1N')
+  // the planner version (top level and replay.planner_version, raw or JSON-escaped): a planner bump changes only this
+  // value, and the comparison is against origin/main. Only the value is masked; every other byte still compares.
+  .replace(/(\\*"planner_version\\*":\\*")\d+(?:\.\d+)+(\\*")/g, '$1PV$2');
 const PLAN = { intent: 'how soon can a 100 MW load get power in PJM' };
 const queueFact = (r) => (json0(r).facts || []).find((f) => f && f.tool === 'get_interconnection_queue');
 
