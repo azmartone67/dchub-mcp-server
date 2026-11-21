@@ -333,9 +333,10 @@ import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B 
 import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
+import * as _LB from './lib/licence-block.mjs';           // DCHUB_LICENCE_BLOCK (default OFF)
 import { withheldFields as _withheldFields, withheldList as _withheldList, reconcilePreviewScope as _reconcilePreviewScope } from './lib/withheld-copy.mjs';
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
-import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
+import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine, depthTrialEligible as _depthTrialEligible } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
 import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
 import { planLeadStep as _planLeadStep } from './lib/plan-lead-text.mjs';
@@ -5744,7 +5745,7 @@ export async function _relayEverywhereStep(result, name, args, c = getCtx()) {
 // with the answer's own preview_scope.
 export function _withheldReconcileStep(result, name, c = getCtx()) {
   try {
-    if (!(_RE.wallRelayEverywhereOn() || _VF.wallValueFirstOn())) return result;
+    if (!(_RE.wallRelayEverywhereOn() || _VF.wallValueFirstOn() || _LB.licenceBlockOn())) return result;
     if (_newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
     const sc = result.structuredContent;
     const next = _reconcilePreviewScope(sc);
@@ -5760,6 +5761,32 @@ export function _withheldReconcileStep(result, name, c = getCtx()) {
       } catch (_) { return b; }
     });
     return { ...result, content, structuredContent: next };
+  } catch (_) { return result; }
+}
+// item 4: trial_available from the offer logic that exists (never hard-coded): the keyless wall trial offer
+// (_keylessTrialOfferEligible: DCHUB_PRO_TRIAL_OFFER + DCHUB_PRO_TRIAL_OFFER_KEYLESS + the tool list), the keyed free
+// caller's offer (_proTrialOfferEligibleCaller), and the depth-wall trial line's own rule (lib/wall-depth-trial.mjs
+// depthTrialEligible, the page's "Start the 7-day trial" button). A licensed caller: false.
+export function _licenceTrialAvailable(result, name, c) {
+  try {
+    if (_LB.licenceTier({ apiKey: c && c.api_key, tier: c && c.tier }) === 'licensed') return false;
+    if (!(c && c.api_key) && _keylessTrialOfferEligible(c, name)) return true;
+    if (c && c.api_key && _proTrialOfferEligibleCaller(c, name)) return true;
+    const sc = (result && result.structuredContent) || {};
+    const f = _floorKindFor(name, sc, c);
+    return _depthTrialEligible({ tool: name, walled: true, depth: f.depth, paid: false, link: _humanLinkOf(result) });
+  } catch (_) { return false; }
+}
+export function _licenceBlockStep(result, name, c = getCtx()) {
+  try {
+    if (!_LB.licenceBlockOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
+    const block = _LB.licenceBlock({ tool: name, sc, apiKey: c.api_key || '', tier: c.tier || '',
+      trialAvailable: _licenceTrialAvailable(result, name, c) });
+    // The final answer no longer carries _upgrade; the one reader after this step (lib/plan-wall-sink.mjs
+    // planAskedTools, via _finishWallRow) reads it from here.
+    if (Object.prototype.hasOwnProperty.call(sc, '_upgrade')) c._upgradeBeforeLicence = sc._upgrade;
+    return _LB.withLicenceBlock(result, block);
   } catch (_) { return result; }
 }
 // item 2: the LAST rewrite of a gated answer.
@@ -27365,6 +27392,8 @@ function _sourceLineCb(name, fn) {
       // DCHUB_WALL_PAID_LINE (default OFF): the paid-license A/B line, after the v2 copy so its tagged URL stays.
       // With item 1 on it adds nothing: the licence link is the relay page's secondary action.
       _final = _wallPaidLineStep(_final, name, c);
+      // Item 4 (DCHUB_LICENCE_BLOCK): `licence` replaces `_upgrade`, after every step that reads `_upgrade`.
+      _final = _licenceBlockStep(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -27414,7 +27443,9 @@ export const _noteWallViaForTest = (sid, wall) => _wallViaMemo.note(sid, wall); 
 // _wallOuterStep drops ask paragraphs and the _bind / pro_url keys, so a row read before it named asks
 // and offers the agent never received. G8 gap marks (_markAskGap) count only if their ask survived;
 // the claim hand-off line is read off the result (lib/offers-shown.mjs finalAskMark).
-function _finishWallRow(c, name, result) {
+function _finishWallRow(c, name, result0) {
+  // Item 4: the licence block replaced `_upgrade` on the answer; the wall row's readers still see the original.
+  const result = _withUpgradeForTelemetry(result0, c);
   try {
     if (_offersShownOn() && Array.isArray(c._pendingWallHits) && c._pendingWallHits.length) {
       const k = _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result });
@@ -27425,6 +27456,14 @@ function _finishWallRow(c, name, result) {
   } catch (_) { /* telemetry never touches a response */ }
   _flushQuotaWallHits(c, name);
   _drainPlanWallSink(c, result);
+}
+function _withUpgradeForTelemetry(result, c) {
+  try {
+    if (!c || c._upgradeBeforeLicence === undefined || !result || typeof result !== 'object') return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._upgrade !== undefined) return result;
+    return { ...result, structuredContent: { ...sc, _upgrade: c._upgradeBeforeLicence } };
+  } catch (_) { return result; }
 }
 // ── Keyless partials on /mcp/chatgpt and /mcp/claude carry the unlock link (Grok QA 2026-11-17) ──
 // g_canvas_pa, g_plan_pa, c_canvas_pa: site_selection_canvas / execute_plan for a PA / PJM ask, keyless,
