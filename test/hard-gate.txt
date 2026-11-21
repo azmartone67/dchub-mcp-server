@@ -590,6 +590,7 @@ test/preview-scope-m21.test.mjs
 test/pricing-canon-and-go-links.test.mjs
 test/pro-tools-and-unlock-no-plan-name.test.mjs
 test/pro-trial-offer.test.mjs
+test/pro-trial-second-pro-wall-1121.test.mjs
 test/pro-wall-stamp.test.mjs
 test/problem-taxonomy.test.mjs
 test/provenance-as-of-zones.test.mjs
