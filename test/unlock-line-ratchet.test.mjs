@@ -100,7 +100,10 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     expect(on.quota_basis).toContain(DAILY_2);
     expect(on.quota_basis).not.toMatch(/keyless callers get no full answers/);
     expect(on.remaining_this_month).toBe(0);
-    expect(on.resets_at).toBe('2026-12-01T00:00:00Z');
+    // the binding limit is the daily lane: resets_at is its reset, the month start keeps its own name
+    expect(on.resets_at).toBe('2026-11-15T00:00:00Z');
+    expect(on.monthly_reports_reset_at).toBe('2026-12-01T00:00:00Z');
+    expect(keylessWallQuota(new Date('2026-11-14T04:00:00Z'), { dailyCap: 0 }).resets_at).toBe('2026-12-01T00:00:00Z');
     expect(keylessWallQuota(new Date(), { dailyCap: 0 }).quota_basis).toMatch(/^keyless callers get no full answers/);
   });
   it('the DCPI withheld basis quotes the clause it is handed and never says "no DCPI row"', () => {

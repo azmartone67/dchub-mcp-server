@@ -514,6 +514,7 @@ test/pipeline-mw-fact-1118.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
 test/plan-answer-budget.test.mjs
+test/plan-asof-headline-1120.test.mjs
 test/plan-asof-oldest-input-1118.test.mjs
 test/plan-caller-ip.test.mjs
 test/plan-colocation-review-1117.test.mjs
