@@ -23840,11 +23840,24 @@ export function _facilityFetchRecord(id, d, url) {
 // (its slug without the state suffix, the form the comparison steps already
 // pass: 'atlanta', 'northern-virginia') and the DCPI index (its own slug).
 // Exported for tests. Pure, never throws.
+const _PLAN_GRID_CLASSES_NAMED_MARKETS = new Set(['iso_comparison', 'grid_headroom', 'interconnection_queue', 'power_timeline']);
 const _PLAN_COMPARE_WORDS_RE = /\b(?:vs\.?|versus|against|compar(?:e|ed|ing|ison)|head[-\s]?to[-\s]?head|which\s+is\s+better|between)\b/i;
 export function _planComparedMarkets(text) {
   try {
     const t = String(text || '');
     if (!_PLAN_COMPARE_WORDS_RE.test(t)) return null;
+    const order = _planTrackedMarketsInOrder(t);
+    return order.length >= 2 ? { a: order[0], b: order[1] } : null;
+  } catch (_e) {
+    return null;
+  }
+}
+// 5.58 (agent-incentive round 2026-11-21): every tracked market the text names, first-named first, with no
+// comparison-word gate. "Is Columbus (PJM) or Dallas-Fort Worth (ERCOT) the better bet" names two markets and two
+// grids; the grids won iso_comparison and neither market's DCPI card was read. Pure, never throws.
+export function _planTrackedMarketsInOrder(text) {
+  try {
+    const t = String(text || '');
     const lower = t.toLowerCase();
     const found = [];   // { v, i, end }
     for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
@@ -23872,9 +23885,9 @@ export function _planComparedMarkets(text) {
       prevEnd = f.end;
       if (!order.includes(f.v)) order.push(f.v);
     }
-    return order.length >= 2 ? { a: order[0], b: order[1] } : null;
+    return order;
   } catch (_e) {
-    return null;
+    return [];
   }
 }
 export function _planSignals(intent, context) {
@@ -24394,7 +24407,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.58';   // 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.59';   // 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26557,6 +26570,29 @@ export function _planQuery(intent, context) {
         at += 1; have.add(m);
       }
       seq.forEach((x, i) => { x.step = i + 1; });
+    }
+    // 5.58 (agent-incentive round 2026-11-21): a GRID plan whose question names two or more tracked markets
+    // ("Columbus (PJM) or Dallas-Fort Worth (ERCOT)", "Columbus vs Atlanta ... interconnection risk") also reads each
+    // named market's DCPI card, so the answer can lead with each place's verdict. Keyless-readable; appended after the
+    // class's own steps, independent wave. Only the markets the text named, at most four.
+    if (_PLAN_GRID_CLASSES_NAMED_MARKETS.has(top.cls.id) && !_stateFan && !d.__stateCompare) {
+      const named = [];
+      for (const m of [...(Array.isArray(d.__namedMarkets) ? d.__namedMarkets : []),
+        ..._planTrackedMarketsInOrder(text)]) {   // tracked names only: comparePair's word-pair fallback can read 'fiber density'
+        const v = typeof m === 'string' ? m.replace(/-[a-z]{2}$/, '') : null;
+        if (v && !named.includes(v) && !_marketSlugProblem(v, _KNOWN_MARKET_SLUGS())) named.push(v);
+      }
+      if (named.length >= 2) {
+        const have = new Set(seq.filter((x) => x.tool === 'get_market_dcpi_rank').map((x) => x.args_hint && String(x.args_hint.market_slug || '').replace(/-[a-z]{2}$/, '')));
+        for (const m of named.slice(0, 4)) {
+          if (have.has(m)) continue;
+          seq.push({ step: 0, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+            why: `DCPI card for ${m}, a market the question named: its BUILD/CAUTION/AVOID verdict and as_of, so the answer leads with each named place.`, args_hint: { market_slug: m } });
+          have.add(m);
+        }
+        seq.forEach((x, i) => { x.step = i + 1; });
+        d.__namedMarketCards = named.slice(0, 4);
+      }
     }
   } catch (_e) { /* routing must never throw */ }
   // 5.38 (owner via Grok, 2026-11-17): both sides of the place. A data-center plan reads the place's power, a power
@@ -33803,7 +33839,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // silently drops the tool from the derived count (caught 2026-07-31 when
   // the count healed 82→81 across every registry surface).
   trackedTool(srv, 'execute_plan',
-    'Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), substations and transmission, megawatts and power density, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, tax incentives and permitting, water and climate risk, data-center M&A and deals. Recommended entry for a question that spans more than one of those: it picks and chains the right tools and returns one dated, cited answer. Pass the user\'s question as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you, energy and time to power first ("how soon can a 100 MW load get power in ERCOT", "interconnection queue and grid headroom in PJM for a 200 MW AI campus", "gas economics for on-site generation in Texas", "rank markets for a 200 MW AI campus"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
+    'Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer. Covers megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), and markets scored by the Data Center Power Index (DCPI). Each step is listed with its status, as_of and citation, at your own access level; single-tool questions should call that tool directly, and plan_query shows the plan without running it.',
     { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "how soon can a 100 MW load get power in ERCOT" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "interconnection queue and energy prices in MISO for a 200 MW campus" · "gas economics for on-site generation in Texas" · "rank markets for a 200 MW AI campus" · "find 100 MW of buildable capacity near Ashburn"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict.'),
       // ★★★2026-08-19 [6]: these values were ALWAYS accepted — but only inside

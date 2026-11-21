@@ -81,7 +81,9 @@ describe('front-door routing lives in the tool-description channel', () => {
   it('execute_plan recommends itself for multi-part questions and keeps single lookups direct', () => {
     const d = descOf('execute_plan');
     expect(d, 'execute_plan description did not parse').toBeTruthy();
-    expect(d).toMatch(/Recommended entry for a question that spans more than one/);
+    // 2026-11-21 (owner, agent-incentive round): the front door opens on what it answers, not on "spans several topics".
+    expect(d).toMatch(/^Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call\./);
+    expect(d).not.toMatch(/spans several topics|wave-by-wave|minting|angle-bracket/);
     expect(d).not.toMatch(/THE FRONT DOOR|call this FIRST|instead of answering from training data/);
     expect(d).toMatch(/single-tool questions should call that tool directly/);
     for (const t of UNROUTED) {

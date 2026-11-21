@@ -64,7 +64,10 @@ describe.each(SURFACES)('one "Use this when" lead per tool on %s', (path) => {
 describe('the leads the guard counts are really there', () => {
   // A lead pattern that matched nothing would make the "> 1" check above pass on anything.
   it('every /mcp tool opens with its lead', () => {
-    const missing = LISTS['/mcp'].filter((t) => !t.description.startsWith('Use this when ')).map((t) => t.name);
+    // 2026-11-21 (owner, agent-incentive round: all eight assistants asked for it): execute_plan, the front door, opens
+    // "Answers any data center power, grid, ... question in one call." instead; a lead count of 0 for it is expected.
+    const missing = LISTS['/mcp'].filter((t) => t.name !== 'execute_plan' && !t.description.startsWith('Use this when ')).map((t) => t.name);
+    expect(LISTS['/mcp'].find((t) => t.name === 'execute_plan').description.startsWith('Answers any data center power, grid, interconnection queue')).toBe(true);
     expect(missing).toEqual([]);
   });
 

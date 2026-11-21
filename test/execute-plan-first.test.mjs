@@ -49,6 +49,7 @@ describe('the execute_plan description', () => {
     const spec = JSON.parse(fs.readFileSync(new URL('../toolspec.json', import.meta.url), 'utf8'));
     const tools = Array.isArray(spec) ? spec : spec.tools;
     const d = tools.find((x) => x.name === 'execute_plan').description;
-    expect(d).toContain('it picks and chains the right tools and returns one dated, cited answer');
+    // 2026-11-21 (owner, agent-incentive round): the approved front-door opening.
+    expect(d.startsWith('Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer.')).toBe(true);
   });
 });

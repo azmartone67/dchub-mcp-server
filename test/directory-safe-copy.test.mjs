@@ -93,7 +93,8 @@ describe('directory-safe copy (owner GO 2026-10-20)', () => {
   it.each(PATHS)('%s: every tool description opens "Use this when" and carries no order', (p) => {
     const tools = served[p].tools;
     expect(tools.length).toBeGreaterThan(5);
-    const notLead = tools.filter((t) => !String(t.description).startsWith('Use this when ')).map((t) => t.name);
+    // 2026-11-21 (owner, agent-incentive round): execute_plan opens "Answers any data center ..." instead.
+    const notLead = tools.filter((t) => t.name !== 'execute_plan' && !String(t.description).startsWith('Use this when ')).map((t) => t.name);
     expect(notLead, p).toEqual([]);
     const hits = tools.map((t) => [t.name, bannedHits(t.description)]).filter(([, h]) => h.length);
     expect(hits, p).toEqual([]);

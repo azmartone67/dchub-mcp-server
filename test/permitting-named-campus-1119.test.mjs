@@ -12,7 +12,7 @@ import { buildNamedCampusAnswer } from '../lib/named-project-facts.mjs';
 const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed', result });
 const L3 = 'Which US states, counties or cities have data center moratoriums or restrictive land-use rules right now?';
 
-it('is planner 5.42', () => { expect(PLANNER_VERSION).toBe('5.58'); });
+it('is planner 5.42', () => { expect(PLANNER_VERSION).toBe('5.59'); });
 
 describe('item 1: permitting routing', () => {
   it('the L3 intent routes to permitting and reads moratorium, legislation and zoning records', () => {
