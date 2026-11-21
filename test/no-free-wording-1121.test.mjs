@@ -6,9 +6,9 @@
 // Ignored on purpose: the tool NAME claim_free_key (an identifier) and <code> spans. Kept elsewhere and
 // NOT scanned here: the /mcp/chatgpt and directory-profile copy (frozen for OpenAI review), the
 // kill-switch *_LEGACY restores, pricing/checkout copy that names a plan or the credit pack, and the
-// shared backend canon sentence ANALYZE_SITE_FREE_LINE (byte for byte dchub-backend ai_surface_canon;
-// changing it is a two-repo change). Tool descriptions on /mcp are scanned whole, with that one shared
-// sentence and the non-price senses ("free text", "free grid capacity", "free up") taken out first.
+// opt-in card shared with dchub-backend mcp_gatekeeper. Tool descriptions on /mcp are scanned whole, with the
+// non-price senses ("free text", "free grid capacity", "free up") taken out first. ANALYZE_SITE_FREE_LINE
+// (shared backend canon) lost its "free key" in #1617 / be#9147, so it is scanned too.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 
@@ -84,6 +84,7 @@ const BUILDERS = [
   ['siteOwnerBlock+Line', () => { const b = soh.siteOwnerBlock('analyze_site', { lat: 39, lon: -77 }); return [JSON.stringify(b), soh.siteOwnerLine(b)]; }],
   ['FREE_OFFER_LAND_POWER', () => [tc.FREE_OFFER_LAND_POWER, tc._freeOffersLine()]],
   ['ANALYZE_SITE_KEY_ADDS / EMAIL_SAME', () => [tc.ANALYZE_SITE_KEY_ADDS, tc.ANALYZE_SITE_EMAIL_SAME]],
+  ['ANALYZE_SITE_FREE_LINE (shared canon, free-less since #1617)', () => [tc.ANALYZE_SITE_FREE_LINE, tc.analyzeSiteFreeLine(2)]],
   ['_freeKeyOfferText / _freeKeyAllowanceText / _unboundKeyLadderText', () => [tc._freeKeyOfferText(), tc._freeKeyAllowanceText(), tc._unboundKeyLadderText()]],
   ['top-metros', () => [tm.TOP_METRO_ACCESS_BASIS, tm.TOP_METRO_PARTIAL_BASIS, tm.openScoresDefinition({ definition: 'x' }) && JSON.stringify(tm.openScoresDefinition({ definition: 'x' }))]],
   ['unlock-line V1', () => [ul.freeKeyNoun(), ul.previewNote(false), ul.previewNote(true), ul.LP_PREVIEW_CLAUSE,
@@ -156,9 +157,8 @@ describe('/mcp tools/list and resources/list', () => {
     if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
     else process.env.DCHUB_API_BASE = prevBase;
   });
-  // Non-price senses and the one shared backend sentence, taken out before the scan.
+  // Non-price senses, taken out before the scan.
   const nonPrice = (s) => String(s)
-    .split(tc.ANALYZE_SITE_FREE_LINE).join('')
     .replace(/\bfree[- ]text\b/gi, '')
     .replace(/\bfree grid capacity\b/gi, '')
     .replace(/\bfree up\b/gi, '');
