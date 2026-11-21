@@ -497,6 +497,16 @@ describe('plan_query router (pure)', () => {
       expect(_planHostingCoverage('find 50 MW in Dallas', { lat: 32.78, lon: -96.8 })).toBeNull();
     });
 
+    it('_planHostingCoverage: a point outside the extent beats a state name in the text', () => {
+      // "Illinois" names Ameren's territory, but the Loop is ComEd (PJM), north of Ameren's box.
+      expect(_planHostingCoverage('best sites in Illinois near Chicago', { lat: 41.88323, lon: -87.6324 })).toBeNull();
+      // inside the box the name still matches, and with no point the name alone still resolves
+      expect(_planHostingCoverage('best sites in Illinois', { lat: 39.8, lon: -89.65 }))
+        .toMatchObject({ utility: 'Ameren Illinois (load)', matched_on: 'name' });
+      expect(_planHostingCoverage('a 50 MW site in central Illinois', null))
+        .toMatchObject({ utility: 'Ameren Illinois (load)', matched_on: 'name' });
+    });
+
     it('steals NOTHING — every intent the two planner suites pin keeps its class', () => {
       // The stated risk of this change: "capacity" is a shared scoring pool.
       // Every pattern added for hosting_capacity is feeder-shaped for exactly

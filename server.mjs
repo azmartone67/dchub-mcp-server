@@ -20720,11 +20720,15 @@ const _PLAN_HC_COVERAGE = [
 export function _planHostingCoverage(text, coords) {
   const t = String(text || '');
   const hits = [];
+  const hasPt = !!coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon);
   for (const c of _PLAN_HC_COVERAGE) {
-    const byName = c.names.test(t);
-    const byBox = !!coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)
+    const byBox = hasPt
       && coords.lat >= c.box[0] && coords.lat <= c.box[2]
       && coords.lon >= c.box[1] && coords.lon <= c.box[3];
+    // A known point outside the utility's published extent is not in its territory, whatever the
+    // text names (Grok QA follow-up 2026-11-20: "best sites in Illinois near Chicago" matched
+    // Ameren's \billinois\b and read Ameren Illinois (MISO, downstate) for a Loop point in ComEd/PJM).
+    const byName = (!hasPt || byBox) && c.names.test(t);
     if (byName || byBox) hits.push({ utility: c.utility, capacity_type: c.type, matched_on: byName ? 'name' : 'coordinates' });
   }
   if (!hits.length) return null;
