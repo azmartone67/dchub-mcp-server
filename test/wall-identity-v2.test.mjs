@@ -200,6 +200,12 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
       for (const e of rows) expect(e.offers_shown, `${e.tool}/${e.wall_status}`).toContain('oauth_signin');
       // the new text names no price, plan or allowance figure
       expect(SIGNIN_LINE).not.toMatch(NO_PRICE);
+      // owner 2026-11-21 ("fix above"): the WHOLE wall's prose, not only the new lines, names no price, plan, "free"
+      // or allowance figure (lib/wall-copy-v2.mjs), and no older human link
+      for (const tx of texts(result).filter((x) => !/^\s*[{[]/.test(x))) {
+        expect(tx).not.toMatch(NO_PRICE);
+        expect(tx).not.toMatch(/answers\/day|After they pay|no card|dchub\.cloud\/upgrade\/h\//i);
+      }
       // where the wall asks for an email, the ask is the V2 copy with this call's market, and the structured call names it
       const t = texts(result).join('\n');
       if (t.includes(EMAIL_ASK_LEAD)) {
