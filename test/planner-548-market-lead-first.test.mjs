@@ -23,7 +23,7 @@ const ctx = { intent: BARE, intent_class: 'siting_search', constraint_iso: ['ERC
 const MARKETS = 'Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).';
 
 describe('planner 5.51: a named market leads the time-to-power headline with its grid and verdict', () => {
-  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.53'); });
+  it('PLANNER_VERSION is 5.51', () => { expect(PLANNER_VERSION).toBe('5.54'); });
 
   it('keyless: Dallas, ERCOT and the verdict lead; no ISO-first lead and no trailing slug verdict', () => {
     const h = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW).headline;
