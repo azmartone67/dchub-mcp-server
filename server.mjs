@@ -303,6 +303,7 @@ import { cutRowsToSubmarket as _cutRowsToSubmarket } from './lib/submarket-scope
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
+import { CONNECT_PATH, CONNECT_CSP, connectPageWanted as _connectPageWanted, renderConnectPage as _renderConnectPage } from './lib/mcp-connect-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
@@ -33166,6 +33167,165 @@ export function _withWelcome(text, env = process.env) {
 
 export const SERVER_DISPLAY_NAME = 'DC Hub';
 
+// r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
+// activate — the agent prints the key once, nobody saves it, and the next
+// session re-mints anonymously (the funnel's biggest structural loss). The
+// old copy ASKED the human to save the key but made them construct the
+// config edit themselves. This hands back COPY-PASTE-READY snippets for the
+// 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
+// X-API-Key header form), so the agent's only job is showing its human the
+// right one. Machine-readable at structuredContent.persist_config.
+const _persistConfig = (key, via) => {
+  const _u = 'https://dchub.cloud/mcp';
+  const _cu = _connectUrl(key, via);
+  return {
+    human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous). If their client only offers a URL box and no header field, use `connect_url` instead — it is the same key, carried in the URL.',
+    server_url: _u,
+    // ★ THE INSTALL ARTIFACT for any client whose connector UI is a URL box.
+    connect_url: _cu,
+    connect_url_note: 'Same key, carried in the URL instead of a header — auth precedence is header > Bearer > query > inline, so this loses to a header if both are present and never overrides one. Use this whenever your human pastes a server URL rather than editing a JSON config.',
+    byo_mcp: {
+      label: 'Paste-a-URL connectors — Grok · Claude.ai web · ChatGPT · Perplexity',
+      applies_to: ['grok', 'claude.ai web', 'chatgpt', 'perplexity',
+                   'any client whose connector settings have a URL field and no header field'],
+      url: _cu,
+      instruction: 'Ask your human to open their DC Hub connector settings and replace the server URL with the one above. That is the whole install — no config file, no header, no restart beyond reconnecting the connector.',
+      why: 'These clients run MCP server-side and build a NEW session for every tool call, so a key returned in a tool result cannot survive to your next call and you cannot apply it yourself. The connector URL is the only durable state on this kind of client.',
+    },
+    header: { 'X-API-Key': key },
+    clients: {
+      claude_desktop: {
+        label: 'Claude Desktop',
+        file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
+        // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
+        // claude_desktop_config.json does not run (stdio servers only). The launcher
+        // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
+        // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
+        snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
+        connector_url: _cu,
+        note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
+      },
+      claude_code: {
+        label: 'Claude Code (CLI — one command)',
+        snippet: 'claude mcp add dchub --transport http --header "X-API-Key: ' + key + '" ' + _u,
+      },
+      cursor: {
+        label: 'Cursor',
+        file: '~/.cursor/mcp.json',
+        snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // ★ VS Code, Copilot agent mode (2026-08-26). The load-bearing
+      // difference is the TOP-LEVEL KEY: VS Code reads `servers`, NOT
+      // `mcpServers` — a block copied from Cursor or Claude Desktop parses as
+      // JSON and registers nothing. Same class of silent failure as Windsurf's
+      // `serverUrl` and Cline's `type: "streamableHttp"`.
+      // Verified against VS Code's own docs, not written from memory:
+      //   https://code.visualstudio.com/docs/copilot/customization/mcp-servers
+      //   https://code.visualstudio.com/docs/agents/reference/mcp-configuration
+      // `type: "http"` is the remote-server form and `headers` is supported on
+      // it, which is why this client is header-capable rather than URL-only.
+      vscode: {
+        label: 'VS Code (Copilot agent mode)',
+        file: '.vscode/mcp.json in the workspace · or the user profile via the "MCP: Open User Configuration" command',
+        snippet: JSON.stringify({ servers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      cline: {
+        label: 'Cline (VS Code)',
+        file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
+        snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // Windsurf (2026-11-20, docs.windsurf.com/windsurf/cascade/mcp): the user config is
+      // ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/ is the
+      // older path. Both named, current first, from lib/windsurf-config-where.mjs.
+      // serverUrl and url are both accepted.
+      windsurf: {
+        label: 'Windsurf',
+        file: WINDSURF_PERSIST_FILE,
+        snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
+      // Gemini CLI called claim_free_key and got back six snippets, none of
+      // them for the client it was actually running on — so the honest move
+      // was to show its human nothing, and the key died in the response.
+      //
+      // These are the ONLY two Gemini surfaces that take a custom remote MCP
+      // server. The consumer Gemini app has no such field (a Gem cannot call
+      // DC Hub live), and the Gemini Enterprise data store REQUIRES OAuth 2.0
+      // and REJECTS X-API-Key — so neither belongs in a key-persistence
+      // snippet set and neither is listed here. Do not "helpfully" add them.
+      //
+      // ★★ THE FIELD NAME IS THE WHOLE THING, and the two disagree with each
+      // other, which is exactly how this goes wrong silently:
+      //   gemini_cli   `httpUrl`   — `url` is the SSE form; a Streamable-HTTP
+      //                              server under `url` is dialled with the
+      //                              wrong transport and never connects.
+      //   antigravity  `serverUrl` — `url` also works; `httpUrl` is not
+      //                              supported, so a Gemini CLI block parses
+      //                              as JSON and registers nothing. File:
+      //                              ~/.gemini/config/mcp_config.json (the
+      //                              ~/.gemini/antigravity/ path is gone from
+      //                              Google's docs, re-read 2026-11-02).
+      // Verified against the vendors' own published docs, not from memory:
+      //   https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
+      //   https://antigravity.google/docs/mcp.md
+      // Both read a `headers` object, which is why they are header-capable
+      // and get a key-bearing snippet at all rather than a connect_url.
+      gemini_cli: {
+        label: 'Gemini CLI',
+        file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add -s user --transport http dchub ' + _u,
+        snippet: JSON.stringify({ mcpServers: { dchub: { httpUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      antigravity: {
+        label: 'Antigravity (Google)',
+        file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
+        snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // The two coding CLIs (Grok CLI note 2026-11-18 item 2). Codex got no snippet of its own and Copilot CLI
+      // got the VS Code one (`servers` in .vscode/mcp.json), which Copilot CLI does not read. Checked 2026-11-19
+      // against the vendors' docs and our live /connect/codex and /connect/copilot-cli pages:
+      //   codex_cli    a [mcp_servers.<name>] table in ~/.codex/config.toml; url, plus http_headers (literal
+      //                values) or env_http_headers (header -> env var name). learn.chatgpt.com/docs/extend/mcp
+      //   copilot_cli  top-level mcpServers in ~/.copilot/mcp-config.json; type "http", url, headers, tools.
+      //                docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
+      codex_cli: {
+        label: 'OpenAI Codex CLI',
+        file: '~/.codex/config.toml (or .codex/config.toml in a trusted project)',
+        snippet: '[mcp_servers.dchub]\nurl = "' + _u + '"\nhttp_headers = { "X-API-Key" = "' + key + '" }',
+        note: 'To keep the key out of the file, use env_http_headers = { "X-API-Key" = "DCHUB_API_KEY" } instead of http_headers, and export DCHUB_API_KEY in the shell that starts codex.',
+      },
+      copilot_cli: {
+        label: 'GitHub Copilot CLI',
+        file: '~/.copilot/mcp-config.json',
+        snippet: JSON.stringify({ mcpServers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key }, tools: ['*'] } } }),
+      },
+    },
+    // CORRECTED 2026-08-18: this used to say email-bind was the only option
+    // for a header-less host. It is not, and saying so cost us the whole
+    // BYO-MCP class — those clients DO have durable state, it is the URL.
+    // Email-bind still matters (it makes the key recoverable if the URL is
+    // ever lost) but it is now the SECOND step, not the substitute.
+    headerless_web_note: 'Claude.ai web / ChatGPT / Grok / Perplexity / Smithery have no config file to hold a header — but they DO have a connector URL box, and that is durable. On Smithery specifically the server runs behind their proxy, so pasting the URL below as a direct MCP server replaces that connection with an identified one (or, if their install screen offers an apiKey field, put the key there instead). Have your human paste `connect_url` above as the DC Hub server URL; the key rides in the URL and is sent on every future call. Then bind the key to their email (bind_email) so it is also recoverable if that URL is ever lost (recover_my_key re-sends it to that inbox).',
+  };
+};
+
+// The client names claim_free_key recognises (initialize clientInfo.name, the platform tag, client_name), in
+// match order. Module scope since 2026-11-20 so /mcp/connect?client= resolves a client the same way.
+const _CLIENT_KEY_RULES = [
+  [/claude[\s_-]*desktop/i, 'claude_desktop'], [/claude[\s_-]*code/i, 'claude_code'], [/cursor/i, 'cursor'],
+  // Copilot CLI (clientInfo github-copilot-developer, UA copilot-cli/) and Codex before the /copilot/ -> vscode rule.
+  [/copilot[\s_-]?cli|github-copilot-developer/i, 'copilot_cli'], [/codex/i, 'codex_cli'],
+  [/vs[\s_-]*code|visual studio code|copilot/i, 'vscode'], [/\b(cline|roo)\b/i, 'cline'],
+  [/windsurf|codeium/i, 'windsurf'], [/gemini/i, 'gemini_cli'], [/antigravity/i, 'antigravity'],
+];
+const _clientKeyFromNames = (...names) => {
+  for (const n of names) {
+    const t = String(n || '');
+    if (!t) continue;
+    for (const [re, k] of _CLIENT_KEY_RULES) if (re.test(t)) return k;
+  }
+  return null;
+};
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   // Display name (Grok note L item 7, 2026-11-15): catalogs that build a toolkit name from
@@ -37696,146 +37856,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
-  // r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
-  // activate — the agent prints the key once, nobody saves it, and the next
-  // session re-mints anonymously (the funnel's biggest structural loss). The
-  // old copy ASKED the human to save the key but made them construct the
-  // config edit themselves. This hands back COPY-PASTE-READY snippets for the
-  // 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
-  // X-API-Key header form), so the agent's only job is showing its human the
-  // right one. Machine-readable at structuredContent.persist_config.
-  const _persistConfig = (key, via) => {
-    const _u = 'https://dchub.cloud/mcp';
-    const _cu = _connectUrl(key, via);
-    return {
-      human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous). If their client only offers a URL box and no header field, use `connect_url` instead — it is the same key, carried in the URL.',
-      server_url: _u,
-      // ★ THE INSTALL ARTIFACT for any client whose connector UI is a URL box.
-      connect_url: _cu,
-      connect_url_note: 'Same key, carried in the URL instead of a header — auth precedence is header > Bearer > query > inline, so this loses to a header if both are present and never overrides one. Use this whenever your human pastes a server URL rather than editing a JSON config.',
-      byo_mcp: {
-        label: 'Paste-a-URL connectors — Grok · Claude.ai web · ChatGPT · Perplexity',
-        applies_to: ['grok', 'claude.ai web', 'chatgpt', 'perplexity',
-                     'any client whose connector settings have a URL field and no header field'],
-        url: _cu,
-        instruction: 'Ask your human to open their DC Hub connector settings and replace the server URL with the one above. That is the whole install — no config file, no header, no restart beyond reconnecting the connector.',
-        why: 'These clients run MCP server-side and build a NEW session for every tool call, so a key returned in a tool result cannot survive to your next call and you cannot apply it yourself. The connector URL is the only durable state on this kind of client.',
-      },
-      header: { 'X-API-Key': key },
-      clients: {
-        claude_desktop: {
-          label: 'Claude Desktop',
-          file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
-          // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
-          // claude_desktop_config.json does not run (stdio servers only). The launcher
-          // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
-          // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
-          snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
-          connector_url: _cu,
-          note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
-        },
-        claude_code: {
-          label: 'Claude Code (CLI — one command)',
-          snippet: 'claude mcp add dchub --transport http --header "X-API-Key: ' + key + '" ' + _u,
-        },
-        cursor: {
-          label: 'Cursor',
-          file: '~/.cursor/mcp.json',
-          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // ★ VS Code, Copilot agent mode (2026-08-26). The load-bearing
-        // difference is the TOP-LEVEL KEY: VS Code reads `servers`, NOT
-        // `mcpServers` — a block copied from Cursor or Claude Desktop parses as
-        // JSON and registers nothing. Same class of silent failure as Windsurf's
-        // `serverUrl` and Cline's `type: "streamableHttp"`.
-        // Verified against VS Code's own docs, not written from memory:
-        //   https://code.visualstudio.com/docs/copilot/customization/mcp-servers
-        //   https://code.visualstudio.com/docs/agents/reference/mcp-configuration
-        // `type: "http"` is the remote-server form and `headers` is supported on
-        // it, which is why this client is header-capable rather than URL-only.
-        vscode: {
-          label: 'VS Code (Copilot agent mode)',
-          file: '.vscode/mcp.json in the workspace · or the user profile via the "MCP: Open User Configuration" command',
-          snippet: JSON.stringify({ servers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        cline: {
-          label: 'Cline (VS Code)',
-          file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
-          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // Windsurf (2026-11-20, docs.windsurf.com/windsurf/cascade/mcp): the user config is
-        // ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/ is the
-        // older path. Both named, current first, from lib/windsurf-config-where.mjs.
-        // serverUrl and url are both accepted.
-        windsurf: {
-          label: 'Windsurf',
-          file: WINDSURF_PERSIST_FILE,
-          snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
-        // Gemini CLI called claim_free_key and got back six snippets, none of
-        // them for the client it was actually running on — so the honest move
-        // was to show its human nothing, and the key died in the response.
-        //
-        // These are the ONLY two Gemini surfaces that take a custom remote MCP
-        // server. The consumer Gemini app has no such field (a Gem cannot call
-        // DC Hub live), and the Gemini Enterprise data store REQUIRES OAuth 2.0
-        // and REJECTS X-API-Key — so neither belongs in a key-persistence
-        // snippet set and neither is listed here. Do not "helpfully" add them.
-        //
-        // ★★ THE FIELD NAME IS THE WHOLE THING, and the two disagree with each
-        // other, which is exactly how this goes wrong silently:
-        //   gemini_cli   `httpUrl`   — `url` is the SSE form; a Streamable-HTTP
-        //                              server under `url` is dialled with the
-        //                              wrong transport and never connects.
-        //   antigravity  `serverUrl` — `url` also works; `httpUrl` is not
-        //                              supported, so a Gemini CLI block parses
-        //                              as JSON and registers nothing. File:
-        //                              ~/.gemini/config/mcp_config.json (the
-        //                              ~/.gemini/antigravity/ path is gone from
-        //                              Google's docs, re-read 2026-11-02).
-        // Verified against the vendors' own published docs, not from memory:
-        //   https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
-        //   https://antigravity.google/docs/mcp.md
-        // Both read a `headers` object, which is why they are header-capable
-        // and get a key-bearing snippet at all rather than a connect_url.
-        gemini_cli: {
-          label: 'Gemini CLI',
-          file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add -s user --transport http dchub ' + _u,
-          snippet: JSON.stringify({ mcpServers: { dchub: { httpUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        antigravity: {
-          label: 'Antigravity (Google)',
-          file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
-          snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // The two coding CLIs (Grok CLI note 2026-11-18 item 2). Codex got no snippet of its own and Copilot CLI
-        // got the VS Code one (`servers` in .vscode/mcp.json), which Copilot CLI does not read. Checked 2026-11-19
-        // against the vendors' docs and our live /connect/codex and /connect/copilot-cli pages:
-        //   codex_cli    a [mcp_servers.<name>] table in ~/.codex/config.toml; url, plus http_headers (literal
-        //                values) or env_http_headers (header -> env var name). learn.chatgpt.com/docs/extend/mcp
-        //   copilot_cli  top-level mcpServers in ~/.copilot/mcp-config.json; type "http", url, headers, tools.
-        //                docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
-        codex_cli: {
-          label: 'OpenAI Codex CLI',
-          file: '~/.codex/config.toml (or .codex/config.toml in a trusted project)',
-          snippet: '[mcp_servers.dchub]\nurl = "' + _u + '"\nhttp_headers = { "X-API-Key" = "' + key + '" }',
-          note: 'To keep the key out of the file, use env_http_headers = { "X-API-Key" = "DCHUB_API_KEY" } instead of http_headers, and export DCHUB_API_KEY in the shell that starts codex.',
-        },
-        copilot_cli: {
-          label: 'GitHub Copilot CLI',
-          file: '~/.copilot/mcp-config.json',
-          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key }, tools: ['*'] } } }),
-        },
-      },
-      // CORRECTED 2026-08-18: this used to say email-bind was the only option
-      // for a header-less host. It is not, and saying so cost us the whole
-      // BYO-MCP class — those clients DO have durable state, it is the URL.
-      // Email-bind still matters (it makes the key recoverable if the URL is
-      // ever lost) but it is now the SECOND step, not the substitute.
-      headerless_web_note: 'Claude.ai web / ChatGPT / Grok / Perplexity / Smithery have no config file to hold a header — but they DO have a connector URL box, and that is durable. On Smithery specifically the server runs behind their proxy, so pasting the URL below as a direct MCP server replaces that connection with an identified one (or, if their install screen offers an apiKey field, put the key there instead). Have your human paste `connect_url` above as the DC Hub server URL; the key rides in the URL and is sent on every future call. Then bind the key to their email (bind_email) so it is also recoverable if that URL is ever lost (recover_my_key re-sends it to that inbox).',
-    };
-  };
+  // _persistConfig, _CLIENT_KEY_RULES and _clientKeyFromNames live at module scope (above createServer) so the
+  // /mcp/connect page (lib/mcp-connect-page.mjs) renders the same snippets.
 
   // ★ Grok audit 2026-10-06, item 7: claim_free_key's reply was 18 KB and led with prose. The caller
   // already told us what it is (initialize clientInfo.name, the platform tag, or client_name), so the
@@ -37843,21 +37865,6 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // that client's entry plus a pointer to /connect for the rest. An unrecognised client keeps the full
   // eight-client block, exactly as before. Post-processes _persistConfig's output so its literal (the
   // text canon fences scan) is untouched.
-  const _CLIENT_KEY_RULES = [
-    [/claude[\s_-]*desktop/i, 'claude_desktop'], [/claude[\s_-]*code/i, 'claude_code'], [/cursor/i, 'cursor'],
-    // Copilot CLI (clientInfo github-copilot-developer, UA copilot-cli/) and Codex before the /copilot/ -> vscode rule.
-    [/copilot[\s_-]?cli|github-copilot-developer/i, 'copilot_cli'], [/codex/i, 'codex_cli'],
-    [/vs[\s_-]*code|visual studio code|copilot/i, 'vscode'], [/\b(cline|roo)\b/i, 'cline'],
-    [/windsurf|codeium/i, 'windsurf'], [/gemini/i, 'gemini_cli'], [/antigravity/i, 'antigravity'],
-  ];
-  const _clientKeyFromNames = (...names) => {
-    for (const n of names) {
-      const t = String(n || '');
-      if (!t) continue;
-      for (const [re, k] of _CLIENT_KEY_RULES) if (re.test(t)) return k;
-    }
-    return null;
-  };
   const _persistConfigFor = (key, via, clientKey) => {
     const full = _persistConfig(key, via);
     const own = clientKey && full.clients && full.clients[clientKey];
@@ -39601,6 +39608,27 @@ app.get([PARTNER_PATH, PARTNER_PATH + '/'], (req, res) => {
     res.type('html').send(_renderPartnerPage());
   } catch (e) {
     res.status(500).type('text').send('partner_unavailable');
+  }
+});
+
+// /mcp/connect (owner 2026-11-20, wall_identity_v2): the human sign-in page a wall can point at
+// (lib/mcp-connect-page.mjs): an email field posting to the backend's existing /api/v1/dev-signup
+// door, the /mcp/oauth sign-in, and with ?client= that client's claim_free_key snippet first.
+// Behind DCHUB_WALL_IDENTITY_V2 and only for a browser GET/HEAD; anything else calls next(), so the
+// request is answered exactly as before (no other /mcp/connect route exists: today that is a 404).
+// Not in MCP_PATHS: a page, not an endpoint. The zone worker forwards a browser GET here.
+app.get([CONNECT_PATH, CONNECT_PATH + '/'], (req, res, next) => {
+  if (!_wallIdV2On() || !_connectPageWanted(req)) return next();
+  try {
+    const client = typeof req.query.client === 'string' ? req.query.client : '';
+    const html = _renderConnectPage({ client, persist: _persistConfig, clientKeyFrom: _clientKeyFromNames });
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Vary', 'Accept');
+    res.set('Content-Security-Policy', CONNECT_CSP());
+    res.set('X-Robots-Tag', 'noindex');
+    res.type('html').send(html);
+  } catch (e) {
+    return next();
   }
 });
 
