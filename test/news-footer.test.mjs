@@ -51,7 +51,7 @@ describe('the site-report line (email-bound free key)', () => {
   const sc = { articles: [{ title: 'x' }], total: 1 };
 
   it('is one line: the run, the map entry ?welcome=free_run, no plan name, price, key or email', () => {
-    expect(NEWS_SITE_REPORT_LINE).toBe('Watching a site? Your email also gets one free full site report a month on the '
+    expect(NEWS_SITE_REPORT_LINE).toBe('Watching a site? Your email also gets one full site report a month on the '
       + 'Land & Power map (sign in with it): ' + NEWS_SITE_REPORT_URL);
     const u = new URL(NEWS_SITE_REPORT_URL);
     expect(u.origin + u.pathname).toBe('https://dchub.cloud/land-power-map');

@@ -27,7 +27,7 @@ describe('planner 5.51: a named market leads the time-to-power headline with its
 
   it('keyless: Dallas, ERCOT and the verdict lead; no ISO-first lead and no trailing slug verdict', () => {
     const h = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW).headline;
-    expect(h.startsWith('Time to 300 MW of power near Dallas (ERCOT), DCPI verdict CAUTION: Dallas DCPI time-to-power is withheld')).toBe(true);
+    expect(h.startsWith('Time to 300 MW of power near Dallas (ERCOT), DCPI verdict CAUTION: Time to power is withheld at this access level.')).toBe(true);   // 5.57
     expect(h).not.toContain('for ERCOT (ISO)');
     expect(h).not.toMatch(/dallas DCPI CAUTION\./);
     expect(h).toContain(deadlineWithheld(18));

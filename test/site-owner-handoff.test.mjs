@@ -39,7 +39,7 @@ describe('site-owner hand-off on analyze_site', () => {
     const r = run(SEAT, siteAnswer('BUILD'));
     expect(ownerLines(r)).toHaveLength(1);
     const line = ownerLines(r)[0].text;
-    expect(line).toContain('List it free on Capacity Source (a fee only if a deal closes): https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site&mw=50#list-capacity');
+    expect(line).toContain('List it on Capacity Source (a fee applies only if a deal closes): https://dchub.cloud/listings?utm_source=dchub-mcp&utm_medium=site_owner&utm_campaign=analyze_site&mw=50#list-capacity');
     // owner 2026-11-16: one disclosure line, no advisory pitch or /advisory link
     expect(line.endsWith(L.SITE_OWNER_DISCLOSURE)).toBe(true);
     expect(line).toContain('https://dchub.cloud/listings/how-it-works#disclosure');

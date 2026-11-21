@@ -379,7 +379,7 @@ describe('F) the compact first plan answer', () => {
 describe('G) the relay line says "free-tier limit" only when a limit was hit', () => {
   it('a depth preview is a preview, and says what an email gets, with no plan name', () => {
     const line = S._ctxALS.run(seat(), () => S._relayLead('get_grid_intelligence', {}));
-    expect(line).toMatch(/^Your AI assistant got a preview of get_grid_intelligence from DC Hub; with an email it gets \d+ full answers a day on this tool, free$/);
+    expect(line).toMatch(/^Your AI assistant got a preview of get_grid_intelligence from DC Hub; with an email it gets \d+ full answers a day on this tool$/);
     expect(line).not.toMatch(/limit|\b(Developer|Pro|Starter)\b|\$/);
   });
   for (const st of ['anon_daily_cap', 'anon_hard_wall', 'trial_used', 'trial_cap_exceeded']) {
@@ -387,7 +387,7 @@ describe('G) the relay line says "free-tier limit" only when a limit was hit', (
       const c = seat();
       S._limitHit(c, st);
       const line = S._ctxALS.run(c, () => S._relayLead('get_grid_data', {}));
-      expect(line).toMatch(/^Your AI assistant hit DC Hub’s limit on get_grid_data; free: 50 MCP calls\/day with an email$/);   // owner 2026-11-15
+      expect(line).toMatch(/^Your AI assistant hit DC Hub’s limit on get_grid_data; 50 MCP calls\/day with an email$/);   // owner 2026-11-15
     });
   }
   it('a caller with an email on file is not told to add one; a paid boundary reads as the end of the preview', () => {

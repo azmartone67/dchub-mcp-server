@@ -128,7 +128,7 @@ describe('tools/list', () => {
     const removed = new Set(CLAUDE_REMOVED);
     for (const t of CANON) expect(listed.has(t.name) || removed.has(t.name) || (t.name === KEY_TOOL_LISTED && removed.has(KEY_TOOL_REGISTERED)), `${t.name} is neither listed nor removed`).toBe(true);
     for (const n of listed) expect(removed.has(n), n).toBe(false);
-    expect(CANON.length).toBe(97);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; both held off this profile; 97 on 2026-11-16: request_enhancement, listed here)
+    expect(CANON.length).toBe(98);   // /mcp keeps all of its tools (94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; both held off this profile; 97 on 2026-11-16: request_enhancement, listed here; 98 on 2026-11-20: accept_capacity_intro, held off this profile)
   });
 
   it('only the five standard annotation keys; read-only (but the two feedback tools) and non-destructive; no _meta or outputSchema', () => {

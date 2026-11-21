@@ -158,7 +158,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
   it('lists claim_free_key AFTER the user line, as the free-preview-first alternative', async () => {
     const t = (await call('analyze_site', LOC, seat())).content[0].text;
     expect(t.indexOf('get_api_key')).toBeGreaterThan(t.indexOf(RELAY_SHORT));
-    expect(t).toMatch(/prefers a free preview first/);
+    expect(t).toMatch(/prefers a preview first/);
     expect(t.split('\n')[0]).not.toContain('claim_free_key');
   });
 

@@ -1,5 +1,31 @@
 [
   {
+    "name": "accept_capacity_intro",
+    "description": "Use this when your human is the operator of a DC Hub Capacity Source listing and wants to accept a buyer's registration for it (the lead_id from DC Hub's lead notice). Accepting shares the buyer's name, role, email and message with the operator, and the operator's site details and contact with the buyer; DC Hub records the acceptance in its tamper-evident lead register and emails both sides a receipt. Run only when your human asks, and set confirm=true only after they say yes. Needs a key bound to the email on the listing (or the account that submitted it), with an inbox DC Hub has proven (an OAuth connection); otherwise use the accept link in DC Hub's email. The listing's operator must be on DC Hub's Capacity Source terms (https://dchub.cloud/terms#capacity-source); if your human has not accepted the current version, the result says so and names the step to accept them first. Returns the decision and a receipt: lead_id, buyer registration time, acceptance time, the listing terms version and the register entry. A repeat call returns the same receipt. Do NOT use to request capacity (use request_capacity_intro) or to accept a buyer's introduction terms (use accept_capacity_terms). For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lead_id": {
+          "description": "The registration to accept, exactly as DC Hub's lead notice gives it, e.g. LD-0123456789",
+          "type": "string"
+        },
+        "note": {
+          "description": "Optional short note from the operator to the buyer, at most 500 characters",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "Set true ONLY after your human, the listing's operator, has said yes to accepting this registration. Unless it is exactly true, nothing is sent",
+          "type": "boolean"
+        }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  {
     "name": "accept_capacity_terms",
     "description": "Use this when the user has read and agreed to DC Hub's capacity introduction terms (https://dchub.cloud/listings#terms): records that acceptance, once per terms version, so Capacity Source listing details open for them. Call it when source_capacity returns a listing locked with access.reason terms_acceptance_required, never on your own judgement: nothing opens without your human's agreement. Requires an identified caller (get_api_key, then bind_email with your human's address, or an OAuth connection) and accept_terms=true. Returns accepted and the terms version, recorded in DC Hub's lead register. Do NOT use to request an introduction (use request_capacity_intro) or to browse listings (use source_capacity). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
@@ -49,7 +75,7 @@
   },
   {
     "name": "analyze_parcel",
-    "description": "Use this when the user has a land parcel for a data center site: structured read of its boundary — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (free county/state GIS polygons, covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview + the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user has a land parcel for a data center site: structured read of its boundary — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (public county/state GIS polygons, covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview + the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -90,7 +116,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and the power band, with the other factors named; a key (DCHUB_API_KEY, optional) adds a few full site reports each month; other scores and figures need a full-access key. When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and the power band, with the other factors named; a key (DCHUB_API_KEY, optional) adds a few full site reports each month; other scores and figures need a full-access key. Without a key, the first 2 `analyze_site` calls each UTC day from a network return the full site report; after that, no full report until UTC midnight. When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -143,7 +169,7 @@
           "type": "boolean"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -297,7 +323,7 @@
           "type": "number"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -570,6 +596,10 @@
         "radius_km": {
           "description": "Search radius in km around lat/lon (default 80, clamped 5-400); ignored in state mode",
           "type": "number"
+        },
+        "market": {
+          "description": "A DCPI market slug or name instead of lat/lon, e.g. chicago: the search is centred on that market (radius_km default 60). anchored_market names it; avoid_note says when it reads AVOID",
+          "type": "string"
         },
         "min_voltage_kv": {
           "description": "Only anchor on substations at or above this voltage in kV (default 115). 230+ for hyperscale, 500 for the largest campuses",
@@ -935,7 +965,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -1107,7 +1137,7 @@
           "type": "boolean"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -1298,7 +1328,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -1336,7 +1366,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -1624,7 +1654,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -1790,7 +1820,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -2188,7 +2218,7 @@
           "type": "number"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -2387,7 +2417,7 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -2737,7 +2767,7 @@
           ]
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -3446,7 +3476,7 @@
           "maximum": 100000
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
@@ -3721,7 +3751,7 @@
           "maximum": 500
         },
         "mpp_pay": {
-          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {

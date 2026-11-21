@@ -145,7 +145,7 @@ function decode(raw) {
 // G6 (2026-09-27): a refused or unverifiable key now gets a leading plain-text
 // notice item (invalid-key-visible.test.mjs pins it). The DATA is still the
 // JSON item behind it; this reads past the notice, and only past the notice.
-const G6_NOTICE = /^(?:This|The) DC Hub .*API key.* isn't valid, so you're getting free-tier results|^DC Hub couldn't verify /;
+const G6_NOTICE = /^(?:This|The) DC Hub .*API key.* isn't valid, so you're getting (?:free-tier|keyless) results|^DC Hub couldn't verify /;
 const dataItems = (content) => (content || []).filter((c) => !G6_NOTICE.test(c.text || ''));
 
 function leadingJson(text) {

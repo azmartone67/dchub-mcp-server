@@ -57,7 +57,7 @@ describe('planner 5.46: a named market leads even when its time to power is with
 
   it('keyless: Dallas leads with its figure withheld, the deadline line, and the canvas markets', () => {
     const a = buildIntentAnswer(ctx, [dcpi(null), canvas, timeline], null, NOW);
-    expect(a.headline).toContain('Dallas DCPI time-to-power is withheld at this access level.');   // 5.48: no field name
+    expect(a.headline).toContain('near Dallas (ERCOT), DCPI verdict CAUTION: Time to power is withheld at this access level.');   // 5.57: one withheld sentence
     expect(a.headline).toContain(deadlineWithheld(18));
     expect(a.headline).toContain('Markets DCPI-ranked for TX (site_selection_canvas): Midland–Odessa (BUILD), El Paso (BUILD), The Woodlands (CAUTION).');
     expect(a.headline).not.toContain('no time-to-power figure in this read');

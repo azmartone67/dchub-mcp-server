@@ -43,17 +43,20 @@ describe('C(a): one free-key line with the email qualifier', () => {
 });
 
 describe('A1: analyze_site states the daily lane and the monthly runs', () => {
-  it('the line reads the lane default, never a second literal', () => {
-    expect(TC.ANALYZE_SITE_FREE_LINE).toBe('analyze_site: ' + KFT.KEYLESS_SITE_FULL_CAP_DEFAULT
-      + ' full site reports a day without a key; a free key adds a few each month; after that, previews until UTC midnight.');
+  // ★2026-11-20 (site audit, owner via relay): the published line states no number; it points at /connect
+  // (byte for byte dchub-backend be#9147). The lane default still drives enforcement, not these words.
+  it('the line states no lane figure and points at /connect', () => {
+    expect(TC.ANALYZE_SITE_FREE_LINE).toBe(
+      'analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect.');
+    expect(TC.ANALYZE_SITE_FREE_LINE).not.toContain(String(KFT.KEYLESS_SITE_FULL_CAP_DEFAULT));
   });
   const lastRun = { used: 3, limit: 3, remaining: 0, resets_at: '2026-12-01T00:00:00Z' };
   it('last monthly run, lane serving: the next calls use today\'s daily runs', () => {
-    expect(S._lpFreeRunNote(lastRun, 2)).toBe('Free full site analysis 3 of 3 this month (UTC). '
-      + 'That was the last monthly one; the next analyze_site calls use today\'s free daily runs, then previews until UTC midnight.');
+    expect(S._lpFreeRunNote(lastRun, 2)).toBe('Full site analysis 3 of 3 this month (UTC). '
+      + 'That was the last monthly one; the next analyze_site calls use today\'s daily runs, then previews until UTC midnight.');
   });
   it('last monthly run, lane not serving: the preview until the month turns (still true there)', () => {
-    expect(S._lpFreeRunNote(lastRun, 0)).toBe('Free full site analysis 3 of 3 this month (UTC). '
+    expect(S._lpFreeRunNote(lastRun, 0)).toBe('Full site analysis 3 of 3 this month (UTC). '
       + 'That was the last one this month: the next analyze_site call returns the preview until 2026-12-01.');
     expect(S._lpFreeRunNote(lastRun)).toBe(S._lpFreeRunNote(lastRun, 0));
   });

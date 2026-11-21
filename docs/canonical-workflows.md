@@ -44,7 +44,7 @@ should always honor:
 > actually absorb the load (DCPI verdict). Cite sources + `retrieved_at`.
 
 ## 4 · Greenest + most-buildable grid right now
-> Connect to https://dchub.cloud/mcp. `get_grid_scoreboard` (free, no key) ranks
+> Connect to https://dchub.cloud/mcp. `get_grid_scoreboard` (no key needed) ranks
 > US + EU + GB + Taiwan + Australia grids by renewable share live. Then
 > `get_grid_intelligence` for the top candidate's headroom + queue. Answer:
 > which grid is greenest AND has real siting headroom today.
@@ -61,7 +61,7 @@ should always honor:
 ---
 
 ## Partner outreach (honest — claim only what's live)
-> **DC Hub exposes 97 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
+> **DC Hub exposes 98 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
 > fiber, and M&A intelligence across a global data-center facility map in 170+ countries, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and

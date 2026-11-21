@@ -117,7 +117,7 @@ describe('high-intent claim line: no trial promise on a free-key link', () => {
   it('the claude variant offers a free key, not a 7-day/50-call trial', () => {
     const line = S.VARIANT_COPY.claude('get_market_intel', { count: 3, claim_url: 'https://dchub.cloud/claim/T' }, 'https://dchub.cloud/upgrade');
     expect(line).toContain('https://dchub.cloud/claim/T');
-    expect(line).toContain('a free DC Hub key');
+    expect(line).toContain('one click, a DC Hub key: https://dchub.cloud/claim/T');
     expect(line).not.toMatch(/7-day|50-call|trial key/);
   });
 });

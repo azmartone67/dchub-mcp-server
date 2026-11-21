@@ -143,13 +143,13 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const seat = await open();
     const r = await post(seat.h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = r.json.result.tools.map((t) => t.name);
-    expect(names.length).toBe(97);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement
+    expect(names.length).toBe(98);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
     expect(names[0]).toBe('execute_plan');
     expect(names[1]).toBe('get_api_key');
     expect(new Set(names).size).toBe(names.length);
     // registration order, from the one canonical catalog, minus the tool that moved
     const reg = Object.keys(S.createServer()._registeredTools);
-    expect(reg.length).toBe(97);
+    expect(reg.length).toBe(98);
     expect(reg.indexOf('claim_free_key'), 'the fixture is vacuous if it was already first').toBeGreaterThan(40);
     expect(names.slice(2)).toEqual(reg.filter((n) => n !== 'claim_free_key' && n !== 'execute_plan'));
   });
@@ -158,7 +158,7 @@ describe('tools/list: execute_plan, then claim_free_key, lead the full catalog',
     const r = await S._buildToolsListResult(null);
     expect(r.tools[0].name).toBe('execute_plan');
     expect(r.tools[1].name).toBe('claim_free_key');
-    expect(r.tools.length).toBe(97);
+    expect(r.tools.length).toBe(98);
   });
 
   it('a profile that does not list the tool is untouched, a pack keeps its declared order', async () => {
@@ -245,7 +245,7 @@ describe('keyless limit: anon_daily_cap', () => {
     expect(isJson(r.blocks[0]), 'block 0 stays the JSON a client parses').toBe(true);
     const prose = proseBlocks(r.blocks);
     expect(prose.length).toBeGreaterThan(0);
-    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. Free, one call: ask your human for an email, pass it to `get_api_key`/);
+    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. One call: ask your human for an email, pass it to `get_api_key`/);
     expect(prose[0]).toContain('X-API-Key');
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);
@@ -283,7 +283,7 @@ describe('keyless preview wall: trial_used', () => {
     const r = await call(seat, 'get_pipeline', { country: 'US' });
     expect(r.status).toBe('trial_used');
     const prose = proseBlocks(r.blocks);
-    expect(prose[0]).toMatch(/^Free, one call: ask your human for their email first, then call `get_api_key` with it \(only an address they gave you\), then send the api_key it returns as the X-API-Key header/);
+    expect(prose[0]).toMatch(/^One call: ask your human for their email first, then call `get_api_key` with it \(only an address they gave you\), then send the api_key it returns as the X-API-Key header/);
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);
     const joined = prose.join('\n');
@@ -297,14 +297,14 @@ describe('keyless preview wall: trial_used', () => {
   it('on the unsplit shape the step really sees (JSON and wall in one block) the line sits between them', async () => {
     // This step runs before _splitHumanBlock, so on every transport block 0 is JSON + prose here; drive that shape.
     const json = JSON.stringify({ ok: true, rows: [] });
-    const text = json + '\n\n---\n\n\u{1F512} **Free-tier preview of `get_pipeline`.** Full results: the payer checks out in one click: x.'
+    const text = json + '\n\n---\n\n\u{1F512} **Preview of `get_pipeline`.** Full results: the payer checks out in one click: x.'
       + L.CLAIM_ALT_TAIL + '\n';
     const out = await S._ctxALS.run({ session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor', _wallStatus: 'trial_used' },
       async () => S._claimHandoffStep({ content: [{ type: 'text', text }], structuredContent: { ok: true } }, 'get_pipeline'));
     expect(out.content).toHaveLength(1);
     const t = out.content[0].text;
-    expect(t.startsWith(json + '\n\n---\n\nFree, one call: ask your human for their email first, then call `claim_free_key`')).toBe(true);
-    expect(t).toMatch(/\.\n\n\u{1F512} \*\*Free-tier preview of `get_pipeline`\.\*\*/u);   // the wall's own header follows the line
+    expect(t.startsWith(json + '\n\n---\n\nOne call: ask your human for their email first, then call `claim_free_key`')).toBe(true);
+    expect(t).toMatch(/\.\n\n\u{1F512} \*\*Preview of `get_pipeline`\.\*\*/u);   // the wall's own header follows the line
     expect(t.indexOf('claim_free_key')).toBeLessThan(t.indexOf('the payer checks out'));
     expect(t).not.toContain('durable free-tier key');
     expect(isJson(t.slice(0, json.length))).toBe(true);

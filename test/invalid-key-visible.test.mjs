@@ -138,7 +138,7 @@ async function call(path, headers = {}, ua = GENERIC_UA) {
            meta: result._meta || {} };
 }
 
-const INVALID_LINE = /isn't valid, so you're getting free-tier results\. Get a new key at https:\/\/dchub\.cloud\//;
+const INVALID_LINE = /isn't valid, so you're getting keyless results\. Get a new key at https:\/\/dchub\.cloud\//;
 
 describe('G6: an invalid X-API-Key / query key is served free AND says so', () => {
   it('invalid X-API-Key header: 200, notice first, key_status invalid, key not echoed', async () => {
@@ -146,7 +146,7 @@ describe('G6: an invalid X-API-Key / query key is served free AND says so', () =
     const got = await call('/mcp', { 'x-api-key': bad });
     expect(got.status).toBe(200);
     expect(got.first).toBe("The DC Hub API key in this connector's X-API-Key header isn't valid, "
-      + "so you're getting free-tier results. Get a new key at https://dchub.cloud/connect");
+      + "so you're getting keyless results. Get a new key at https://dchub.cloud/connect");
     expect(got.meta.key_status).toBe('invalid');
     expect(got.identity.key_status).toBe('invalid');
     expect(got.identity.credential_source).toBe('header');
@@ -172,7 +172,7 @@ describe('G6: an invalid X-API-Key / query key is served free AND says so', () =
   it('a Grok client is sent to /install/grok', async () => {
     const got = await call(`/mcp?apiKey=${k('g6badgrok')}`, {}, GROK_UA);
     expect(got.first).toBe("This DC Hub connector URL's API key isn't valid, so you're getting "
-      + 'free-tier results. Get a new key at https://dchub.cloud/install/grok');
+      + 'keyless results. Get a new key at https://dchub.cloud/install/grok');
   });
 
   it('valid key: no notice and no key_status', async () => {

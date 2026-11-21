@@ -554,7 +554,7 @@ describe('plan tier_preview (r-continuation item 4)', () => {
     const p = _planQuery('rank markets for a 200 MW AI campus in Texas', {});
     expect(p.tier_preview.free_steps + p.tier_preview.gated_steps)
       .toBe(p.recommended_sequence.length);
-    expect(p.tier_preview.agent_quotable).toMatch(/free tier/);
+    expect(p.tier_preview.agent_quotable).toMatch(/^I can answer \d+ of \d+ steps? of this at your current DC Hub access\. /);
     expect(p.tier_preview.gated_tools).toContain('get_grid_intelligence');
   });
 

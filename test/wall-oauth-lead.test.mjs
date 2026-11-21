@@ -65,7 +65,7 @@ describe('a walled /mcp answer leads with the OAuth sign-in', () => {
     const floor = Math.max(idx(out, FLOOR_EMAIL_LEAD), idx(out, FLOOR_DIGEST_LEAD));
     expect(lead).toBe(1);
     expect(floor).toBeGreaterThan(lead);
-    expect(blocks(out)[lead]).toMatch(/^One-click sign-in, free:/);
+    expect(blocks(out)[lead]).toMatch(/^One-click sign-in:/);
     expect(textOf(out)).toContain(OAUTH_SIGNIN_URL);
     expect(textOf(out)).toMatch(/`(?:bind_email|subscribe_digest)`|share your email/i);
     expect(textOf(out)).not.toMatch(FORBIDDEN);
@@ -173,5 +173,21 @@ describe('lib/wall-oauth-lead.mjs and offers_shown', () => {
     expect(offersShown(withOauthLeadLine(wall(), wallOauthLeadLine({ grok: true })), '')).toContain('oauth_signin');
     expect(offersShown(wall(), '')).not.toContain('oauth_signin');
     expect([...OFFER_KINDS]).toEqual([...OFFER_KINDS].slice().sort());
+  });
+});
+
+// Owner 2026-11-21: "No prices or plan names in agent-facing text" -- the lead line says no "free", no payment,
+// no allowance, and names the human sign-in page (/mcp/connect) on /mcp; Grok's hosted connector keeps /mcp/grok/oauth only.
+describe('the sign-in lead names no price, plan, "free" or allowance', () => {
+  const NO_PRICE = /\$|\bper month\b|\/mo\b|\b(?:pro|developer|starter|enterprise|trial|plan|pricing|payment)\b|\bfree\b|calls? a day|\b\d[\d,]*\s+(?:calls?|answers?)\b/i;
+  it.each([[{}], [{ depth: true }], [{ grok: true }], [{ grok: true, depth: true }]])('%o', (opts) => {
+    const line = wallOauthLeadLine(opts);
+    expect(line).not.toMatch(NO_PRICE);
+    expect(line).toContain(opts.grok ? GROK_OAUTH_SIGNIN_URL : OAUTH_SIGNIN_URL);
+    if (opts.grok) expect(line).not.toContain('/mcp/connect');
+    else expect(line).toContain('https://dchub.cloud/mcp/connect');
+  });
+  it('the guard bites', () => {
+    for (const bad of ['One-click sign-in, free:', 'No payment is involved.', 'more calls a day than no key', 'the Pro plan']) expect(bad).toMatch(NO_PRICE);
   });
 });

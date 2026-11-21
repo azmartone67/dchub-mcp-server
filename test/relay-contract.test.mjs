@@ -459,7 +459,7 @@ describe('execute_plan relay line says the lookups ran (Grok QA 2026-11-12)', ()
     // Owner 2026-11-14: "free-tier limit" only when a limit was hit; a depth preview says it is a preview.
     expect(S._relayLead('get_gas_index')).toBe('Your AI assistant got a preview of get_gas_index from DC Hub');
     expect(S._relayLead('get_gas_index', { _upgrade: { tier: 'anon_daily_cap' } }))
-      .toBe('Your AI assistant hit DC Hub’s limit on get_gas_index; free: 50 MCP calls/day with an email');   // owner 2026-11-15
+      .toBe('Your AI assistant hit DC Hub’s limit on get_gas_index; 50 MCP calls/day with an email');   // owner 2026-11-15
     expect(S._relayLead('execute_plan', { executed: [{ status: 'executed' }] })).toBe('Your AI assistant ran 1 DC Hub lookup for your question');
   });
 });

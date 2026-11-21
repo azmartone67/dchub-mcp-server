@@ -49,7 +49,7 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
       for (const n of nums) expect(canonNums, `${k}: ${n} is not a canon figure`).toContain(n);
       expect(L[k], k).not.toMatch(/full free tier|calls to try|\d+-calls\/day|free calls are used up/);
     }
-    expect(L.analyzeSiteKeyClause).toContain('a few free full site reports each month');
+    expect(L.analyzeSiteKeyClause).toContain('a few full site reports each month');
   });
   // Note F / option A (owner 2026-11-17): the live unbound-key line says what the email keeps, no allowance.
   it('the unbound-key line says what the email keeps: no allowance, no "free", no "used up"', () => {
@@ -73,10 +73,10 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     + 'report; after that, no full report until UTC midnight.';
   const DAILY_1 = 'Without a key, the first `analyze_site` call each UTC day from a network returns the full site '
     + 'report; after that, no full report until UTC midnight.';
-  const KEY_EMAIL = 'A free key adds a few free full site reports each month: call `claim_free_key` (one call, no email); '
-    + 'adding an email (`bind_email`) gives the same free key, with no more site reports.';
-  const KEY_EMAIL_TEXT = 'or call `claim_free_key` (one call, no email) for a free key: it adds a few free full site '
-    + 'reports each month; adding an email (`bind_email`) gives the same free key, with no more site reports.';
+  const KEY_EMAIL = 'A DC Hub key adds a few full site reports each month: call `claim_free_key` (one call, no email); '
+    + 'adding an email (`bind_email`) gives the same key, with no more site reports.';
+  const KEY_EMAIL_TEXT = 'or call `claim_free_key` (one call, no email) for a DC Hub key: it adds a few full site '
+    + 'reports each month; adding an email (`bind_email`) gives the same key, with no more site reports.';
   it('analyze_site: the keyless wall clause states the daily keyless runs, the free key\'s monthly runs and what an email adds', () => {
     expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 2 })).toBe(DAILY_2 + ' ' + KEY_EMAIL);
     expect(U.lpFreeKeyClause('analyze_site', { lpFreeRuns: true, dailyCap: 1 })).toBe(DAILY_1 + ' ' + KEY_EMAIL);
@@ -107,7 +107,7 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     expect(keylessWallQuota(new Date(), { dailyCap: 0 }).quota_basis).toMatch(/^keyless callers get no full answers/);
   });
   it('the DCPI withheld basis quotes the clause it is handed and never says "no DCPI row"', () => {
-    const b = U.DCPI_BAND_WITHHELD_BASIS('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
+    const b = U.DCPI_BAND_WITHHELD_BASIS('Grid/queue/market-intel tools: previews with no email; an email adds 10 full answers/day each.');
     expect(b).toMatch(/^WITHHELD at this access level/);
     expect(b).toContain('an email adds 10 full answers/day each.');
     expect(b).not.toMatch(/no DCPI row|UNMEASURED/);
@@ -239,7 +239,7 @@ describe('5. /mcp e2e (real server.mjs, stub backend)', () => {
     const basis = bandOf(r);
     expect(basis, 'control: the taste band came back\n' + r.text.slice(0, 600)).toBeTruthy();
     expect(basis).toMatch(/^WITHHELD at this access level/);
-    expect(basis).toMatch(/Grid\/queue\/market-intel tools: previews on free/);
+    expect(basis).toMatch(/Grid\/queue\/market-intel tools: previews (?:with no|without an) email/);
     expect(basis).not.toMatch(/no DCPI row/);
   }, 60_000);
 
@@ -281,7 +281,7 @@ describe('5. /mcp e2e (real server.mjs, stub backend)', () => {
     expect(H.S._keylessSiteDailyFor({ ...CALLER, client_ip: '' }), 'no caller IP: the lane cannot count it').toBe(0);
     const noIp = H.S._runInCtxForTest({ ...CALLER, client_ip: '' }, () => H.S._lpWallResult('analyze_site'));
     expect(noIp.structuredContent.message).not.toMatch(/each UTC day from a network/);
-    expect(noIp.structuredContent.message).toContain('A free key adds a few free full site reports each month');
+    expect(noIp.structuredContent.message).toContain('A DC Hub key adds a few full site reports each month');
     // other Land & Power tools keep the preview clause (their free key really is a preview)
     expect(H.S._lpWallResult('compare_sites').structuredContent.message).toContain(U.LP_PREVIEW_CLAUSE);
   });

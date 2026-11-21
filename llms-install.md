@@ -8,7 +8,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
 - **Auth:** none required (previews, no key needed). Optionally,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
-- **Tools exposed:** 97 (facility search, market intelligence, grid + interconnection,
+- **Tools exposed:** 98 (facility search, market intelligence, grid + interconnection,
   site analysis and site-risk scoring, M&A deals, infrastructure).
 
 ## What it does
@@ -38,7 +38,7 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 ```
 
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
-97 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
+98 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
 
 Then try one data call with no key: **"Use DC Hub to list data centers in Ashburn, VA, and
@@ -99,7 +99,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key
 
-The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: 2 full site reports a day without a key; a free key adds a few each month; after that, previews until UTC midnight. To raise limits, get a free key
+The free tier: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 

@@ -58,12 +58,12 @@ describe('rankMarketsSellLine labels (pure)', () => {
     expect(crit.filter((k) => !Object.prototype.hasOwnProperty.call(RANK_CRITERIA_LABELS, k))).toEqual([]);
     expect(reg.filter((k) => !Object.prototype.hasOwnProperty.call(RANK_REGION_LABELS, k))).toEqual([]);
     for (const criteria of crit) for (const region of reg) {
-      expect(rankMarketsSellLine({ criteria, region, ...LINE }), `${criteria}/${region}`).toMatch(/^This free DC Hub .+ ranking of .+ markets shows 5 of 10/);
+      expect(rankMarketsSellLine({ criteria, region, ...LINE }), `${criteria}/${region}`).toMatch(/^This DC Hub .+ ranking of .+ markets shows 5 of 10/);
     }
   });
   it('a US state region takes the code the backend matched', () => {
     expect(rankMarketsSellLine({ criteria: 'most_capacity', region: 'texas', regionState: 'TX', ...LINE }))
-      .toMatch(/^This free DC Hub capacity ranking of TX markets shows 5 of 10/);
+      .toMatch(/^This DC Hub capacity ranking of TX markets shows 5 of 10/);
   });
   it('never guesses a label', () => {
     for (const [criteria, region, regionState] of [['weird', 'us'], ['best_overall', 'mars'], ['constructor', 'us'],

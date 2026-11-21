@@ -235,11 +235,11 @@ describe('3. /mcp: a key past its daily allowance is offered only what it does n
     TIER = 'developer'; H.S._dropQuotaCache(KEY);
     const { prose, sc } = await call('list_transactions');
     expect((sc.identity || {}).daily_quota_reached).toBeTruthy();
-    expect(prose).not.toContain('What opens the fields held back here: a 7-day free trial.');
+    expect(prose).not.toContain('What opens the fields held back here: a 7-day trial.');
     expect(prose).not.toMatch(/`claim_free_key`/);
     TIER = 'identified'; H.S._dropQuotaCache(KEY);
     const id = await call('list_transactions');   // CONTROL: an identified key is not paid, so the trial stays
-    expect(id.prose).toContain('What opens the fields held back here: a 7-day free trial.');
+    expect(id.prose).toContain('What opens the fields held back here: a 7-day trial.');
   }, 120_000);
 });
 

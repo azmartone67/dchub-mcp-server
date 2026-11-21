@@ -87,7 +87,7 @@ import { buildHandoff, handoffEnabled, coreHandoffOn as _coreHandoffOn, planLook
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRegion } from './lib/grid-ranking.mjs';
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
-import { keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack } from './lib/keyless-first-full.mjs';
+import { keylessFirstFullOn, keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack, planStepDepths as _kffPlanStepDepths, utcClock as _utcClock } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -208,6 +208,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
 import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
+import { legacyFreeWording as _legacyFreeWording } from './lib/chatgpt-frozen-copy.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { humanEmailReplyOn as _humanEmailReplyOn, applyHumanEmailReply as _applyHumanEmailReply } from './lib/human-email-reply.mjs';
@@ -248,12 +249,13 @@ import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, w
 import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
-import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor } from './lib/wall-via-tag.mjs';
+import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor, usableSessionId } from './lib/wall-via-tag.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
          keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
 import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
+import * as _WD from './lib/wall-device-match.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -287,7 +289,7 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
@@ -303,6 +305,7 @@ import { cutRowsToSubmarket as _cutRowsToSubmarket } from './lib/submarket-scope
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
+import { CONNECT_PATH, CONNECT_CSP, connectPageWanted as _connectPageWanted, renderConnectPage as _renderConnectPage } from './lib/mcp-connect-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
@@ -324,6 +327,7 @@ import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.m
 import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligible, withSignInLine as _wallIdWithSignIn,
   withEmailAsk as _wallIdWithEmailAsk, emailAskLine as _wallIdEmailAskLine, emailAskCall as _wallIdEmailAskCall,
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
+import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
@@ -359,7 +363,11 @@ import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, lan
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
 import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs';
 import { nearestTransmission as _nearestTransmission, NEAREST_LINE_RADIUS_KM as _NEAREST_LINE_RADIUS_KM } from './lib/site-point-depth.mjs';
-import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer } from './lib/street-address.mjs';
+// 5.56 (Grok daily 2026-11-20, items 2-4): a named facility, a pipeline status ask, and both sides of a capacity ask.
+import { namedFacility as _namedFacility, buildNamedFacilityAnswer as _buildNamedFacilityAnswer } from './lib/named-facility.mjs';
+import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForState, capacityAsksOperational as _capacityAsksOperational, buildPipelineStatusAnswer as _buildPipelineStatusAnswer,
+  buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
+import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -936,9 +944,9 @@ function _relayEmailGets(tool, limitHit) {
     const c = getCtx() || {};
     if (c.email || _boundaryPhrase(tool) !== 'free-tier limit') return '';
     // Owner 2026-11-15: where a result names the free offer it uses the owner's exact phrase (lib/tier-canon.mjs).
-    if (limitHit && !c.api_key) return '; free: ' + FREE_OFFER_EMAIL;
-    if (_emailFullDecisionTool(tool, c)) return '; with an email it gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day on this tool, free';
-    if (_emailOpensTool(tool)) return '; with an email it gets the full answer, free';
+    if (limitHit && !c.api_key) return '; ' + FREE_OFFER_EMAIL;
+    if (_emailFullDecisionTool(tool, c)) return '; with an email it gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day on this tool';
+    if (_emailOpensTool(tool)) return '; with an email it gets the full answer';
     return '';
   } catch (_) { return ''; }
 }
@@ -1649,12 +1657,12 @@ export function _unlockMoreDataEnvelope(a) {
         '**API capacity, a separate option:** ' + _UNLOCK_PACK_TEXT + '; paid-plan tools not included → ' + credits + '\n' +
         '💳 I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
         (_offer.pack
-          ? '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*'
+          ? '*No payment needed yet? I can call `claim_free_key` for a DC Hub key — all tools, ' + _freeKeyAllowanceText() + '.*'
           : '')
     : HUMAN_FIRST_MARKER + ' ' + _ladder + '\n' +
     '💳 **Your human can open full DC Hub depth in one click.** I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
     (_offer.pack
-      ? '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*'
+      ? '*No payment needed yet? I can call `claim_free_key` for a DC Hub key — all tools, ' + _freeKeyAllowanceText() + '.*'
       : '');
   // Human-approval policy (owner 2026-10-20): the per-call rail is never advertised here.
   const _mppOn = MPP_SELF_PAY_ADVERTISED && mppEnabled();
@@ -1708,7 +1716,7 @@ export function _unlockMoreDataEnvelope(a) {
         ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'A paid DC Hub plan for agents', best_for: 'agents and apps running daily — full depth on every tool except the paid-plan tools, cancel anytime', checkout_url: developer }] : []),
         ...((_offer.pro && !_proLeadOn) ? [{ id: 'pro',       label: 'A higher-volume DC Hub plan with every tool', best_for: 'a human screening real sites — the paid-plan tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
-      free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
+      free_alternative: { tool: 'claim_free_key', note: 'a DC Hub key, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       // ladder stage 1: the pack and Developer open everything outside the Pro-only
       // set; only Pro opens that set. "every premium tool" was true of no rung below Pro.
       what_unlocks: 'A paid DC Hub plan for agents: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the paid-plan tools, and higher rate limits. The one-time credit pack is API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets. The DC Hub plan with every tool adds the paid-plan tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
@@ -1875,7 +1883,7 @@ const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z
 // Both forms of lib/paywall-contract.mjs buildAgentHints: the purchase form, and the Pro-rung form a
 // preview takes once a withheld field opens only at Pro (the DCPI sub-scores, owner 2026-10-31).
 // Note V keyed follow-up (2026-11-16): the Pro-rung form names no plan now; the old spelling is still matched.
-const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)|this call returns no more at this access level, so do not retry it now; (?:use the free headline above and )?show your user the link in human_url\.) Multi-step question: execute_plan\.\)\s*/g;
+const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)|this call returns no more at this access level, so do not retry it now; (?:use the (?:free )?headline above and )?show your user the link in human_url\.) Multi-step question: execute_plan\.\)\s*/g;
 export function _gridDeclutterStep(result, name) {
   try {
     if ((name !== 'get_grid_intelligence' && name !== 'get_fiber_intel') || !_gridDeclutterOn()) return result;
@@ -1951,7 +1959,7 @@ function _swapUrl(v, from, to) {
 }
 // A repeat call's header ends the text with no blank line after it, so accept either.
 const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
-const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; a free DC Hub key returns them|; those fields are in a paid DC Hub plan|; those fields are withheld from this answer|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
+const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; a DC Hub key returns them|; those fields are in a paid DC Hub plan|; those fields are withheld from this answer|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
 // ── r-paid-sell-line (2026-10-04, owner-approved; DCHUB_PAID_SELL_LINE, default OFF) ──
 // The grid sentence for the other keyless paid tools. get_market_intel, compare_isos and
 // rank_markets: the $10 pack opens them, so the sentence says $10 and links ?buy=1.
@@ -2027,6 +2035,8 @@ export function _paidSellStep(result, name) {
       && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE
       ? _rankEmailClause({ total: sc._results_total_in_pro, perDay: IDENTIFIED_DAILY_FULL_CAP }) : null;
     if (emailClause) agentLine = agentLine.replace(' After they pay,', ' ' + emailClause + ' After they pay,');
+    // /mcp/chatgpt is frozen byte for byte: it keeps the wording origin/main served (lib/chatgpt-frozen-copy.mjs).
+    if (_chatgptFrozenSeat(c)) { sentence = _legacyFreeWording(sentence); agentLine = _legacyFreeWording(agentLine); }
     let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -2250,6 +2260,8 @@ export function _gridSellStep(result, name) {
         geom: !!(feats && feats.some((f) => f && f.geometry && f.geometry._coordinates_total_in_pro != null)) });
       if (hasLine && !sentence) return result;
     }
+    // /mcp/chatgpt is frozen byte for byte: it keeps the wording origin/main served (lib/chatgpt-frozen-copy.mjs).
+    if (_chatgptFrozenSeat(c)) { sentence = _legacyFreeWording(sentence); agentLine = _legacyFreeWording(agentLine); }
     let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -2985,7 +2997,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
       + '*Your client opens a fresh session for every tool call, so a key handed back inside a tool '
       + 'result is gone by your next call. `claim_free_key` also returns a **connector URL** that '
       + 'carries the key \u2014 the only artifact that survives this session, and the one thing worth '
-      + 'relaying to your human. Free tier: ' + _freeKeyAllowanceText() + '; the credit pack above '
+      + 'relaying to your human. With a key: ' + _freeKeyAllowanceText() + '; the credit pack above '
       + 'adds API capacity.*';
   };
   // ★ The PRO_ONLY exclusion applies to the ANONYMOUS branch only. Leading an
@@ -3114,7 +3126,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     ...(_isTrial ? {
       bind_email_tool: 'bind_email',
       bind_email_endpoint: 'POST https://dchub.cloud/api/v1/keys/auto-trial/bind {api_key, email}',
-      bind_email_why: 'trial free calls used — bind to continue free (50/day), capture the key durably, stop re-minting trials',
+      bind_email_why: 'trial calls used — bind to continue (50/day), capture the key durably, stop re-minting trials',
     } : {}),
     claim_curl:     claimCurl,
     claim_payload:  { client_name: '<your-agent-name>',
@@ -3143,7 +3155,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
 // (That guard lived in regression.test.mjs until #267 moved it onto the hard
 // gate — it had been running in a continue-on-error step and could not fail.)
-const SERVER_VERSION = { version: '2.12.59' }.version;  // 2.12.59 (2026-11-16): report_finding opens to every caller (keyless 5/day per IP, any key 30/day, partner 120/day, all held by the backend), with the public classes wrong_number, missing_data, coverage_gap, bug and feature_request and the fields summary, user_goal, region and contact_email; request_enhancement, the 97th tool, is its alias (same handler and queue). Both are on /mcp and /mcp/claude, not on the frozen /mcp/chatgpt. execute_plan, site_selection_canvas and get_refined_queue point at report_finding only on a gap answer. Tool count 96 -> 97.  // 2.12.58 (2026-11-15): npm-launcher keywords gain the AgentNode ownership challenge token so a new npm publish can prove package ownership; also ships the already-merged npm README listing-copy cleanup (#1452). No tool or schema change, tool count stays 96.  // 2.12.57 (2026-11-15; 2.12.56 skipped: Glama already lists an unrelated 2.12.56): tool descriptions name no plan and no price (owner listing rule 2026-11-14): 'free tier', 'paid plan', 'paid DC Hub plan', 'paid key' and 'the DC Hub plan that includes every tool' become 'a free key' / 'a full-access key' / 'without full access' on 18 tools. No tool or schema shape change, tool count stays 96.  // 2.12.55 (2026-11-14): install config: server.json lists ONE remote, https://dchub.cloud/mcp (owner item D4; was six: /mcp/registry first, then /mcp/claude, /mcp/grok, /mcp/oauth, /mcp/core, /mcp), and _meta.remoteProfiles is gone with /mcp/core. Every path still serves. No tool change, tool count stays 96.  // 2.12.54 (2026-11-14; written as 2.12.51 on 11-13, main reached 2.12.53 first): dchub_services, the 96th tool (owner-approved 'MCP as front desk'): DC Hub's services with one ?via=agent-referral&src=services link each; execute_plan's one next-step line (footer / referral) and the /mcp welcome. Not listed on /mcp/claude, /mcp/chatgpt, /mcp/core, /mcp/grok or the packs. Tool count 95 -> 96 and every published count moves with it.  // 2.12.49 (2026-11-13): release so npm carries the orchestration-layer description (#1403, npm refuses a second 2.12.48 upload; owner 'bump to 2.12.49' 2026-11-13). Already on main and live, now under this version: planner 5.24 (#1408, #1409), crawler tools/list test (#1404), @hono/node-server 2.1.6 (#1398). Version only; tool count stays 95.  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.12.60' }.version;  // 2.12.60 (2026-11-20): accept_capacity_intro, the 98th tool: the operator of a Capacity Source listing accepts a buyer's registration by lead id (POST /api/v1/listings/leads/<id>/accept) and gets the acceptance receipt back; nothing is sent without confirm=true and a register-shaped lead id. The backend's DCHUB_OPERATOR_TERMS_V1 is the switch (off: the backend answers not_enabled). Not listed on /mcp/claude. Tool count 97 -> 98.  // 2.12.59 (2026-11-16): report_finding opens to every caller (keyless 5/day per IP, any key 30/day, partner 120/day, all held by the backend), with the public classes wrong_number, missing_data, coverage_gap, bug and feature_request and the fields summary, user_goal, region and contact_email; request_enhancement, the 97th tool, is its alias (same handler and queue). Both are on /mcp and /mcp/claude, not on the frozen /mcp/chatgpt. execute_plan, site_selection_canvas and get_refined_queue point at report_finding only on a gap answer. Tool count 96 -> 97.  // 2.12.58 (2026-11-15): npm-launcher keywords gain the AgentNode ownership challenge token so a new npm publish can prove package ownership; also ships the already-merged npm README listing-copy cleanup (#1452). No tool or schema change, tool count stays 96.  // 2.12.57 (2026-11-15; 2.12.56 skipped: Glama already lists an unrelated 2.12.56): tool descriptions name no plan and no price (owner listing rule 2026-11-14): 'free tier', 'paid plan', 'paid DC Hub plan', 'paid key' and 'the DC Hub plan that includes every tool' become 'a free key' / 'a full-access key' / 'without full access' on 18 tools. No tool or schema shape change, tool count stays 96.  // 2.12.55 (2026-11-14): install config: server.json lists ONE remote, https://dchub.cloud/mcp (owner item D4; was six: /mcp/registry first, then /mcp/claude, /mcp/grok, /mcp/oauth, /mcp/core, /mcp), and _meta.remoteProfiles is gone with /mcp/core. Every path still serves. No tool change, tool count stays 96.  // 2.12.54 (2026-11-14; written as 2.12.51 on 11-13, main reached 2.12.53 first): dchub_services, the 96th tool (owner-approved 'MCP as front desk'): DC Hub's services with one ?via=agent-referral&src=services link each; execute_plan's one next-step line (footer / referral) and the /mcp welcome. Not listed on /mcp/claude, /mcp/chatgpt, /mcp/core, /mcp/grok or the packs. Tool count 95 -> 96 and every published count moves with it.  // 2.12.49 (2026-11-13): release so npm carries the orchestration-layer description (#1403, npm refuses a second 2.12.48 upload; owner 'bump to 2.12.49' 2026-11-13). Already on main and live, now under this version: planner 5.24 (#1408, #1409), crawler tools/list test (#1404), @hono/node-server 2.1.6 (#1398). Version only; tool count stays 95.  // 2.12.48 (2026-11-12): release of the OAuth-first wall offer (#1391, owner-approved 2026-11-12): a walled /mcp answer leads with the https://dchub.cloud/mcp/oauth sign-in, Grok's wall adds one free-key block naming /mcp/grok/oauth; email unlock and digest stay as secondary offers. Version only for this release; tool count stays 95.  // 2.12.47 (2026-11-11): get_air_permit_context, the 95th tool (owner via Grok 2026-11-11): EPA Green Book nonattainment for the point's county (US-wide) plus nearby TCEQ gas-turbine air permits (Texas only), read from dchub-backend GET /api/v1/air-permit-context, a dated public-domain snapshot; planner 5.20 adds the air_permits class. Not listed on /mcp/claude or /mcp/chatgpt (owner-approved sets). Tool count 94 -> 95 and every published count moves with it.  // 2.12.46 (2026-11-09): registry metadata only (owner move 2): server.json remotes list https://dchub.cloud/mcp/core, the ten-tool core profile, second to last (before the bare /mcp), labelled in _meta publisher-provided remoteProfiles as 'core profile: 10 tools for multi-server hosts'; remotes[0] and canonicalRemote are unchanged. README and REGISTRY-LISTINGS name it as an alternate. No behaviour change, tool count stays 94.  // 2.12.43 (2026-10-21): owner "mcp tools should cover way more": get_grid_data and compare_isos serve every live grid DC Hub ingests (US ISOs, TVA, BPA, utility BAs, Canada, GB, ENTSO-E zones, Taiwan, Japan, South Korea, Brazil, Australia, Singapore) via /api/v1/grid/intelligence and the new /api/v1/grid/latest; non-US compare rows carry null DCPI/queue fields (not tracked). /mcp/chatgpt keeps its reviewed parameter text (DIRECTORY_HELD_PARAM_TEXT). Tool count stays 94.  // 2.12.42 (2026-10-19): registry metadata only: server.json description and title lead with data center, energy, electricity and power grid (description keeps DCPI, query and cite, capacity to buy or lease); server.json gains a packages entry for the npm launcher dchub-mcp-server; the Smithery listing copy names ISO interconnection queue snapshots. Smithery's hosted proxy (run.tools) shuts down 2026-10-31, and the Smithery publish already targets https://dchub.cloud/mcp directly. No behaviour change, tool count stays 94.  // 2.12.41 (2026-10-18): npm description and author in package.json (canon copy) ship to the registry; version only, no behaviour change, tool count stays 94.  // 2.12.37 (2026-10-13): owner reversal of D6 for compare_sites ONLY: keyless callers get each site's verdict band and power band (analyze_site's teaser per site) instead of the plain wall; the pick, scores and figures stay Pro; kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0. Tool count stays 94. 2.12.36 (2026-10-12): owner decisions 2+4+5: claude claim line says share the link, parenthetical partial-results sentence, registries pick up the clean text. 2.12.35 (2026-10-09): OpenAI app resubmission: research_task off the read-only directory profiles (it queues a job), openWorldHint true on the 15 tools whose backend calls a third-party host. 2.12.32 (2026-10-09): security and disclosure release: @modelcontextprotocol/sdk ^1.32.1 (GHSA-6qxp-vccf-f47h), langchain-core floor >=1.3.3 in the langchain integration, npm prepare hook removed (opt-in npm run hooks:install), README and SECURITY.md document first-party telemetry and optional bind_email. No behaviour change, tool count stays 94.  // 2.12.30 (2026-10-08): read_inbox + report_finding, the two PARTNER tools (owner decision 2026-10-08 "add the two tools"): the partner inbox (dchub://inbox, 2.12.29+) as a tool and its write side, POST /api/v1/inbox/findings (brain_findings detector external_audit). Registered for every caller, data for a partner key only. Tool count 92 -> 94 and every published count moves with it.  // 2.12.29 (2026-10-06): proxy-addr 2.0.7 -> 2.0.8 (npm audit critical, lockfile only); version only, no behaviour change, tool count stays 92.  // 2.12.28 (2026-10-05): log hygiene (no session id, key prefix, full URL or IP in log lines; error text scrubbed), SECURITY.md sections, depth-tease relay link for context packs; 2.12.27 (2026-10-03): @hono/node-server pinned back to ^1.19.17 (2.x needs Node 20, engines is >=18); dependency change only, no behaviour change, tool count stays 92.  // 2.12.26 (2026-10-04): B1 free-key copy goes to the registries. tools/list and every manifest already say the free key renews daily (previews plus 2 full answers per tool per day; mcp#706/#713) instead of "10 calls to try", but 2.12.24 was already on the registry, so registry-refresh took the duplicate-version 400 and the cascade (PulseMCP, Glama) kept the old copy. Version only, no behaviour change, tool count stays 92.  // 2.12.24 (2026-09-29): server.json description says "capacity to buy or lease" instead of "off-market" (owner copy rule until public listings exist). Manifest content only, tool count stays 92.  // 2.12.23 (2026-09-28): server.json remotes list /mcp/claude and /mcp/grok beside /mcp/registry (generated from lib/registry-remotes.mjs; remotes[0] stays the cascade path). Manifest content only: no behaviour change, tool count stays 92. Bumped because the registry rejects a duplicate version.  // 2.12.21 (2026-09-25): server.json gains an icons array (schema 2025-12-11 Icon: src/mimeType/sizes) pointing at the DC Hub icons https://dchub.cloud/icons/icon-512.png, icon-192.png and dchub-logo.svg, each measured HTTP 200 with an image content type the same day, so the official registry and the directories that mirror it can show a logo instead of none. Manifest content only: no behaviour change, no tool change, tool count stays 92. Bumped because the registry rejects a duplicate version, so new server.json content under 2.12.20 would never publish.  // 2.12.20 (2026-09-24): named customer testimonials reach agents — a WHO USES DC HUB instructions line and the dchub://testimonials resource, read live from https://dchub.cloud/testimonials.json (people only, never AI-assistant quotes). Bumped so registries republish the listing. 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -3799,7 +3811,7 @@ export function _maskGasIntelligenceAnonymous(out) {
   if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
   if (masked.length) {
     o.tier_masked = { tier_required: 'identified', fields: masked,
-      note: 'Gas-to-grid $/MWh and the basis and delivered gas prices need any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
+      note: 'Gas-to-grid $/MWh and the basis and delivered gas prices need any DC Hub key (claim_free_key, one call), the same rule the REST API applies.' };
     _noteGate('any_key');
   }
   return o;
@@ -5502,6 +5514,32 @@ export function _wallIdentityV2Step(result, name, c = getCtx()) {
     return _wallIdWithEmailAsk(out, c._wallIdMarket || '', { asked });
   } catch (_) { return result; }
 }
+// DCHUB_WALL_IDENTITY_V2 + DCHUB_WALL_COPY_V2 (lib/wall-copy-v2.mjs; owner 2026-11-21 "fix above"): the rest of a
+// keyless / trial-key wall reads the v2 copy: no "free", allowance figure or payment wording, human links go to
+// https://dchub.cloud/mcp/connect, a keyless ask names get_api_key, next_ask.free is dropped, and the headline (with
+// its date and Source line) comes before the sign-in line. Runs right after _wallIdentityV2Step. Grok's G3 wall gets
+// the same copy, keeps its /mcp/grok/oauth line (plus the /mcp/connect page) and, on execute_plan, the one
+// get_api_key ask. Never on /mcp/chatgpt or a ChatGPT client, the directory / Claude / core profiles, a clean
+// platform, an execute_plan step, the key / account tools, or a paid / non-trial key. Gating is untouched.
+export function _wallCopyV2Step(result, name, c = getCtx()) {
+  try {
+    if (!_wallIdV2On() || !_wallCopyV2On() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (c.loopback_step || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE
+      || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return result;
+    if (_FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key') return result;
+    const trial = c.is_trial === true || /^dch_trial_/.test(String(c.api_key || ''));
+    if (c.api_key && !trial) return result;
+    let walled = _wallIsWalled(result, name, c);
+    if (!walled && name === 'execute_plan') {
+      try { const id = c._planWallSinkId; walled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { walled = false; }
+    }
+    if (!walled && !_wallCopyLooksPreview(result)) return result;
+    const grok = !!_pcIsGrok(c.platform);
+    const market = c._wallIdMarket || '';
+    return _wallCopyV2(result, { keyless: !c.api_key, grok,
+      planAsk: grok && name === 'execute_plan' ? { line: _wallIdEmailAskLine(market), call: _wallIdEmailAskCall(market) } : null });
+  } catch (_) { return result; }
+}
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
 // "an account does not open ..." and "an email does not open ..." and nothing that does. One line names what does:
 // the 7-day trial on the page the wall's own human link opens, right below the block handing out that link. Whether
@@ -5870,7 +5908,7 @@ export function highIntentInstructions(name, count) {
   const n = Number(count);
   const repeat = Number.isFinite(n) && n >= 2;
   return 'If your human wants the full `' + name + '` answer, ask whether they want to share their email, then call '
-    + '`bind_email` with it: the email-bound key gets the full answer here and more calls a day, free. '
+    + '`bind_email` with it: the email-bound key gets the full answer here and more calls a day. '
     + 'Only bind an email your human gave you; never invent one.'
     + (repeat ? ' Separately, and only if they say yes to a follow-up from a DC Hub analyst on this workflow, pass '
       + 'marketing_opt_in:true; otherwise leave it out.' : '');
@@ -5884,7 +5922,7 @@ export const VARIANT_COPY = {
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so share this link with your user ' +
-    'to open — one click, a free DC Hub key: ' + claim.claim_url + '\n',   // note K item 8: one link, no upgrade link beside it
+    'to open — one click, a DC Hub key: ' + claim.claim_url + '\n',   // note K item 8: one link, no upgrade link beside it
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
   chatgpt: (name, claim, devUrl) => _hiClaimLine(name, claim, ' from ChatGPT', devUrl),
@@ -6537,6 +6575,7 @@ export const QUOTA_EXEMPT_TOOLS = new Set([
   // same class as bind_email — never walled by call volume.
   'request_capacity_intro',
   'accept_capacity_terms',
+  'accept_capacity_intro',   // the operator's side of the same deal (behind DCHUB_OPERATOR_TERMS_V1)
   // 2026-11-16 (owner "Let's do both"): feedback is never walled by call volume; the backend holds
   // its own per-caller daily limit on findings (5 keyless per IP, 30 per key, 120 per partner key).
   'report_finding', 'request_enhancement',
@@ -6812,6 +6851,7 @@ const _TRACK_AUTH_CHANNELS = new Set(['header', 'bearer', 'query', 'inline_argum
 export function _trackAuthChannel(c) {
   if (!c) return null;
   if (c.auth_oauth === true) return 'oauth';
+  if (c.device_match === true) return 'device_match';   // wall identity v2: a keyless call served as its pair's key
   const src = String(c.auth_source || '');
   if (!_TRACK_AUTH_CHANNELS.has(src)) return null;
   if (src === 'none' && c.api_key) return 'session';
@@ -7641,7 +7681,7 @@ function _challengeClientAllowed(clientName, allowRaw) {
 // challenged until the bound, that one included.
 export const CHALLENGE_CONNECT_URL = 'https://dchub.cloud/connect?ref=mcp_challenge';
 const _CHALLENGE_SIGN_IN = 'Authorization required — sign in to DC Hub to continue.';
-const _CHALLENGE_HUMAN = 'DC Hub needs a one-time free sign-in to keep answering. '
+const _CHALLENGE_HUMAN = 'DC Hub needs a one-time sign-in to keep answering. '
   + 'In Claude: Settings → Connectors → DC Hub → Connect. In Claude Code: run /mcp and '
   + 'authenticate DC Hub. Help: ' + CHALLENGE_CONNECT_URL;
 export function _challengeBody() {
@@ -8875,6 +8915,39 @@ export function _listingAcceptPreflight(args) {
   }, { isError: false });
 }
 
+// 2026-11-20 (owner via the MCP Ecosystem relay): accept_capacity_intro, the
+// OPERATOR side of a deal registration. The switch is the BACKEND's
+// DCHUB_OPERATOR_TERMS_V1: while it is off the backend answers 404 not_enabled
+// and this tool relays that, pointing at the accept link in DC Hub's email.
+// Same refusal contract as the two preflights above: a structured NON-error
+// result and no network unless the operator's human confirmed and the lead id
+// has the register's shape.
+const _LEAD_ID_RE = /^LD-[0-9A-HJKMNP-TV-Z]{10}$/;
+
+export function _operatorAcceptPreflight(args) {
+  const a = args || {};
+  const leadId = String(a.lead_id || '').trim().toUpperCase();
+  if (!_LEAD_ID_RE.test(leadId)) {
+    return _listingResult({
+      ok: false, sent: false, error: 'invalid_lead_id', missing: ['lead_id'],
+      message: 'Nothing was sent. lead_id is the registration id from DC Hub\'s lead notice, e.g. LD-0123456789.',
+      next_steps: ['accept_capacity_intro'],
+    }, { isError: false });
+  }
+  if (a.confirm !== true) {
+    return _listingResult({
+      ok: false, sent: false, error: 'operator_confirmation_required', missing: ['confirm'],
+      message: 'Nothing was sent and nothing was accepted. Accepting shares the buyer\'s name, role, email and message with you, and your site details and contact with the buyer. Ask your human, the listing\'s operator, first; only after they say yes, call accept_capacity_intro again with confirm=true.',
+      next_steps: ['accept_capacity_intro'],
+    }, { isError: false });
+  }
+  return null;
+}
+
+export function _operatorAcceptPath(leadId) {
+  return '/api/v1/listings/leads/' + encodeURIComponent(String(leadId).trim().toUpperCase()) + '/accept';
+}
+
 // The POST body, in the contract's shape. Absent optional fields are omitted
 // rather than sent as null.
 export function _listingIntroBody(args, { termsVersion = null, client = null, receiptReference = null } = {}) {
@@ -9078,11 +9151,11 @@ function _listingNextStepsNote(tool, status, body, steps, opts = {}) {
       ? body.quota.intro_requests : {};
     const limit = Number.isInteger(q.limit) && q.limit > 0 ? q.limit : null;
     const reset = _listingDay(body.reset_at) || _listingDay(q.resets_at);
-    return 'The free plan\'s introduction requests for this month are used'
+    return 'This account\'s introduction requests for this month are used'
       + (limit ? ' (' + limit + ' per calendar month, UTC)' : '') + ', so nothing was sent.'
       + (reset ? ' The allowance resets on ' + reset + '.' : ' The allowance resets at the start of next month (UTC).')
       + ' For more introductions now, the link in human_url is the paid option to relay (paid plans have unlimited introductions); then call ' + tool + ' again.'
-      + ' Registering a standing requirement (request_capacity_intro without a slug) stays free.';
+      + ' Registering a standing requirement (request_capacity_intro without a slug) does not use an introduction.';
   }
   if (status === 403 && reason === 'account_review') {
     const unlock = body.access && body.access.unlock && typeof body.access.unlock === 'object' ? body.access.unlock : {};
@@ -9302,12 +9375,12 @@ function _matchQuotaLine(body) {
   const reset = _listingDay(q.resets_at);
   if (limit === null) return '';
   if (remaining === null) {
-    return 'Introduction requests: ' + limit + ' per month on the free plan (remaining could not be read)'
+    return 'Introduction requests: ' + limit + ' per month on this account (remaining could not be read)'
       + (reset ? '; resets ' + reset : '') + '.';
   }
-  return 'Introduction requests: ' + remaining + ' of ' + limit + ' left this month on the free plan'
+  return 'Introduction requests: ' + remaining + ' of ' + limit + ' left this month on this account'
     + (reset ? ' (resets ' + reset + ')' : '') + '.'
-    + (remaining === 0 ? ' More now: unlimited on a paid DC Hub plan (the link in human_url); a standing requirement stays free.' : '');
+    + (remaining === 0 ? ' More now: unlimited on a paid DC Hub plan (the link in human_url); a standing requirement does not use an introduction.' : '');
 }
 
 // When the shortfall's best_kw is counted. With available_by the backend
@@ -9511,12 +9584,12 @@ export function _matchToolResult(r, args) {
       // partial listing is the optional next step, not the answer.
       note = 'Nothing delivers the whole requirement: best reachable ' + _matchReachableWhen(scrubbed.request)
         + ' is ' + (_matchKw(sf.best_kw) || '0 kW') + ' of ' + (_matchKw(sf.target_kw) || 'the target') + '.'
-        + ' request_capacity_intro without a slug registers the requirement (free) so DC Hub can email your human when matching capacity opens.'
+        + ' request_capacity_intro without a slug registers the requirement (it does not use an introduction) so DC Hub can email your human when matching capacity opens.'
         + (slugs.length ? ' To pursue a partial listing anyway, call request_capacity_intro with its slug.' : '');
     } else if (slugs.length) {
       note = 'To proceed on a listing, call request_capacity_intro with that listing\'s slug (it asks for your human\'s name, company and agreement to the introduction terms). A bundle needs one introduction per listing.';
       if (limited && bundleNeeds > q.remaining) {
-        note += ' The smallest bundle needs ' + bundleNeeds + ' introductions and this free account has ' + q.remaining
+        note += ' The smallest bundle needs ' + bundleNeeds + ' introductions and this account has ' + q.remaining
           + ' left this month; more introductions need a paid plan (the link in human_url).';
       }
     } else {
@@ -9997,6 +10070,12 @@ export function _legacyWallCopy(c) {
 export function _wallCopy(neutral, legacy, c) {
   return _legacyWallCopy(c) ? legacy : neutral;
 }
+// 2026-11-21 no-"free" sweep: a line the sweep rewrote that /mcp/chatgpt also serves keeps its origin/main wording
+// on that profile only (frozen byte for byte; its directory scrub keys on that wording). Unlike _wallCopy, the
+// Claude profile gets the new wording.
+export function _chatgptFrozenCopy(neutral, legacy, c) {
+  return _chatgptFrozenSeat(c) ? legacy : neutral;
+}
 // The tools that may still enter the capped free full-answer (trial_taste) path.
 export function _freeTasteTool(name) {
   return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
@@ -10109,6 +10188,17 @@ export function _keylessFirstFullSeat(name, c, env = process.env) {
   };
   return _kffPlanStepSeatFor(name, c, deps) || _kffSeatFor(name, c, deps);
 }
+// Grok daily note 2026-11-20: when this replica served a bucket's first full answer (epoch ms), so a later preview
+// can say "used at HH:MM UTC". In-process only: a bucket spent on another replica reads "earlier today".
+const _kffChargedAt = new Map();
+// "HH:MM UTC" the caller's day's first full answer on `tool` was served here, or null (the earliest of its buckets).
+export function _kffUsedAt(c, tool) {
+  try {
+    const ks = [_keylessFirstFullDayKey(c, tool), _keylessFirstFullSessionDayKey(c, tool)].filter(Boolean).map((b) => b.key);
+    const ts = ks.map((k) => _kffChargedAt.get(k)).filter((t) => Number.isFinite(t));
+    return ts.length ? _utcClock(Math.min(...ts)) : null;
+  } catch (_) { return null; }
+}
 // The (IP, tool, UTC day) bucket of the first full answer: the charge below and the quota stamp read it.
 function _keylessFirstFullDayKey(c, tool) {
   const id = KEYLESS_FIRST_FULL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
@@ -10136,10 +10226,13 @@ export async function _keylessFirstFullCharge(c, tool, cap, opts = {}) {
     const hydrating = Promise.all(buckets.map(({ id, key }) => _hydrateOnce(key, key, id, tool, cap)));
     if (FULL_CAP_PEEK_MS > 0) await hydrating;
     if (buckets.some(({ key }) => (_trialDayCounts.get(key) || 0) >= cap)) return false;
+    const _at = Date.now();
     for (const { id, key } of buckets) {
       _trialDayCounts.set(key, (_trialDayCounts.get(key) || 0) + 1);
+      if (!_kffChargedAt.has(key)) _kffChargedAt.set(key, _at);   // when the day's answer was served (the preview says so)
       if (!(opts && opts.defer)) _fullCapConsume(id, tool, cap);
     }
+    if (_kffChargedAt.size > 50000) _kffChargedAt.clear();   // unbounded-growth guard
     if (opts && opts.defer && c && typeof c === 'object') c._kffPending = { tool, cap, buckets };
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
     return true;
@@ -10156,6 +10249,7 @@ export function _keylessFirstFullSettle(c, used) {
       if (used) { _fullCapConsume(id, p.tool, p.cap); continue; }
       const n = _trialDayCounts.get(key) || 0;
       if (n > 0) _trialDayCounts.set(key, n - 1);
+      if (n <= 1) _kffChargedAt.delete(key);
     }
     return used ? 'committed' : 'refunded';
   } catch (_) { return null; }
@@ -10182,12 +10276,26 @@ export function _kffPreviewReason(c) {
     const seat = _keylessFirstFullSeat('execute_plan', c);
     if (seat === 'charge') {
       const q = _keylessFirstFullQuota(c, 'execute_plan');
-      return q && q.full_answers_remaining_today === 0
-        ? 'today\u2019s full plan answer without a key was used on this network (IP) or in this session; the next is after 00:00 UTC' : '';
+      if (!(q && q.full_answers_remaining_today === 0)) return '';
+      // Grok daily note 2026-11-20: say WHEN, so a run just after 00:00 UTC can tell its own earlier call spent it.
+      const at = _kffUsedAt(c, 'execute_plan');
+      return 'today\u2019s full plan answer without a key was used ' + (at ? 'at ' + at : 'earlier today')
+        + ' on this network (IP) or in this session; the next is after 00:00 UTC';
     }
     if (seat) return '';
+    // Grok daily note 2026-11-20 (4th report): every reason the lane refuses a keyless plan is said (the refusals of
+    // lib/keyless-full-trial.mjs keylessCallerSeat). The report's runner sent a User-Agent naming DC Hub,
+    // which the lane leaves out on purpose (our own callers); the note said only "steps returned preview depth".
+    // The two 5.43 reasons first, unchanged and in their order (/mcp/chatgpt is frozen in review: byte for byte).
     if (_isQaCaller(c) || c.qa_header === true || _selfTestTelemetryTag(c)) return 'a QA-marked caller is not served the first full plan answer';
     if (c.profile && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE) return 'this endpoint does not serve the first full plan answer';
+    // The lane switched off (DCHUB_KEYLESS_FIRST_FULL=0 or cap 0) is today's path byte for byte: no new reason.
+    if (!keylessFirstFullOn() || !(_keylessFirstFullCap() > 0)) return '';
+    let bot = false;
+    try { bot = !!isBotOrInternalCtxForSiteLane(c); } catch (_) { bot = true; }
+    if (bot) return 'this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer';
+    const ip = String(c.client_ip || '').trim();
+    if (!ip || /^(127\.|::1$|::ffff:127\.)/.test(ip)) return 'no caller network (IP) could be read, so the first full plan answer could not be counted';
     return '';
   } catch (_) { return ''; }
 }
@@ -10247,9 +10355,9 @@ export function _withKeylessSiteRun(result, used, cap, keyed) {
     ? `${remaining} left today.`
     : 'That was the last one today: the next analyze_site call returns the preview until UTC midnight.';
   const note = keyed
-    ? `Free daily full site analysis ${used} of ${cap} today (UTC), after this key's monthly runs. ${tail}`
-    : `Free full site analysis without a key: ${used} of ${cap} today (UTC). ${tail}`
-      + ' A free key (claim_free_key) adds monthly full analyses of its own.';
+    ? `Daily full site analysis ${used} of ${cap} today (UTC), after this key's monthly runs. ${tail}`
+    : `Full site analysis without a key: ${used} of ${cap} today (UTC). ${tail}`
+      + ' A DC Hub key (claim_free_key) adds monthly full analyses of its own.';
   const block = { used, limit: cap, remaining, resets: 'UTC midnight', basis: 'per caller network (IP), UTC day' };
   const out = { ...result };
   // The one figure still withheld in this run (the backend's DCPI rule), said plainly so the run
@@ -10258,7 +10366,7 @@ export function _withKeylessSiteRun(result, used, cap, keyed) {
   const ttp = sc0 && typeof sc0 === 'object' ? sc0.time_to_power : null;
   const ttpLine = ttp && typeof ttp === 'object' && ttp._time_to_power_months_withheld === true
     ? ' Time to power is shown as a band' + (ttp.time_to_power_band ? ` (${ttp.time_to_power_band})` : '')
-      + '; the estimate in months is not part of the free run.'
+      + '; the estimate in months is not part of the daily run.'
     : '';
   if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
     out.content = [...out.content, { type: 'text', text: note + ttpLine }];
@@ -10340,7 +10448,7 @@ export function _emailFullPreviewSentence(name, c) {
   const n = EMAIL_DECISION_DAILY_FULL_CAP;
   if (_emailFullSeat(c)) return 'This key\u2019s ' + n + ' full `' + name + '` answers for today are used; they reset at 00:00 UTC.';
   if (c && c.api_key) return 'A key with a bound email gets ' + n + ' full `' + name + '` answers a day: call `bind_email` with your human\u2019s email (no card).';
-  return 'A free key with a bound email gets ' + n + ' full `' + name + '` answers a day.';
+  return 'A key with a bound email gets ' + n + ' full `' + name + '` answers a day.';
 }
 
 // r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
@@ -10434,7 +10542,7 @@ const PRO_ONLY_TOOLS = new Set([
 export const HARD_WALL_HEADLINES = Object.freeze([
   'needs full access',                   // keyed, Pro
   'is a paid feature',                   // anon, Pro
-  'needs a free key, not a payment',     // anon, free-with-email
+  'needs a key, not a payment',     // anon, free-with-email
   'needs a bound email, not a payment',  // keyed, free-with-email
 ]);
 export const isHardWallText = (t) =>
@@ -10513,7 +10621,7 @@ function _planTierPreview(seq) {
     // the person who can authorize it.
     agent_quotable: free > 0
       ? 'I can answer ' + free + ' of ' + steps.length + ' step' + (steps.length === 1 ? '' : 's')
-        + " of this on DC Hub's free tier. The remaining " + gated.length
+        + " of this at your current DC Hub access. The remaining " + gated.length
         // Note V keyed follow-up (owner 2026-11-16): "need the paid layer" became the access-level wording.
         + ' (' + names.join(', ') + ') return' + (gated.length === 1 ? 's a preview' : ' previews') + ' at this access level.'
       : 'All ' + steps.length + ' step' + (steps.length === 1 ? '' : 's') + ' of this plan ('
@@ -10773,12 +10881,12 @@ function _freeDecisionUpgrade(name, c) {
       + 'answer does not return, with counts. '
       + _wallCopy(_WALL_NEUTRAL_LINE + ' ', 'Full `' + name + '` opens with a paid DC Hub plan. ', c)
       + 'Relay the link in human_url to your human. '
-      + (_email || 'A free key, a trial key or a bound email does not deepen this tool.'),
+      + (_email || 'A DC Hub key, a trial key or a bound email does not deepen this tool.'),
     next_tool: _emailNext ? 'bind_email' : 'unlock_more_data',
     next_tool_hint: _emailNext
-      ? 'Ask your human for their email and call bind_email with it (free); only use an address they gave you. ' + _email
+      ? 'Ask your human for their email and call bind_email with it; only use an address they gave you. ' + _email
       : 'Relay the link in human_url to your human; that page shows the plans. '
-        + (_email || 'A free key or a bound email does not change this tool\'s depth.'),
+        + (_email || 'A DC Hub key or a bound email does not change this tool\'s depth.'),
   };
 }
 // The depth-tease-shaped result (same envelope buildDepthTease returns) for the
@@ -10811,10 +10919,10 @@ function _freeDecisionHeader(name) {
   // claim handoff line carries the step, so the header names no tool and nothing is said twice).
   let _email = '';
   try { _email = _emailFullPreviewSentence(name, getCtx() || {}); } catch (_) { _email = ''; }
-  return '🔒 **`' + name + '` is a preview on the free tier** — the headline is in `taste`; `withheld` names '
+  return '🔒 **`' + name + '` is a preview at this access level** — the headline is in `taste`; `withheld` names '
     + 'every section this tier does not return, with counts. Full `' + name + '` opens with a paid DC Hub '
     + 'plan: relay the link in human_url to your human. '
-    + (_email || 'A free key, a trial key or a bound email does not deepen this tool.') + '\n\n---\n\n';
+    + (_email || 'A DC Hub key, a trial key or a bound email does not deepen this tool.') + '\n\n---\n\n';
 }
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -10959,11 +11067,11 @@ export function _tierRequiredFor(name) {
 }
 // One plain sentence per class. No prices, no plan counts.
 export const FREE_ANSWER_BY_TIER = Object.freeze({
-  pro: 'Keyless: no data. A free key: a preview where the tool has one (verdicts, bands, counts). Scores, figures and exports need a full-access key.',
-  email: 'Keyless: a trimmed preview. A free key with a bound email (bind_email) opens full answers within the daily allowance.',
-  developer_for_full: 'Keyless and free keys: a trimmed preview (top rows). Full depth needs a full-access key.',
-  free_key: 'Needs a free key (claim_free_key).',
-  anonymous: 'Works keyless. Some keyless results are trimmed; a free key (claim_free_key) raises the allowance.',
+  pro: 'Keyless: no data. A DC Hub key: a preview where the tool has one (verdicts, bands, counts). Scores, figures and exports need a full-access key.',
+  email: 'Keyless: a trimmed preview. A key with a bound email (bind_email) opens full answers within the daily allowance.',
+  developer_for_full: 'No key, or a DC Hub key without full access: a trimmed preview (top rows). Full depth needs a full-access key.',
+  free_key: 'Needs a DC Hub key (claim_free_key).',
+  anonymous: 'Works keyless. Some keyless results are trimmed; a DC Hub key (claim_free_key) raises the allowance.',
 });
 
 // The class the live paywall and the URL shape below key on. Kept separate
@@ -11172,12 +11280,12 @@ export function _sitingPreviewUpgrade(name, seat, fr) {
   const counted = !!(fr && Number.isInteger(fr.limit) && fr.limit > 0);
   const message = spent
     ? (counted
-      ? 'Preview: this key\'s free full ' + name + ' answers for this month are used'
+      ? 'Preview: this key\'s full ' + name + ' answers for this month are used'
         + (fr.resets_at ? '; the count resets ' + String(fr.resets_at).slice(0, 10) : '') + '.'
       : 'Preview: the full ' + name + ' answer is not open on this key right now.')
       + ' For the full answer, relay the link in human_url to your human.'
     :'Preview: a key with no email gets the same ' + name + ' preview as no key. Bind your human\'s email '
-      + '(bind_email {api_key, email}, free) for ' + what + '; past that, relay the link in human_url to your human.';
+      + '(bind_email {api_key, email}) for ' + what + '; past that, relay the link in human_url to your human.';
   return {
     tier: spent ? 'identified' : 'free',
     message,
@@ -11202,9 +11310,9 @@ export function _lpFreeRunNote(fr, dailyCap = 0) {
   const tail = fr.remaining > 0
     ? `${fr.remaining} left; the count resets ${_lpMonthDay(fr.resets_at)}.`
     : (Number.isInteger(dailyCap) && dailyCap > 0
-      ? 'That was the last monthly one; the next analyze_site calls use today\'s free daily runs, then previews until UTC midnight.'
+      ? 'That was the last monthly one; the next analyze_site calls use today\'s daily runs, then previews until UTC midnight.'
       : `That was the last one this month: the next ${'analyze_site'} call returns the preview until ${_lpMonthDay(fr.resets_at)}.`);
-  return `Free full site analysis ${fr.used} of ${fr.limit} this month (UTC). ${tail}`;
+  return `Full site analysis ${fr.used} of ${fr.limit} this month (UTC). ${tail}`;
 }
 // The daily lane's cap for a keyed caller below Pro (the lane serves keys once their monthly runs are
 // spent: _keylessSiteFull(..., keyed=true)), 0 when the lane would not seat this caller.
@@ -11230,7 +11338,7 @@ export function _withLpFreeRun(result, fr, dailyCap = 0) {
 // block and one line saying why. The preview's own link stays the only link.
 export function _withLpFreeRunsSpent(result, fr, tool) {
   if (!result || typeof result !== 'object') return result;
-  const msg = `You've used your ${fr.limit} free full site analyses this month (UTC); this is the preview. `
+  const msg = `You've used your ${fr.limit} full site analyses this month (UTC); this is the preview. `
     + _wallCopy(_WALL_NEUTRAL_LINE + ` The count resets ${_lpMonthDay(fr.resets_at)}.`,
       `Full analyses need a paid DC Hub plan; the count resets ${_lpMonthDay(fr.resets_at)}.`);
   const block = {
@@ -11436,13 +11544,13 @@ export function _lpWallResult(name, headline = null) {
       // three verdict bands, so it is a key's (the preview keeps it).
       interpretation_label: undefined,
       limiting_factor: { factor: headline.weakest_factor,
-                         note: _wallCopy('The weakest factor is named free; factor bands come with a free key. ' + _WALL_NEUTRAL_LINE,
+                         note: _wallCopy('The weakest factor is named in this preview; factor bands come with a DC Hub key. ' + _WALL_NEUTRAL_LINE,
                            'The weakest factor is named free; factor bands come with a free key, scores with a paid DC Hub plan.') },
       ...(headline.site_counts ? { site_counts: headline.site_counts } : {}),
     } : {}),
     message: _b2
       ? '`analyze_site` without a key returns the weakest factor and counts. '
-        + 'A free key adds factor bands and substation distance bands: call `claim_free_key`. '
+        + 'A DC Hub key adds factor bands and substation distance bands: call `claim_free_key`. '
         + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
       : _wallCopy(`\`${name}\` is Land & Power. ` + _WALL_NEUTRAL_LINE + ' ',
         `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. `) + 'Without a key it '
@@ -11913,8 +12021,17 @@ export function _descFollowsSwitches(name, description) {
   }
   if (name !== 'analyze_site' || typeof description !== 'string') return description;
   const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
-  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(access);
-  return _gatedPreviewOnImpl() ? d.split(access).join(access + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
+  // 2026-11-20 (owner A1, "publish what is enforced"): the daily site lane serves the full report to
+  // the first DCHUB_KEYLESS_SITE_FULL_CAP calls per network per UTC day with no key. The description
+  // states it with the keyless wall's own sentence (lib/tier-canon.mjs), at the cap as it runs; ''
+  // when the lane is off or the cap is 0, so it never promises runs the gate does not serve.
+  const daily = _analyzeSiteDescDailySentence();
+  const served = daily ? access + ' ' + daily : access;
+  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(served);
+  return _gatedPreviewOnImpl() ? d.split(served).join(served + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
+}
+export function _analyzeSiteDescDailySentence(env = process.env) {
+  try { return _wfnSiteFullOn(env) ? _analyzeSiteKeylessDailySentence(_keylessSiteFullCap(env)) : ''; } catch (_) { return ''; }
 }
 // The counts the anonymous headline may carry: integers the backend's own
 // below-Pro preview (_site_score_preview) already publishes. Nothing else.
@@ -11996,8 +12113,8 @@ export function _siteKeyLinkOn(env = process.env) {
 // (mcp#908) was rewritten into "Start a 7-day trial" copy beside a link that opens a free-key page
 // (measured live 2026-10-11, QA headers, no session).
 export const _isSiteUnlockKind = (k) => k === 'email' || k === 'email_key';
-export const SITE_KEY_LINK_MESSAGE = 'The full site report is free by email: show your human the link in human_url. '
-  + 'They enter an email, the page shows a free key and emails it to them; they add it to this connector as '
+export const SITE_KEY_LINK_MESSAGE = 'The full site report needs only an email: show your human the link in human_url. '
+  + 'They enter an email, the page shows a DC Hub key and emails it to them; they add it to this connector as '
   + 'X-API-Key, and the next `analyze_site` call returns the full report.';
 const _SITE_VERDICTS = new Set(['BUILD', 'CAUTION', 'AVOID']);
 const _teaserNum = (v) => (typeof v === 'number' ? v
@@ -12069,12 +12186,12 @@ export function _compareSitesTeaser(parsed) {
   return { sites, locked: [...COMPARE_TEASER_LOCKED], note: COMPARE_TEASER_NOTE };
 }
 export const COMPARE_KEYLESS_MESSAGE = 'Without a key, `compare_sites` returns each site\u2019s verdict band and power band; '
-  + 'scores, the pick and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + 'scores, the pick and the other factor bands are locked. A DC Hub key adds names and counts: call `claim_free_key`. '
   + WALL_NEUTRAL_LINE;
 // What /mcp/chatgpt and /mcp/claude keep serving (_legacyWallCopy).
 export const COMPARE_KEYLESS_MESSAGE_LEGACY = COMPARE_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'Scores and figures need a paid DC Hub plan.';
-export const COMPARE_FREE_KEY_LINE = 'Free preview: call `claim_free_key` (one call, no email) and send the key it returns as '
+export const COMPARE_FREE_KEY_LINE = 'Preview with a key: call `claim_free_key` (one call, no email) and send the key it returns as '
   + 'X-API-Key; `analyze_site` returns a full site report a few times each month.';
 export function _compareTeaserLine(t) {
   if (!t) return '';
@@ -12114,7 +12231,7 @@ export function _compositeTeaser(parsed) {
   return { verdict, power_grid: power, locked: [...COMPOSITE_TEASER_LOCKED], note: COMPOSITE_TEASER_NOTE };
 }
 export const COMPOSITE_KEYLESS_MESSAGE = 'Without a key, `get_composite_site_score` returns the verdict band and the power band; '
-  + 'the score and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + 'the score and the other factor bands are locked. A DC Hub key adds names and counts: call `claim_free_key`. '
   + WALL_NEUTRAL_LINE;
 export const COMPOSITE_KEYLESS_MESSAGE_LEGACY = COMPOSITE_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'Scores and figures need a paid DC Hub plan.';
@@ -12149,7 +12266,7 @@ export function _reportTeaser(parsed) {
     locked: [...REPORT_TEASER_LOCKED], note: REPORT_TEASER_NOTE } : null;
 }
 export const REPORT_KEYLESS_MESSAGE = 'Without a key, `generate_site_analysis` returns the verdict band and the power band; '
-  + 'the shareable report, scores and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + 'the shareable report, scores and the other factor bands are locked. A DC Hub key adds names and counts: call `claim_free_key`. '
   + WALL_NEUTRAL_LINE;
 export const REPORT_KEYLESS_MESSAGE_LEGACY = REPORT_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'The report and figures need a paid DC Hub plan.';
@@ -12194,7 +12311,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     ? 'Without a key, `analyze_site` returns the verdict band and the power band; scores and the other factor bands are locked. '
     : 'Without a key, `analyze_site` returns no scores or figures. ')
     + (keyLink ? SITE_KEY_LINK_MESSAGE
-      : 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
+      : 'The full site report needs only an email: show your human the link in human_url. Once they enter an email, '
         + 'this session’s next `analyze_site` call returns the full report.');
   // request_id (conversion panel 2026-10-11): the id the signed relay token carries in its first
   // field. With no session that is the per-request id (a-… / uuid) the claim page keys the stored
@@ -12214,7 +12331,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     upgrade_url: link, human_url: link,
     user_message: line, show_to_user: true, copy_version: WALL_COPY_VERSION,
     for_your_human: {
-      message: 'Your AI assistant ran a DC Hub site analysis. Open this link to unlock the full report free by email:',
+      message: 'Your AI assistant ran a DC Hub site analysis. Open this link to unlock the full report with your email:',
       url: link, text: line, render: 'verbatim_link_required',
       markdown: '[Unlock the full site report by email](' + link + ')',
       _agent_instruction: 'Share this link with your user: the `markdown` field above is a ready '
@@ -12234,7 +12351,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
 // that does not need a session: `claim_free_key` (no email, one call). Any key below the paid
 // plan gets the monthly free full runs, and the key is the caller's identity on the next call
 // whatever the transport.
-export const SITE_NOSID_KEY_LINE = 'Free full site report: call `claim_free_key` (one call, no email) and send the key it '
+export const SITE_NOSID_KEY_LINE = 'Full site report: call `claim_free_key` (one call, no email) and send the key it '
   + 'returns as X-API-Key; your next `analyze_site` call returns the full report, a few times each month.';
 // The key-link wall keeps the no-email route as its last line, so a caller that would rather not give an
 // email still has a way in.
@@ -12257,7 +12374,7 @@ export function _withSiteFreeKeyRoute(result, teaser = null) {
 }
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
-    ? 'Free headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
+    ? 'Headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
       + '. ' + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
     : '';
 }
@@ -12497,7 +12614,7 @@ export function _paidPlanProPreview(name, result, planWord, sessionId) {
   const lead = (mu && mu.rung === 'pro') ? mu.what + ' ' : '';
   // v14 (owner 2026-10-10): neither the caller's plan nor the one that opens the tool is named.
   const line = '\n\n🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE, '`' + name + '` needs a different paid DC Hub plan.') + '** ' + lead + (_legacyWallCopy() ? 'On your current plan' : 'At your current access')
-    + ' this is the same preview a free key gets'
+    + ' this is the same preview a DC Hub key gets'
     // Note V keyed follow-up (owner 2026-11-16): on /mcp the line names no plan; the directory profiles keep theirs.
     + (_legacyWallCopy()
       ? (proUrl ? '; the full answer comes with the DC Hub plan that includes every tool → ' + proUrl
@@ -12581,7 +12698,7 @@ export function _bindNoticeLine(c, sc) {
     + IDENTIFIED_DAILY_FULL_CAP + '/day + make this key recoverable.';
   const u = c && c.api_key && c.key_usage;
   const n = u ? Number(u.calls) : NaN;
-  let lead = '🔑 Free: ';
+  let lead = '🔑 Optional: ';
   if (Number.isFinite(n) && n >= 2) {
     let since = '';
     try {
@@ -12591,10 +12708,10 @@ export function _bindNoticeLine(c, sc) {
       }
     } catch (_) { since = ''; }
     lead = '🔑 This DC Hub key has made ' + n.toLocaleString('en-US') + ' calls' + since
-      + ' with no email on it. Free: ';
+      + ' with no email on it. Optional: ';
   }
   const pro = (sc && typeof sc.human_url === 'string' && sc.human_url)
-    ? ' For the answers a free key does not open, relay the link in human_url to your human.' : '';
+    ? ' For the answers a DC Hub key does not open, relay the link in human_url to your human.' : '';
   return lead + base + pro;
 }
 export function withBindHint(result, name, c) {
@@ -12616,8 +12733,8 @@ export function withBindHint(result, name, c) {
       // what captures the email that the whole conversion funnel depends on.
       why: (_freePreviewOnlyTool(name) && !_emailFullDecisionTool(name))
         // Preview on every non-paid seat and no email allowance (get_market_intel): never promise full answers.
-        ? `Bind your human's email (free, no card, one call: bind_email {api_key, email}) for market-change alerts, key recovery and a higher daily call budget on the other tools. It does not open full ${name} answers: that is a preview on every free seat` + _wallCopy('. ' + _WALL_NEUTRAL_LINE, ', and full needs a paid DC Hub plan.')
-        : `Bind your human's email (free, no card, one call: bind_email {api_key, email}) to lift your daily full-data limit to ${IDENTIFIED_DAILY_FULL_CAP} full ${name} answers/day (vs ${TRIAL_DAILY_FULL_CAP} unbound) — plus market-change alerts and key recovery if this session's key is lost.`,
+        ? `Bind your human's email (${_chatgptFrozenCopy('', 'free, ', c)}no card, one call: bind_email {api_key, email}) for market-change alerts, key recovery and a higher daily call budget on the other tools. It does not open full ${name} answers: that is a preview on every ${_chatgptFrozenCopy('seat without full access', 'free seat', c)}` + _wallCopy('. ' + _WALL_NEUTRAL_LINE, ', and full needs a paid DC Hub plan.')
+        : `Bind your human's email (${_chatgptFrozenCopy('', 'free, ', c)}no card, one call: bind_email {api_key, email}) to lift your daily full-data limit to ${IDENTIFIED_DAILY_FULL_CAP} full ${name} answers/day (vs ${TRIAL_DAILY_FULL_CAP} unbound) — plus market-change alerts and key recovery if this session's key is lost.`,
     };
     // r-bind-visible (2026-07-01): the structured-only hint is invisible on most
     // MCP hosts (they render content[], not structuredContent) — so 0 binds ever
@@ -12824,7 +12941,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
       ? { next_tool:      'unlock_more_data',
           next_tool_hint: 'Relay the link in human_url to your human for one-click checkout links (credit pack / paid plan). The moment your human pays, your next call returns full data — no reconnect.' }
       : { next_tool:      'claim_free_key',
-          next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For the full answer now, relay the link in human_url to your human.' }),
+          next_tool_hint: 'Call claim_free_key (no email) for a DC Hub key and SAVE the key to your MCP config so it persists across sessions. For the full answer now, relay the link in human_url to your human.' }),
     ...promoSC(),
   };
   // r-move3-keybound (2026-06-24): for a KEYED caller (free/trial key), surface a
@@ -13581,6 +13698,69 @@ function _keylessReturnStep(result, name, c, env) {
 export function _setKeylessReturnLookupForTest(lookup) {
   _keylessReturning = _createReturningCache({ lookup }); _KEYLESS_ONCE.clear();
 }
+// Wall identity v2, device match (owner relay 2026-11-20, item 3): a key minted at a wall is recorded against the
+// caller's (client name, IP /24 or /48) pair; a later KEYLESS call from that exact pair within 30 days is served as
+// that key with one welcome line, and the key never reaches the answer. All policy in lib/wall-device-match.mjs.
+// Inert unless DCHUB_WALL_IDENTITY_V2 AND DCHUB_WALL_IDENTITY_V2_DEVICE_MATCH are on. Three hooks: the top and the
+// end of _sourceLineCb, and claim_free_key's fresh mint. Never awaited on the request path.
+async function _wdPost(path, body) {
+  const r = await fetch(new URL(path, API_BASE).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(2500),
+  });
+  return r.ok ? r.json() : null;
+}
+const _wdLookup = async (p) => {
+  const j = await _wdPost('/api/v1/mcp/wall-device/lookup', { client_name: p.client_name, ip_prefix: p.ip_prefix });
+  return j && j.match === true && typeof j.api_key === 'string' ? j.api_key : null;
+};
+let _wdCache = _WD.createMatchCache({ lookup: _wdLookup });
+const _wdWallPairs = _WD.createWallPairMemo();
+const _wdLineSession = _WD.createOnce();                         // the welcome line: once per transport session
+const _wdLinePair = _WD.createOnce({ ttlMs: 3600_000 });         // ... or once per pair per hour (no session)
+const _wdReturnDay = _WD.createOnce();                           // the return event: once per pair per UTC day
+const _wdIsBot = (c) => isBotOrInternalCtx(c) || _isQaCaller(c);
+// ChatGPT surfaces get none of this (the /mcp/chatgpt directory profile and any clean platform), nor a loopback step.
+const _wdExcluded = (c) => !!c.loopback_step || c.profile === DIRECTORY_PROFILE || _isCleanPlatform()
+  || /chatgpt|openai/i.test(String(c.platform || ''));
+export function _deviceMatchEnter(c, name) {
+  const m = _WD.matchFor(c, name, { cache: _wdCache, isBot: _wdIsBot, excluded: _wdExcluded });
+  if (!m) return false;
+  c.api_key = m.key; c.tier = 'free'; c.is_trial = false; c.device_match = true; c._wdPair = m.pair;
+  if (_wdReturnDay.take(m.pair.k + ':' + new Date().toISOString().slice(0, 10))) {
+    _wdPost('/api/v1/mcp/wall-device/return', { api_key: m.key, client_name: m.pair.client_name,
+      ip_prefix: m.pair.ip_prefix, tool: String(name || '').slice(0, 80), method: _WD.METHOD }).catch(() => {});
+  }
+  return true;
+}
+export function _deviceMatchExit(result, name, c) {
+  try {
+    if (c && c.device_match === true) {
+      const sid = usableSessionId(c.session_id);
+      const line = sid && !_GROK_RELAY_PLATFORMS.has(c.platform) ? _wdLineSession.take(sid) : _wdLinePair.take(c._wdPair && c._wdPair.k);
+      return _WD.finishMatchedAnswer(result, c.api_key, { showLine: line });
+    }
+    // A keyless wall: remember the pair for a hosted client whose claim arrives in another transport session.
+    if (c && !c.api_key && _WD.recordOn() && result && result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent) && _isRelayWall(result.structuredContent, c)) {
+      _wdWallPairs.note(_WD.pairOf(c, { isBot: _wdIsBot }));
+    }
+  } catch (_) { /* never fail an answer over this */ }
+  return result;
+}
+export function _deviceMatchRecord(c, key) {
+  const pair = _WD.recordFor(c, key, { walledSession: !!(c && _wallViaMemo.get(c.session_id)), wallPairs: _wdWallPairs,
+    isBot: _wdIsBot, excluded: _wdExcluded });
+  if (!pair) return false;
+  _wdCache.forget(pair);
+  _wdPost('/api/v1/mcp/wall-device/record', { api_key: key, client_name: pair.client_name, ip_prefix: pair.ip_prefix })
+    .catch(() => {});
+  return true;
+}
+export function _setDeviceMatchLookupForTest(lookup) {
+  _wdCache = _WD.createMatchCache({ lookup: lookup || _wdLookup });
+  _wdWallPairs.clear(); _wdLineSession.clear(); _wdLinePair.clear(); _wdReturnDay.clear();
+}
 export async function _returnNudgeStep(result, name, env = process.env) {
   try {
     const kc = getCtx() || {};
@@ -14311,20 +14491,20 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   const _exhausted = _capKnown && remainingFull <= 0;
   const _morePlural = _capKnown && remainingFull === 1 ? '' : 's';
   const _againLine = _capKnown
-    ? ' — you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial'
+    ? ' — you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the trial'
     : ' now for the full result';
   const leadBound =
-    '✅ **Free trial unlocked on THIS session — call `' + name + '` again' + _againLine + '. No header, no reconnect needed.**\n' +
+    '✅ **Trial unlocked on THIS session — call `' + name + '` again' + _againLine + '. No header, no reconnect needed.**\n' +
     '   Keep it across future sessions (one paste — Claude Code): `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` (' + calls + ' calls/day, ' + days + 'd left).\n';
   const leadManual =
-    '✅ **Free trial key — works instantly, no signup. Add this header, reconnect, and call again:**\n' +
+    '✅ **Trial key — works instantly, no signup. Add this header, reconnect, and call again:**\n' +
     '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
     '   **Keep it (one paste — Claude Code):** `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` — or save that header in your MCP client config. Do it once and previews stop.\n';
   // r-honest-cap: today's free full answers are USED — no retry promise at all.
   // Pack leads (house rule), then the FREE bind_email ladder. The key/persist
   // fields stay in structuredContent for machine consumers.
   const leadExhausted =
-    '🔒 **Today’s free full `' + name + '` answers are used up.**\n' +
+    '🔒 **Today’s included full `' + name + '` answers are used up.**\n' +
     '\n\u{1F464} **Tell your human:** for the complete `' + name + '` now — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n' +
     '\nFree: `bind_email` (your human’s email, no card) lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.\n';
   // r-trial-refused: the backend already refuses this key (see _mintRefused), so it was
@@ -14334,17 +14514,17 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // and keep the one true free action (bind_email) pointed at what it really
   // buys — a higher daily CALL cap — instead of at a depth it cannot change.
   const leadStillPreview =
-    '\u{1F512} **`' + name + '` is free at PREVIEW depth — the rows above are the free tier, not a one-off taste.**\n' +
+    '\u{1F512} **`' + name + '` is served at PREVIEW depth — the rows above are this access level, not a one-off taste.**\n' +
     (_emailFullDecisionTool(name)
       // Item 3: on the grid/queue reads a bound email DOES open full answers (capped per day). The one
       // step to get there is the claim handoff line (_claimHandoffStep) on this same response, so this
       // line states the fact and names no second tool (one ask, not two).
       ? '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left). A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + name + '` answers a day; without one, calling `' + name + '` again returns the same preview.\n'
-      : '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget for free — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n') +
+      : '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n') +
     '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + (_freePreviewOnlyTool(name) ? _freeDecisionRungText(name, mint.tier || 'trial', _sid) : _rungsText(name, mint.tier || 'trial')) + ' (' + _afterPayClause('', name) + ').\n';
   const leadRefused =
-    '🔒 **This free trial key is not active yet — it needs your human’s email first.**\n' +
-    'Free: `bind_email` (your human’s email, no card) activates it and lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day; then call `' + name + '` again.\n' +
+    '🔒 **This trial key is not active yet — it needs your human’s email first.**\n' +
+    '`bind_email` (your human’s email, no card) activates it and lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day; then call `' + name + '` again.\n' +
     '\n\u{1F464} **Tell your human:** or, for the complete `' + name + '` now — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n';
   // r-handoff (2026-06-28): ONE free taste + ONE human CTA. The prior block
   // stacked ~8 CTAs and led with the free key, so agents self-served and never
@@ -14364,10 +14544,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // structuredContent (sc) is unchanged so machine consumers keep the unlock fields.
   const text = stillPro
     ? ('\n\n---\n' +
-       '🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE + ' The preview above is the free taste.',
+       '🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE + ' The preview above is the sample.',
          '`' + name + '` needs a paid DC Hub plan — the preview above is the free taste.') + '**\n' +
        '\n\u{1F464} **Tell your human:** to run the full `' + name + '` — ' + _rungsText(name, mint.tier || 'trial') + '\n' +
-       '\n_(Separately: the free identified tier for 18+ other DC Hub tools is one call away — `claim_free_key`.)_\n')
+       '\n_(Separately: a DC Hub key for 18+ other DC Hub tools is one call away — `claim_free_key`.)_\n')
     : _refused
     ? ('\n\n---\n' + leadRefused)
     : _stillPreview
@@ -14382,8 +14562,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     : ('\n\n---\n' +
        (autoBound ? leadBound : leadManual) +
        (autoBound
-          ? ('→ `' + name + '` is FULL on this session now (free for ' + days + ' days' + (_capKnown ? ', ' + remainingFull + ' full answer' + _morePlural + ' left today' : '') + ') — just call it again.\n')
-          : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days' + (_capKnown ? ', first ' + remainingFull + ' answer' + _morePlural + '/day full' : '') + ').\n')) +
+          ? ('→ `' + name + '` is FULL on this session now (trial: ' + days + ' days' + (_capKnown ? ', ' + remainingFull + ' full answer' + _morePlural + ' left today' : '') + ') — just call it again.\n')
+          : ('→ Retry `' + name + '` with that header for the FULL, ungated result (trial: ' + days + ' days' + (_capKnown ? ', first ' + remainingFull + ' answer' + _morePlural + '/day full' : '') + ').\n')) +
        '\n\u{1F464} **Tell your human:** to keep `' + name + '` past the ' + days + '-day trial — ' + _rungsText(name, mint.tier || 'trial') + '\n' +
        _FRONT_DOOR_LINE);
   // ★2026-07-28: the auto-trial envelope now carries the SAME measured human-relay
@@ -14404,9 +14584,9 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     digest_optin:              { next_tool: 'subscribe_digest', how: 'With the human’s consent + their email, call subscribe_digest with {email} for a weekly market-change digest (double opt-in, unsubscribe anytime) — fills the retention/win-back audience.' },
     first_call_nudge:          { ..._FRONT_DOOR, ...(_dcpiTeaserSC || {}) },
     retry_instructions: _refused
-      ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
+      ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (no card), then call ' + name + ' again.')
       : (_stillPreview && _emailFullDecisionTool(name))
-      ? (name + ' is free at PREVIEW depth on this key. bind_email with your human\u2019s email opens ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full ' + name + ' answers a day on it' + _wallCopy('. ' + _WALL_NEUTRAL_LINE + ' Relay the link in human_url to your human.',
+      ? (name + ' is served at PREVIEW depth on this key. bind_email with your human\u2019s email opens ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full ' + name + ' answers a day on it' + _wallCopy('. ' + _WALL_NEUTRAL_LINE + ' Relay the link in human_url to your human.',
         '; the full answer without a cap needs a paid DC Hub plan (relay the link in human_url to your human).'))
       : _stillPreview
       ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. The complete answer is paid per call (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
@@ -14423,7 +14603,7 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       // An agent that OBEYED call 1 landed in call 2 and was told the opposite.
       // Measured live 2026-07-27. Never branch a caller INSTRUCTION on per-replica
       // state; state the key once and make both paths work.
-      : ('Call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial)' : ' for the full result')
+      : ('Call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the trial)' : ' for the full result')
          + '. If it is still gated, your client did not carry the key — add header X-API-Key: ' + mint.api_key
          + ' (session binding is per-connection, so a reconnect can drop it). Save persist_command to keep it across future sessions.'),
     // ★★★ NOT WHILE THE KEY IS REFUSED. `_refused` means this trial key is
@@ -14669,7 +14849,7 @@ async function _keyedFreeFacilityResult(result, name, c) {
   if (masked && typeof masked === 'object' && !Array.isArray(masked)) {
     masked._upgrade = {
       tier: 'free',
-      message: _wallCopy('Free tier: ' + _WALL_NEUTRAL_LINE + ' ', 'Free tier: facility capacity (MW), exact coordinates + deep specs need a paid DC Hub plan. ', c)
+      message: _wallCopy('Preview: ' + _WALL_NEUTRAL_LINE + ' ', 'Free tier: facility capacity (MW), exact coordinates + deep specs need a paid DC Hub plan. ', c)
         + 'You have full discovery — search the global facility map by name/geo. Relay the link in human_url to your human to upgrade.',
       next_tool: 'unlock_more_data',
     };
@@ -14941,7 +15121,7 @@ function _withExactLocationNote(result, reveal) {
     if (rec && reveal.address && !rec.address) rec.address = reveal.address;
     if (note.via === 'allowance') {
       note.message = 'Exact location revealed from your monthly allowance of exact '
-        + 'locations. Revisiting this facility this month is free.';
+        + 'locations. Revisiting this facility this month does not use another one.';
     }
   } else if (reveal.status === 'limit_reached') {
     note.message = "This month's exact locations are used up, so coordinates are "
@@ -15217,6 +15397,11 @@ export function _missedUpgradeFor(payload, extraGates, opts) {
     // "They come with the DC Hub plan that includes every tool"), for every caller on /mcp.
     if (mu && (mu.rung === 'developer' || mu.rung === 'pack' || mu.rung === 'pro') && !_legacyWallCopy(c)) {
       const how = _WALL_NEUTRAL_LINE.replace(/\.$/, '');
+      return { ...mu, how, text: mu.what + ' ' + how + '.' };
+    }
+    // /mcp/chatgpt is frozen byte for byte: the free_key rung keeps its origin/main wording there.
+    if (mu && mu.rung === 'free_key' && _chatgptFrozenSeat(c) && typeof mu.how === 'string') {
+      const how = mu.how.replace(/^A DC Hub key /, 'A free DC Hub key ');
       return { ...mu, how, text: mu.what + ' ' + how + '.' };
     }
     return mu;
@@ -15970,7 +16155,7 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   // its steps ran at full depth (KEYLESS_FIRST_FULL_STEP_TIER), so this walk at the caller's own tier
   // re-masked every DCPI score, time to power and queue wait they returned (measured live 2026-11-16 on
   // 2.12.58, ERCOT). The plan is the one full answer: no walk. Later plans today are previews again.
-  if (name === 'execute_plan' && c && c._kffPlan === true && !c.loopback_step) return result;
+  if (name === 'execute_plan' && c && c._kffPlan === true && c._kffPlanHeld !== true && !c.loopback_step) return result;
   let st = null;
   try { st = _muState(); } catch (_) { st = null; }
   const priorGates = !!(st && st.gates && st.gates.size > 0);
@@ -16759,7 +16944,7 @@ export function _keylessGridDataHonesty(out, toolName) {
       + claim + (tail ? ' ' + tail : '');
   } else {
     out.message = out.message.replace(/free dev key \([^)]*\)/,   // the backend's older wording, whatever its parenthetical
-      'free key (claim_free_key: no email needed)');
+      'DC Hub key (claim_free_key: no email needed)');
   }
   if (out.agent_action && typeof out.agent_action === 'object') {
     out.agent_action = { ...out.agent_action, then: 'Retry ' + retry + " with header 'X-API-Key: <api_key>'" };
@@ -16768,7 +16953,7 @@ export function _keylessGridDataHonesty(out, toolName) {
     out.email_capture = { ...out.email_capture,
       ...(typeof out.email_capture.url === 'string'
         ? { url: out.email_capture.url.replace('tool=get_grid_intelligence', 'tool=get_grid_data') } : {}),
-      prompt: 'Ask your human: want a free key (no credit card) plus a reset-time notice? Drop your email at this URL: '
+      prompt: 'Ask your human: want a DC Hub key (no credit card) plus a reset-time notice? Drop your email at this URL: '
         + 'it turns this anonymous probe into a tracked account they can manage and upgrade.' };
   }
   return out;
@@ -16809,7 +16994,7 @@ function _trialGapLine(parsed) {
     // "showing N of M" note this file already had to repair below.
     const shown = Math.min(TRIAL_PREVIEW_ROWS, maxN);
     if (maxN > shown) {
-      return '\u{1F4E6} **Free tier: ' + shown + ' of ' + maxN + ' results shown.** The other ' +
+      return '\u{1F4E6} **Preview: ' + shown + ' of ' + maxN + ' results shown.** The other ' +
              (maxN - shown) + ' — plus every premium tool and full grid/fiber depth — are one upgrade away ' +
              '(💳 a one-time pack of 1,000 API credits, no subscription). Relay the link in human_url to your human.\n';
     }
@@ -16854,7 +17039,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
     const looksDecision = _DECISION_TOOLS.has(toolName) ||
       /"(verdict|recommendation|composite_score|dcpi|build_caution_avoid|time_to_power|suitability)"/.test(blob);
     if (looksDecision) {
-      decisionLine = '\u{1F3AF} **The decision layer is locked.** You’re seeing the raw data free — but the *answer* (the BUILD/CAUTION/AVOID verdict + the why, the full cross-market ranking, multi-site comparison, and time-to-power) ' + _wallCopy('is not in it. ' + _WALL_NEUTRAL_LINE + '\n', 'needs a paid DC Hub plan. That’s the part worth paying for.\n');
+      decisionLine = '\u{1F3AF} **The decision layer is locked.** You’re seeing the raw data — but the *answer* (the BUILD/CAUTION/AVOID verdict + the why, the full cross-market ranking, multi-site comparison, and time-to-power) ' + _wallCopy('is not in it. ' + _WALL_NEUTRAL_LINE + '\n', 'needs a paid DC Hub plan. That’s the part worth paying for.\n');
     }
   } catch (e) {}
   // ★ r-data-first (2026-08-26): DATA leads; this nudge trails it, and says
@@ -16862,7 +17047,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   // _trialGapLine reports the real shown/total pair. Same links, same free-tier
   // off-ramp, roughly a third of the characters, none of them ahead of the
   // payload an agent is deciding on.
-  const nudge = '\u{1F512} **Free-tier preview of `' + toolName + '`.** ' +
+  const nudge = '\u{1F512} **Preview of `' + toolName + '`.** ' +
                 decisionLine.replace(/\n$/, ' ') +
                 // r86-reach: surface the NATIVE claim_free_key tool + persist on the MAIN anon path
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
@@ -17048,7 +17233,7 @@ const TRIAL_HEADER_OVERRIDES = {
       }
     } catch (_) {}
     return '🔒 **`get_grid_intelligence` returned a preview** — full per-ISO depth (all 7 US ISOs + queue + time-to-power) is one click: 💳 ' + _rungsText('get_grid_intelligence', 'free', sessionId) +
-           '. The moment your human pays, your next call returns the complete brief. (Free full answers left today: ' + _remaining +
+           '. The moment your human pays, your next call returns the complete brief. (Full answers left today: ' + _remaining +
            '; `bind_email` raises your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + '.)\n\n---\n\n';
   },
   get_market_intel: (sessionId) => {
@@ -17060,11 +17245,11 @@ const TRIAL_HEADER_OVERRIDES = {
       '',
       "The number above is real — but it's a single market with no facility detail, pipeline, or operator landscape. **An agent reasoning from one data point gives incomplete answers.** Give it the full report so it reasons from everything:",
       '',
-      '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
+      '⚡ **One call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the depth a DC Hub key gets. **Save the key to your MCP config** so every future session reuses it.',
       `💳 **Want full premium depth** (facility detail, pipelines, operator landscape)? Your human pays in one click and THIS session is served in full: ${_rungsText('get_market_intel', 'free', sessionId)}`,
       `→ Prefer a flat plan? **[A paid DC Hub plan](${_developer})** · [free dev key by email](${redeem})`,
       '',
-      '🧭 **Want the decision, not just the metric?** On this same free taste, call `get_market_dcpi_rank` (BUILD / CAUTION / AVOID verdict for a market) or `rank_markets` (a ranked shortlist) — the decision layer that makes the upgrade worth it.',
+      '🧭 **Want the decision, not just the metric?** On this same preview, call `get_market_dcpi_rank` (BUILD / CAUTION / AVOID verdict for a market) or `rank_markets` (a ranked shortlist) — the decision layer that makes the upgrade worth it.',
       '',
       '---',
       '',
@@ -17152,7 +17337,7 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
   let _keyedCaller = false;
   try { _keyedCaller = !!(getCtx() && getCtx().api_key); } catch (_) { _keyedCaller = false; }
   const _claimFreeKeyAlt = _keyedCaller ? '\n'
-    : ' Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';
+    : ' Or call `claim_free_key` (one call, no email) for a durable DC Hub key.\n';
   if (missed && missed.what && missed.how) {
     const _free = _claimFreeKeyAlt;
     if (missed.rung === 'pack') {
@@ -17172,8 +17357,8 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
     }
   }
   const _lead = gapClause
-    ? '🔒 **Free tier: ' + gapClause + '.** Full set + every premium tool: '
-    : '🔒 **Free-tier preview of `' + toolName + '`.** Full results: ';
+    ? '🔒 **Preview: ' + gapClause + '.** Full set + every premium tool: '
+    : '🔒 **Preview of `' + toolName + '`.** Full results: ';
   // ★ r-relay-one-ask (2026-09-24): this line is the wall's checkout POINTER, not
   // the response's human ask. It used to read "your human can pay in one click",
   // which _HUMAN_CTA_SIGNATURES counts as THE one human ask, so composeHumanCta
@@ -17346,7 +17531,7 @@ function _freeRungLine(toolName) {
   // A caller holding a key has already taken this rung. Offering it again is
   // noise at best and, on a key that is already identified, wrong.
   if (k) return '';
-  return '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs at the free tier. **Save the key to your MCP config** so every future session reuses it.';
+  return '⚡ **One call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs with that key. **Save the key to your MCP config** so every future session reuses it.';
 }
 
 function siteHeadlineHeader(name, sessionId) {
@@ -17388,7 +17573,7 @@ export const SCRAPER_BLOCK_TEXT = '**Automated usage detected.**\n\nThis anonymo
   + 'get_agent_registry, get_energy_prices, get_facility, get_fiber_intel and get_grid_data, the pattern DC Hub '
   + 'treats as an automated sweep, so further anonymous calls in this session are blocked. We would like to hear '
   + 'from whoever is running it.'
-  + '\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or get a free key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.';
+  + '\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key for evaluation\n- **Or get a DC Hub key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.';
 const _scraperTracker = new Map();   // session_id → { tools: Set, calls: number, firstAt: number }
 const _SCRAPER_TTL_MS = 60 * 60 * 1000;  // forget sessions older than 1h
 
@@ -17701,7 +17886,7 @@ async function _maybeEmbedValueClaim(result, name, c) {
     if (!claim || !claim.claim_url) return result;       // below threshold / bot / error → unchanged
     return _embedClaim(result, {
       url: claim.claim_url,
-      headline: `You have full ${name} data this session — claim a free key so it persists (call claim_free_key: no email needed; adding one raises the daily limit).`,
+      headline: `You have full ${name} data this session — claim a DC Hub key so it persists (call claim_free_key: no email needed; adding one raises the daily limit).`,
       expires_at: claim.expires_at || null,
       relay: `Tell the user: claim full DC Hub access → ${claim.claim_url}`,
     });
@@ -17939,7 +18124,7 @@ function _buildQuotaHint(toolName) {
           + 'email; no daily full-answer budget is charged here. A key with a bound email gets '
           + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day.'
         : 'NOT APPLICABLE: `' + toolName + '` is a preview on every '
-        + 'non-paid seat (anonymous, free key, trial, email-bound); no daily full-answer budget is '
+        + 'non-paid seat (anonymous, DC Hub key, trial, email-bound); no daily full-answer budget is '
         + 'charged for it. ' + _wallCopy(_WALL_NEUTRAL_LINE, 'Full needs a paid DC Hub plan.');
     } else if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
       // ★★★ THE METER MUST ONLY APPEAR WHERE IT IS CHARGED.
@@ -18434,7 +18619,7 @@ export async function _scoreboardForCaller(res, c) {
     const out = { ...d };
     for (const k of _SCOREBOARD_DCPI_PAID) out[k] = null;
     out._locked_fields = [..._SCOREBOARD_DCPI_PAID];
-    out.note = 'DCPI per-ISO intelligence, live from the Data Center Power Index. BUILD-rate is free; queue '
+    out.note = 'DCPI per-ISO intelligence, live from the Data Center Power Index. BUILD-rate is in every answer; queue '
       + 'wait, curtailment and 30-day grid emergencies come with a paid plan or the credit pack — relay the link in human_url to your human.';
     return out;
   };
@@ -19225,6 +19410,8 @@ const WRITE_TOOLS = new Set([
   // r-listings: registers a lead and triggers a confirmation email.
   'request_capacity_intro',
   'accept_capacity_terms',
+  // 2026-11-20: the operator accepts a registration; contact details are exchanged.
+  'accept_capacity_intro',
   // 2026-10-08: files a brain_findings row (POST /api/v1/inbox/findings).
   'report_finding',
   // 2026-11-16: the same filing through its alias.
@@ -19690,6 +19877,7 @@ const _RETURN_NUDGE_SKIP = new Set([
   'generate_site_analysis',  // r-endburst: same — the hook is the ONE return line on this response
   'request_capacity_intro',  // r-listings: a lead receipt; its next step is the confirmation email, not a data refresh
   'accept_capacity_terms',   // an acceptance receipt; its next step is source_capacity, not a data refresh
+  'accept_capacity_intro',   // the operator's acceptance receipt, not a data refresh
   'read_inbox', 'report_finding', 'request_enhancement',  // notes and filing receipts, not data to refresh
 ]);
 function withReturnNudge(result, toolName, c) {
@@ -19700,7 +19888,7 @@ function withReturnNudge(result, toolName, c) {
     if (result.content.some((it) => typeof it?.text === 'string'
         && it.text.includes('get_changes since=24h'))) return result;   // idempotent
     result.content.push({ type: 'text', text:
-      '🔁 DC Hub data moves daily — next session call `get_changes since=24h` (free) to pull only what shifted in the markets/ISOs you queried, instead of re-running everything.' });
+      '🔁 DC Hub data moves daily — next session call `get_changes since=24h` to pull only what shifted in the markets/ISOs you queried, instead of re-running everything.' });
     if (result.structuredContent && typeof result.structuredContent === 'object'
         && !Array.isArray(result.structuredContent)) {
       result.structuredContent._return_loop = { next_tool: 'get_changes', hint: 'get_changes since=24h for the delta next session' };
@@ -19759,7 +19947,7 @@ function withEndOfBurstHook(result, toolName, c) {
       + 'since=<this response’s generated_at, or "24h"> to get only what moved since '
       + 'this analysis — instead of re-running it.'
       + (_unbound
-          ? ' This key is unbound: `bind_email` (free, your human’s email) makes this '
+          ? ' This key is unbound: `bind_email` (your human’s email) makes this '
             + 'key — and its saved work — recoverable next session.'
           : '');
     result.content.push({ type: 'text', text: line });
@@ -20330,7 +20518,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     queued_large_load_gw: _oNum('ERCOT\'s large-load (demand) interconnection queue, GW. Not generation.'),
     queued_connections_gw: _oNum('A mixed connections queue (generation AND demand in one figure), GW: NESO, IESO, AESO'),
     queued_generation_gw_basis_note: _oStr('What queued_generation_gw counts on this row: status filter and MW column, e.g. "Active only, summer MW". Present on the US generation-queue ISOs other than ERCOT; compare totals from other trackers only on the same basis'),
-    queued_generation_pending_revision_gw: _oNum('MISO only: GW of applications in Pending Revision Approval (summer MW), reported beside the active total and NOT part of queued_generation_gw. null on every other ISO, and null on the free preview like the other GW figures'),
+    queued_generation_pending_revision_gw: _oNum('MISO only: GW of applications in Pending Revision Approval (summer MW), reported beside the active total and NOT part of queued_generation_gw. null on every other ISO, and null on the preview like the other GW figures'),
     queued_generation_pending_revision_gw_basis: _oStr('What queued_generation_pending_revision_gw counts: the MISO status, MW column, and that it is excluded from queued_generation_gw. Present only when the figure is'),
     queued_load_data_center_gw: _oNum('ERCOT: data-center load DERIVED as ~90% of the large-load queue, GW. NESO/IESO/AESO: demand projects in the connections queue (all demand, not data centres only). null elsewhere'),
     queued_load_dc_share_pct: _oNum('ERCOT: data-center share of the large-load queue, %. NESO/IESO/AESO: demand share of the connections queue, %. null elsewhere'),
@@ -20364,7 +20552,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
 
   analyze_site: z.looseObject({
     ..._ENVELOPE_SHAPE,
-    composite_score: _oNum('0-100 composite site suitability score (free HEADLINE tier and full tier)'),
+    composite_score: _oNum('0-100 composite site suitability score (HEADLINE preview and full tier)'),
     overall_score: _oNum('Alias of composite_score on the full payload'),
     verdict: _oStr('Verdict string, e.g. "Excellent site" / BUILD-CAUTION-AVOID read'),
     interpretation: _oStr('Verdict prose on the full payload'),
@@ -20373,7 +20561,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
       score: _oNum('Its score'),
       of: _oNum('Scale maximum (100)'),
       note: _oStr('Why it limits the site'),
-    }, 'Single top limiting factor (the lowest sub-score) — always present on the free headline'),
+    }, 'Single top limiting factor (the lowest sub-score) — always present on the headline'),
     scores: _oObj({
       power_infrastructure: _oNum('0-100'),
       gas_pipeline_access: _oNum('0-100'),
@@ -20385,9 +20573,9 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     power_cost: _oObj({}, 'Power cost read: {industrial_cents_kwh, commercial_cents_kwh, period, basis} (full payload)'),
     fiber: _oObj({}, 'Fiber read: {connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk} (full payload)'),
     location: _oAny('Echo of the analyzed location (full payload)'),
-    site_headline: _oBool('true when this is the free citable HEADLINE (score + verdict + limiting factor)'),
-    preview: _oStr('Headline preview line (free tier)'),
-    locked: _oObj({}, 'Which sections are locked to a paid plan on the free headline: {per_factor_breakdown, nearby_infrastructure, power_cost, fiber_carriers, site_analysis_report}'),
+    site_headline: _oBool('true when this is the citable HEADLINE (score + verdict + limiting factor)'),
+    preview: _oStr('Headline preview line'),
+    locked: _oObj({}, 'Which sections are locked to a paid plan on the headline: {per_factor_breakdown, nearby_infrastructure, power_cost, fiber_carriers, site_analysis_report}'),
   }).describe('Multi-factor site suitability for one lat/lon: composite score + verdict (+ per-factor breakdown, nearby infra, power cost, fiber on paid) — alongside the DC Hub envelope keys.'),
 
   get_energy_prices: z.looseObject({
@@ -20505,7 +20693,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 97 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 98 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -20525,13 +20713,13 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     parallelizable: _oBool('true when at least one execution wave holds 2+ steps — the plan is not purely sequential'),
     execution_waves: _oAny('The execution graph as concurrency waves: array of arrays of step numbers; every step in a wave can run concurrently once earlier waves finish (derived from depends_on)'),
     execution_strategy: _oAny('r-planner-v3 explicit strategy: {parallel_groups: string[][] — execution_waves rendered as TOOL-NAME arrays (e.g. [["get_grid_intelligence","get_interconnection_queue","get_refined_queue"]]), note: plan-only disclaimer — this tool only plans; execute the sequence yourself}'),
-    execution_estimate: _oAny('r-planner-v3 deterministic cost preview: {estimated_calls (plan NODE count — one per step; the top-level estimated_calls is the fan-out-weighted API-call total), estimated_latency_ms (sum over waves of the SLOWEST tool in each wave, from a static 3-tier table: heavy synthesis 3000ms / standard read 1200ms / light free read 500ms), parallelizable (any wave holds 2+ steps)}'),
+    execution_estimate: _oAny('r-planner-v3 deterministic cost preview: {estimated_calls (plan NODE count — one per step; the top-level estimated_calls is the fan-out-weighted API-call total), estimated_latency_ms (sum over waves of the SLOWEST tool in each wave, from a static 3-tier table: heavy synthesis 3000ms / standard read 1200ms / light read 500ms), parallelizable (any wave holds 2+ steps)}'),
     alternatives: _oArr(z.looseObject({
       tool: _oStr('Alternative tool name'),
       when: _oStr('When to prefer this tool over the recommended sequence'),
       rejected_because: _oStr('Why the planner did NOT make this the primary route — the deterministic rejection reason'),
     }), 'Adjacent tools for nearby intents, including runner-up intent classes'),
-    coverage_notes: _oAny('Tier/coverage caveats for the recommended tools (free-tier previews, depth gates, honest-unknown semantics)'),
+    coverage_notes: _oAny('Tier/coverage caveats for the recommended tools (previews, depth gates, honest-unknown semantics)'),
     matched_classes: _oAny('Every intent class that scored, with its score — the router\'s full deterministic trace'),
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
@@ -20603,10 +20791,10 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     iso_name: _oStr('Grid operator full name'),
     as_of: _oStr('Timestamp of the reading'),
     demand_period: _oStr('Period of the demand reading'),
-    taste: _oObj({}, 'Free-tier preview fields'),
+    taste: _oObj({}, 'Preview fields'),
     withheld: _oArr(z.any(), 'Fields withheld on this tier'),
     withheld_total: _oNum('How many fields were withheld'),
-    free_preview_only: _oBool('true when only the free preview was served'),
+    free_preview_only: _oBool('true when only the preview was served'),
     completeness: _oObj({}, 'Share of the payload this tier got'),
     cite_as: _oStr('Ready-made attribution line'),
   }),
@@ -20916,6 +21104,7 @@ export const _DISCOVERY_EXEMPT = {
   search: 'OpenAI Deep Research / ChatGPT connector protocol pair — required shape, not a DC Hub capability an agent chooses by topic.',
   fetch: 'OpenAI Deep Research / ChatGPT connector protocol pair — see search.',
   get_backup_status: 'Platform health/ops introspection, not a siting capability — deliberately not advertised as an answer surface.',
+  accept_capacity_intro: 'The operator side of a Capacity Source deal registration: reached from the lead id in DC Hub\'s lead notice, never chosen by a buyer by topic.',
 };
 
 // ── _planStateScope (r-planner-v5.11, 2026-08-10) ──────────────────────────
@@ -21174,7 +21363,7 @@ export function _gridHeadroomSequence(d) {
   }
   return [
     { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
-      why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
+      why: 'Live cross-ISO scoreboard (no key needed): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
       args_hint: {} },
     { step: 2, tool: 'get_grid_intelligence', depends_on: [1], estimated_calls: 1,
       why: 'Deep-dive the ISO the scoreboard surfaces: headroom, constraints, time-to-power.',
@@ -21342,7 +21531,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank work at every access level; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -21423,7 +21612,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set; get_market_dcpi_rank works at every access level. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // 5.29 (Grok note K, item 1, 2026-11-15): A SITING QUESTION OVER SEVERAL NAMED STATES.
@@ -21536,7 +21725,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank works at every access level; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     // 5.26 (Grok live agent reviews 2026-11-13): TWO OR MORE NAMED GRIDS. "Compare ERCOT and PJM
@@ -21698,12 +21887,28 @@ export const _PLAN_CLASSES = [
             + (sm ? `A town is not a pipeline market, so the rows are cut to ${sm.city} after the call. ` : '')
             + 'A server older than the market/state filter drops them and reads the country.',
           args_hint: { ...(us ? { country: 'US' } : {}), ...pm, ...(construction ? { status: 'construction' } : {}), ...(sm ? { limit: 100 } : {}) } },
-        { step: 2, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
-          why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
-          args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } },
       ];
+      // 5.56 (Grok daily 2026-11-20, item 4): a question that asks the operational side ("operational versus under
+      // construction", "how much capacity") reads the market brief (get_market_intel): facilities tracked and the MW floor
+      // of those that report capacity, dated. The market the question named, else the state's tracked markets (at most
+      // two, each named, never summed as the state); a town keeps the facility search it can be cut to, a place with no
+      // tracked market keeps the search too, and a pipeline-only ask keeps its plan.
+      const intelMarkets = (sm || !d.__capOperational) ? [] : (pm.market ? [pm.market] : (st ? _marketsForState(st) : []));
+      if (intelMarkets.length) {
+        for (const mk of intelMarkets.slice(0, 2)) {
+          steps.push({ step: steps.length + 1, tool: 'get_market_intel', depends_on: [], estimated_calls: 1, operational_side: true,
+            why: `The operational side for ${mk}: facilities tracked and the MW of those that report capacity (a floor), dated.`
+              + (pm.market ? '' : ` ${st} is not one market, so its tracked markets are read one by one and never summed as the state.`)
+              + ' Independent of step 1, same wave.',
+            args_hint: { market: mk } });
+        }
+      } else {
+        steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
+          why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
+          args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } });
+      }
       if (capacityPointersEnabled()) {
-        steps.push({ step: 3, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
+        steps.push({ step: steps.length + 1, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
           why: 'Capacity listed for sale or lease (powered land, powered shells, turnkey, colocation) in the same place, matched on what each listing can deliver. Runs last.',
           args_hint: { ...(st ? { state: st } : (sm ? { market: sm.city } : {})), ...(d.mw ? { min_mw: d.mw } : {}) } });
       }
@@ -21717,8 +21922,8 @@ export const _PLAN_CLASSES = [
     alternatives: [
       { tool: 'get_power_pipeline', when: 'You want new POWER GENERATION coming online (EIA-860M planned generators), not data-center space.',
         rejected_because: 'The intent asked about data-center capacity; generation is the backup read, not the answer.' },
-      { tool: 'get_market_intel', when: 'You want one market\'s brief: tracked MW, pipeline and providers in one read.',
-        rejected_because: 'The pipeline and facility reads answer the capacity question row by row, and can be held to a submarket.' },
+      { tool: 'search_facilities', when: 'You want the operating facilities row by row (operator, status), or a town the market brief cannot be cut to.',
+        rejected_because: 'The market brief (get_market_intel) gives the operational count and its MW floor, dated; the facility search runs instead for a town or a place with no tracked market.' },
       { tool: 'get_retirement_headroom', when: 'The question is where GRID headroom opens for a new load.',
         rejected_because: 'Grid headroom is power capacity, not data-center capacity.' },
     ],
@@ -21801,7 +22006,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_dchub_recommendation', when: 'You want a one-call siting recommendation across markets.',
         rejected_because: 'A recommendation picks its own market, which may not be the one asked about.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. A metro outside the tracked index is reported as unresolved, never replaced.',
+    coverage_notes: 'get_market_dcpi_rank works at every access level; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. A metro outside the tracked index is reported as unresolved, never replaced.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -21820,7 +22025,7 @@ export const _PLAN_CLASSES = [
       // purchase" are other questions and do not count.
       [/\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b[^.?!]{0,30}\bpower\b(?!\s+(?:plants?|purchase))|\bpower\b(?!\s+(?:plants?|purchase))[^.?!]{0,30}\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatts?|gigawatts?)\b/i, 1],
     ],
-    rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
+    rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the open scoreboard must run first to pick the ISO the deep reads depend on.',
     sequence: (d) => _gridHeadroomSequence(d),
     alternatives: [
       { tool: 'compare_isos', when: 'You want a side-by-side of 2+ named ISOs instead of one deep read.',
@@ -21832,7 +22037,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     // 5.39 (Grok cross-domain head-to-head, 2026-11-17 night): "Where can I get 50 MW of colocation or powered capacity
@@ -21928,7 +22133,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -21989,7 +22194,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO queue — projects seeking transmission interconnection.',
         rejected_because: 'The queue is a transmission-interconnection register; a hosting-capacity question is about the distribution system already in the ground.' },
     ],
-    coverage_notes: 'get_hosting_capacity is FREE + FULL at every tier (public utility GIS). Coverage is 18 utilities and NOT nationwide — Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista. Outside them it returns an explicit not-published answer plus the nearest covered markets, never a silent zero. CRITICAL: only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish "load" (what a new load can DRAW); "gen" is DER export headroom and must never be relayed as siteable capacity; "bus_headroom" (Avista) is transmission bus MW. Published rows are GIS vertices — read distinct_feeders, and check sample_complete/capacity_floor_mw before calling a capped read exhaustive. Informational, not binding interconnection guidance.',
+    coverage_notes: 'get_hosting_capacity is FULL at every tier (public utility GIS). Coverage is 18 utilities and NOT nationwide — Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista. Outside them it returns an explicit not-published answer plus the nearest covered markets, never a silent zero. CRITICAL: only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish "load" (what a new load can DRAW); "gen" is DER export headroom and must never be relayed as siteable capacity; "bus_headroom" (Avista) is transmission bus MW. Published rows are GIS vertices — read distinct_feeders, and check sample_complete/capacity_floor_mw before calling a capped read exhaustive. Informational, not binding interconnection guidance.',
   },
   {
     id: 'water_climate', recipe: 'water_risk',
@@ -22018,7 +22223,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_facility_risk_delta', when: 'The question is what CHANGED in a site\'s risk profile recently, not where it stands.',
         rejected_because: 'The intent asked for current risk standing, not a recent-change delta.' },
     ],
-    coverage_notes: 'These tools return coverage: validated | unavailable per factor and trace every number to FEMA NRI / USGS / NOAA / WRI — report unavailable as unknown, never estimate. Free-tier friendly citation hooks.',
+    coverage_notes: 'These tools return coverage: validated | unavailable per factor and trace every number to FEMA NRI / USGS / NOAA / WRI — report unavailable as unknown, never estimate. Citation hooks at every access level.',
   },
   {
     // 5.20 (2026-11-11, owner via Grok): AIR permits for on-site generation.
@@ -22124,7 +22329,7 @@ export const _PLAN_CLASSES = [
       { tool: 'generate_site_analysis', when: 'You need the branded Site Analysis PDF for the point (full access).' },   // Note V keyed follow-up: was "(paid plan)"
       { tool: 'find_alternatives', when: 'You want DC Hub to surface OTHER sites matching a target profile.' },
     ],
-    coverage_notes: 'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates. The get_hosting_capacity step is CONDITIONAL — it appears only when the point falls inside a utility that publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus). It is free + full at every tier, and outside those footprints it returns an explicit not-published answer with the nearest covered markets rather than a zero.',
+    coverage_notes: 'analyze_site without full access returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is withheld below full access. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates. The get_hosting_capacity step is CONDITIONAL — it appears only when the point falls inside a utility that publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus). It is full at every tier, and outside those footprints it returns an explicit not-published answer with the nearest covered markets rather than a zero.',
   },
   {
     id: 'deals_ma', recipe: 'hyperscaler_activity',
@@ -22152,7 +22357,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
         rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
-    coverage_notes: 'hyperscaler_deals: no key or a free key gets a trimmed preview; a credit pack or full access gets the full answer. list_transactions: no key or a free key gets a trimmed preview; full access gets the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
+    coverage_notes: 'hyperscaler_deals: no key or a DC Hub key without full access gets a trimmed preview; a credit pack or full access gets the full answer. list_transactions: no key or a DC Hub key without full access gets a trimmed preview; full access gets the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
     // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
@@ -22202,7 +22407,7 @@ export const _PLAN_CLASSES = [
       { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
         rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
     ],
-    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank work at every access level; get_fiber_intel: with no key a trimmed preview; a DC Hub key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
   },
   {
     id: 'fiber', recipe: null,
@@ -22227,10 +22432,10 @@ export const _PLAN_CLASSES = [
     alternatives: [
       { tool: 'get_metro_fiber', when: 'You want the metro-level fiber map for a market rather than a state grid.',
         rejected_because: 'The long-haul read covers the metro layer too — the dedicated metro map is a narrower view of the same data.' },
-      { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
+      { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (full at every access level).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a DC Hub key gets a daily allowance of full answers, then previews; full access gets the full answer, unlimited. Call quota on a DC Hub key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is full at every access level by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -22263,7 +22468,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics shows the EIA state gas prices (delivered industrial, delivered electric, burner tip) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the $/MWh table below the access level that includes every tool.',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are citation hooks at every access level. get_gas_index: no key or a DC Hub key without full access gets a trimmed preview; full access gets the full answer. get_gas_intelligence: with no key a trimmed preview; a DC Hub key gets a daily allowance of full answers, then previews; full access gets the full answer. get_gas_economics shows the EIA state gas prices (delivered industrial, delivered electric, burner tip) and the Henry Hub spot to every caller, and masks the regional hub and basis prices and the $/MWh table below the access level that includes every tool.',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -22284,7 +22489,7 @@ export const _PLAN_CLASSES = [
       const place = _planChangesPlace(d);
       const seq = [
         { step: 1, tool: 'get_changes', depends_on: [], estimated_calls: 1,
-          why: 'Only the delta since your last pull: DCPI movers, new facilities, new pipeline, new deals (recipe whats_changed; free). Cache generated_at and pass it back as since= next time.'
+          why: 'Only the delta since your last pull: DCPI movers, new facilities, new pipeline, new deals (recipe whats_changed; no key needed). Cache generated_at and pass it back as since= next time.'
             + (w && !d.since ? ' Window: ' + w.phrase + ' (the intent named it).' : '')
             + (place ? ' get_changes takes no place filter, so this is the whole feed; the ' + place.label + ' read is the step(s) below.' : ''),
           args_hint: { since: d.since || (w ? w.since : '24h') } },
@@ -22313,7 +22518,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_news', when: 'You want narrative news, not the structured change feed.',
         rejected_because: 'The structured delta is diffable and citable; news is narrative and unscoped.' },
     ],
-    coverage_notes: 'get_changes is free for everyone — the canonical re-entry loop. The portfolio block in list_saved_sites needs an API key with saved sites.',
+    coverage_notes: 'get_changes works for everyone — the canonical re-entry loop. The portfolio block in list_saved_sites needs an API key with saved sites.',
   },
   {
     // r-planner-v5.6 (2026-07-30): "tax incentives for data centers in <state>"
@@ -22437,7 +22642,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_intel', when: 'You want the market\'s supply, pipeline and operator mix in one report.',
         rejected_because: 'The DCPI card plus the metro facility search answer the colocation question with less.' },
     ],
-    coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access. A size filter that was not applied is named in dropped_filters. DC Hub does not publish colocation pricing.',
+    coverage_notes: 'Discovery is open to everyone (anon gets sample rows; a DC Hub key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access. A size filter that was not applied is named in dropped_filters. DC Hub does not publish colocation pricing.',
   },
   {
     // 5.32: a colocation PRICE ask ("$/kW", "cost", "quote"). DC Hub does not publish colocation pricing; the plan
@@ -22465,17 +22670,35 @@ export const _PLAN_CLASSES = [
       [/\bunder\s+construction\b/i, 2], [/\boperational\b/i, 1.5],
     ],
     rationale: 'Search first to mint facility slugs, then the full-profile read keys on whichever slug you pick.',
-    sequence: (d) => [
-      { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
+    sequence: (d) => {
+      // 5.56 (Grok daily 2026-11-20, item 3): a status ask ("campuses under construction in Northern Virginia") is the
+      // construction pipeline, held to the place: get_pipeline with the status, not the registry of built facilities.
+      const ps = d.__pipelineStatus;
+      if (ps && !d.__facName) {
+        const st = d.state || d.stateFromPlace || (d.__facMetro && d.__facMetro.state) || null;
+        const o = d.__outlook && !d.__outlook.unresolved && typeof d.__outlook.intel === 'string' && /^[a-z0-9-]{2,60}$/.test(d.__outlook.intel) ? d.__outlook.intel : null;
+        return [{ step: 1, tool: 'get_pipeline', depends_on: [], estimated_calls: 1, pipeline_status: ps,
+          why: `The status the question asks for (${ps === 'any' ? 'every pipeline stage' : ps}): each project with its company, MW where served and expected completion${o ? `, held to the ${o} market` : ''}${st ? ` in ${st}` : ''}. Built facilities are not the answer to a status ask.`,
+          args_hint: { ...(st || o ? { country: 'US' } : {}), ...(ps !== 'any' ? { status: ps } : {}), ...(st ? { state: st } : {}), ...(o ? { market: o } : {}) } }];
+      }
+      // 5.56 (item 2): one named facility is searched by its name ("QTS Atlanta Metro"), the market as a filter; the
+      // executor ranks the rows by that name, so get_facility reads the best name match, not the first row.
+      const fn = d.__facName;
+      const metro = d.__facMetro ? d.__facMetro : {};
+      const searchArgs = fn ? { query: fn.name, ...(metro.state ? { state: metro.state } : {}) } : { ...metro };
+      return [
+      { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, ...(fn ? { named_facility: fn.name } : {}),
         why: 'Filter the full global facility dataset by location / capacity / operator / status — each row carries a slug.',
         // 5.32: a named metro is searched as the metro (query + its state), not left unscoped or widened to the state.
-        args_hint: { ...(d.__facMetro ? d.__facMetro : {}), ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
+        args_hint: { ...searchArgs, ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
       { step: 2, tool: 'get_facility', depends_on: [1], estimated_calls: 1,
-        why: 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
+        why: fn ? `Full profile for "${fn.name}": the search row whose name matches it best, not the first row.`
+          : 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
         // 5.32: the facility placeholder kind resolves only from search_facilities rows, never from the
         // market slug the intent named (get_facility{slug:"northern-virginia"} was a 404).
         args_hint: { slug: _FACILITY_SLUG_PLACEHOLDER } },
-    ],
+      ];
+    },
     alternatives: [
       { tool: 'semantic_search', when: 'The query is fuzzy natural language rather than structured filters.',
         rejected_because: 'The intent carried structured filters (place/operator/status) — exact filtering beats fuzzy retrieval when filters exist.' },
@@ -22484,9 +22707,9 @@ export const _PLAN_CLASSES = [
       { tool: 'score_facility', when: 'You want a 0-100 score for one existing facility.',
         rejected_because: 'The intent was discovery, not scoring one known facility.' },
       { tool: 'get_pipeline', when: 'You want the forward CONSTRUCTION pipeline, not existing facilities.',
-        rejected_because: 'The intent read as existing facilities, not the forward pipeline.' },
+        rejected_because: 'The intent read as existing facilities, not the forward pipeline (a status word such as under construction, planned or announced runs get_pipeline first).' },
     ],
-    coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access.',
+    coverage_notes: 'Discovery is open to everyone (anon gets sample rows; a DC Hub key unlocks full discovery). Capacity MW / exact coordinates / deep specs need full access.',
   },
 ];
 
@@ -23779,6 +24002,11 @@ export function _planSignals(intent, context) {
   // dc_capacity filters the pipeline to construction when asked).
   const __queueAsk = /\b(?:queues?|queued|interconnect(?:ion)?)\b/i.test(text);
   const __constructionAsk = /\b(?:under\s+construction|being\s+built)\b/i.test(text);
+  // 5.56 (Grok daily 2026-11-20, items 2 and 3): one named facility ("QTS Atlanta Metro") is searched by its name, and a
+  // status word (under construction, planned, announced, pipeline) is the pipeline status a facility question asks for.
+  const __facName = _namedFacility(text);
+  const __pipelineStatus = _pipelineStatusOf(text);
+  const __capOperational = _capacityAsksOperational(text);
   // 5.27 (live QA sweep 2026-11-14): an AI ask is a deployment-HORIZON question ("where can 100 MW
   // land in the next 90 days") only when it says so; otherwise it is a ranking by suitability
   // (rank_markets criteria=ai_ready). And the relative window the text names ("this week").
@@ -23805,7 +24033,7 @@ export function _planSignals(intent, context) {
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
   const scopeWidenedOut = _coloScopeWidened(__colo, coords, scopeWidened);
   return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address };
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational };
 }
 // The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
 // would carry without a colocation read. Pure; never throws.
@@ -24096,7 +24324,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.58';   // 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.56 and 5.57 are taken by other open planner work. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.58';   // 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26027,13 +26255,27 @@ export function _planQuery(intent, context) {
     const pz = scored.find((s) => s.cls.id === 'permitting');
     if (pz) {
       pz.score = 0; pz.hits = [];
-      const kind = d.coords ? null : _permittingAsk(text);
+      // 5.56 (Grok daily 2026-11-20, P1 regression): a street address with a screen / site / evaluate verb is the site, the
+      // same as a lat/lon: "Screen 21571 Beaumeade Circle ... flood zone, zoning and parcel" read "zoning" and routed to
+      // permitting (7.5 over site_analysis 6). The screen keeps its own permitting read (get_permitting_intel, state-held).
+      const addrScreen = !!d.__address && _siteScreenVerb(text);
+      const kind = (d.coords || addrScreen) ? null : _permittingAsk(text);
       let b = null; for (const s of scored) if (s !== pz && (!b || s.score > b.score)) b = s;
       const held = !!b && b.score > 0 && ['air_permits', 'incentives_tax', 'colocation', 'pricing_out_of_scope', 'named_campus', 'generation_mix', 'gas_price'].includes(b.cls.id);
       const open = !b || b.score <= 0 || ['facility_search', 'dc_capacity', 'market_outlook', 'market_ranking', 'site_analysis', 'deals_ma'].includes(b.cls.id);
       if (kind === 'strong' ? !held : (kind === 'weak' && open && !held)) {
         pz.score = Math.max(b ? b.score : 0, 2) + 1.5;
         pz.hits = [kind === 'strong' ? 'a moratorium / ban ask' : 'a data-center zoning, land-use or bill ask'];
+      }
+      // 5.56: the address screen wins over whatever it outscored only narrowly (water, grid wording in the same sentence);
+      // an air-permit, tax-incentive, colocation or entity ask keeps its class.
+      if (addrScreen && !held) {
+        const sa = scored.find((s) => s.cls.id === 'site_analysis');
+        if (sa) {
+          let o = null; for (const s of scored) if (s !== sa && s !== pz && (!o || s.score > o.score)) o = s;
+          if (!o || sa.score < o.score + 1.5) sa.score = Math.max(o ? o.score : 0, 2) + 1.5;
+          sa.hits = [...(sa.hits || []), 'a street address with a screen / site verb'];
+        }
       }
     }
   } catch (_e) { /* routing must never throw */ }
@@ -26736,6 +26978,7 @@ function _sourceLineCb(name, fn) {
   // human line (lib/lean-response.mjs); it skips the directory / Claude / core profiles and ChatGPT.
   return async (args, extra) => {
     const c = getCtx() || {};
+    _deviceMatchEnter(c, name);   // wall identity v2 device match: inert unless both flags are on
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
@@ -26818,9 +27061,13 @@ function _sourceLineCb(name, fn) {
       if (name === 'execute_plan') _final = _planOneLinkStep(_final, { skip: !!c.loopback_step || ownScrub || _isCleanPlatform() });
       // DCHUB_WALL_IDENTITY_V2 (default OFF): the sign-in line and the V2 email ask, after every rewrite above.
       _final = _wallIdentityV2Step(_final, name, c);
+      // DCHUB_WALL_COPY_V2 (default on under the v2 flag): the rest of the wall reads the v2 copy (lib/wall-copy-v2.mjs).
+      _final = _wallCopyV2Step(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
+      // Wall identity v2 device match: the matched key never reaches the answer; one welcome line. The LAST rewrite.
+      _final = _deviceMatchExit(_final, name, c);
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -26996,7 +27243,7 @@ const _HYGIENE_TAILS = {
   hyperscaler_deals: 'limit 1-500. Hyperscaler leases and purchases only; for all M&A use list_transactions.',
   get_tax_incentives: 'state is a US state code (e.g. VA); omit for the 50-state overview. Program detail needs a full-access key (human_url).',
   get_renewable_energy: 'Give state or lat/lon (decimal degrees); energy_type narrows. Empty = no installations there: widen to the state.',
-  get_water_risk: 'US only: give state or lat/lon (decimal degrees). Free = latest week; longer history needs a full-access key.',
+  get_water_risk: 'US only: give state or lat/lon (decimal degrees). Without full access: latest week; longer history needs a full-access key.',
   get_iso_context: 'iso is required (US ISO code). max_tokens caps the context returned; locked_sections need a higher tier.',
   execute_plan: 'Front door for multi-part questions: pass intent unchanged; add market, iso, state or lat/lon when you know them.',
   plan_query: 'Returns the ordered tool plan for an intent without running it; run the steps yourself or use execute_plan.',
@@ -27496,7 +27743,7 @@ function trackedTool(srv, name, description, schema, handler) {
           + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
           + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
           + (_askNoSid ? _askNoSid + ' Save the key to your MCP config. '
-            : "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
+            : "This is one step to fix: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
               + "identified callers are not subject to this wall. ")
           + "To keep going today without a key, relay the link in human_url to your human "
           + "(a one-time pack of 1,000 API credits, no subscription).";
@@ -27866,7 +28113,7 @@ function trackedTool(srv, name, description, schema, handler) {
           return await _withWallUserLine({
             content: [{ type: 'text', text: composeHumanCta(
               _pwxM && _pwxM.for_your_human && _pwxM.for_your_human.url,
-              '🔒 **You’ve used DC Hub’s free grid & fiber allowance** — heavy `' + name +
+              '🔒 **You’ve used DC Hub’s included grid & fiber allowance** — heavy `' + name +
               '` / grid / fiber use over the last 7 days. Keep going: 💳 **a one-time pack of 1,000 API ' +
               'credits, no subscription** → ' + _packCheckoutUrl(_sidM) +
               ' — the moment your human pays, your next `' + name + '` call returns full data (no ' +
@@ -28095,7 +28342,7 @@ function trackedTool(srv, name, description, schema, handler) {
                    keyless_first_full_charged: _kffSeat === 'charge' };
           // The quota stamp (_buildQuotaHint) says this call IS the day's first full answer.
           if (_kffSeat !== 'step') c._kffServed = { tool: name, charged: _kffSeat === 'charge' };
-          if (name === 'execute_plan') c._kffPlan = true;   // its steps carry the plan's token
+          if (name === 'execute_plan') { c._kffPlan = true; c._kffPlanHeld = undefined; }   // its steps carry the plan's token
           // M2.2: a CHARGED first plan gets its depth-test arm (a QA observer and a step get none). Off / no salt: null.
           if (name === 'execute_plan' && _kffSeat === 'charge') { const _arm = _firstPlanArm(c.client_ip); if (_arm) c.kff_arm = _arm; }
         }
@@ -28796,7 +29043,7 @@ function trackedTool(srv, name, description, schema, handler) {
 
 Your key is not email-bound yet, and that — not money — is what is holding \`${name}\`.
 
-\u{1F916} **You can fix this yourself, in this session:** call \`bind_email\` with your human's email (free, no card), then call \`${name}\` again.
+\u{1F916} **You can fix this yourself, in this session:** call \`bind_email\` with your human's email (no card), then call \`${name}\` again.
 
 \u{1F464} **Tell your human:** only if you want higher limits — ${_rungsText(name, tier || 'free', c.session_id)}. \`${name}\` itself does not require it.`
           : _onPaidPlan
@@ -28807,11 +29054,11 @@ Your current paid plan does not include \`${name}\`; it opens on the DC Hub plan
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} is served in full — just call \`${name}\` again.`
           : `## \u{1F512} \`${name}\` needs full access
 
-You're on **free tier** — \`${name}\` returns its full result on a paid plan.
+Your current access does not include the full \`${name}\` — it returns its full result on a paid plan.
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} is served in full — just call \`${name}\` again.
 
-Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
+${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
 
         // r71-claudetune (2026-06-06): platform-aware _mdAnon. Claude.ai
         // is ~56% of attributable AI traffic (94,948 of ~204K external
@@ -28848,7 +29095,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         //   than a key flow. `bind_email` is a TOOL CALL — it works identically
         //   on every client, so there is nothing to branch on here.
         const _mdAnon = _freeWithEmail
-          ? `## \u{1F511} \`${name}\` needs a free key, not a payment
+          ? `## \u{1F511} \`${name}\` needs a key, not a payment
 
 \u{1F916} **You can fix this yourself — no human, no card:** call \`bind_email\` with your human's email, then call \`${name}\` again. That is all this tool needs.
 
@@ -28858,12 +29105,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. Works in any browser: click, pay, refresh this chat — \`${name}\` returns in full.
 
-*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`
+*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for a DC Hub key (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`
           : `## \u{1F512} \`${name}\` is a paid feature
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, this session is served in full.
 
-*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`;
+*Hold your own key? Call the \`claim_free_key\` tool (no email) for a DC Hub key (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`;
 
         // r50 (2026-05-26): mark paywall response as isError=true so
         // MCP clients (Claude Desktop/Cursor/Cline/ChatGPT-MCP) surface
@@ -29065,7 +29312,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // free key and the page in human_url: what this preview withheld (the
             // missed-upgrade sentence, the rung the gates this call applied name) and
             // the Developer / Pro ladder — never the pack, which returns nothing here.
-            const _coachHead = "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config.";
+            const _coachHead = "You've hit today's anonymous calls from this IP — you're clearly getting value. Keep going: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config.";
             const _coachSellsPack = _capCoachSellsPack(name);
             const _coachMissed = _coachSellsPack ? null
               : (_missedUpgradeFor(trimmed, undefined, { strict: true }) || _missedUpgradeFor(trimmed));
@@ -29150,7 +29397,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           ...(typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { data: parsed }),
           _upgrade_notice: {
             tier,
-            message: `Free tier capped results at ${gate.capped}. Upgrade for full access.`,
+            message: `Results capped at ${gate.capped} at this access level. Upgrade for full access.`,
             upgrade_url: _unlockUrl(name, (c && c.session_id) || ''),
             signup_url: c.api_key ? null : SIGNUP_URL,
           },
@@ -29419,6 +29666,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                   && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DAY2_DIGEST_ASK || ''))) {
                 _lf = _day2DigestLine({ tool: name, what: name === 'get_grid_intelligence' ? _mtParsed.iso : (c._go_place || _mtParsed.metro) });
               }
+              // /mcp/chatgpt is frozen byte for byte: these asks keep their origin/main wording there.
+              if (_lf && _chatgptFrozenSeat(c)) _lf = { ..._lf, human: _legacyFreeWording(_lf.human), agent: _legacyFreeWording(_lf.agent) };
               if (_lf) {
                 _mtParsed.user_message = _lf.human;
                 _mtParsed.show_to_user = true;
@@ -29531,7 +29780,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // still serves it full per call (the pair is not Pro-only any more).
                 message: _paidTaste
                   ? `You've used the ${_cap} full \`${name}\` answers included with your plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth comes with a paid DC Hub plan → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 a one-time pack of 1,000 API credits (capacity, paid per call, no subscription) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. More full answers today: 💳 the ${PACK_PRICE} ${PACK_NAME} (usage capacity only, no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Or ⚡ ${_proOnlyTool(name) ? (PRO_NAME + ' (' + PRO_PRICE + ') to open \`' + name + '\`') : (PRO_NAME + ' (' + PRO_PRICE + ') for ' + PRO_NAME + '-only tools and a higher daily allowance')} → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Credits do not unlock ${PRO_NAME}-only tools. Relay the link in human_url to your human.${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial'}) — you're now on the trimmed preview. More full answers today: 💳 the ${PACK_PRICE} ${PACK_NAME} (usage capacity only, no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Or ⚡ ${_proOnlyTool(name) ? (PRO_NAME + ' (' + PRO_PRICE + ') to open \`' + name + '\`') : (PRO_NAME + ' (' + PRO_PRICE + ') for ' + PRO_NAME + '-only tools and a higher daily allowance')} → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Credits do not unlock ${PRO_NAME}-only tools. Relay the link in human_url to your human.${_bound ? '' : ` Call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: 'A one-time pack of 1,000 API credits, no subscription — API capacity, paid per call (less than two coffees; DataCenterHawk is an annual analyst contract).',
@@ -29618,7 +29867,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                     '` call returns the complete result (no reconnect).' +
                     (_bound
                       ? ''
-                      : ' 🔑 Free: lift your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + ' full `' + name +
+                      : ' 🔑 Lift your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + ' full `' + name +
                         '` answers/day — call `bind_email` with your human\'s email (no card).') },
               ] };
             }
@@ -29818,7 +30067,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           _valued.content.push({ type: 'text', text:
             '\n\n💡 Full `' + name + '` data delivered. To own it long-term — 💳 **a one-time pack of 1,000 API credits** (no subscription) → '
             + _packCheckoutUrl(_sid)
-            + ' · relay the link in human_url to your human. No rush — your current calls stay free.' });
+            + ' · relay the link in human_url to your human. No rush — your current calls keep working.' });
           _markHumanLineSent(c.session_id);
         }
       } catch (_) { /* additive only — never break the data path */ }
@@ -30822,7 +31071,7 @@ export function _identitySource(ctxLike) {
     // not — but the two cannot both be set, so order here is readability only.
     out.credential_unverified = true;
     out.means = `The key that arrived via '${src}' could NOT be checked on this call: `
-      + 'DC Hub\u2019s validator did not answer, so this response was served at FREE tier '
+      + 'DC Hub\u2019s validator did not answer, so this response was served at the default access level '
       + 'without the key being verified. This is not a statement about your key — it may '
       + 'be perfectly good. Nothing was cached, so simply calling again re-validates; if '
       + 'the depth you expected is still missing on a retry, then check the key.';
@@ -30873,13 +31122,13 @@ function _demotedMeans(src, reason, tier) {
     ? 'the subscription behind it is no longer active'
     : reason === 'dunning_demote'
       ? 'a recent payment on that account did not go through'
-      : 'that account currently resolves to the free tier';
+      : 'that account currently has no paid access';
   return `The key that arrived via '${src}' is VALID and was accepted \u2014 this is not a `
     + `credential problem. It was served at ${tier.toUpperCase()} tier because ${why}, `
     + 'so paid depth this account previously had is not being returned right now. '
     + 'Sending a different key will not change this and `claim_free_key` will not '
     + 'help. PAUSE and tell your human, in your own words, that DC Hub is serving '
-    + 'their account at free tier for a billing reason and only they can resolve it '
+    + 'their account at the default access level for a billing reason and only they can resolve it '
     + 'at https://dchub.cloud/account \u2014 do not guess at what they owe or which plan '
     + 'they were on.';
 }
@@ -30894,7 +31143,7 @@ function _refusedMeans(src, reason, servedUnderSessionKey) {
     : `This call was served ANONYMOUSLY: the key that arrived via '${src}' reached DC Hub `
       + `and was REFUSED (${reason}), so it bought no keyed depth.`;
   if (reason === 'bind_email_required') {
-    return head + ' That key is real: it has used its free unbound calls and serves again '
+    return head + ' That key is real: it has used its unbound calls and serves again '
       + 'once bound to an email. Ask your human which address to use (never invent one), '
       + 'then call `bind_email` with {email, api_key: <that key>}. Pass api_key: without it '
       + 'bind_email binds the key active on this session, and a refused key is not active.';
@@ -30984,7 +31233,7 @@ export function _keyNoticeLine(ctxLike) {
   const status = _keyStatus(c);
   const url = _keyHelpUrl(c.platform);
   if (status === 'invalid' && !c.api_key) {
-    return `${_keyWhere(c.auth_source)} isn't valid, so you're getting free-tier results. `
+    return `${_keyWhere(c.auth_source)} isn't valid, so you're getting keyless results. `
       + `Get a new key at ${url}`;
   }
   if (status === 'unverified') {
@@ -31179,9 +31428,9 @@ export function _authWallGuidance(toolName, status, detail, keyed) {
     || (next === 'unlock_more_data' ? 'developer' : next === 'bind_email' ? 'identified' : 'free');
   const t = String(toolName || 'This tool');
   const message = next === 'claim_free_key'
-    ? `${t} needs a free DC Hub key. Call claim_free_key (no email, one call), then call ${t} again.`
+    ? `${t} needs a DC Hub key. Call claim_free_key (no email, one call), then call ${t} again.`
     : next === 'bind_email'
-      ? `${t} needs a free key with a bound email. Call bind_email with your human's email (no payment), then call ${t} again.`
+      ? `${t} needs a DC Hub key with a bound email. Call bind_email with your human's email (no payment), then call ${t} again.`
       : _wallCopy(_WALL_NEUTRAL_LINE, `${t} needs a paid DC Hub plan.`) + ' Relay the link in human_url to your human.';
   return { message, next_tool: next, tier_required: tierRequired, required_plan: plan };
 }
@@ -33198,6 +33447,165 @@ export function _withWelcome(text, env = process.env) {
 
 export const SERVER_DISPLAY_NAME = 'DC Hub';
 
+// r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
+// activate — the agent prints the key once, nobody saves it, and the next
+// session re-mints anonymously (the funnel's biggest structural loss). The
+// old copy ASKED the human to save the key but made them construct the
+// config edit themselves. This hands back COPY-PASTE-READY snippets for the
+// 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
+// X-API-Key header form), so the agent's only job is showing its human the
+// right one. Machine-readable at structuredContent.persist_config.
+const _persistConfig = (key, via) => {
+  const _u = 'https://dchub.cloud/mcp';
+  const _cu = _connectUrl(key, via);
+  return {
+    human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous). If their client only offers a URL box and no header field, use `connect_url` instead — it is the same key, carried in the URL.',
+    server_url: _u,
+    // ★ THE INSTALL ARTIFACT for any client whose connector UI is a URL box.
+    connect_url: _cu,
+    connect_url_note: 'Same key, carried in the URL instead of a header — auth precedence is header > Bearer > query > inline, so this loses to a header if both are present and never overrides one. Use this whenever your human pastes a server URL rather than editing a JSON config.',
+    byo_mcp: {
+      label: 'Paste-a-URL connectors — Grok · Claude.ai web · ChatGPT · Perplexity',
+      applies_to: ['grok', 'claude.ai web', 'chatgpt', 'perplexity',
+                   'any client whose connector settings have a URL field and no header field'],
+      url: _cu,
+      instruction: 'Ask your human to open their DC Hub connector settings and replace the server URL with the one above. That is the whole install — no config file, no header, no restart beyond reconnecting the connector.',
+      why: 'These clients run MCP server-side and build a NEW session for every tool call, so a key returned in a tool result cannot survive to your next call and you cannot apply it yourself. The connector URL is the only durable state on this kind of client.',
+    },
+    header: { 'X-API-Key': key },
+    clients: {
+      claude_desktop: {
+        label: 'Claude Desktop',
+        file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
+        // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
+        // claude_desktop_config.json does not run (stdio servers only). The launcher
+        // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
+        // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
+        snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
+        connector_url: _cu,
+        note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
+      },
+      claude_code: {
+        label: 'Claude Code (CLI — one command)',
+        snippet: 'claude mcp add dchub --transport http --header "X-API-Key: ' + key + '" ' + _u,
+      },
+      cursor: {
+        label: 'Cursor',
+        file: '~/.cursor/mcp.json',
+        snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // ★ VS Code, Copilot agent mode (2026-08-26). The load-bearing
+      // difference is the TOP-LEVEL KEY: VS Code reads `servers`, NOT
+      // `mcpServers` — a block copied from Cursor or Claude Desktop parses as
+      // JSON and registers nothing. Same class of silent failure as Windsurf's
+      // `serverUrl` and Cline's `type: "streamableHttp"`.
+      // Verified against VS Code's own docs, not written from memory:
+      //   https://code.visualstudio.com/docs/copilot/customization/mcp-servers
+      //   https://code.visualstudio.com/docs/agents/reference/mcp-configuration
+      // `type: "http"` is the remote-server form and `headers` is supported on
+      // it, which is why this client is header-capable rather than URL-only.
+      vscode: {
+        label: 'VS Code (Copilot agent mode)',
+        file: '.vscode/mcp.json in the workspace · or the user profile via the "MCP: Open User Configuration" command',
+        snippet: JSON.stringify({ servers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      cline: {
+        label: 'Cline (VS Code)',
+        file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
+        snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // Windsurf (2026-11-20, docs.windsurf.com/windsurf/cascade/mcp): the user config is
+      // ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/ is the
+      // older path. Both named, current first, from lib/windsurf-config-where.mjs.
+      // serverUrl and url are both accepted.
+      windsurf: {
+        label: 'Windsurf',
+        file: WINDSURF_PERSIST_FILE,
+        snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
+      // Gemini CLI called claim_free_key and got back six snippets, none of
+      // them for the client it was actually running on — so the honest move
+      // was to show its human nothing, and the key died in the response.
+      //
+      // These are the ONLY two Gemini surfaces that take a custom remote MCP
+      // server. The consumer Gemini app has no such field (a Gem cannot call
+      // DC Hub live), and the Gemini Enterprise data store REQUIRES OAuth 2.0
+      // and REJECTS X-API-Key — so neither belongs in a key-persistence
+      // snippet set and neither is listed here. Do not "helpfully" add them.
+      //
+      // ★★ THE FIELD NAME IS THE WHOLE THING, and the two disagree with each
+      // other, which is exactly how this goes wrong silently:
+      //   gemini_cli   `httpUrl`   — `url` is the SSE form; a Streamable-HTTP
+      //                              server under `url` is dialled with the
+      //                              wrong transport and never connects.
+      //   antigravity  `serverUrl` — `url` also works; `httpUrl` is not
+      //                              supported, so a Gemini CLI block parses
+      //                              as JSON and registers nothing. File:
+      //                              ~/.gemini/config/mcp_config.json (the
+      //                              ~/.gemini/antigravity/ path is gone from
+      //                              Google's docs, re-read 2026-11-02).
+      // Verified against the vendors' own published docs, not from memory:
+      //   https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
+      //   https://antigravity.google/docs/mcp.md
+      // Both read a `headers` object, which is why they are header-capable
+      // and get a key-bearing snippet at all rather than a connect_url.
+      gemini_cli: {
+        label: 'Gemini CLI',
+        file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add -s user --transport http dchub ' + _u,
+        snippet: JSON.stringify({ mcpServers: { dchub: { httpUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      antigravity: {
+        label: 'Antigravity (Google)',
+        file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
+        snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
+      },
+      // The two coding CLIs (Grok CLI note 2026-11-18 item 2). Codex got no snippet of its own and Copilot CLI
+      // got the VS Code one (`servers` in .vscode/mcp.json), which Copilot CLI does not read. Checked 2026-11-19
+      // against the vendors' docs and our live /connect/codex and /connect/copilot-cli pages:
+      //   codex_cli    a [mcp_servers.<name>] table in ~/.codex/config.toml; url, plus http_headers (literal
+      //                values) or env_http_headers (header -> env var name). learn.chatgpt.com/docs/extend/mcp
+      //   copilot_cli  top-level mcpServers in ~/.copilot/mcp-config.json; type "http", url, headers, tools.
+      //                docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
+      codex_cli: {
+        label: 'OpenAI Codex CLI',
+        file: '~/.codex/config.toml (or .codex/config.toml in a trusted project)',
+        snippet: '[mcp_servers.dchub]\nurl = "' + _u + '"\nhttp_headers = { "X-API-Key" = "' + key + '" }',
+        note: 'To keep the key out of the file, use env_http_headers = { "X-API-Key" = "DCHUB_API_KEY" } instead of http_headers, and export DCHUB_API_KEY in the shell that starts codex.',
+      },
+      copilot_cli: {
+        label: 'GitHub Copilot CLI',
+        file: '~/.copilot/mcp-config.json',
+        snippet: JSON.stringify({ mcpServers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key }, tools: ['*'] } } }),
+      },
+    },
+    // CORRECTED 2026-08-18: this used to say email-bind was the only option
+    // for a header-less host. It is not, and saying so cost us the whole
+    // BYO-MCP class — those clients DO have durable state, it is the URL.
+    // Email-bind still matters (it makes the key recoverable if the URL is
+    // ever lost) but it is now the SECOND step, not the substitute.
+    headerless_web_note: 'Claude.ai web / ChatGPT / Grok / Perplexity / Smithery have no config file to hold a header — but they DO have a connector URL box, and that is durable. On Smithery specifically the server runs behind their proxy, so pasting the URL below as a direct MCP server replaces that connection with an identified one (or, if their install screen offers an apiKey field, put the key there instead). Have your human paste `connect_url` above as the DC Hub server URL; the key rides in the URL and is sent on every future call. Then bind the key to their email (bind_email) so it is also recoverable if that URL is ever lost (recover_my_key re-sends it to that inbox).',
+  };
+};
+
+// The client names claim_free_key recognises (initialize clientInfo.name, the platform tag, client_name), in
+// match order. Module scope since 2026-11-20 so /mcp/connect?client= resolves a client the same way.
+const _CLIENT_KEY_RULES = [
+  [/claude[\s_-]*desktop/i, 'claude_desktop'], [/claude[\s_-]*code/i, 'claude_code'], [/cursor/i, 'cursor'],
+  // Copilot CLI (clientInfo github-copilot-developer, UA copilot-cli/) and Codex before the /copilot/ -> vscode rule.
+  [/copilot[\s_-]?cli|github-copilot-developer/i, 'copilot_cli'], [/codex/i, 'codex_cli'],
+  [/vs[\s_-]*code|visual studio code|copilot/i, 'vscode'], [/\b(cline|roo)\b/i, 'cline'],
+  [/windsurf|codeium/i, 'windsurf'], [/gemini/i, 'gemini_cli'], [/antigravity/i, 'antigravity'],
+];
+const _clientKeyFromNames = (...names) => {
+  for (const n of names) {
+    const t = String(n || '');
+    if (!t) continue;
+    for (const [re, k] of _CLIENT_KEY_RULES) if (re.test(t)) return k;
+  }
+  return null;
+};
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   // Display name (Grok note L item 7, 2026-11-15): catalogs that build a toolkit name from
@@ -33321,7 +33729,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // silently drops the tool from the derived count (caught 2026-07-31 when
   // the count healed 82→81 across every registry surface).
   trackedTool(srv, 'execute_plan',
-    'Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), substations and transmission, megawatts and power density, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, tax incentives and permitting, water and climate risk, data-center M&A and deals. Recommended entry for a question that spans more than one of those: it picks and chains the right tools and returns one dated, cited answer. Pass the user\'s question as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you, energy and time to power first ("how soon can a 100 MW load get power in ERCOT", "interconnection queue and grid headroom in PJM for a 200 MW AI campus", "gas economics for on-site generation in Texas", "rank markets for a 200 MW AI campus"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
+    'Use this when a data center question spans several topics: one-call planner over grid headroom and power availability, interconnection queues, PPAs and energy pricing, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), substations and transmission, megawatts and power density, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, tax incentives and permitting, water and climate risk, data-center M&A and deals. Recommended entry for a question that spans more than one of those: it picks and chains the right tools and returns one dated, cited answer. Pass the user\'s question as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you, energy and time to power first ("how soon can a 100 MW load get power in ERCOT", "interconnection queue and grid headroom in PJM for a 200 MW AI campus", "gas economics for on-site generation in Texas", "rank markets for a 200 MW AI campus"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
     { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "how soon can a 100 MW load get power in ERCOT" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "interconnection queue and energy prices in MISO for a 200 MW campus" · "gas economics for on-site generation in Texas" · "rank markets for a 200 MW AI campus" · "find 100 MW of buildable capacity near Ashburn"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict.'),
       // ★★★2026-08-19 [6]: these values were ALWAYS accepted — but only inside
@@ -33555,7 +33963,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
               // 5.32: facility slugs from a facility search, kept apart from the market-slug pool.
               if (s.tool === 'search_facilities') {
-                const fs = _facilitySlugsFromSearch(out.full || out.result, Math.max(maxFan, 3), args && args.query);
+                const fs = _facilitySlugsFromSearch(out.full || out.result, Math.max(maxFan, 3), args && args.query, s.named_facility || null);
                 if (fs.length) {
                   const byStep = (minted.__facility_by_step = minted.__facility_by_step || {});
                   byStep[s.step] = fs;
@@ -33909,6 +34317,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           || _buildPermittingAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildNamedCampusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             campus: _sig && _sig.__campus ? _sig.__campus.name : null }, executed, fullByEntry)
+          // 5.56 (Grok daily 2026-11-20, items 2-4): a named facility leads with its record, a status ask with its
+          // projects, and a data-center capacity ask with its operational and build sides (power context after them).
+          || _buildNamedFacilityAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            facility: _sig && _sig.__facName ? _sig.__facName : null }, executed, fullByEntry)
+          || _buildPipelineStatusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            status: _sig && !(_sig.__facName) ? _sig.__pipelineStatus : null }, executed, fullByEntry)
+          || _buildCapacitySidesAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            state: _sig ? (_sig.state || _sig.stateFromPlace || null) : null }, executed, fullByEntry)
           || _buildGasPriceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildQueueWithdrawalsAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildQueueSliceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
@@ -33957,6 +34373,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           _pairs = _pairLines(executed, (e) => fullByEntry.get(e));
         }
       } catch (_e) { _pairs = null; }
+      // Grok daily note 2026-11-20: a plan served as its caller's first full answer whose steps all came back held
+      // back (preview depth, or the data API's keyless stub) was not the day's full answer. It is not counted
+      // (c._kffPlanStepsRan below, the dispatch gives the seat back) and its tier_note says so; a plan with some
+      // held-back steps names them instead of saying "full depth" over them.
+      let _kffDepths = null;
+      try {
+        if (c && c._kffPlan === true && c.loopback_step !== true) {
+          _kffDepths = _kffPlanStepDepths(executed, (e) => fullByEntry.get(e));
+          if (!_kffDepths.full.length && _kffDepths.held.length) c._kffPlanHeld = true;
+        }
+      } catch (_e) { _kffDepths = null; }
       const out = {
         ...(_dcpiLead ? { dcpi_verdict: _dcpiLead } : {}),
         _entity: 'plan_execution', ok: true,
@@ -34001,9 +34428,18 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                       // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
                       // Grok re-run 2026-11-17 (option A): the allowance clauses ("the first keyless plan each UTC day is
                       // a full answer", "an email raises the limit") are gone; the note says only the depth the steps ran at.
+                      // Grok daily note 2026-11-20: the reason leads ("today's full plan answer ... was used at 00:12 UTC
+                      // ...; steps returned preview depth"), and a first-full plan says which steps came back held back.
                       : (c && c._kffPlan === true
-                        ? 'no key — steps ran at full depth'
-                        : (() => { const why = _kffPreviewReason(c); return `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
+                        ? (c._kffPlanHeld === true
+                          ? 'no key — every step came back at preview depth, so this plan was not counted as today\u2019s full plan answer; steps returned preview depth'
+                          : (_kffDepths && _kffDepths.held.length
+                            ? 'no key — steps ran at full depth except ' + [...new Set(_kffDepths.held)].join(', ') + ' (preview depth)'
+                            : 'no key — steps ran at full depth'))
+                        // The used case leads with its reason; every other reason keeps the 5.43 shape (in parentheses), so
+                        // /mcp/chatgpt (frozen in review) and the QA-marked note stay byte for byte.
+                        : (() => { const why = _kffPreviewReason(c); return /^today\u2019s full plan answer/.test(why) ? `no key — ${why}; steps returned preview depth`
+                          : `no key — steps returned preview depth${why ? ` (${why})` : ''}`; })())) },
         ...(replay.plan_id ? { plan_id: replay.plan_id } : {}),
         replay,
         // #118011: an unbound plan says so FIRST, so the agent does not compose an
@@ -34145,7 +34581,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // seat is given back). A plan with no data says so, and more_detail.calls names the calls to make by
       // hand: each step's own arguments, then the concrete reads for the states the question named.
       const _dataRan = _planDataStepsRan(executed);
-      if (c) c._kffPlanStepsRan = _dataRan;
+      // A first-full plan whose every data step came back held back consumed nothing (Grok daily note 2026-11-20).
+      if (c) c._kffPlanStepsRan = c._kffPlanHeld === true ? 0 : _dataRan;
       const _hintOf = (e) => { const p = e && byStep.get(e.step); return p && p.tool === e.tool ? (p.args_hint || null) : null; };
       if (_dataRan === 0) {
         let _extra = [];
@@ -34164,7 +34601,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // as_of lead, each step keeps its key figures and first rows, and more_detail points at the full rows.
       // A plan with no data is not compacted: it was not the day's full answer (the dispatch gives the seat back).
       let _final = out;
-      if (c && c._kffPlan === true && c.loopback_step !== true && _dataRan > 0) {
+      if (c && c._kffPlan === true && c._kffPlanHeld !== true && c.loopback_step !== true && _dataRan > 0) {
         try {
           _final = _compactFirstPlan(out, fullByEntry, { cap: _keylessFirstFullCap(), hintOf: _hintOf });
           // Grok CLI note 2026-11-18 item 1: next_tools (the get_changes daily check-in) is the first answer's only way
@@ -34996,7 +35433,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // the interconnection queue, time-to-power, full multi-factor site score)
           // is the paid layer. Honest signpost, not a paywall on the data above.
           deep_intelligence: {
-            note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (a modeled MW estimate, not confirmed available power), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
+            note: 'This is the live fuel-mix ranking' + _chatgptFrozenCopy('', ' (free)') + '. For the SITING DECISION — per-ISO grid headroom (a modeled MW estimate, not confirmed available power), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
             per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
             score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
             best_market_recommendation: 'get_dchub_recommendation',
@@ -35311,7 +35748,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       });
       if (!r.ok) return `# Unavailable\n\nDC Hub context pack fetch failed (HTTP ${r.status}).`;
       const md = await r.text();
-      return md + '\n\n---\n_Free preview. Full token-budgeted pack: call the `'
+      return md + '\n\n---\n_' + _chatgptFrozenCopy('Preview', 'Free preview') + '. Full token-budgeted pack: call the `'
         + (path.includes('/iso/') ? 'get_iso_context' : 'get_market_context')
         + '` tool. Cite "DC Hub (dchub.cloud)"._\n';
     } catch (e) {
@@ -35326,13 +35763,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const ms = ((d && d.markets) || []).slice(0, 60);
         return { resources: ms.map(m => ({
           uri: `dchub://markets/${m.slug}`,
-          name: `${m.name} — market context (free)`,
-          description: `DCPI verdict ${m.verdict || 'N/A'} — free DC Hub market context pack for ${m.name}`,
+          name: `${m.name} — market context`,
+          description: `DCPI verdict ${m.verdict || 'N/A'} — DC Hub market context pack for ${m.name}`,
           mimeType: 'text/markdown',
         })) };
       },
     }),
-    { description: 'Free DC Hub market context pack (DCPI verdict + at-a-glance + latest headline) as markdown. Full pack: get_market_context tool.',
+    { description: 'DC Hub market context pack (DCPI verdict + at-a-glance + latest headline) as markdown. Full pack: get_market_context tool.',
       mimeType: 'text/markdown' },
     async (uri, vars) => ({
       contents: [{ uri: uri.href, mimeType: 'text/markdown',
@@ -35344,13 +35781,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       list: async () => ({
         resources: US_ISOS.map(i => ({
           uri: `dchub://isos/${i}`,
-          name: `${i} — grid context (free)`,
-          description: `Free DC Hub grid context pack for ${i} (live demand, fuel mix, latest headline)`,
+          name: `${i} — grid context`,
+          description: `DC Hub grid context pack for ${i} (live demand, fuel mix, latest headline)`,
           mimeType: 'text/markdown',
         })),
       }),
     }),
-    { description: 'Free DC Hub ISO/grid context pack (live snapshot + latest headline) as markdown. Full pack: get_iso_context tool.',
+    { description: 'DC Hub ISO/grid context pack (live snapshot + latest headline) as markdown. Full pack: get_iso_context tool.',
       mimeType: 'text/markdown' },
     async (uri, vars) => ({
       contents: [{ uri: uri.href, mimeType: 'text/markdown',
@@ -35957,7 +36394,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'analyze_parcel',
-    'Use this when the user has a land parcel for a data center site: structured read of its boundary — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (free county/state GIS polygons, covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview + the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary or a point on a specific parcel and want it anchored + sized; for a general lat/lon site score use analyze_site; for the interconnection-queue survivor set use get_refined_queue (queue rows carry NO parcel identity, so they never auto-join to hosted parcels).',
+    'Use this when the user has a land parcel for a data center site: structured read of its boundary — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (public county/state GIS polygons, covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview + the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary or a point on a specific parcel and want it anchored + sized; for a general lat/lon site score use analyze_site; for the interconnection-queue survivor set use get_refined_queue (queue rows carry NO parcel identity, so they never auto-join to hosted parcels).',
     // r-coord-aliases (2026-07-16): geometry was z.any() WITHOUT .optional() —
     // the SDK required it, so the documented lat/lon-only hosted-parcel lookup
     // was rejected at validation (-32602) before the handler ever ran.
@@ -36464,7 +36901,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // grid so every candidate is a point we can cite — see the backend module
   // docstring for why tessellation was rejected.
   trackedTool(srv, 'find_sites',
-    'Use this when the user has no data center site yet and wants candidate search areas (site selection by substation voltage, gas and fiber distance); execute_plan covers a multi-part siting question. THE INVERSE QUERY: every other DC Hub siting tool needs a coordinate you already have — analyze_site scores one, get_composite_site_score grades one, rank_sites orders candidates YOU already enriched, find_alternatives needs a seed facility. This one answers "where should I even be looking?". Returns candidate SEARCH AREAS anchored on real HIFLD substations at or above min_voltage_kv, spatially de-duplicated by cluster_km so a dense metro yields distinct areas instead of 40 near-identical rows, each carrying measured distance to the nearest gas pipeline and fiber route plus state-grain moratorium context, and a next_calls handoff. ★ WHAT A CANDIDATE IS NOT: a search area is NOT a parcel, NOT a listing, and NOT land known to be for sale — DC Hub holds no land-ownership or availability data, and hosted parcel boundaries cover only a set of priority data-center counties (VA, IL, TX, OH, UT, OR, IA, WY), so analyze_parcel returns parcel_not_covered on many of these points BY DESIGN. Read each as "start looking here", then score the coordinate with analyze_site. ★ READ constraint_coverage BEFORE CALLING THIS A SCREENED LIST: a constraint filters ONLY when its layer actually answered. If a layer errors, the set comes back UNFILTERED with applied:false plus a reason and an instead, the names repeated in top-level unapplied_constraints and an unapplied_constraints_warning — an unevaluable constraint is never a passed constraint. fiber_distance_km is a straight-line CHORD between a route\'s endpoints, NOT the true polyline path; its basis is stamped on every candidate and get_fiber_readiness at the coordinate is the engineered read. hazard/moratorium are STATE grain, never a site verdict. A geography is REQUIRED — pass state, or lat+lon (+radius_km); without one you get a legible 400 (error_code geography_required), never a nationwide scan. Free tier coarsens coordinates to ~11 km and withholds operator/capacity. Answers "where should I even be looking for 200 MW in Ohio" and "which areas near Dallas sit on 230kV with gas within 5 miles". Try: find_sites state=OH min_voltage_kv=230 max_gas_km=8 — or find_sites lat=39.04 lon=-77.48 radius_km=60 min_voltage_kv=500. Do NOT use to score a site you already have (analyze_site), to rank candidates you already enriched (rank_sites), to find similar FACILITIES to a known one (find_alternatives), or for interconnection-queue survivors (get_refined_queue).',
+    'Use this when the user has no data center site yet and wants candidate search areas (site selection by substation voltage, gas and fiber distance); execute_plan covers a multi-part siting question. THE INVERSE QUERY: every other DC Hub siting tool needs a coordinate you already have — analyze_site scores one, get_composite_site_score grades one, rank_sites orders candidates YOU already enriched, find_alternatives needs a seed facility. This one answers "where should I even be looking?". Returns candidate SEARCH AREAS anchored on real HIFLD substations at or above min_voltage_kv, spatially de-duplicated by cluster_km so a dense metro yields distinct areas instead of 40 near-identical rows, each carrying measured distance to the nearest gas pipeline and fiber route plus state-grain moratorium context, and a next_calls handoff. ★ WHAT A CANDIDATE IS NOT: a search area is NOT a parcel, NOT a listing, and NOT land known to be for sale — DC Hub holds no land-ownership or availability data, and hosted parcel boundaries cover only a set of priority data-center counties (VA, IL, TX, OH, UT, OR, IA, WY), so analyze_parcel returns parcel_not_covered on many of these points BY DESIGN. Read each as "start looking here", then score the coordinate with analyze_site. ★ READ constraint_coverage BEFORE CALLING THIS A SCREENED LIST: a constraint filters ONLY when its layer actually answered. If a layer errors, the set comes back UNFILTERED with applied:false plus a reason and an instead, the names repeated in top-level unapplied_constraints and an unapplied_constraints_warning — an unevaluable constraint is never a passed constraint. fiber_distance_km is a straight-line CHORD between a route\'s endpoints, NOT the true polyline path; its basis is stamped on every candidate and get_fiber_readiness at the coordinate is the engineered read. hazard/moratorium are STATE grain, never a site verdict. A geography is REQUIRED — pass state, or lat+lon (+radius_km); without one you get a legible 400 (error_code geography_required), never a nationwide scan. Without full access, coordinates are coarsened to ~11 km and operator/capacity is withheld. Answers "where should I even be looking for 200 MW in Ohio" and "which areas near Dallas sit on 230kV with gas within 5 miles". Try: find_sites state=OH min_voltage_kv=230 max_gas_km=8 — or find_sites lat=39.04 lon=-77.48 radius_km=60 min_voltage_kv=500. Do NOT use to score a site you already have (analyze_site), to rank candidates you already enriched (rank_sites), to find similar FACILITIES to a known one (find_alternatives), or for interconnection-queue survivors (get_refined_queue).',
     { state: S.describe('2-letter US state to search, e.g. OH — required unless you pass lat + lon'),
       lat: N.describe('Latitude of a search centre, e.g. 39.04 — use with lon (+ radius_km) instead of state'),
       lon: N.describe('Longitude of a search centre, e.g. -77.48'),
@@ -37728,146 +38165,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
-  // r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
-  // activate — the agent prints the key once, nobody saves it, and the next
-  // session re-mints anonymously (the funnel's biggest structural loss). The
-  // old copy ASKED the human to save the key but made them construct the
-  // config edit themselves. This hands back COPY-PASTE-READY snippets for the
-  // 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
-  // X-API-Key header form), so the agent's only job is showing its human the
-  // right one. Machine-readable at structuredContent.persist_config.
-  const _persistConfig = (key, via) => {
-    const _u = 'https://dchub.cloud/mcp';
-    const _cu = _connectUrl(key, via);
-    return {
-      human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous). If their client only offers a URL box and no header field, use `connect_url` instead — it is the same key, carried in the URL.',
-      server_url: _u,
-      // ★ THE INSTALL ARTIFACT for any client whose connector UI is a URL box.
-      connect_url: _cu,
-      connect_url_note: 'Same key, carried in the URL instead of a header — auth precedence is header > Bearer > query > inline, so this loses to a header if both are present and never overrides one. Use this whenever your human pastes a server URL rather than editing a JSON config.',
-      byo_mcp: {
-        label: 'Paste-a-URL connectors — Grok · Claude.ai web · ChatGPT · Perplexity',
-        applies_to: ['grok', 'claude.ai web', 'chatgpt', 'perplexity',
-                     'any client whose connector settings have a URL field and no header field'],
-        url: _cu,
-        instruction: 'Ask your human to open their DC Hub connector settings and replace the server URL with the one above. That is the whole install — no config file, no header, no restart beyond reconnecting the connector.',
-        why: 'These clients run MCP server-side and build a NEW session for every tool call, so a key returned in a tool result cannot survive to your next call and you cannot apply it yourself. The connector URL is the only durable state on this kind of client.',
-      },
-      header: { 'X-API-Key': key },
-      clients: {
-        claude_desktop: {
-          label: 'Claude Desktop',
-          file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
-          // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
-          // claude_desktop_config.json does not run (stdio servers only). The launcher
-          // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
-          // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
-          snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
-          connector_url: _cu,
-          note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
-        },
-        claude_code: {
-          label: 'Claude Code (CLI — one command)',
-          snippet: 'claude mcp add dchub --transport http --header "X-API-Key: ' + key + '" ' + _u,
-        },
-        cursor: {
-          label: 'Cursor',
-          file: '~/.cursor/mcp.json',
-          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // ★ VS Code, Copilot agent mode (2026-08-26). The load-bearing
-        // difference is the TOP-LEVEL KEY: VS Code reads `servers`, NOT
-        // `mcpServers` — a block copied from Cursor or Claude Desktop parses as
-        // JSON and registers nothing. Same class of silent failure as Windsurf's
-        // `serverUrl` and Cline's `type: "streamableHttp"`.
-        // Verified against VS Code's own docs, not written from memory:
-        //   https://code.visualstudio.com/docs/copilot/customization/mcp-servers
-        //   https://code.visualstudio.com/docs/agents/reference/mcp-configuration
-        // `type: "http"` is the remote-server form and `headers` is supported on
-        // it, which is why this client is header-capable rather than URL-only.
-        vscode: {
-          label: 'VS Code (Copilot agent mode)',
-          file: '.vscode/mcp.json in the workspace · or the user profile via the "MCP: Open User Configuration" command',
-          snippet: JSON.stringify({ servers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        cline: {
-          label: 'Cline (VS Code)',
-          file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
-          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // Windsurf (2026-11-20, docs.windsurf.com/windsurf/cascade/mcp): the user config is
-        // ~/.config/devin/mcp_config.json (%AppData%/devin on Windows); ~/.codeium/windsurf/ is the
-        // older path. Both named, current first, from lib/windsurf-config-where.mjs.
-        // serverUrl and url are both accepted.
-        windsurf: {
-          label: 'Windsurf',
-          file: WINDSURF_PERSIST_FILE,
-          snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // ★ THE TWO GOOGLE CLIENTS (2026-08-31). Until now an agent running on
-        // Gemini CLI called claim_free_key and got back six snippets, none of
-        // them for the client it was actually running on — so the honest move
-        // was to show its human nothing, and the key died in the response.
-        //
-        // These are the ONLY two Gemini surfaces that take a custom remote MCP
-        // server. The consumer Gemini app has no such field (a Gem cannot call
-        // DC Hub live), and the Gemini Enterprise data store REQUIRES OAuth 2.0
-        // and REJECTS X-API-Key — so neither belongs in a key-persistence
-        // snippet set and neither is listed here. Do not "helpfully" add them.
-        //
-        // ★★ THE FIELD NAME IS THE WHOLE THING, and the two disagree with each
-        // other, which is exactly how this goes wrong silently:
-        //   gemini_cli   `httpUrl`   — `url` is the SSE form; a Streamable-HTTP
-        //                              server under `url` is dialled with the
-        //                              wrong transport and never connects.
-        //   antigravity  `serverUrl` — `url` also works; `httpUrl` is not
-        //                              supported, so a Gemini CLI block parses
-        //                              as JSON and registers nothing. File:
-        //                              ~/.gemini/config/mcp_config.json (the
-        //                              ~/.gemini/antigravity/ path is gone from
-        //                              Google's docs, re-read 2026-11-02).
-        // Verified against the vendors' own published docs, not from memory:
-        //   https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md
-        //   https://antigravity.google/docs/mcp.md
-        // Both read a `headers` object, which is why they are header-capable
-        // and get a key-bearing snippet at all rather than a connect_url.
-        gemini_cli: {
-          label: 'Gemini CLI',
-          file: '~/.gemini/settings.json · or .gemini/settings.json in a project · or one command: gemini mcp add -s user --transport http dchub ' + _u,
-          snippet: JSON.stringify({ mcpServers: { dchub: { httpUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        antigravity: {
-          label: 'Antigravity (Google)',
-          file: '~/.gemini/config/mcp_config.json · or .agents/mcp_config.json in the workspace',
-          snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
-        },
-        // The two coding CLIs (Grok CLI note 2026-11-18 item 2). Codex got no snippet of its own and Copilot CLI
-        // got the VS Code one (`servers` in .vscode/mcp.json), which Copilot CLI does not read. Checked 2026-11-19
-        // against the vendors' docs and our live /connect/codex and /connect/copilot-cli pages:
-        //   codex_cli    a [mcp_servers.<name>] table in ~/.codex/config.toml; url, plus http_headers (literal
-        //                values) or env_http_headers (header -> env var name). learn.chatgpt.com/docs/extend/mcp
-        //   copilot_cli  top-level mcpServers in ~/.copilot/mcp-config.json; type "http", url, headers, tools.
-        //                docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
-        codex_cli: {
-          label: 'OpenAI Codex CLI',
-          file: '~/.codex/config.toml (or .codex/config.toml in a trusted project)',
-          snippet: '[mcp_servers.dchub]\nurl = "' + _u + '"\nhttp_headers = { "X-API-Key" = "' + key + '" }',
-          note: 'To keep the key out of the file, use env_http_headers = { "X-API-Key" = "DCHUB_API_KEY" } instead of http_headers, and export DCHUB_API_KEY in the shell that starts codex.',
-        },
-        copilot_cli: {
-          label: 'GitHub Copilot CLI',
-          file: '~/.copilot/mcp-config.json',
-          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'http', url: _u, headers: { 'X-API-Key': key }, tools: ['*'] } } }),
-        },
-      },
-      // CORRECTED 2026-08-18: this used to say email-bind was the only option
-      // for a header-less host. It is not, and saying so cost us the whole
-      // BYO-MCP class — those clients DO have durable state, it is the URL.
-      // Email-bind still matters (it makes the key recoverable if the URL is
-      // ever lost) but it is now the SECOND step, not the substitute.
-      headerless_web_note: 'Claude.ai web / ChatGPT / Grok / Perplexity / Smithery have no config file to hold a header — but they DO have a connector URL box, and that is durable. On Smithery specifically the server runs behind their proxy, so pasting the URL below as a direct MCP server replaces that connection with an identified one (or, if their install screen offers an apiKey field, put the key there instead). Have your human paste `connect_url` above as the DC Hub server URL; the key rides in the URL and is sent on every future call. Then bind the key to their email (bind_email) so it is also recoverable if that URL is ever lost (recover_my_key re-sends it to that inbox).',
-    };
-  };
+  // _persistConfig, _CLIENT_KEY_RULES and _clientKeyFromNames live at module scope (above createServer) so the
+  // /mcp/connect page (lib/mcp-connect-page.mjs) renders the same snippets.
 
   // ★ Grok audit 2026-10-06, item 7: claim_free_key's reply was 18 KB and led with prose. The caller
   // already told us what it is (initialize clientInfo.name, the platform tag, or client_name), so the
@@ -37875,21 +38174,6 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // that client's entry plus a pointer to /connect for the rest. An unrecognised client keeps the full
   // eight-client block, exactly as before. Post-processes _persistConfig's output so its literal (the
   // text canon fences scan) is untouched.
-  const _CLIENT_KEY_RULES = [
-    [/claude[\s_-]*desktop/i, 'claude_desktop'], [/claude[\s_-]*code/i, 'claude_code'], [/cursor/i, 'cursor'],
-    // Copilot CLI (clientInfo github-copilot-developer, UA copilot-cli/) and Codex before the /copilot/ -> vscode rule.
-    [/copilot[\s_-]?cli|github-copilot-developer/i, 'copilot_cli'], [/codex/i, 'codex_cli'],
-    [/vs[\s_-]*code|visual studio code|copilot/i, 'vscode'], [/\b(cline|roo)\b/i, 'cline'],
-    [/windsurf|codeium/i, 'windsurf'], [/gemini/i, 'gemini_cli'], [/antigravity/i, 'antigravity'],
-  ];
-  const _clientKeyFromNames = (...names) => {
-    for (const n of names) {
-      const t = String(n || '');
-      if (!t) continue;
-      for (const [re, k] of _CLIENT_KEY_RULES) if (re.test(t)) return k;
-    }
-    return null;
-  };
   const _persistConfigFor = (key, via, clientKey) => {
     const full = _persistConfig(key, via);
     const own = clientKey && full.clients && full.clients[clientKey];
@@ -38151,6 +38435,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
       if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
+      if (key) { try { _deviceMatchRecord(getCtx(), key); } catch (_) {} }   // wall identity v2: both flags, walled callers only
       if (!key && r && r.error === 'email_has_key') return _emailHasKeyReply(r, false);
       // E4 (owner 2026-11-14): the backend no longer hands an email-less caller another caller's unused key. At its
       // per-IP caps it answers 429 (unused_key_cap / mint_rate_limited); say what to do instead of "Could not mint".
@@ -38513,8 +38798,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // 2026-11-11: the email already has a key, so nothing was minted; claim_free_key's reply says so.
           if (_minted && _minted.structuredContent && _minted.structuredContent.error === 'email_has_key') return _minted;
           let _lead = _notBound
-            ? 'No key on this session, so `bind_email` minted a free DC Hub key, but the email was NOT bound to it (see below). '
-            : 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+            ? 'No key on this session, so `bind_email` minted a DC Hub key, but the email was NOT bound to it (see below). '
+            : 'No key on this session, so `bind_email` minted a DC Hub key with this email bound (one call). ';
           // Sessionless caller (2026-11-10): no MCP session, so the server cannot apply the key to later
           // calls and the walled call stays walled until the agent sends it. Kill switch
           // DCHUB_SESSIONLESS_BIND_KEY_LINE=0. Session callers and execute_plan steps: unchanged.
@@ -38779,6 +39064,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         await callAPIWrite(LISTING_TERMS_ACCEPT_API, body, { withStatus: true }));
     });
 
+  // 2026-11-20: the operator accepts a buyer's registration (see
+  // _operatorAcceptPreflight). Contract fixtures: test/operator-accept-capacity-intro.test.mjs.
+  {
+    trackedTool(srv, 'accept_capacity_intro',
+      'Use this when your human is the operator of a DC Hub Capacity Source listing and wants to accept a buyer\'s registration for it (the lead_id from DC Hub\'s lead notice). Accepting shares the buyer\'s name, role, email and message with the operator, and the operator\'s site details and contact with the buyer; DC Hub records the acceptance in its tamper-evident lead register and emails both sides a receipt. Run only when your human asks, and set confirm=true only after they say yes. Needs a key bound to the email on the listing (or the account that submitted it), with an inbox DC Hub has proven (an OAuth connection); otherwise use the accept link in DC Hub\'s email. The listing\'s operator must be on DC Hub\'s Capacity Source terms (https://dchub.cloud/terms#capacity-source); if your human has not accepted the current version, the result says so and names the step to accept them first. Returns the decision and a receipt: lead_id, buyer registration time, acceptance time, the listing terms version and the register entry. A repeat call returns the same receipt. Do NOT use to request capacity (use request_capacity_intro) or to accept a buyer\'s introduction terms (use accept_capacity_terms).',
+      { lead_id: S.describe('The registration to accept, exactly as DC Hub\'s lead notice gives it, e.g. LD-0123456789'),
+        note: S.describe('Optional short note from the operator to the buyer, at most 500 characters'),
+        confirm: B.describe('Set true ONLY after your human, the listing\'s operator, has said yes to accepting this registration. Unless it is exactly true, nothing is sent') },
+      async (a) => {
+        const refused = _operatorAcceptPreflight(a);
+        if (refused) return refused;
+        const body = {};
+        if (typeof a.note === 'string' && a.note.trim()) body.note = a.note.trim().slice(0, 500);
+        return _listingsToolResult('accept_capacity_intro',
+          await callAPIWrite(_operatorAcceptPath(a.lead_id), body, { withStatus: true }));
+      });
+  }
+
   // r-unlock (2026-06-16): unlock_more_data — the first-class, DISCOVERABLE
   // upgrade tool. Agents enumerate the tool list; if "upgrade" isn't itself a
   // tool, half of them never surface the option to their human. This is the
@@ -38869,7 +39172,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       text: await _dhDailyResourceText((path) => callAPI(path, {})) }] }));
   _R('pack-ai-campus-power', 'dchub://packs/ai-campus-power', 'Starter pack: AI Campus Power + Interconnect',
      'The scoped 10-tool pack + 6 ready intents for the hyperscale AI-campus wave (Grok + Perplexity converged spec).',
-     '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Free tier answers all six at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
+     '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Without a key, all six answer at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
   _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
      'How the Data Center Power and Gas Indices are computed — and what the DCGI correction changed.',
      '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of the excess-power score, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas access (pipeline and operator presence) plus gas cost (EIA electric-power gas price, trailing 12 months) -> a GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED verdict. `get_gas_index` returns the score and verdict per state, with `data_as_of` (the stalest of its two inputs); a state EIA cannot price is UNSCORED with the reason, never given a substitute price. Withdrawn 2026-08-08 after an audit found two of its three terms measurably wrong, restored 2026-08-30 with all three repaired; the cost basis changed again 2026-09-27 (see /api/v1/dcgi/methodology `corrections`). Scores published before 2026-08-08 are not comparable with current ones, so do not quote a cached pre-withdrawal DCGI figure.\n\nDCPI updates from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
@@ -38911,7 +39214,7 @@ Return a ranked shortlist: market, DCPI verdict, time-to-power (months), headroo
 2. get_interconnection_queue iso=${a.iso} — queued GW by fuel/status (ERCOT also returns the large-load data-center queue).
 3. get_refined_queue iso=${a.iso}${a.capacity_mw ? ` min_mw=${a.capacity_mw}` : ''} geocoded_only=true — de-duplicated queue survivors; each mints a durable candidate_id — chain into analyze_site by candidate_id, never re-typed coordinates.`
        : `Run the DC Hub grid_and_queue recipe:
-1. get_grid_scoreboard — free, no key: live demand, fuel mix, renewable share for every tracked grid; pick the ISO that fits the question.
+1. get_grid_scoreboard — no key needed: live demand, fuel mix, renewable share for every tracked grid; pick the ISO that fits the question.
 2. get_grid_intelligence iso=<ISO chosen from step 1> — headroom, constraints, time-to-power.
 3. get_interconnection_queue iso=<same ISO> — queued GW by fuel/status (parallel with step 2 once the ISO is chosen).`)
        + `\nAnswer plainly: how much headroom DC Hub's data shows (a modeled estimate, not a utility or ISO confirmation that the power is available), how long it takes, and where in the queue it comes from. Report unavailable factors as unknown. Cite "DC Hub (dchub.cloud)".`);
@@ -38928,7 +39231,7 @@ Summarize: cooling-water sustainability, the driving hazards, seismic + cooling 
      'Only the delta since your last pull — DCPI movers, new facilities/pipeline/deals, plus movement in your saved sites (recipe whats_changed).',
      { since: z.string().optional().describe('Window or cached generated_at, e.g. 24h, 7d, 2026-07-01T00:00:00Z') },
      (a) => `Run the DC Hub whats_changed recipe — the two calls are independent, run them in parallel:
-1. get_changes since=${a.since || '24h'} — the delta only: DCPI movers, new facilities, new pipeline projects, new deals (free). Cache the returned generated_at and pass it back as since= on the next pull.
+1. get_changes since=${a.since || '24h'} — the delta only: DCPI movers, new facilities, new pipeline projects, new deals (no key needed). Cache the returned generated_at and pass it back as since= on the next pull.
 2. list_saved_sites since=7d — did YOUR saved sites move? Verdict flips, excess-power deltas, alerts fired (needs an API key with saved sites — skip when keyless).
 Report the notable movers with direction and why each matters. Cite "DC Hub (dchub.cloud)".`);
   _P('site_analysis', 'Recipe: single-site analysis',
@@ -38988,7 +39291,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 97 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 98 tools; start with get_grid_scoreboard (no key needed).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',
@@ -39634,6 +39937,39 @@ app.get([PARTNER_PATH, PARTNER_PATH + '/'], (req, res) => {
   } catch (e) {
     res.status(500).type('text').send('partner_unavailable');
   }
+});
+
+// /mcp/connect (owner 2026-11-20, wall_identity_v2): the human sign-in page a wall can point at
+// (lib/mcp-connect-page.mjs): an email field posting to the backend's existing /api/v1/dev-signup
+// door, the /mcp/oauth sign-in, and with ?client= that client's claim_free_key snippet first.
+// Behind DCHUB_WALL_IDENTITY_V2 and only for a browser GET/HEAD; anything else calls next(), so the
+// request is answered exactly as before (no other /mcp/connect route exists: today that is a 404).
+// Not in MCP_PATHS: a page, not an endpoint. The zone worker forwards a browser GET here.
+app.get([CONNECT_PATH, CONNECT_PATH + '/'], (req, res, next) => {
+  if (!_wallIdV2On() || !_connectPageWanted(req)) return next();
+  try {
+    const client = typeof req.query.client === 'string' ? req.query.client : '';
+    const html = _renderConnectPage({ client, persist: _persistConfig, clientKeyFrom: _clientKeyFromNames });
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Vary', 'Accept');
+    res.set('Content-Security-Policy', CONNECT_CSP());
+    res.set('X-Robots-Tag', 'noindex');
+    res.type('html').send(html);
+  } catch (e) {
+    return next();
+  }
+});
+
+// POST /mcp/connect (owner 2026-11-21, outside test: it answered Express's 404 "Cannot POST /mcp/connect"): an MCP
+// client that saved the page URL as its server URL gets exactly what POST /mcp gives (same handler, same gating:
+// keyless /mcp is never gated). DELETE (session close) follows it. The browser page above is GET/HEAD only.
+// Express re-reads req.url at every later layer, so the /mcp middlewares and handler below see a plain /mcp request.
+app.all([CONNECT_PATH, CONNECT_PATH + '/'], (req, res, next) => {
+  if (req.method !== 'POST' && req.method !== 'DELETE') return next();
+  const q = req.url.indexOf('?');
+  req.url = '/mcp' + (q >= 0 ? req.url.slice(q) : '');
+  req.originalUrl = req.url;
+  return next();
 });
 
 app.get('/health', (req, res) => {

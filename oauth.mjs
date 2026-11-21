@@ -195,13 +195,13 @@ function _consentPage(p) {
 .host{font-weight:600}button{font:inherit;padding:.6rem 1.2rem;border-radius:8px;border:0;cursor:pointer;margin:.25rem .5rem .25rem 0}
 .ok{background:#0a5;color:#fff}.no{background:#eee;color:#333}.muted{color:#666;font-size:.85rem;margin-top:1rem}</style></head>
 <body><div class="card"><h1>Authorize DC Hub access</h1>
-<p>Allow your AI assistant connecting from <span class="host">${_esc(host)}</span> to query DC Hub's data-center intelligence (free tier) on your behalf?</p>
+<p>Allow your AI assistant connecting from <span class="host">${_esc(host)}</span> to query DC Hub's data-center intelligence on your behalf?</p>
 <form method="POST" action="${_esc(p.issuer)}/oauth/authorize/decision">
 ${hidden('client_id', p.client_id)}${hidden('redirect_uri', p.redirect_uri)}${hidden('code_challenge', p.code_challenge)}${hidden('code_challenge_method', p.code_challenge_method)}${hidden('response_type', p.response_type)}${p.state != null ? hidden('state', p.state) : ''}
 <button class="ok" type="submit" name="decision" value="approve">Authorize</button>
 <button class="no" type="submit" name="decision" value="deny">Deny</button>
 </form>
-<p class="muted">DC Hub (dchub.cloud) · free-tier data access · disconnect anytime in your client's connector settings.</p>
+<p class="muted">DC Hub (dchub.cloud) · data-center intelligence access · disconnect anytime in your client's connector settings.</p>
 </div></body></html>`;
 }
 

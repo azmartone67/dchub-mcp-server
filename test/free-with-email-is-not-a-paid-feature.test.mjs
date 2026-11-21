@@ -73,7 +73,7 @@ describe('the wall copy branches on it', () => {
     const free = block.slice(block.indexOf('_mdAnon = _freeWithEmail'),
                              block.indexOf(': _isClaude'));
     expect(free).not.toContain('is a paid feature');
-    expect(free).toContain('needs a free key, not a payment');
+    expect(free).toContain('needs a key, not a payment');
   });
 
   it('the free branch leads with bind_email', () => {
@@ -121,7 +121,7 @@ describe('HARD_WALL_HEADLINES is coupled to the copy', () => {
   });
 
   it('both new free-with-email headlines are covered', () => {
-    expect(isHardWallText('## 🔑 `x` needs a free key, not a payment')).toBe(true);
+    expect(isHardWallText('## 🔑 `x` needs a key, not a payment')).toBe(true);
     expect(isHardWallText('## 🔑 `x` needs a bound email, not a payment')).toBe(true);
     expect(isHardWallText('## 🔒 `x` is a paid feature')).toBe(true);
     expect(isHardWallText('here is your data')).toBe(false);

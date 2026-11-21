@@ -144,7 +144,7 @@ describe('_identitySource — what the agent actually reads', () => {
 
   it('degrades to a neutral sentence on a reason it does not know', () => {
     const means = _identitySource(ctxOf({ auth_demoted: 'some_future_reason' })).means;
-    expect(means).toMatch(/currently resolves to the free tier/);
+    expect(means).toMatch(/currently has no paid access/);
     expect(means).not.toMatch(/some_future_reason/);   // never echo an opaque token at a human
   });
 
