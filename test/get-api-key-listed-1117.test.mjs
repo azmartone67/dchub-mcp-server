@@ -63,7 +63,7 @@ describe('tools/list: get_api_key is listed, claim_free_key is not (canonical su
     const n = names(r);
     expect(n).toContain(KEY_TOOL_LISTED);
     expect(n).not.toContain(KEY_TOOL_REGISTERED);
-    expect(n).toHaveLength(97);   // one renamed, none added: the tool-count canon stays 97
+    expect(n).toHaveLength(98);   // one renamed, none added: the tool-count canon stayed 97; 98 on 2026-11-20: accept_capacity_intro
     const t = r.body.result.tools.find((x) => x.name === KEY_TOOL_LISTED);
     // the title rides top-level or in annotations, depending on the path's slimming; at least one carries it
     const titles = [t.title, t.annotations && t.annotations.title].filter((x) => x !== undefined);
