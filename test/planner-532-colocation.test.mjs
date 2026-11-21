@@ -12,7 +12,7 @@ const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 const step = (p, tool) => p.recommended_sequence.find((s) => s.tool === tool);
 
 describe('5.32 routing: the head-to-head colocation asks', () => {
-  it('PLANNER_VERSION is 5.32', () => { expect(PLANNER_VERSION).toBe('5.56'); });
+  it('PLANNER_VERSION is 5.32', () => { expect(PLANNER_VERSION).toBe('5.57'); });
 
   it('NoVA 500 kW (context market + state): colocation, the asked market\'s DCPI first, Ashburn search with the kW, no canvas', () => {
     const p = _planQuery('Colocation options in Northern Virginia (Ashburn) for about 500 kW', { market: 'Northern Virginia', state: 'VA' });

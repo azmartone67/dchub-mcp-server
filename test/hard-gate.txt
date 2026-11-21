@@ -317,6 +317,8 @@ test/grid-tools-every-grid.test.mjs
 test/grok-bot-self-path.test.mjs
 test/grok-claude-check-nits-1016.test.mjs
 test/grok-daily-1119b.test.mjs
+test/grok-daily-answers-1120d.test.mjs
+test/grok-daily-answers-e2e-1120d.test.mjs
 test/grok-daily-routing-1120d-e2e.test.mjs
 test/grok-daily-routing-1120d.test.mjs
 test/grok-ident-log.test.mjs

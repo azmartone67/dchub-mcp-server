@@ -23,7 +23,7 @@ import { buildFiberAnswer } from '../lib/fiber-answer.mjs';
 const ex = (step, tool, args, result) => ({ step, tool, args, status: 'executed', result });
 const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 
-it('is planner 5.41', () => { expect(PLANNER_VERSION).toBe('5.56'); });
+it('is planner 5.41', () => { expect(PLANNER_VERSION).toBe('5.57'); });
 
 describe('1 Q-f: the Cermak building, not the operator row the search ranked first', () => {
   const SEARCH = { data: [
@@ -114,10 +114,12 @@ describe('3 xd-a: 50 MW with power in 24 months', () => {
       ex(4, 'get_power_availability_timeline', { state: 'ND' }, tl('ND', 640)),
       ex(5, 'source_capacity', { min_mw: 50 }, { items: [] }),
     ], null);
-    expect(a.headline).toMatch(/Midland–Odessa TX \(ERCOT; TX-wide 2026 firm supply 16,796 MW\)/);
-    expect(a.headline).toMatch(/MI-wide 2026 firm supply 2,100 MW/);
-    expect(a.headline).toMatch(/ND-wide 2026 firm supply 640 MW/);
-    expect(a.headline).toMatch(/EIA-860M state totals, as of 2026-09-30/);
+    // 5.57 (Grok daily 2026-11-20 item 8): the asked queue GW now fits beside the firm supply, each finalist short.
+    expect(a.headline).toMatch(/Midland–Odessa TX \(ERCOT; firm 16,796 MW\)/);
+    expect(a.headline).toMatch(/Upper Peninsula MI \(MISO; firm 2,100 MW\)/);
+    expect(a.headline).toMatch(/Williston ND \(MISO; firm 640 MW\)/);
+    expect(a.headline).toMatch(/Firm: EIA-860M state supply, as of 2026-09-30\./);
+    expect(a.headline).toMatch(/Queue: ERCOT 461\.4 GW/);
     expect(a.headline).toMatch(/24-month cut not applied/);
     expect(a.facts.filter((f) => f.tool === 'get_power_availability_timeline')).toHaveLength(3);
   });
