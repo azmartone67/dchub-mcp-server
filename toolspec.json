@@ -3943,5 +3943,31 @@
       "additionalProperties": true,
       "properties": {}
     }
+  },
+  {
+    "name": "accept_capacity_intro",
+    "description": "Use this when your human is the operator of a DC Hub Capacity Source listing and wants to accept a buyer's registration for it (the lead_id from DC Hub's lead notice). Accepting shares the buyer's name, role, email and message with the operator, and the operator's site details and contact with the buyer; DC Hub records the acceptance in its tamper-evident lead register and emails both sides a receipt. Run only when your human asks, and set confirm=true only after they say yes. Needs a key bound to the email on the listing (or the account that submitted it), with an inbox DC Hub has proven (an OAuth connection); otherwise use the accept link in DC Hub's email. The listing's operator must be on DC Hub's Capacity Source terms (https://dchub.cloud/terms#capacity-source); if your human has not accepted the current version, the result says so and names the step to accept them first. Returns the decision and a receipt: lead_id, buyer registration time, acceptance time, the listing terms version and the register entry. A repeat call returns the same receipt. Do NOT use to request capacity (use request_capacity_intro) or to accept a buyer's introduction terms (use accept_capacity_terms). For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lead_id": {
+          "description": "The registration to accept, exactly as DC Hub's lead notice gives it, e.g. LD-0123456789",
+          "type": "string"
+        },
+        "note": {
+          "description": "Optional short note from the operator to the buyer, at most 500 characters",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "Set true ONLY after your human, the listing's operator, has said yes to accepting this registration. Unless it is exactly true, nothing is sent",
+          "type": "boolean"
+        }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
   }
 ]

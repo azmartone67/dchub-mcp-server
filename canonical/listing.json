@@ -36,11 +36,11 @@
   "source_repo": "https://github.com/azmartone67/dchub-mcp-server",
   "tagline": "Live data center, power, grid, fiber and deal data for AI agents and site selection.",
   "tight": "DC Hub is the orchestration layer for data center and energy intelligence. Data Center Power Index (DCPI): 300+ markets daily. MCP: https://dchub.cloud/mcp",
-  "tool_count": 97,
+  "tool_count": 98,
   "tool_counts": {
     "chatgpt": 65,
     "grok": 11,
-    "mcp": 97
+    "mcp": 98
   },
   "transport": "streamable-http",
   "version": "1.0.0",

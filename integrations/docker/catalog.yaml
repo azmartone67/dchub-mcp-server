@@ -29,6 +29,8 @@ registry:
       license: "MIT"
       owner: "DC Hub (dchub.cloud)"
     tools:
+      - name: "accept_capacity_intro"
+        description: "Use this when your human is the operator of a DC Hub Capacity Source listing and wants to accept a buyer's registration for it (the lead_id from DC Hub's lead notice)."
       - name: "accept_capacity_terms"
         description: "Use this when the user has read and agreed to DC Hub's capacity introduction terms (https://dchub.cloud/listings#terms): records that acceptance, once per terms version, so Capacity Source listing…"
       - name: "ai_capacity_index"
