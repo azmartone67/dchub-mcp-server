@@ -125,7 +125,7 @@ describe('keyless: 2 full analyze_site answers per IP per UTC day, then the wall
 
   it('no plan name or price in the added copy', async () => {
     const r = await call({ ip: freshIp() });
-    const line = r.text.split('\n').filter((l) => /free full site analysis/i.test(l)).join('\n');
+    const line = r.text.split('\n').filter((l) => /full site analysis without a key/i.test(l)).join('\n');
     expect(line.length).toBeGreaterThan(0);
     expect(line).not.toMatch(/\$\d/);
     expect(line).not.toMatch(/\b(Pro|Developer|Starter|Enterprise)\b/);

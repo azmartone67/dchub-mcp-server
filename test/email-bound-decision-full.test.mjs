@@ -515,7 +515,7 @@ describe('D) the published clause is built from the enforced cap', () => {
   // Note F / option A (owner 2026-11-17): what claim_free_key / bind_email emit (_freeDecisionClause) names no
   // per-day count and no plan; the published lib clause (T.FREE_DECISION_CLAUSE) keeps its 10-16 wording.
   it('no count, no plan name, and the switch-off clause names no plan either', async () => {
-    expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews without an email; an email adds 10 full answers/day each.');
+    expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews with no email; an email adds 10 full answers/day each.');
     expect(S._freeDecisionClause()).toBe('Grid/queue/market-intel tools: previews without an email; an email opens fuller answers.');
     expect(S._freeDecisionClause()).not.toMatch(PLAN_OR_PRICE);
     expect(S._freeDecisionClause()).not.toMatch(/\bfree\b|\/day|a day\b/i);

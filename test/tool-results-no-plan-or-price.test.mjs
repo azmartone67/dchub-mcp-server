@@ -254,7 +254,7 @@ describe('initialize instructions: the neutral connect line, no offers, no tier 
   });
   it('the offers are the owner\'s exact phrases, and the email figure is the canon rung', () => {
     expect(FREE_OFFER_EMAIL).toBe('50 MCP calls/day with an email');
-    expect(FREE_OFFER_LAND_POWER).toBe('1 free Land & Power map search a month');
+    expect(FREE_OFFER_LAND_POWER).toBe('1 Land & Power map search a month');
     expect(TIER_CANON.calls_per_day.identified, 'the email rung moved: the owner rewords the offer').toBe(50);
   });
   for (const p of ['/mcp', '/mcp?catalog=full', '/mcp/oauth', '/mcp/grok']) {

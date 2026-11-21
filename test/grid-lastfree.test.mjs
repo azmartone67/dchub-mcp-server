@@ -7,8 +7,8 @@ import { lastFreeLine } from '../lib/grid-sell-line.mjs';
 describe('lastFreeLine (pure)', () => {
   it('names the price, the same key, the per-pack count it was given, no em dash', () => {
     const l = lastFreeLine({ tool: 'get_grid_intelligence', link: 'https://dchub.cloud/go/c/x.y', perPack: 200 });
-    expect(l.human).toBe('That was the last free full DC Hub grid brief on this key today. More full grid briefs on the same key, no subscription, one click: https://dchub.cloud/go/c/x.y');
-    expect(l.agent).toMatch(/last free full get_grid_intelligence answer today/);
+    expect(l.human).toBe('That was the last included full DC Hub grid brief on this key today. More full grid briefs on the same key, no subscription, one click: https://dchub.cloud/go/c/x.y');
+    expect(l.agent).toMatch(/last included full get_grid_intelligence answer today/);
     expect(l.human + l.agent).not.toMatch(/—/);
   });
   it('states no count it was not given; other tools and no link yield nothing', () => {

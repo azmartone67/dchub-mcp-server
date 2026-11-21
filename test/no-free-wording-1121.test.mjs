@@ -53,7 +53,7 @@ const BUILDERS = [
   ['freeDecisionClause', () => fdt.freeDecisionClause(10)],
   ['gridAgentLine', () => [gsl.gridAgentLine('PJM', 3), gsl.gridAgentLine('PJM', 3, undefined, true, URL)]],
   ['GRID_AGENT_EMAIL_TAIL', () => gsl.GRID_AGENT_EMAIL_TAIL],
-  ['gridSellLine', () => gsl.gridSellLine({ iso: 'PJM', bands: {}, withheld: ['queue_gw', 'headroom_mw'], url: URL })],
+  ['gridSellLine', () => gsl.gridSellLine({ iso: 'ERCOT', withheld: ['queue_depth_gw', 'avg_time_to_power_months', 'constraint_score'], url: URL })],
   ['fiberSellLine', () => gsl.fiberSellLine({ place: 'Dallas', hid: ['carriers'], url: URL, shown: 3, total: 9 })],
   ['fiberAgentLine', () => [gsl.fiberAgentLine('Dallas'), gsl.fiberAgentLine('Dallas', true, URL)]],
   ['lastFreeLine', () => Object.values(gsl.lastFreeLine({ tool: 'get_grid_intelligence', link: URL, perPack: 1000 }) || {})],
@@ -67,8 +67,8 @@ const BUILDERS = [
   ]],
   ['NEWS_SITE_REPORT_LINE', () => NEWS_SITE_REPORT_LINE],
   ['marketIntelSellLine', () => psl.marketIntelSellLine({ market: 'Dallas', hid: ['providers', 'pipeline_mw'], providersTotal: 40, providersShown: 5, url: URL })],
-  ['compareIsosSellLine', () => psl.compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: { PJM: ['queue_gw'], ERCOT: ['queue_gw'] }, url: URL })],
-  ['rankMarketsSellLine', () => psl.rankMarketsSellLine({ criteria: 'power', region: 'us', total: 20, shown: 5, scoreHidden: true, mwHidden: false, url: URL })],
+  ['compareIsosSellLine', () => psl.compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: [{ _queue_depth_gw_in_pro: true, _headroom_in_pro: true }, { _queue_depth_gw_in_pro: true }], url: URL })],
+  ['rankMarketsSellLine', () => psl.rankMarketsSellLine({ criteria: 'best_overall', region: 'us', total: 20, shown: 5, scoreHidden: true, mwHidden: false, url: URL })],
   ['paidAgentLine', () => [psl.paidAgentLine('get_market_intel', 3), psl.paidAgentLine('get_market_intel', 3, true, URL)]],
   ['humanText', () => [
     pc.humanText({ tool: 'analyze_site', completeness: { complete: false }, headline: { verdict: 'BUILD', weakest_factor: 'water' }, offer: null, url: URL, remaining: 0 }),
@@ -76,7 +76,7 @@ const BUILDERS = [
   ]],
   ['buildAgentHints', () => JSON.stringify(pc.buildAgentHints({ tool: 'analyze_site', hosted: false, offer: null, hasHeadline: true }))],
   ['lpHeadlineFields neutral', () => JSON.stringify(pc.lpHeadlineFields({ verdict: 'BUILD', weakest_factor: 'water' }, { neutral: true }))],
-  ['CLAIM_TELL_TEXT', () => ret.CLAIM_TELL_TEXT],
+  // CLAIM_TELL_TEXT is the DCHUB_CLAIM_BENEFIT_ASK=0 kill-switch restore, pinned verbatim (kept by design).
   ['claimBenefitText', () => ret.claimBenefitText(10, {})],
   ['wallEmailFreekeyLineText', () => ret.wallEmailFreekeyLineText(URL, {})],
   ['wallEmailLineText', () => ret.wallEmailLineText(URL, {})],

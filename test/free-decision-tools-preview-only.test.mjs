@@ -616,8 +616,8 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     for (const t of ['grid', 'queue', 'market-intel']) expect(CLAUSE.toLowerCase()).toContain(t);
     // Item 3 (owner draft 2026-10-16): the clause states the email allowance on grid/queue, from the
     // served cap; with the item-3 switch off it is the 10-08 clause (v13: rung named without a plan name).
-    expect(CLAUSE).toMatch(/previews on free; an email adds 10 full answers\/day each\.$/);
-    expect(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY).toMatch(/previews on free; full needs a paid DC Hub plan\.$/);
+    expect(CLAUSE).toMatch(/previews with no email; an email adds 10 full answers\/day each\.$/);
+    expect(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY).toMatch(/previews without an email; full needs a paid DC Hub plan\.$/);
     for (const c of [CLAUSE, T.FREE_DECISION_CLAUSE_PREVIEW_ONLY]) {
       expect(c).not.toMatch(/\b(Developer|Pro|Starter)\b/);
       expect(c.length).toBeLessThanOrEqual(95);
@@ -628,7 +628,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     // Owner decision 2026-11-15 put the two offers here; option A (owner 2026-11-16) replaces them with the neutral
     // connect line. _INSTR_FREE_TIER keeps the offers but no page reads it (/mcp/builders dropped it, 2026-11-19). The decision-tools clause
     // still rides beside the rule on claim_free_key / bind_email (below).
-    const OFFERS = '50 MCP calls/day with an email. 1 free Land & Power map search a month.';
+    const OFFERS = '50 MCP calls/day with an email. 1 Land & Power map search a month.';
     expect(S._INSTR_FREE_TIER.trim()).toBe(OFFERS);
     for (const t of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
       expect(t).not.toContain(OFFERS);
@@ -671,12 +671,16 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     // 2026-11-14 owner listing rule (applied to the GitHub README 2026-11-16): Glama
     // renders README.md, so it must not say "previews on free" / "free key" / "free tier".
     // It still states the 2-full-answers sentence and the email-rung clause without those words.
-    const CLAUSE_DOC = 'previews on free; an email adds 10 full answers/day each';
+    // 2026-11-21 no-"free" sweep: the served clause now reads "previews with no email" (95-char budget); the static
+    // registry docs (not served by the MCP runtime) still carry the 10-16 wording until a docs pass. Either
+    // wording satisfies "states the clause"; a doc with neither still fails.
+    const CLAUSE_DOCS = ['previews with no email; an email adds 10 full answers/day each',
+      'previews on free; an email adds 10 full answers/day each'];
     const missing = hits.filter((p) => {
       const src = readFileSync(join(ROOT, p), 'utf8');
       if (p.endsWith('.mjs')) return !src.includes('FREE_DECISION_CLAUSE');
       if (p === 'README.md') return !src.includes('More detail is available at dchub.cloud/connect');
-      return !src.includes(CLAUSE_DOC);
+      return !CLAUSE_DOCS.some((c) => src.includes(c));
     });
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);
   });

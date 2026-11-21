@@ -107,7 +107,7 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     expect(keylessWallQuota(new Date(), { dailyCap: 0 }).quota_basis).toMatch(/^keyless callers get no full answers/);
   });
   it('the DCPI withheld basis quotes the clause it is handed and never says "no DCPI row"', () => {
-    const b = U.DCPI_BAND_WITHHELD_BASIS('Grid/queue/market-intel tools: previews without an email; an email adds 10 full answers/day each.');
+    const b = U.DCPI_BAND_WITHHELD_BASIS('Grid/queue/market-intel tools: previews with no email; an email adds 10 full answers/day each.');
     expect(b).toMatch(/^WITHHELD at this access level/);
     expect(b).toContain('an email adds 10 full answers/day each.');
     expect(b).not.toMatch(/no DCPI row|UNMEASURED/);
@@ -239,7 +239,7 @@ describe('5. /mcp e2e (real server.mjs, stub backend)', () => {
     const basis = bandOf(r);
     expect(basis, 'control: the taste band came back\n' + r.text.slice(0, 600)).toBeTruthy();
     expect(basis).toMatch(/^WITHHELD at this access level/);
-    expect(basis).toMatch(/Grid\/queue\/market-intel tools: previews on free/);
+    expect(basis).toMatch(/Grid\/queue\/market-intel tools: previews (?:with no|without an) email/);
     expect(basis).not.toMatch(/no DCPI row/);
   }, 60_000);
 

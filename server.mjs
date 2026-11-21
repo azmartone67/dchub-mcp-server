@@ -1881,7 +1881,7 @@ const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z
 // Both forms of lib/paywall-contract.mjs buildAgentHints: the purchase form, and the Pro-rung form a
 // preview takes once a withheld field opens only at Pro (the DCPI sub-scores, owner 2026-10-31).
 // Note V keyed follow-up (2026-11-16): the Pro-rung form names no plan now; the old spelling is still matched.
-const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)|this call returns no more at this access level, so do not retry it now; (?:use the free headline above and )?show your user the link in human_url\.) Multi-step question: execute_plan\.\)\s*/g;
+const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)|this call returns no more at this access level, so do not retry it now; (?:use the (?:free )?headline above and )?show your user the link in human_url\.) Multi-step question: execute_plan\.\)\s*/g;
 export function _gridDeclutterStep(result, name) {
   try {
     if ((name !== 'get_grid_intelligence' && name !== 'get_fiber_intel') || !_gridDeclutterOn()) return result;

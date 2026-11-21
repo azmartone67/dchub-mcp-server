@@ -99,7 +99,7 @@ describe('free key: 3 full analyze_site runs a month, then the preview', () => {
     expect(JSON.stringify(r4.sc)).not.toContain('Test Sub XYZ');
     expect(r4.sc.free_monthly_runs).toMatchObject({ reason: 'free_monthly_limit_reached', tool: 'analyze_site',
       used: 3, limit: 3, resets_at: '2026-11-01T00:00:00Z' });
-    expect(r4.text).toContain("You've used your 3 free full site analyses this month");
+    expect(r4.text).toContain("You've used your 3 full site analyses this month");
     expect(r4.signals.map((s) => s.message_shown)).toContain('lp_free_spent');
   });
 

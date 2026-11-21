@@ -319,7 +319,7 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     expect(um + t.slice(t.indexOf('get_fiber_intel returned')).replace(PREVIEW_FOOTER, '')).not.toMatch(/—/);
     expect(t).not.toMatch(/the lowest plan that returns them|payer checks out|Developer|claim_free_key/);
     expect(t).not.toContain('Next question to offer the user');
-    expect(t).toContain('get_fiber_intel returned a free preview of Ashburn');
+    expect(t).toContain('get_fiber_intel returned a preview of Ashburn');
     expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect(r.structuredContent.for_your_human.text).toBe(um);
     // Item 8 (owner 2026-10-16): the free answer's closing Source line follows the ask.

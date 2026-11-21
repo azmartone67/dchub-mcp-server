@@ -98,7 +98,7 @@ describe('keyed free caller, grid calls in one UTC day', () => {
       expect(r1.structuredContent.for_your_human).toEqual({ text: r1.structuredContent.user_message });
       expect(text(r1)).toContain('subscribe_digest');
       expect(text(r2)).not.toContain('subscribe_digest');
-      expect(text(r2)).toContain('last free full');
+      expect(text(r2)).toContain('last included full');
     } finally { restore(); }
   });
   it('the kill switch removes it and leaves the answer untouched', async () => {

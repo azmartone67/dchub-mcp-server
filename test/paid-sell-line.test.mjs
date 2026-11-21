@@ -20,7 +20,7 @@ describe('builders (pure)', () => {
     expect(compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: [all, all], url: U }))
       .toBe("This DC Hub comparison of PJM and ERCOT hides each grid's time to power, queue depth, headroom, the constraint and excess power scores and 30-day grid emergencies. The full comparison is not in this preview; see what your agent found: " + U);
     expect(rankMarketsSellLine({ criteria: 'best_overall', region: 'us', total: 10, shown: 3, scoreHidden: true, mwHidden: true, url: U }))
-      .toBe("This free DC Hub best overall ranking of US markets shows 3 of 10 and hides each market's score and total MW. The full ranking is not in this preview; see what your agent found: " + U);
+      .toBe("This DC Hub best overall ranking of US markets shows 3 of 10 and hides each market's score and total MW. The full ranking is not in this preview; see what your agent found: " + U);
   });
   it('names only what the gate lists, stays under the bound, no em dash', () => {
     expect(marketIntelSellLine({ market: 'dallas', hid: [], providersTotal: 3, timeToPower: false, url: U })).toBeNull();
@@ -59,7 +59,7 @@ describe('_paidSellStep on real-shape keyless responses', () => {
         expect(sc.for_your_human.text).toBe(sc.user_message);
         expect(t).toContain(sc.user_message);
         expect(t).not.toMatch(/claim_free_key|\*\*Developer\*\*|Want the decision|—.*Developer/);
-        expect(t).toContain(name + ' returned a free preview:');
+        expect(t).toContain(name + ' returned a preview:');
         expect(sc.preview_is_partial).toBe(true);
         expect(r.content[1].text).toContain('execute_plan');   // the compass block is left alone
         expect(sc.user_message).not.toMatch(/—/);
