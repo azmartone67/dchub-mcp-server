@@ -34,6 +34,7 @@ import { CLAUDE_SITE_UNLOCK_COPY } from '../lib/claude-directory.mjs';
 import * as kff from '../lib/keyless-first-full.mjs';
 import * as ses from '../lib/siting-email-seat.mjs';
 import { digestAskLine } from '../lib/depth-digest-ask.mjs';
+import { legacyFreeWording } from '../lib/chatgpt-frozen-copy.mjs';
 
 const FREE = /\bfree\b/i;
 // claim_free_key is a tool name; <code>…</code> spans are identifiers too.
@@ -181,5 +182,33 @@ describe('/mcp tools/list and resources/list', () => {
   it('no resource name or description says "free"', () => {
     const bad = (resources || []).flatMap((r) => [r.name, r.description]).filter((s) => typeof s === 'string' && FREE.test(clean(s)));
     expect(bad).toEqual([]);
+  });
+});
+
+// /mcp/chatgpt is frozen byte for byte: on that profile the sell steps map the new sell lines back to the
+// origin/main wording (lib/chatgpt-frozen-copy.mjs). Each mapped line differs from the new one by the restored
+// word only, and the origin/main lead is back.
+describe('lib/chatgpt-frozen-copy.mjs restores the origin/main sell wording on /mcp/chatgpt', () => {
+  const CASES = [
+    ['gridSellLine', gsl.gridSellLine({ iso: 'ERCOT', withheld: ['queue_depth_gw', 'avg_time_to_power_months', 'constraint_score'], url: URL }), 'This free DC Hub preview of ERCOT hides ', 'This free DC Hub', 'This DC Hub'],
+    ['fiberSellLine', gsl.fiberSellLine({ place: 'Dallas', hid: ['carriers'], url: URL, shown: 3, total: 9 }), 'This free DC Hub fiber preview of Dallas', 'This free DC Hub', 'This DC Hub'],
+    ['marketIntelSellLine', psl.marketIntelSellLine({ market: 'Dallas', hid: ['providers', 'pipeline_mw'], providersTotal: 40, providersShown: 5, url: URL }), 'This free DC Hub preview of the Dallas market hides ', 'This free DC Hub', 'This DC Hub'],
+    ['compareIsosSellLine', psl.compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: [{ _queue_depth_gw_in_pro: true, _headroom_in_pro: true }, { _queue_depth_gw_in_pro: true }], url: URL }), 'This free DC Hub comparison of PJM and ERCOT hides ', 'This free DC Hub', 'This DC Hub'],
+    ['rankMarketsSellLine', psl.rankMarketsSellLine({ criteria: 'best_overall', region: 'us', total: 20, shown: 5, scoreHidden: true, mwHidden: false, url: URL }), 'This free DC Hub ', 'This free DC Hub', 'This DC Hub'],
+    ['gridAgentLine', gsl.gridAgentLine('PJM', 3), 'get_grid_intelligence returned a free preview of PJM: ', 'returned a free preview', 'returned a preview'],
+    ['fiberAgentLine', gsl.fiberAgentLine('Dallas'), 'get_fiber_intel returned a free preview of Dallas. ', 'returned a free preview', 'returned a preview'],
+    ['paidAgentLine', psl.paidAgentLine('get_market_intel', 3), 'get_market_intel returned a free preview: ', 'returned a free preview', 'returned a preview'],
+    ['paidAgentLine repeat', psl.paidAgentLine('get_market_intel', 3, true, URL), 'get_market_intel returned a free preview. ', 'returned a free preview', 'returned a preview'],
+    ['GRID_AGENT_EMAIL_TAIL', gsl.GRID_AGENT_EMAIL_TAIL, 'Your user can unlock the full brief free with their email (the step above). ', 'full brief free with', 'full brief with'],
+  ];
+  it.each(CASES)('%s', (_n, now, oldLead, oldWord, newWord) => {
+    expect(typeof now === 'string' && now.length > 0, 'control: the builder returned a line').toBe(true);
+    expect(FREE.test(clean(now))).toBe(false);
+    const back = legacyFreeWording(now);
+    expect(back.startsWith(oldLead), back).toBe(true);
+    expect(back.replace(oldWord, newWord)).toBe(now);
+  });
+  it('a line it does not know is returned unchanged', () => {
+    for (const s of ['Source: DC Hub (dchub.cloud)', 'This answer is a preview.', '', null]) expect(legacyFreeWording(s)).toBe(s);
   });
 });

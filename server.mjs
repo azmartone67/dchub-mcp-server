@@ -208,6 +208,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { digestAskLine as _digestAskLine, digestAskApplies as _digestAskApplies } from './lib/depth-digest-ask.mjs';
 import { withIsoBands as _withIsoBands, attachIsoBands as _attachIsoBands, bandsSummary as _bandsSummary, rowWithholdsBandSource as _rowWithholdsBandSource } from './lib/iso-bands.mjs';
+import { legacyFreeWording as _legacyFreeWording } from './lib/chatgpt-frozen-copy.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, rankEmailClause as _rankEmailClause, aiCapacityEmailClause as _aiCapacityEmailClause, fiberEmailClause as _fiberEmailClause, gasEmailClause as _gasEmailClause, AICAP_EMAIL_LINE_HEAD as _AICAP_EMAIL_LINE_HEAD, RANK_EMAIL_ASK_LEAD as _RANK_EMAIL_ASK_LEAD, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { humanEmailReplyOn as _humanEmailReplyOn, applyHumanEmailReply as _applyHumanEmailReply } from './lib/human-email-reply.mjs';
@@ -2033,6 +2034,8 @@ export function _paidSellStep(result, name) {
       && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE
       ? _rankEmailClause({ total: sc._results_total_in_pro, perDay: IDENTIFIED_DAILY_FULL_CAP }) : null;
     if (emailClause) agentLine = agentLine.replace(' After they pay,', ' ' + emailClause + ' After they pay,');
+    // /mcp/chatgpt is frozen byte for byte: it keeps the wording origin/main served (lib/chatgpt-frozen-copy.mjs).
+    if (c && c.profile === DIRECTORY_PROFILE) { sentence = _legacyFreeWording(sentence); agentLine = _legacyFreeWording(agentLine); }
     let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -2256,6 +2259,8 @@ export function _gridSellStep(result, name) {
         geom: !!(feats && feats.some((f) => f && f.geometry && f.geometry._coordinates_total_in_pro != null)) });
       if (hasLine && !sentence) return result;
     }
+    // /mcp/chatgpt is frozen byte for byte: it keeps the wording origin/main served (lib/chatgpt-frozen-copy.mjs).
+    if (c && c.profile === DIRECTORY_PROFILE) { sentence = _legacyFreeWording(sentence); agentLine = _legacyFreeWording(agentLine); }
     let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -10064,6 +10069,14 @@ export function _legacyWallCopy(c) {
 export function _wallCopy(neutral, legacy, c) {
   return _legacyWallCopy(c) ? legacy : neutral;
 }
+// 2026-11-21 no-"free" sweep: a line the sweep rewrote that /mcp/chatgpt also serves keeps its origin/main wording
+// on that profile only (frozen byte for byte; its directory scrub keys on that wording). Unlike _wallCopy, the
+// Claude profile gets the new wording.
+export function _chatgptFrozenCopy(neutral, legacy, c) {
+  let s = c;
+  if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
+  return (s && s.profile === DIRECTORY_PROFILE) ? legacy : neutral;
+}
 // The tools that may still enter the capped free full-answer (trial_taste) path.
 export function _freeTasteTool(name) {
   return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
@@ -10872,7 +10885,7 @@ function _freeDecisionUpgrade(name, c) {
       + (_email || 'A DC Hub key, a trial key or a bound email does not deepen this tool.'),
     next_tool: _emailNext ? 'bind_email' : 'unlock_more_data',
     next_tool_hint: _emailNext
-      ? 'Ask your human for their email and call bind_email with it (no card); only use an address they gave you. ' + _email
+      ? 'Ask your human for their email and call bind_email with it; only use an address they gave you. ' + _email
       : 'Relay the link in human_url to your human; that page shows the plans. '
         + (_email || 'A DC Hub key or a bound email does not change this tool\'s depth.'),
   };
@@ -11273,7 +11286,7 @@ export function _sitingPreviewUpgrade(name, seat, fr) {
       : 'Preview: the full ' + name + ' answer is not open on this key right now.')
       + ' For the full answer, relay the link in human_url to your human.'
     :'Preview: a key with no email gets the same ' + name + ' preview as no key. Bind your human\'s email '
-      + '(bind_email {api_key, email}, no card) for ' + what + '; past that, relay the link in human_url to your human.';
+      + '(bind_email {api_key, email}) for ' + what + '; past that, relay the link in human_url to your human.';
   return {
     tier: spent ? 'identified' : 'free',
     message,
@@ -27692,7 +27705,7 @@ function trackedTool(srv, name, description, schema, handler) {
         const _askNoSid = _sessionlessCapEmailAsk(c, name);
         if (_askNoSid) _markEmailAsk(c, 'line');   // option E: the wall-hit row says it asked
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
-          + ANON_HARD_WALL_MULT + "x the anonymous allowance of " + ANON_DAILY_CAP
+          + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
           + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
           + (_askNoSid ? _askNoSid + ' Save the key to your MCP config. '
             : "This is one step to fix: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
@@ -29010,7 +29023,7 @@ Your current access does not include the full \`${name}\` — it returns its ful
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} is served in full — just call \`${name}\` again.
 
-Your current access still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
+${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
 
         // r71-claudetune (2026-06-06): platform-aware _mdAnon. Claude.ai
         // is ~56% of attributable AI traffic (94,948 of ~204K external
@@ -35383,7 +35396,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // the interconnection queue, time-to-power, full multi-factor site score)
           // is the paid layer. Honest signpost, not a paywall on the data above.
           deep_intelligence: {
-            note: 'This is the live fuel-mix ranking. For the SITING DECISION — per-ISO grid headroom (a modeled MW estimate, not confirmed available power), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
+            note: 'This is the live fuel-mix ranking' + _chatgptFrozenCopy('', ' (free)') + '. For the SITING DECISION — per-ISO grid headroom (a modeled MW estimate, not confirmed available power), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
             per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
             score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
             best_market_recommendation: 'get_dchub_recommendation',
