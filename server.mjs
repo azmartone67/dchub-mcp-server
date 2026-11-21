@@ -184,7 +184,7 @@ import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAG
 // DCHUB_LAZY_AUTH_V1 (default OFF): lazy OAuth at the wall on the generic /mcp (lib/lazy-auth.mjs).
 import { lazyAuthDecide as _lazyAuthDecide, noteLazyAuthChallenge as _lazyAuthNoteChallenge,
          lazyAuthResponse as _lazyAuthResponse, withLazyAuthTrackArm as _withLazyAuthTrackArm,
-         LAZY_AUTH_4XX_REASON } from './lib/lazy-auth.mjs';
+         countLazyAuthChallenge as _lazyAuthCount, LAZY_AUTH_4XX_REASON } from './lib/lazy-auth.mjs';
 // 2026-11-18: /mcp/gemini, /mcp/copilot, /mcp/perplexity, /mcp/cursor, /mcp/mistral serve the full /mcp
 // with an arrival source tag (lib/client-paths.mjs).
 import { CLIENT_PATHS } from './lib/client-paths.mjs';
@@ -41436,8 +41436,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_la.action === 'challenge'
           && !(((await _getCredits({ api_key: '', session_id: _sessionIdToken(sessionId) || '' })).credits || 0) > 0)) {
         _lazyAuthNoteChallenge(_la.identity);
-        if (_isClaudeConnectorNow) _chBump('claude_connector', 'tools/call');   // retention: connector_call
-        _chBump('challenge_issued', 'tools/call');
+        _lazyAuthCount(_chBump, { claudeConnector: _isClaudeConnectorNow });   // retention: connector_call + stage 1
         _mcp4xxCounter.note({ client: _mcp4xxClient(req), status: 401, reason: LAZY_AUTH_4XX_REASON });
         const _lr = _lazyAuthResponse(req.body?.id);
         res.set('WWW-Authenticate', _lr.headers['WWW-Authenticate']);
