@@ -99,7 +99,8 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     expect(instr).not.toContain('curated subset');
     // Capacity handoff item 5 (owner 2026-11-11): /mcp alone adds the buy/RFP clause after the routing sentence.
     // Front desk item 4 (owner 2026-11-13): and the welcome after its lead.
-    expect(instr).toBe(_listedKeyName(S._withWelcome(S._INSTRUCTIONS_LEAN)));
+    // Agent-incentive round (owner 2026-11-21): /mcp alone ends with the ten-tool profile suggestion.
+    expect(instr).toBe(_listedKeyName(S._withWelcome(S._INSTRUCTIONS_LEAN)) + S._INSTR_TAIL_CORE_HINT);
     expect(instr).not.toBe(S._INSTRUCTIONS_LEAN);
   });
 

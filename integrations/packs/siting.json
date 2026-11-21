@@ -36,7 +36,7 @@
     },
     {
       "name": "rank_markets",
-      "description": "Use this when the user wants a ranked list of data-center markets, including where a data center can get grid power (criteria=\"ai_ready\", DCPI): top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks a few full lists a day. Ex: \"Top 10 US markets, ai_ready.\" For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user wants a ranked list of data-center markets, including where a data center can get grid power (criteria=\"ai_ready\", DCPI): top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks full lists. Ex: \"Top 10 US markets, ai_ready.\" For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "get_composite_site_score",

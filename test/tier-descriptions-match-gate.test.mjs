@@ -79,7 +79,7 @@ describe('Land & Power descriptions match the keyless wall', () => {
 describe('approved wording (spec A3)', () => {
   it('get_grid_intelligence states the keyed and keyless split (no "free", Grok 2026-11-15)', () => {
     expect(descOf('get_grid_intelligence'))
-      .toContain('Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks a few full briefs a day.');
+      .toContain('Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks full briefs.');
   });
   it('get_market_dcpi_rank: verdict and composite free, sub-scores and narrative Pro (owner 2026-10-31; no plan name, no price)', () => {
     expect(descOf('get_market_dcpi_rank')).not.toMatch(/paid plans|credit pack|\b(Pro|Developer|Starter)\b|\$\s?\d/);
