@@ -290,6 +290,7 @@ import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere a
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
+import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark, askedForEmailInProse as _askedForEmailInProse } from './lib/offers-shown.mjs';
@@ -10611,7 +10612,26 @@ function _capTrim(parsed, name) {
   // Owner 2026-10-08: the decision tools' taste on every over-cap trim too.
   let _fd = null;
   try { _fd = _freeDecisionTasteObject(name, parsed, getCtx()); } catch (_) { _fd = null; }
-  return _fd || trimForTrial(parsed, name);
+  return _fd || _headlinePreviewStep(name, parsed, trimForTrial(parsed, name));
+}
+
+// Headline before the wall (lib/headline-preview.mjs, DCHUB_WALL_IDENTITY_V2, default OFF): a keyless or trial-key
+// caller's wall preview of the queue read keeps its headline figure with its date and source. Not on the ChatGPT
+// surfaces (/mcp/chatgpt, a ChatGPT-identified client, a plan step started there) or /mcp/core. Flag off: `out` as is.
+export function _headlinePreviewSeat(c) {
+  if (!c || typeof c !== 'object') return false;
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE || c.legacy_wall_copy === true) return false;
+  if (_isCleanPlatform()) return false;
+  return !c.api_key || c.is_trial === true || /^dch_trial_/.test(String(c.api_key));
+}
+function _headlinePreviewStep(name, parsed, out, ctx) {
+  try {
+    if (!_headlinePreviewOn()) return out;
+    let c = ctx;
+    if (!c) { try { c = getCtx(); } catch (_) { c = null; } }
+    if (!_headlinePreviewSeat(c)) return out;
+    return _attachHeadlinePreview(name, parsed, out);
+  } catch (_) { return out; }
 }
 
 // ── Free-tier taste of the decision tools (owner 2026-10-08) ─────────────────
@@ -10633,6 +10653,7 @@ function _freeDecisionTasteObject(name, parsed, ctx, args) {
     henryHubFree: _keylessHenryHubOn(),   // get_energy_prices: Henry Hub in the preview (owner 11-18)
   });
   if (!built || !built.envelope) return null;
+  _headlinePreviewStep(name, parsed, built.envelope, ctx);
   _noteGate('free_decision_preview');
   for (const f of built.figures || []) { _noteWithheld(f.key, f.value); _noteMaskedKey(f.key, f.value); }
   let c = ctx;
@@ -12713,7 +12734,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
   if (_ctxPack) {
     teased = _ctxPack;
   } else {
-    teased = _teaseDepth(parsed, DEPTH_TEASE_KEEP);
+    teased = _headlinePreviewStep(name, parsed, _teaseDepth(parsed, DEPTH_TEASE_KEEP), ctx);
   }
   // Name the single largest locked list so the pitch is concrete ("Full 14 …").
   let lockedField = null, lockedN = 0;
@@ -28235,7 +28256,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   // Owner 2026-10-08: the decision tools' labelled taste (one renderer,
                   // lib/free-decision-taste.mjs); the generic trim when the body is not
                   // the shape the taste is defined for.
-                  : (_freeDecisionTasteObject(name, parsed, c, args) || trimForTrial(parsed, name));
+                  : (_freeDecisionTasteObject(name, parsed, c, args) || _headlinePreviewStep(name, parsed, trimForTrial(parsed, name), c));
                 _trialText = JSON.stringify(_previewObj);
               }
             } catch { /* not JSON, leave as prose */ }
