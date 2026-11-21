@@ -70,9 +70,12 @@ const SURFACES = [
 // dchub-backend ai_surface_canon.PINNED['free_tier_rule']). A surface quoting it
 // whole names "Anonymous:" and "50 calls/day" in one sentence by design — that
 // is the rule, not an anonymous 50/day claim.
+// ★2026-11-21 (owner decisions 6/7): the backend pin moved on 2026-11-17 (Note F, option A) and states no limits, so
+// the rule no longer carries a calls/day figure; the docs quote it as it now reads.
 const FREE_TIER_RULE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
   + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day).';
+  + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.';
+const OLD_EMAIL_CLAUSE = 'With an email: 50 calls/day (up to 10 full answers per tool per day).';
 // ★2026-11-16 (Note F, Grok item 11): the discovery files quote it without the pin's closing
 // "Higher limits: dchub.cloud/pricing." sentence (lib/tier-canon.mjs _freeTierRuleForGate),
 // so the constant stops before it; test/discovery-docs-no-higher-limits.test.mjs bars the pointer.
@@ -111,11 +114,11 @@ function claims() {
 
 describe("published calls/day claims", () => {
   it("surfaces quote the published rule verbatim (and the exemption is not vacuous)", () => {
-    const quoted = claims().filter((c) => c.inRule);
-    expect(new Set(quoted.map((c) => c.file))).toEqual(
-      // 2026-11-14 (owner): mcp-server.json no longer quotes the rule (publish surfaces name no tier).
-      new Set(["llms-install.md", "integrations/README.md"]));
-    expect(quoted.every((c) => c.n === 50)).toBe(true);
+    // 2026-11-21: the rule carries no calls/day figure any more, so nothing is exempt as "inside the rule"; the two
+    // docs that quote it quote the current sentence, and no surface keeps the old email clause.
+    expect(claims().filter((c) => c.inRule)).toEqual([]);
+    for (const f of ["llms-install.md", "integrations/README.md"]) expect(read(f), f).toContain(FREE_TIER_RULE);
+    for (const f of SURFACES) expect(read(f), f).not.toContain(OLD_EMAIL_CLAUSE);
   });
 
   it("finds claims at all (guards against a vacuous pass)", () => {
@@ -124,7 +127,10 @@ describe("published calls/day claims", () => {
     expect(SNAP.allowance.anonymous.calls).toBeNull();
     // 2026-11-14: 9 after smithery.yaml dropped its pricing block and mcp-server.json the rule.
     // 2026-11-19: 5 after README's bind_email line dropped its calls/day figure (Grok item 13).
-    expect(claims().length).toBeGreaterThan(4);
+    // 2026-11-21 (owner decision 6, no-free sweep): 0. The free-tier rule and the listings carry no calls/day figure,
+    // so the gate is proved live on a synthetic line instead: CLAIM must still see a claim when one is written.
+    expect(claims()).toEqual([]);
+    expect([..."A key gives 10 calls/day.".matchAll(CLAIM)].map((m) => m[1])).toEqual(["10"]);
   });
 
   it("the retired anonymous 5/day survives only where it is pinned as residue", () => {
@@ -221,9 +227,14 @@ function fullAnswerClaims() {
 describe("published full-answers claims", () => {
   it("finds claims at all, and canon has the counts (guards against a vacuous pass)", () => {
     expect(FULL_ANSWER_CANON).toEqual(new Set([2, 10]));
-    const got = fullAnswerClaims();
-    expect(got.length).toBeGreaterThan(10);
-    expect(got.some((c) => c.tier === "keyed")).toBe(true);
+    // 2026-11-21 (owner decision 6/7, no-free sweep): no published surface states a full-answers allowance any more
+    // (the rule says "the first call each UTC day ... is a full answer", which names no count). The gate is proved
+    // live on a synthetic line instead: FULL_ANSWERS still matches, and the classifier still reads its tier.
+    expect(fullAnswerClaims()).toEqual([]);
+    const probe = "A free key: previews plus 2 full answers per tool per day.";
+    const m = [...probe.matchAll(FULL_ANSWERS)];
+    expect(m.map((x) => Number(x[1]))).toEqual([2]);
+    expect(tierOf(probe.slice(0, m[0].index))).toBe("keyed");
   });
 
   it("the classifier reads the old ChatGPT Actions sentence as anonymous", () => {
@@ -388,7 +399,7 @@ describe("the composed free-tier rule", () => {
   it("is the published sentence verbatim and states no price", async () => {
     const { _freeTierRuleText } = await import("../lib/tier-canon.mjs");
     // The pin (lib/tier-canon mirrors the backend) keeps its closing pointer; discovery copy drops it.
-    expect(_freeTierRuleText()).toBe(FREE_TIER_RULE + " Higher limits: dchub.cloud/pricing.");
+    expect(_freeTierRuleText()).toBe(FREE_TIER_RULE + " More detail is available at dchub.cloud/connect.");
     expect(FREE_TIER_RULE).not.toMatch(/\$/);
   });
 });

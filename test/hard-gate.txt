@@ -710,6 +710,7 @@ test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
+test/static-docs-no-free-1121.test.mjs
 test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs

@@ -28,7 +28,7 @@ Streamable HTTP, no key required to start:
 
     https://dchub.cloud/mcp
 
-Anonymous callers get a small daily allowance. Call the `claim_free_key` tool for a free
+Anonymous callers get a small daily allowance. Call the `claim_free_key` tool: it returns an API
 key with a larger one — it needs no human and no payment. Limits and prices are
 deliberately not restated here (see "No numbers in this file", below).
 
@@ -92,7 +92,7 @@ of it.
 
 ## Canonical machine-readable surfaces
 
-- https://dchub.cloud/llms.txt — the live version of this file, site-wide, with the free API index
+- https://dchub.cloud/llms.txt — the live version of this file, site-wide, with the open API index
 - https://dchub.cloud/llms-full.txt — full endpoint documentation
 - https://dchub.cloud/openapi.json — OpenAPI 3.1 spec
 - https://dchub.cloud/.well-known/mcp/server-card.json — MCP server card

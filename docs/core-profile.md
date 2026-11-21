@@ -70,7 +70,7 @@ A caller without Land & Power access gets the headline:
 - the name of the limiting factor.
 
 The composite score and every factor score and figure are null, and the response says they
-are withheld. This uses the same `_lpPreviewPayload` reduction that a free key gets on
+are withheld. This uses the same `_lpPreviewPayload` reduction that a DC Hub key without full access gets on
 `/mcp`, and is limited per caller (`DCHUB_CORE_HEADLINE_PER_HOUR`, default 30).
 
 This deliberately differs from the 2026-09-22 Land & Power rule, under which no key means no

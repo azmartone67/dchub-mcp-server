@@ -666,7 +666,10 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
       }
     };
     walk(ROOT);
-    expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(3);
+    // 2026-11-21 (owner decision 6): the static docs no longer state the allowance at all; the runtime source still
+    // emits it (server.mjs), so the scan is not vacuous.
+    expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(0);
+    expect(hits).toContain('server.mjs');
     // Item 3: the docs quote the CURRENT clause (lib/free-decision-taste.mjs FREE_DECISION_CLAUSE).
     // 2026-11-14 owner listing rule (applied to the GitHub README 2026-11-16): Glama
     // renders README.md, so it must not say "previews on free" / "free key" / "free tier".

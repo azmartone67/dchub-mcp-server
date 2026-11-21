@@ -28,7 +28,7 @@
     "api_key": {
       "type": "string",
       "title": "DC Hub API key (optional)",
-      "description": "Optional \u2014 DC Hub works without one (previews, no key needed). Claim a free key at dchub.cloud/signup or by calling the claim_free_key tool, then paste it here so every session keeps your limits.",
+      "description": "Optional \u2014 DC Hub works without one (previews, no key needed). Get an API key at dchub.cloud/signup or by calling the claim_free_key tool (it returns an API key), then paste it here so every session keeps your key.",
       "sensitive": true,
       "required": false
     }

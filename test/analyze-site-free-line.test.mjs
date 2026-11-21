@@ -36,6 +36,8 @@ const OWNER_LINE = 'analyze_site: full site reports and previews. More detail is
 const LANE_OFF_LINE = OWNER_LINE;
 // Item 3 (owner draft 2026-10-16): the decision-tools clause now states the email allowance.
 const CLAUSE = 'previews on free; an email adds 10 full answers/day each';
+// 2026-11-21: the backend free_tier_rule's key clause (ai_surface_canon, Note F option A).
+const KEY_CLAUSE = 'A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.';
 
 let S, TC, httpServer, stub, PORT, prevBase;
 
@@ -84,7 +86,8 @@ describe('the sentence', () => {
   });
   it('never joins the pinned rule', () => {
     expect(TC._freeTierRuleText()).not.toContain('site reports');
-    expect(TC._freeTierRuleText()).toMatch(/ Higher limits: dchub\.cloud\/pricing\.$/);
+    // 2026-11-21: the pin ends on the neutral pointer (backend Note F, option A), not the pricing pointer.
+    expect(TC._freeTierRuleText()).toMatch(/ More detail is available at dchub\.cloud\/connect\.$/);
     expect(S._INSTR_FREE_TIER).not.toContain('site reports');
   });
   it('follows the monthly free runs switch', () => {
@@ -132,7 +135,10 @@ describe('repo docs', () => {
   it('each free-tier summary carries it right after the decision-tools clause', () => {
     // 2026-11-15 (owner, MCP Ecosystem PR review): the npm README names no tier, so it no longer quotes it.
     const docs = ['REGISTRY-LISTINGS.md', 'integrations/README.md', 'llms-install.md'];
-    for (const p of docs) expect(read(p), p).toContain(CLAUSE + '. ' + OWNER_LINE);
+    // 2026-11-21 (owner decision 6): the docs quote the backend rule as it now reads (no email allowance, no
+    // decision-tools allowance clause), so the line follows the rule's key clause.
+    for (const p of docs) expect(read(p), p).toContain(KEY_CLAUSE + ' ' + OWNER_LINE);
+    for (const p of docs) expect(read(p), p).not.toContain(CLAUSE);
     // 2026-11-14 owner listing rule (applied to the GitHub README 2026-11-16): Glama
     // renders this file, so it must not say "free key", "free tier", or "previews on free".
     // The allowance is stated with "DCHUB_API_KEY is optional" and "an email adds 10 full

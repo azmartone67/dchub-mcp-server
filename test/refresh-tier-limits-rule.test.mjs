@@ -151,8 +151,9 @@ describe('the committed snapshot carries the rule', () => {
     expect(_rungNum('anonymous')).toBeNull();
     expect(_freeTierRuleText()).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
       + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-      + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
-      + 'Higher limits: dchub.cloud/pricing.');
+      // 2026-11-21: the backend pin after Note F option A, byte for byte (no email allowance, no pricing pointer).
+      + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
+      + 'More detail is available at dchub.cloud/connect.');
     expect(existsSync(join(ROOT, 'scripts/refresh-tier-limits.mjs'))).toBe(true);
   });
 });

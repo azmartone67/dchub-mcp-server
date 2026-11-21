@@ -86,7 +86,7 @@ remote:
 # Optional API key. DC Hub is keyless-first — with NO key you still get
 # previews (no key needed, live grid scoreboard). Paste a
 # key here to raise limits + unlock full results, and Smithery reuses it across sessions so
-# you never re-mint. Get a free key by calling the `claim_free_key` tool once
+# you never re-mint. `claim_free_key` returns an API key; call it once
 # (no email). Left blank → the header renders empty and the
 # server treats it exactly like no key (anonymous tier), so this never breaks
 # keyless use.
@@ -99,12 +99,12 @@ configSchema:
       title: "DC Hub API key (optional)"
       description: >-
         Optional. Blank = no key: previews, no key
-        needed. A FREE key gives previews plus 2 full answers per tool per day, no email, no card:
-        connect once and call `claim_free_key`, then paste the key here so
+        needed. `claim_free_key` returns an API key (no email, no card):
+        connect once and call it, then paste the key here so
         every future session starts identified. Add an email with
-        `bind_email` for 50 calls/day (up to 10 full answers per tool per day).
-        Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.
+        `bind_email` to keep the key across sessions.
         Saved sites and alerts need a key at all (they are per-account).
+        More detail is available at dchub.cloud/connect.
       format: password
 
 # Smithery injects the configured apiKey as the X-API-Key header the server

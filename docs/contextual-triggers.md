@@ -23,7 +23,7 @@ Pattern: a short "Ask your AI" block with a **Copy** button next to each snippet
 > rating plus seismic and cooling-climate, straight from federal data."
 
 ## On a grid / ISO page
-> "Connect to https://dchub.cloud/mcp and run `get_grid_scoreboard` (free, no key) —
+> "Connect to https://dchub.cloud/mcp and run `get_grid_scoreboard` (no key needed) —
 > which grid worldwide is greenest and most buildable right now — then
 > `get_grid_intelligence` for **{ISO}** for headroom and time-to-power."
 

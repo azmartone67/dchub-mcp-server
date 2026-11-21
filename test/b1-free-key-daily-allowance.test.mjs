@@ -23,8 +23,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 // follows the shape). Byte for byte dchub-backend ai_surface_canon PINNED['free_tier_rule'].
 const B1_SENTENCE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
   + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-  + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
-  + 'Higher limits: dchub.cloud/pricing.';
+  // 2026-11-21: byte for byte the backend pin after Note F option A (no email allowance, no pricing pointer).
+  + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
+  + 'More detail is available at dchub.cloud/connect.';
 const LIFETIME = {
   calls_per_day: { identified: 50 },
   allowance: {

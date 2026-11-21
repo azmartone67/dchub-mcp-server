@@ -6,7 +6,7 @@ is real (verify with `tools/list`).
 
 ## Connect (zero-install)
 - **Server:** `https://dchub.cloud/mcp` (remote streamable-HTTP, 98 tools)
-- **Auth:** none for the free tier; `X-API-Key: <dch_live_…>` for a paid tier
+- **Auth:** none to start; `X-API-Key: <dch_live_…>` for a paid tier
 - **Manifest:** `https://dchub.cloud/.well-known/mcp.json` · **OpenAPI:** `/openapi.json`
 - **SDKs:** `sdk/python` + `sdk/node` (zero-dependency). **Prompts:** `docs/canonical-workflows.md`
 

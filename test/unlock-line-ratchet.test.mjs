@@ -35,7 +35,9 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
   it('control: the canon paragraph is composed (snapshot present), keyless clause first, the email rung, no free-key sale', () => {
     expect(rule).toBeTruthy();
     expect(rule.startsWith(KEYLESS_FIRST_FULL_CLAUSE)).toBe(true);
-    expect(rule).toContain('With an email: ' + _rungNum('identified') + ' calls/day');
+    // 2026-11-21 (owner decisions 6/7): the canon rule states no limits; it says what a key is for.
+    expect(rule).toBe(KEYLESS_FIRST_FULL_CLAUSE + ' A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.');
+    expect(rule).not.toMatch(/calls\/day|per tool per day/);
     expect(rule).not.toContain('Free key:');
     expect(_freeKeyOfferText()).toBeTruthy();
   });
@@ -57,7 +59,7 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
     expect(t).toContain('the key keeps its saved shortlists, alerts and tracked changes (get_changes) for the next chat');
     expect(t).not.toMatch(/calls\/day|per tool per day|\bfree\b/i);
     expect(t).not.toMatch(/used up/);
-    expect(rule).toContain('(up to ' + _fullAnswersPerToolPerDay('identified') + ' full answers per tool per day)');
+    expect(rule).not.toContain('(up to ' + _fullAnswersPerToolPerDay('identified') + ' full answers per tool per day)');
   });
   it('the email ask is the soft sentence (bind_email named; the user decides)', () => {
     expect(EMAIL_ASK).toBe(U.EMAIL_ASK_SOFT);

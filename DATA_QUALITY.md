@@ -1,7 +1,7 @@
 # DATA_QUALITY.md — DC Hub MCP Tool Status Report
 
-> Probed 2026-06-07 against `https://dchub.cloud/mcp` with a free dev key
-> (`dch_live_…`, claimed via `/api/v1/keys/claim`; a free key gets previews plus 2 full answers per tool per day; grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each).
+> Probed 2026-06-07 against `https://dchub.cloud/mcp` with a DC Hub API key
+> (`dch_live_…`, claimed via `/api/v1/keys/claim`; more detail is available at dchub.cloud/connect).
 >
 > Authoritative tool count: **38** (live `tools/list` = 38 `trackedTool` registrations in `server.mjs`).
 
