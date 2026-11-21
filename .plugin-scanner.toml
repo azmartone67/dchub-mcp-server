@@ -15,3 +15,17 @@ ignore_paths = [
   "sdk/ai-sdk/test/*.test.mjs",
   "integrations/langchain-dchub/tests/unit_tests/test_*.py",
 ]
+
+# [plugin_kit] exclude_paths: files that are not part of the plugin the HOL
+# Plugin Kit packages (hol-plugin-release.yml, plugin_dir "."). It is separate
+# from ignore_paths above: it does not hide scanner findings.
+# plugins/dchub-copilot/ is the GitHub Copilot CLI marketplace copy
+# (mcp#1541, 2026-11-18): its three skills are byte-identical copies of
+# plugins/dchub/skills/, so the Kit counted each skill twice and failed the
+# 2.12.60 release with skill_name_duplicate x3 (run 44875400404). The Kit's
+# own config.rs names this use: "copies of its skills kept for other
+# marketplaces". The Claude plugin in plugins/dchub/ stays in the package.
+[plugin_kit]
+exclude_paths = [
+  "plugins/dchub-copilot/*",
+]
