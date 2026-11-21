@@ -35,6 +35,7 @@ import * as kff from '../lib/keyless-first-full.mjs';
 import * as ses from '../lib/siting-email-seat.mjs';
 import { digestAskLine } from '../lib/depth-digest-ask.mjs';
 import { legacyFreeWording } from '../lib/chatgpt-frozen-copy.mjs';
+import { PAID_LINE, PAID_LINE_SHORT } from '../lib/wall-paid-line.mjs';
 
 const FREE = /\bfree\b/i;
 // claim_free_key is a tool name; <code>…</code> spans are identifiers too.
@@ -98,6 +99,8 @@ const BUILDERS = [
   ['firstFullBlock', () => [JSON.stringify(kff.firstFullBlock('get_grid_intelligence', 1, 10)), JSON.stringify(kff.firstFullBlock('get_grid_intelligence', 1, 0))]],
   ['sitingFreeRunNote', () => ses.sitingFreeRunNote({ used: 1, limit: 3, resets_at: '2026-12-01T00:00:00Z' }, 'analyze_site')],
   ['digestAskLine', () => digestAskLine('get_market_intel')],
+  // DCHUB_WALL_PAID_LINE A/B (lib/wall-paid-line.mjs, 2026-11-21): the wall's paid-license line and its short form.
+  ['wall paid line', () => [PAID_LINE, PAID_LINE_SHORT]],
 ];
 
 describe('no "free" (price sense) in the copy the 2026-11-21 sweep rewrote', () => {
