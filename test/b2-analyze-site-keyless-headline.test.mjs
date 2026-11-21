@@ -350,3 +350,33 @@ describe('analyze_site description follows DCHUB_B2_SITE_HEADLINE', () => {
     expect(Object.keys(on).length).toBe(Object.keys(off).length);
   });
 });
+
+// 2026-11-20 (owner A1, "publish what is enforced"): the served description states the no-key daily
+// site lane with the keyless wall's own sentence, at the cap as it runs, and drops it when the lane is off.
+describe('analyze_site description states the no-key daily runs', () => {
+  it('carries the wall sentence at the running cap, and nothing when the lane is off', async () => {
+    const { analyzeSiteKeylessDailySentence } = await import('../lib/tier-canon.mjs');
+    const S = await import('../server.mjs');
+    expect(S._analyzeSiteDescDailySentence({})).toBe(analyzeSiteKeylessDailySentence(2));
+    expect(S._analyzeSiteDescDailySentence({})).toContain('the first 2 `analyze_site` calls each UTC day from a network return the full site report');
+    expect(S._analyzeSiteDescDailySentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '1' })).toContain('the first `analyze_site` call each UTC day');
+    expect(S._analyzeSiteDescDailySentence({ DCHUB_KEYLESS_SITE_FULL: '0' })).toBe('');
+    expect(S._analyzeSiteDescDailySentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '0' })).toBe('');
+    const saved = { on: process.env.DCHUB_KEYLESS_SITE_FULL, cap: process.env.DCHUB_KEYLESS_SITE_FULL_CAP };
+    try {
+      process.env.DCHUB_KEYLESS_SITE_FULL = '1'; process.env.DCHUB_KEYLESS_SITE_FULL_CAP = '2';
+      const served = S._descFollowsSwitches('analyze_site', 'Lead. ' + S.ANALYZE_SITE_ACCESS_B2 + ' Ex.');
+      const LINE = 'Without a key, the first 2 `analyze_site` calls each UTC day from a network return the full site report';
+      expect(served).toContain(LINE);
+      expect(served.split(LINE).length).toBe(2);   // once, not doubled by the partial hint
+      expect(served).toMatch(/full-access key\. Without a key, the first 2/);   // right after the access sentence
+      expect(served).not.toMatch(/\$\d|Pro\b|Founding|Starter/);   // no prices or plan names in agent text
+      process.env.DCHUB_KEYLESS_SITE_FULL = '0';
+      expect(S._descFollowsSwitches('analyze_site', 'Lead. ' + S.ANALYZE_SITE_ACCESS_B2)).not.toContain('each UTC day');
+    } finally {
+      for (const [k, v] of [['DCHUB_KEYLESS_SITE_FULL', saved.on], ['DCHUB_KEYLESS_SITE_FULL_CAP', saved.cap]]) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
+    }
+  });
+});
