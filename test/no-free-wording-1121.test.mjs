@@ -108,6 +108,23 @@ describe('no "free" (price sense) in the copy the 2026-11-21 sweep rewrote', () 
   });
 });
 
+// Hard gate: loopback only. server.mjs reads DCHUB_API_BASE when it is first imported, so the
+// 127.0.0.1 stub is up and the env set at file level, before any describe imports server.mjs.
+let stub, prevBase;
+beforeAll(async () => {
+  await new Promise((resolve) => {
+    stub = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end('{}'); });
+    stub.listen(0, '127.0.0.1', resolve);
+  });
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
+});
+afterAll(async () => {
+  await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+});
+
 describe('server.mjs exported copy', () => {
   let S;
   beforeAll(async () => { S = await import('../server.mjs'); });
@@ -126,14 +143,8 @@ describe('server.mjs exported copy', () => {
 });
 
 describe('/mcp tools/list and resources/list', () => {
-  let httpServer, stub, prevBase, tools, resources;
+  let httpServer, tools, resources;
   beforeAll(async () => {
-    await new Promise((resolve) => {
-      stub = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end('{}'); });
-      stub.listen(0, '127.0.0.1', resolve);
-    });
-    prevBase = process.env.DCHUB_API_BASE;
-    process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
     const S = await import('../server.mjs');
     await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
     const port = httpServer.address().port;
@@ -153,9 +164,6 @@ describe('/mcp tools/list and resources/list', () => {
   });
   afterAll(async () => {
     await new Promise((resolve) => (httpServer ? httpServer.close(resolve) : resolve()));
-    await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
-    if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
-    else process.env.DCHUB_API_BASE = prevBase;
   });
   // Non-price senses, taken out before the scan.
   const nonPrice = (s) => String(s)
