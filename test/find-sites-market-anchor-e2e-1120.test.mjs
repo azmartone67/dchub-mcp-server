@@ -49,7 +49,10 @@ beforeAll(async () => {
     if (p === '/api/v1/sites/find') {
       if (mode === 'near') return { status: 200, body: NEAR };
       if (mode === 'far') return { status: 200, body: DOWNSTATE };
-      if (mode === 'exact') return { status: 200, body: EXACT };
+      // 5.58: the exact intent now sends market=chicago (state=IL beside it); the backend centres the search there.
+      if (mode === 'exact') return { status: 200, body: /[?&]market=chicago\b/.test(u && u.search ? u.search : '') ? NEAR : EXACT };
+      // The backend could not resolve the market and searched the state: the 5.55 caveat is the safety net.
+      if (mode === 'exact_unresolved') return { status: 200, body: EXACT };
       return { status: 200, body: { ...DOWNSTATE, ranked_after: RANKED } };
     }
     if (p.startsWith('/api/v1/dcpi/scores/chicago')) return { status: 200, body: CHICAGO_CARD };
@@ -94,13 +97,13 @@ describe('find_sites market= on a real server.mjs', () => {
   }
 });
 
-describe('execute_plan 250 MW near Chicago (planner 5.55)', () => {
+describe('execute_plan 250 MW near Chicago (planner 5.55, anchored 5.58)', () => {
   for (const [who, headers] of [['keyed (Pro)', PRO], ['keyless', ANON]]) {
     it(`${who}: areas near Chicago: the lead carries the AVOID line`, async () => {
       mode = 'near';
       const r = await H.call('/mcp', 'execute_plan', { intent: 'Find land for a 250 MW data center near Chicago' }, headers);
       const o = sc(r);
-      expect(o.planner_version).toBe('5.55');
+      expect(o.planner_version).toBe('5.58');
       expect(o.executed.some((e) => e.tool === 'find_sites' && (e.status === 'executed' || e.status === 'gated_preview'))).toBe(true);
       expect(o.intent_answer.siting_caveat).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index/);
       expect(planLeadText(o)).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index \(Chicago, Elk Grove Village; PJM\), so they rank last/);
@@ -118,16 +121,28 @@ describe('execute_plan 250 MW near Chicago (planner 5.55)', () => {
       expect(o.intent_answer.siting_caveat).toContain('For areas near Chicago, call find_sites market=chicago.');
     }, 120_000);
 
-    // Grok QA 2026-11-20 item 1: "fastest ... site ... within 30 months" is siting_search (a ranking class, not a land
-    // question), so find_sites runs state-wide; the lead must still carry the distance and AVOID line.
-    it(`${who}: THE EXACT GROK INTENT widens to IL and leads with the caveat for the Dixon point`, async () => {
+    // Grok QA 2026-11-20 item 1; owner 2026-11-20 "anchor fastest-site-near-X asks to the metro" (planner 5.58): the exact
+    // intent is siting_search, and its find_sites step is now centred on Chicago (market=chicago, state=IL as the fallback).
+    it(`${who}: THE EXACT GROK INTENT searches around Chicago and leads with the AVOID line`, async () => {
       mode = 'exact';
       const before = seen.length;
       const o = sc(await H.call('/mcp', 'execute_plan', { intent: EXACT_INTENT }, headers));
       expect(o.intent_class).toBe('siting_search');
       const fsStep = o.executed.find((e) => e.tool === 'find_sites');
-      expect(fsStep && fsStep.args).toEqual({ state: 'IL' });
-      expect(seen.slice(before).some((x) => /^\/api\/v1\/sites\/find\?(.*&)?state=IL\b/.test(x))).toBe(true);
+      expect(fsStep && fsStep.args).toEqual({ market: 'chicago', state: 'IL' });
+      const calls = seen.slice(before).filter((x) => x.startsWith('/api/v1/sites/find'));
+      expect(calls.some((x) => /[?&]market=chicago\b/.test(x) && /[?&]state=IL\b/.test(x)), calls.join(' | ')).toBe(true);
+      const lead = planLeadText(o);
+      expect(lead).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index \(Chicago, Elk Grove Village; PJM\), so they rank last/);
+      // Every area is within 60 km of Chicago: no distance line, and no "call find_sites market=chicago" (it already did).
+      expect(o.intent_answer.siting_caveat).not.toMatch(/100 km or more|well away from Chicago|call find_sites market=/);
+      expect(lead).not.toMatch(/\$\d|\bPro\b|upgrade|pricing/i);
+    }, 120_000);
+
+    it(`${who}: THE EXACT GROK INTENT when the market does not resolve: the Dixon point still gets the distance line`, async () => {
+      mode = 'exact_unresolved';
+      const o = sc(await H.call('/mcp', 'execute_plan', { intent: EXACT_INTENT }, headers));
+      expect(o.executed.find((e) => e.tool === 'find_sites').args).toEqual({ market: 'chicago', state: 'IL' });
       const lead = planLeadText(o);
       if (who === 'keyless') {
         expect(lead).toMatch(/^One of the 3 areas shown sits well away from Chicago, outside its metro area\. Chicago-area markets \(PJM\) read AVOID on the Data Center Power Index \(DCPI\), so they rank last/);
@@ -136,14 +151,26 @@ describe('execute_plan 250 MW near Chicago (planner 5.55)', () => {
         expect(lead).toMatch(/^One of the 3 areas shown sits 100 km or more from Chicago \(up to about 170 km\)\. Chicago-area markets \(PJM\) read AVOID on the Data Center Power Index \(DCPI\), so they rank last/);
       }
       expect(o.intent_answer.siting_caveat).toContain('For areas near Chicago, call find_sites market=chicago.');
-      expect(lead).not.toMatch(/\$\d|\bPro\b|upgrade|pricing/i);
+    }, 120_000);
+  }
+
+  // The ChatGPT catalog holds find_sites' market input off its listing (frozen schema); the plan's own step still sends it.
+  for (const path of ['/mcp/claude', '/mcp/chatgpt']) {
+    it(`${path} keyless: THE EXACT GROK INTENT sends market=chicago to the backend`, async () => {
+      mode = 'exact';
+      const before = seen.length;
+      const o = sc(await H.call(path, 'execute_plan', { intent: EXACT_INTENT }, ANON));
+      const calls = seen.slice(before).filter((x) => x.startsWith('/api/v1/sites/find'));
+      expect(calls.some((x) => /[?&]market=chicago\b/.test(x)), calls.join(' | ')).toBe(true);
+      // These surfaces lead with the DCPI card, not the caveat block (as on main); either way AVOID comes first.
+      expect(planLeadText(o)).toMatch(/^Chicago[^.]{0,40}AVOID/);
     }, 120_000);
   }
 
   it('THE EXACT GROK INTENT with be#9113 ranked_after on the state search: the AVOID caveat still leads', async () => {
     mode = 'ranked';
     const o = sc(await H.call('/mcp', 'execute_plan', { intent: EXACT_INTENT }, PRO));
-    expect(o.executed.find((e) => e.tool === 'find_sites').args).toEqual({ state: 'IL' });
+    expect(o.executed.find((e) => e.tool === 'find_sites').args).toEqual({ market: 'chicago', state: 'IL' });
     expect(planLeadText(o)).toMatch(/^3 of the 3 areas shown sit 100 km or more from Chicago \(up to about \d+ km\)\. Chicago-area markets \(PJM\) read AVOID/);
   }, 120_000);
 

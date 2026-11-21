@@ -685,6 +685,7 @@ test/site-point-depth-1120.test.mjs
 test/site-verdict-label.test.mjs
 test/siting-caveat-1120.test.mjs
 test/siting-email-seat.test.mjs
+test/siting-metro-anchor-558.test.mjs
 test/siting-scope.test.mjs
 test/size-trim-not-tier-gating.test.mjs
 test/skill-source-heals-canon-1104.test.mjs

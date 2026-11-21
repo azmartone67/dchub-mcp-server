@@ -157,6 +157,8 @@ const prose = (r) => (res(r).content || []).map((b) => (b && b.text) || '').join
 const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/https:\/\/dchub\.cloud\/(upgrade\/h\/[A-Za-z0-9_.-]+|u\/[A-Za-z0-9]+)(?:\?[^"\s\\]*)?/g, 'RELAY')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
+  // A planner version bump is not this flag's: the branch and origin/main differ there by design until it merges.
+  .replace(/(\\?"planner_version\\?":\\?")[0-9.]+/g, '$1V')
   .replace(/pr1\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/g, 'RERUN')
   .replace(/(\\?")(ms|elapsed_ms|duration_ms|took_ms|latency_ms|wall_ms)(\\?"):\d+/g, '$1$2$3:0')
   .replace(/(plan|req|sess|run|rp|hp)[-_][A-Za-z0-9-]{6,}/g, '$1-ID')
