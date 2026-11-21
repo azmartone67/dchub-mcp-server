@@ -29,10 +29,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-// ★2026-11-20 (owner, quota one-statement A1: "keep enforcement as it is and publish it"): the line states the daily
-// site lane (2 a day per network with no key, lib/keyless-full-trial.mjs) and keeps "a few" for the monthly runs.
-const OWNER_LINE = 'analyze_site: 2 full site reports a day without a key; a free key adds a few each month; after that, previews until UTC midnight.';
-const LANE_OFF_LINE = 'analyze_site: a free key gets a few full site reports each month; after that, previews.';
+// ★2026-11-20 (site audit, owner via relay): no "free key", no tool alias, no limit; the /connect pointer. Byte for
+// byte dchub-backend ai_surface_canon ANALYZE_SITE_FREE_LINE (be#9147). The words no longer follow the daily lane
+// cap, so the lane-off sentence is the same line.
+const OWNER_LINE = 'analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect.';
+const LANE_OFF_LINE = OWNER_LINE;
 // Item 3 (owner draft 2026-10-16): the decision-tools clause now states the email allowance.
 const CLAUSE = 'previews on free; an email adds 10 full answers/day each';
 
@@ -74,11 +75,12 @@ afterAll(async () => {
 });
 
 describe('the sentence', () => {
-  it('is the owner wording, byte for byte; its only number is the daily lane cap, never the monthly count', () => {
+  it('is the owner wording, byte for byte, with no number, no "free key" and no tool alias', () => {
     expect(TC.ANALYZE_SITE_FREE_LINE).toBe(OWNER_LINE);
-    expect(TC.ANALYZE_SITE_FREE_LINE.match(/\d+/g)).toEqual(['2']);
+    expect(TC.ANALYZE_SITE_FREE_LINE.match(/\d+/g)).toBeNull();
+    expect(TC.ANALYZE_SITE_FREE_LINE).not.toMatch(/free key|claim_free_key|a day|each month|UTC/i);
     expect(TC.analyzeSiteFreeLine(0)).toBe(LANE_OFF_LINE);
-    expect(TC.analyzeSiteFreeLine(1)).toBe('analyze_site: 1 full site report a day without a key; a free key adds a few each month; after that, previews until UTC midnight.');
+    expect(TC.analyzeSiteFreeLine(1)).toBe(OWNER_LINE);
   });
   it('never joins the pinned rule', () => {
     expect(TC._freeTierRuleText()).not.toContain('site reports');
@@ -90,7 +92,7 @@ describe('the sentence', () => {
     // the daily lane off, or its cap 0: no daily figure is promised
     expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL: '0' })).toBe(LANE_OFF_LINE);
     expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '0' })).toBe(LANE_OFF_LINE);
-    expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '3' })).toContain('analyze_site: 3 full site reports a day without a key;');
+    expect(S._analyzeSiteFreeSentence({ DCHUB_KEYLESS_SITE_FULL_CAP: '3' })).toBe(OWNER_LINE);
     for (const off of ['0', 'false', 'no', 'OFF']) {
       expect(S._analyzeSiteFreeSentence({ DCHUB_LP_FREE_RUNS: off }), off).toBe('');
     }
