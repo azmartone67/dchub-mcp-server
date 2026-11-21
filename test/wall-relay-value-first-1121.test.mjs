@@ -360,7 +360,6 @@ describe('flags ON, /mcp, keyless: the acceptance tools', () => {
   };
   beforeAll(async () => {
     for (const [name, args] of ACCEPT) runs.set(name, await run(name, args));
-    if (process.env.WRVF_DUMP) (await import('node:fs')).writeFileSync(process.env.WRVF_DUMP, JSON.stringify([...runs], null, 1));
   }, 120_000);
 
   it.each(ACCEPT)('%s: /u/ human_url; the token carries a- / c- / u- and the landing query', (name, args) => {
