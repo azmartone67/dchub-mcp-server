@@ -89,7 +89,7 @@ describe('/mcp/claude keyless compare_sites wall: the per-site verdicts survive 
     const r = await H.call('/mcp', 'compare_sites', TWO_SITES);
     const t = texts(r);
     const teaserAt = t.findIndex((x) => /^Comparison teaser: site 1 verdict BUILD/.test(x));
-    const keyAt = t.findIndex((x) => x.startsWith('Free preview: call `claim_free_key`'));
+    const keyAt = t.findIndex((x) => x.startsWith('Preview with a key: call `claim_free_key`'));
     expect(teaserAt).toBeGreaterThan(0);
     expect(keyAt).toBe(teaserAt + 1);
     expect(t[teaserAt]).not.toMatch(/claim_free_key/);

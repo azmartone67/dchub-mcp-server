@@ -50,7 +50,7 @@ describe('wall_link_th is written only for walls that handed out a link', () => 
   // still carries no wall_link_th: joining Claude walls to relay opens is a separate owner call.
   it('C1 /mcp/claude: wall logged pro_wall, source claude-directory, the unlock link in the reply, no wall_link_th', async () => {
     const w = await wall('/mcp/claude', false);
-    expect(w.text).toMatch(/Unlock the full site report free\]\(https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/)/);
+    expect(w.text).toMatch(/Unlock the full site report\]\(https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/)/);
     expect(w.tracks.length).toBe(1);
     expect(w.tracks[0].body.status).toBe('pro_wall');
     expect(w.tracks[0].body.source).toBe('claude-directory');

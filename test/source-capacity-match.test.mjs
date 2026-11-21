@@ -251,7 +251,7 @@ describe('rendering a match', () => {
     expect(t).toContain('Single-listing fits (1)');
     expect(t).toContain('dfw-40mw-powered-shell: 40,000 kW in Dallas, TX, US, available from 2027-04');
     expect(t).toContain('Next: request_capacity_intro slug="dfw-40mw-powered-shell"');
-    expect(t).toContain('Introduction requests: 1 of 1 left this month on the free plan (resets 2026-10-01).');
+    expect(t).toContain('Introduction requests: 1 of 1 left this month on this account (resets 2026-10-01).');
     expect(r.structuredContent.next_steps).toEqual(['request_capacity_intro']);
     const ok = await accepts(r.structuredContent);
     expect(ok.ok, ok.issues).toBe(true);
@@ -274,7 +274,7 @@ describe('rendering a match', () => {
     }
     expect(t).toContain('A bundle needs one introduction per listing in it.');
     // Free plan, one intro left, smallest bundle needs two: the note says so.
-    expect(r.structuredContent.next_steps_note).toContain('needs 2 introductions and this free account has 1 left');
+    expect(r.structuredContent.next_steps_note).toContain('needs 2 introductions and this account has 1 left');
     const ok = await accepts(r.structuredContent);
     expect(ok.ok, ok.issues).toBe(true);
   });
@@ -329,7 +329,7 @@ describe('rendering a match', () => {
     responder = () => json(200, { ...MATCH_SHORTFALL, quota: QUOTA_FREE_USED });
     const note = (await call({ target_mw: 40 }, seat())).structuredContent.next_steps_note;
     expect(note.startsWith('Nothing delivers the whole requirement: best reachable now is 25,000 kW of 40,000 kW.')).toBe(true);
-    expect(note).toContain('request_capacity_intro without a slug registers the requirement (free)');
+    expect(note).toContain('request_capacity_intro without a slug registers the requirement (it does not use an introduction)');
     expect(note).toContain('To pursue a partial listing anyway');
     expect(note).not.toMatch(/paid|upgrade|human_url/);
     // Control: an exact fit keeps the proceed-on-a-listing note.
@@ -347,7 +347,7 @@ describe('rendering a match', () => {
 
   it('quota: exhausted free and unlimited paid each render their own line', async () => {
     responder = () => json(200, { ...MATCH_EXACT, quota: QUOTA_FREE_USED });
-    expect(rendered(await call({ target_mw: 40 }, seat()))).toContain('0 of 1 left this month on the free plan (resets 2026-10-01). More now: unlimited on a paid DC Hub plan');
+    expect(rendered(await call({ target_mw: 40 }, seat()))).toContain('0 of 1 left this month on this account (resets 2026-10-01). More now: unlimited on a paid DC Hub plan');
     responder = () => json(200, { ...MATCH_EXACT, quota: QUOTA_PAID, caller_tier: 'pro' });
     expect(rendered(await call({ target_mw: 40 }, seat({ tier: 'pro' })))).toContain('Introduction requests: unlimited on this plan.');
   });
@@ -390,7 +390,7 @@ describe('walls and errors on match', () => {
     expect(sc.next_steps_note).toContain('(1 per calendar month, UTC)');
     expect(sc.next_steps_note).toContain('resets on 2026-10-01');
     expect(sc.next_steps_note).toContain('human_url');   // r-relay-contract: the link to relay, not a tool to call
-    expect(sc.next_steps_note).toContain('stays free');
+    expect(sc.next_steps_note).toContain('does not use an introduction');
     expect(sc.next_steps_note).not.toContain('higher plan');
   });
 

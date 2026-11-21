@@ -116,9 +116,10 @@ describe('server.mjs exported copy', () => {
       ...Object.values(S.FREE_ANSWER_BY_TIER),
       S.SITE_KEY_LINK_MESSAGE, S.COMPARE_KEYLESS_MESSAGE, S.COMPARE_FREE_KEY_LINE,
       S.COMPOSITE_KEYLESS_MESSAGE, S.REPORT_KEYLESS_MESSAGE, S.SITE_NOSID_KEY_LINE,
-      S.OPTIN_NOTE_PREFIX, S.OPTIN_VALUE,
+      // OPTIN_NOTE_PREFIX / OPTIN_VALUE are not here: the opt-in card is shared canon with dchub-backend
+      // mcp_gatekeeper._optin_cta_block (test/optin-cta-parity.test.mjs), changed only in both repos at once.
     ];
-    expect(strings.filter((s) => typeof s === 'string' && s.length).length).toBeGreaterThan(12);
+    expect(strings.filter((s) => typeof s === 'string' && s.length).length).toBeGreaterThan(10);
     expect(offenders(strings)).toEqual([]);
   });
 });
@@ -200,6 +201,9 @@ describe('lib/chatgpt-frozen-copy.mjs restores the origin/main sell wording on /
     ['paidAgentLine', psl.paidAgentLine('get_market_intel', 3), 'get_market_intel returned a free preview: ', 'returned a free preview', 'returned a preview'],
     ['paidAgentLine repeat', psl.paidAgentLine('get_market_intel', 3, true, URL), 'get_market_intel returned a free preview. ', 'returned a free preview', 'returned a preview'],
     ['GRID_AGENT_EMAIL_TAIL', gsl.GRID_AGENT_EMAIL_TAIL, 'Your user can unlock the full brief free with their email (the step above). ', 'full brief free with', 'full brief with'],
+    ['lastFreeLine human', gsl.lastFreeLine({ tool: 'get_grid_intelligence', link: URL, perPack: 1000 }).human, 'That was the last free full DC Hub grid brief on this key today.', 'last free full', 'last included full'],
+    ['lastFreeLine agent', gsl.lastFreeLine({ tool: 'get_grid_intelligence', link: URL, perPack: 1000 }).agent, 'This is your last free full get_grid_intelligence answer today; ', 'last free full', 'last included full'],
+    ['day2DigestLine human', gsl.day2DigestLine({ tool: 'get_grid_intelligence', what: 'PJM' }).human, 'Want a free weekly email on ', 'a free weekly', 'a weekly'],
   ];
   it.each(CASES)('%s', (_n, now, oldLead, oldWord, newWord) => {
     expect(typeof now === 'string' && now.length > 0, 'control: the builder returned a line').toBe(true);

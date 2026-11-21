@@ -134,7 +134,7 @@ describe('a keyed Pro caller gets full data, still scrubbed', () => {
     const anon = await H.call(DIR, 'analyze_site', { lat: 39.04, lon: -77.48 });
     const t = anon.msg.result.content.map((c) => c.text);
     expect(t).toHaveLength(2);
-    expect(t[0]).toMatch(/^The full site report .*\[Unlock the full site report free\]\(https:\/\/dchub\.cloud\//);
+    expect(t[0]).toMatch(/^The full site report .*\[Unlock the full site report\]\(https:\/\/dchub\.cloud\//);
     expect(t[1]).toBe(CLAUDE_PLANS_NOTICE);
     const pro = await H.call(`${DIR}?api_key=${PRO_KEY}`, 'analyze_site', { lat: 39.04, lon: -77.48 });
     expect(pro.msg.result.isError).toBeUndefined();

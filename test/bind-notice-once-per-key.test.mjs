@@ -62,7 +62,7 @@ describe('_bindNoticeOnceStep', () => {
   it('appends the usage line on the due call, on a tool outside BIND_CTA_TOOLS, sessionless', () => {
     const out = step({ ...due });
     expect(out.content).toHaveLength(2);
-    expect(out.content[1].text).toMatch(/^🔑 This DC Hub key has made 57 calls since Sep 12 with no email on it\. Free: call `bind_email`/);
+    expect(out.content[1].text).toMatch(/^🔑 This DC Hub key has made 57 calls since Sep 12 with no email on it\. Optional: call `bind_email`/);
     expect(out.content[1].text).not.toMatch(/https?:\/\//);
   });
   it('appends nothing when the backend says not due', () => {
