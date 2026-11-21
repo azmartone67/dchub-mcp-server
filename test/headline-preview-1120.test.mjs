@@ -164,7 +164,9 @@ const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/("id":)\d+/g, '$1N')
   // the planner version (top level and replay.planner_version, raw or JSON-escaped): a planner bump changes only this
   // value, and the comparison is against origin/main. Only the value is masked; every other byte still compares.
-  .replace(/(\\*"planner_version\\*":\\*")\d+(?:\.\d+)+(\\*")/g, '$1PV$2');
+  .replace(/(\\*"planner_version\\*":\\*")\d+(?:\.\d+)+(\\*")/g, '$1PV$2')
+  // The power-timing lead the planner composes (lib/intent-answers.mjs), which the flag never writes.
+  .replace(/Time to 100 MW of power for PJM \(ISO\)[^"\\]*?(?= Source: |\\?")/g, 'TTP_LEAD');
 const PLAN = { intent: 'how soon can a 100 MW load get power in PJM' };
 const queueFact = (r) => (json0(r).facts || []).find((f) => f && f.tool === 'get_interconnection_queue');
 

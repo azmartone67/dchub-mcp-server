@@ -52,7 +52,8 @@ describe('item 1: the power-timing headline states ONE time-to-power figure and 
     const ex = [PJM_EXECUTED[0], PJM_EXECUTED[2]].map((e) => (e.tool === 'get_grid_intelligence'
       ? { ...e, result: { ...e.result, avg_time_to_power_months: null } } : e));
     const r = buildIntentAnswer(PJM_CTX, ex, null);
-    expect(r.headline).toBe(`Time to 100 MW of power for PJM (ISO): estimated time-to-power 50.5 months (${TTP_QUEUE_FIELD}).`);
+    // 5.57 (Grok daily 2026-11-20 item 6): the figure carries the date of the queue data it came from.
+    expect(r.headline).toBe(`Time to 100 MW of power for PJM (ISO): estimated time-to-power 50.5 months (${TTP_QUEUE_FIELD}, queue data as of 2026-11-16).`);
     expect(r.time_to_power_basis.field).toBe(TTP_QUEUE_FIELD);
     expect(r.evidence.join(' ')).not.toMatch(/different series/);
   });
