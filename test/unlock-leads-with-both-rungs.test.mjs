@@ -66,8 +66,9 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     // Agent rungs (the pack, Developer) are named before Pro. ★2026-10: the plans
     // are named, never priced (owner rule 09-27) — no monthly price on the line.
     // Owner 2026-10-10: the pack is not priced here either; the checkout page shows it.
+    // Owner 2026-11-21 (decision 2): nor named as a pack of credits; the rung says what the checkout gets.
     const at = (s) => first.indexOf(s);
-    const PACK = '**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**';
+    const PACK = '**Full answers in one checkout** (no subscription)';
     expect(at(PACK)).toBeGreaterThanOrEqual(0);
     // v14 (owner 2026-10-10): the two subscription rungs are described, not named.
     const DEV = '**full depth for agents**', PRO = '**every DC Hub tool**';
