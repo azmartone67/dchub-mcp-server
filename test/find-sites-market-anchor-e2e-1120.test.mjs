@@ -27,6 +27,12 @@ const DOWNSTATE = { success: true, count: 10, filter: { state: 'IL' },
 const RANKED = { note: 'These areas all read CAUTION or better. Published DCPI markets in IL with a worse verdict rank after every one of them, so none of their substations is listed here: Chicago (PJM, AVOID). For one of them, call find_sites with its lat/lon (radius_km 50) or analyze_site at the point.',
   markets: [{ market: 'Chicago', slug: 'chicago', iso: 'PJM', verdict: 'AVOID', source_url: 'https://dchub.cloud/dcpi/chicago', lat: 41.87, lon: -87.63 }],
   count: 1, next_call: { tool: 'find_sites', args: { lat: 41.87, lon: -87.63, radius_km: 50 } } };
+// Grok QA 2026-11-20 item 1, the exact repro (keyed, planner 5.52): the run widened find_sites to state=IL and pointed
+// analyze_site at 41.787197, -89.710625 (near Dixon, about 170 km from Chicago) with no AVOID line. Two near-Chicago
+// rows ride with it, so only the exact point can make the distance part fire.
+const EXACT_INTENT = 'fastest 250 MW data center site near Chicago Illinois within 30 months';
+const EXACT = { success: true, count: 10, filter: { state: 'IL' },
+  candidates: [CAND(41.787197, -89.710625, 'Rockford', 'CAUTION', 'PJM'), CAND(41.95, -87.7, 'Chicago', 'AVOID', 'PJM'), CAND(42.0, -87.97, 'Elk Grove Village', 'AVOID', 'PJM')] };
 const CHICAGO_CARD = { market_slug: 'chicago', market_name: 'Chicago', state: 'IL', iso: 'PJM', verdict: 'AVOID', composite_score: 21.9,
   latitude: 41.87, longitude: -87.63, computed_at: '2026-11-20T18:30:07+00:00', published: true };
 
@@ -43,6 +49,7 @@ beforeAll(async () => {
     if (p === '/api/v1/sites/find') {
       if (mode === 'near') return { status: 200, body: NEAR };
       if (mode === 'far') return { status: 200, body: DOWNSTATE };
+      if (mode === 'exact') return { status: 200, body: EXACT };
       return { status: 200, body: { ...DOWNSTATE, ranked_after: RANKED } };
     }
     if (p.startsWith('/api/v1/dcpi/scores/chicago')) return { status: 200, body: CHICAGO_CARD };
@@ -104,10 +111,41 @@ describe('execute_plan 250 MW near Chicago (planner 5.55)', () => {
       mode = 'far';
       const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'Find land for a 250 MW data center near Chicago' }, headers));
       const lead = planLeadText(o);
-      expect(lead).toMatch(/^3 of the 3 areas shown sit 100 km or more from Chicago \(up to about \d+ km\)\. Chicago-area markets \(PJM\) read AVOID/);
+      // mcp#1600: below full access the distance is said without a figure.
+      expect(lead).toMatch(who === 'keyless'
+        ? /^3 of the 3 areas shown sit well away from Chicago, outside its metro area\. Chicago-area markets \(PJM\) read AVOID/
+        : /^3 of the 3 areas shown sit 100 km or more from Chicago \(up to about \d+ km\)\. Chicago-area markets \(PJM\) read AVOID/);
       expect(o.intent_answer.siting_caveat).toContain('For areas near Chicago, call find_sites market=chicago.');
     }, 120_000);
+
+    // Grok QA 2026-11-20 item 1: "fastest ... site ... within 30 months" is siting_search (a ranking class, not a land
+    // question), so find_sites runs state-wide; the lead must still carry the distance and AVOID line.
+    it(`${who}: THE EXACT GROK INTENT widens to IL and leads with the caveat for the Dixon point`, async () => {
+      mode = 'exact';
+      const before = seen.length;
+      const o = sc(await H.call('/mcp', 'execute_plan', { intent: EXACT_INTENT }, headers));
+      expect(o.intent_class).toBe('siting_search');
+      const fsStep = o.executed.find((e) => e.tool === 'find_sites');
+      expect(fsStep && fsStep.args).toEqual({ state: 'IL' });
+      expect(seen.slice(before).some((x) => /^\/api\/v1\/sites\/find\?(.*&)?state=IL\b/.test(x))).toBe(true);
+      const lead = planLeadText(o);
+      if (who === 'keyless') {
+        expect(lead).toMatch(/^One of the 3 areas shown sits well away from Chicago, outside its metro area\. Chicago-area markets \(PJM\) read AVOID on the Data Center Power Index \(DCPI\), so they rank last/);
+        expect(o.intent_answer.siting_caveat).not.toMatch(/\d\s*km\b/);
+      } else {
+        expect(lead).toMatch(/^One of the 3 areas shown sits 100 km or more from Chicago \(up to about 170 km\)\. Chicago-area markets \(PJM\) read AVOID on the Data Center Power Index \(DCPI\), so they rank last/);
+      }
+      expect(o.intent_answer.siting_caveat).toContain('For areas near Chicago, call find_sites market=chicago.');
+      expect(lead).not.toMatch(/\$\d|\bPro\b|upgrade|pricing/i);
+    }, 120_000);
   }
+
+  it('THE EXACT GROK INTENT with be#9113 ranked_after on the state search: the AVOID caveat still leads', async () => {
+    mode = 'ranked';
+    const o = sc(await H.call('/mcp', 'execute_plan', { intent: EXACT_INTENT }, PRO));
+    expect(o.executed.find((e) => e.tool === 'find_sites').args).toEqual({ state: 'IL' });
+    expect(planLeadText(o)).toMatch(/^3 of the 3 areas shown sit 100 km or more from Chicago \(up to about \d+ km\)\. Chicago-area markets \(PJM\) read AVOID/);
+  }, 120_000);
 
   it('a state search with ranked_after: the lead names Chicago as ranked after the areas listed', async () => {
     mode = 'ranked';
