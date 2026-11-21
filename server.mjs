@@ -328,6 +328,7 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
   withEmailAsk as _wallIdWithEmailAsk, emailAskLine as _wallIdEmailAskLine, emailAskCall as _wallIdEmailAskCall,
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
+import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
@@ -5249,8 +5250,8 @@ export function _quotaWallEventFor(c, name, status) {
   try {
     if (!_quotaWallEventOn()) return null;
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
-    return _quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
-                                 isQa: _isQaCaller(c), platform: tagged.platform });
+    return _WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+                                 isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm);
   } catch (_) { return null; }
 }
 // Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
@@ -5310,6 +5311,7 @@ function _drainPlanWallSink(c, result) {
       if (sc && typeof sc === 'object') sc._emailAsk = '';
       // A drained step row carries the plan answer's floor standing, not the step's own ('plan_step').
       if (sc && typeof sc === 'object' && c._offerFloor) sc._offerFloor = c._offerFloor;
+      if (sc && typeof sc === 'object' && c._wallPaidLineArm) sc._wallPaidLineArm = c._wallPaidLineArm;   // the plan's A/B arm
       if (e && asked.has(e.name)) _markEmailAsk(sc, 'line');
       if (e && digest.has(e.name)) _markEmailAsk(sc, 'digest_line');
       if (offersOn && result) { const o = _offersShown(result, sc._emailAsk); if (o) sc._offersShown = o; }
@@ -5563,6 +5565,28 @@ export function _wallCopyV2Step(result, name, c = getCtx()) {
     const market = c._wallIdMarket || '';
     return _wallCopyV2(result, { keyless: !c.api_key, grok,
       planAsk: grok && name === 'execute_plan' ? { line: _wallIdEmailAskLine(market), call: _wallIdEmailAskCall(market) } : null });
+  } catch (_) { return result; }
+}
+// DCHUB_WALL_PAID_LINE (lib/wall-paid-line.mjs, default OFF; owner relay 2026-11-21): the "paid license" A/B on the
+// generic /mcp surface only. A walled answer for a keyless or trial-key caller gets an arm from a salted hash of the
+// caller (c._wallPaidLineArm, recorded on the track row and the wall row); the paid_line arm reads one line right after
+// the sign-in line, once per (session, tool), and the short form in next_ask. Runs AFTER _wallCopyV2Step, so the v2
+// link rewrite never strips the tagged /connect URL. Same walled read and tool skips as _wallIdentityV2Step.
+export function _wallPaidLineStep(result, name, c = getCtx()) {
+  try {
+    if (!_WPL.wallPaidLineOn() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (!_WPL.paidLineSurface(c, { grok: !!_pcIsGrok(c.platform), clean: _isCleanPlatform() }) || !_WPL.paidLineCaller(c)) return result;
+    if (_FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key') return result;
+    let walled = _wallIsWalled(result, name, c);
+    if (!walled && name === 'execute_plan') {
+      try { const id = c._planWallSinkId; walled = !!id && _planWallSink.rows(id).length > 0; } catch (_) { walled = false; }
+    }
+    if (!walled) return result;
+    const arm = _WPL.paidLineArm(_WPL.paidLineCallerId(c));
+    if (!arm) return result;
+    c._wallPaidLineArm = arm;
+    if (arm !== _WPL.ARM_PAID_LINE || _askOnceSeen(c.session_id, 'paid_line', name)) return result;
+    return _WPL.withPaidLine(result);
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -27077,6 +27101,8 @@ function _sourceLineCb(name, fn) {
       _final = _wallIdentityV2Step(_final, name, c);
       // DCHUB_WALL_COPY_V2 (default on under the v2 flag): the rest of the wall reads the v2 copy (lib/wall-copy-v2.mjs).
       _final = _wallCopyV2Step(_final, name, c);
+      // DCHUB_WALL_PAID_LINE (default OFF): the paid-license A/B line, after the v2 copy so its tagged URL stays.
+      _final = _wallPaidLineStep(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
@@ -27087,6 +27113,7 @@ function _sourceLineCb(name, fn) {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
       // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
+      if (c && c._wallPaidLineArm) _WPL.markHeldTrackRows(c, name, c._wallPaidLineArm);   // the A/B arm on the track row
       _flushTrackRows(c, name, _final);
     }
   };
