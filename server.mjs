@@ -139,7 +139,7 @@ import { planProvenanceOnceStep as _planProvenanceOnceStep } from './lib/plan-pr
 import { neutralCtaStep as _neutralCtaStep } from './lib/neutral-cta.mjs';
 import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-tag.mjs';
 import { planOneLinkStep as _planOneLinkStep } from './lib/plan-one-link.mjs';
-import { previewScopeStep as _previewScopeStep } from './lib/preview-scope.mjs';
+import { previewScopeStep as _previewScopeStep, isPreviewAnswer as _isPreviewAnswerSc } from './lib/preview-scope.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
@@ -334,8 +334,13 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
+import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
+import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
+const _headlineOf = _VF.headlineOf;
+import * as _LB from './lib/licence-block.mjs';           // DCHUB_LICENCE_BLOCK (default OFF)
+import { withheldFields as _withheldFields, withheldList as _withheldList, reconcilePreviewScope as _reconcilePreviewScope } from './lib/withheld-copy.mjs';
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
-import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine } from './lib/wall-depth-trial.mjs';
+import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine, depthTrialEligible as _depthTrialEligible } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
 import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
 import { planLeadStep as _planLeadStep } from './lib/plan-lead-text.mjs';
@@ -5604,6 +5609,9 @@ export function _wallCopyV2Step(result, name, c = getCtx()) {
 export function _wallPaidLineStep(result, name, c = getCtx()) {
   try {
     if (!_WPL.wallPaidLineOn() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    // Item 1 (DCHUB_WALL_RELAY_EVERYWHERE): the relay page carries the licence link as its secondary action, so this
+    // answer gets no competing line (and no arm: an arm with no line is not a treatment).
+    if (c._relayEverywhereLink) return result;
     if (!_WPL.paidLineSurface(c, { grok: !!_pcIsGrok(c.platform), clean: _isCleanPlatform() }) || !_WPL.paidLineCaller(c)) return result;
     if (_FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key') return result;
     let walled = _wallIsWalled(result, name, c);
@@ -5616,6 +5624,192 @@ export function _wallPaidLineStep(result, name, c = getCtx()) {
     c._wallPaidLineArm = arm;
     if (arm !== _WPL.ARM_PAID_LINE || _askOnceSeen(c.session_id, 'paid_line', name)) return result;
     return _WPL.withPaidLine(result);
+  } catch (_) { return result; }
+}
+// ── Wall items 1, 2 and 4 (owner 2026-11-21; each behind its own flag, default OFF, byte-identical when off) ──────────
+//   item 1  DCHUB_WALL_RELAY_EVERYWHERE  a session-bound /u/ relay link on every gated answer (lib/wall-relay-everywhere.mjs)
+//   item 2  DCHUB_WALL_VALUE_FIRST       content[0] = the dated headline, what was withheld, the link (lib/wall-value-first.mjs)
+//   item 4  DCHUB_LICENCE_BLOCK          `licence` replaces `_upgrade` on a gated answer (lib/licence-block.mjs)
+// All three read ONE withheld-field list (lib/withheld-copy.mjs). Never on the directory / Claude / core profiles
+// (/mcp/chatgpt is frozen byte for byte, /mcp/claude keeps its reviewed copy), a clean platform (ChatGPT-identified
+// clients keep their commerce scrub), an execute_plan loopback step, a device-matched caller, or the key / account tools.
+// Keyless access, quotas and counting are untouched: these steps only rewrite the finished answer.
+function _newWallStepSkip(c, name) {
+  if (!c || c.loopback_step || c.device_match === true) return true;
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return true;
+  if (_isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return true;
+  return _FLOOR_SKIP_TOOLS.has(name) || _NEUTRAL_CONNECT_SKIP_TOOLS.has(name) || name === 'get_api_key';
+}
+// A gated answer: a parked wall row, a walled execute_plan step, a relay wall, or the answer's own preview markers.
+export function _gatedAnswer(result, name, c) {
+  try {
+    if (!result || typeof result !== 'object' || result.isError || !Array.isArray(result.content)) return false;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+      ? result.structuredContent : null;
+    if (_wallIsWalled(result, name, c)) return true;
+    if (name === 'execute_plan') {
+      try { const id = c && c._planWallSinkId; if (id && _planWallSink.rows(id).length > 0) return true; } catch (_) { /* fall through */ }
+    }
+    if (!sc) return false;
+    return _wallCopyLooksPreview(result) || _isPreviewAnswerSc(sc) || sc._gated === true || _isRelayWall(sc, c || {});
+  } catch (_) { return false; }
+}
+// What an email on the relay page really opens for this answer: 'email' (the full answer) or 'licence'. The server's
+// own rules, not new ones: a decision tool whose bound-email key gets full answers (_emailFullDecisionTool: the grid
+// and queue reads), else not a depth / Pro-only wall (_floorKindFor, the email floor's rule: get_market_dcpi_rank's
+// DCPI sub-scores read 'licence') AND an email opens the tool with nothing hidden past the free-key rung
+// (_capEmailOpens, the rung _missedUpgradeFor reads off THIS answer's gates),
+// analyze_site's keyless email unlock (unlock_kind email / email_key). Anything else, or unreadable: 'licence'.
+export function _wallUnlockFor(name, sc, c) {
+  try {
+    const s = (sc && typeof sc === 'object') ? sc : {};
+    if (name === 'analyze_site') {
+      return !(c && c.api_key) && /^email/.test(String(s.unlock_kind || '')) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
+    }
+    if (name === 'execute_plan') return _planUnlockFor(s, c);
+    if (_emailFullDecisionTool(name, c)) return _RE.UNLOCK_EMAIL;
+    // A depth wall (the email floor's own rule, _floorKindFor: a backend-masked field such as the DCPI sub-scores
+    // is a depth gate the MCP-side rung cannot see) or a Pro-only tool: an email does not open it.
+    const f = _floorKindFor(name, s, c);
+    if (f.proOnly || f.rawDepth) return _RE.UNLOCK_LICENCE;
+    return _capEmailOpens(name, s) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
+  } catch (_) { return _RE.UNLOCK_LICENCE; }   // unknown: promise nothing an email might not keep
+}
+// execute_plan: 'email' only when an email opens every step that came back at preview depth.
+function _planUnlockFor(sc, c) {
+  const ex = Array.isArray(sc.executed) ? sc.executed.filter((e) => e && typeof e === 'object') : [];
+  const walled = ex.filter((e) => _execStepPreview(e.result, c));
+  if (!walled.length) return _RE.UNLOCK_LICENCE;
+  return walled.every((e) => _emailFullDecisionTool(e.tool, c) || !_floorKindFor(e.tool, e.result || {}, c).depth)
+    ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
+}
+// The signed relay URL for item 1: the token buildHumanRelay mints (session or its fallback id, tool, tier, time,
+// pk- / w- / m-), plus a- / c- / u- (lib/wall-relay-everywhere.mjs relayBindFields), landing query
+// ?via=mcp-wall&tool=<tool>&client=<client>. null without a signing secret.
+export function _relayEverywhereUrl(name, args, c, { unlock, client, sessionBound = false } = {}) {
+  try {
+    if (!process.env.DCHUB_INTERNAL_KEY) return null;
+    let sid = (c && c.session_id) || '';
+    if ((!sid || sid === 'no-session') && _relaySidFallbackOn()) sid = _anonAttribRef() || _requestFallbackSid();
+    const tail = _relayMintKey(name, {})[1];
+    const raw = `${sid || ''}|${name || ''}|${(c && c.tier) || 'free'}|${Math.floor(Date.now() / 1000)}` + tail
+      + '|' + _RE.relayBindFields({ args, client, unlock, sessionBound }).join('|');
+    return _signRelayPayload(raw) + '?' + _RE.relayLandingQuery({ tool: name, client });
+  } catch (_) { return null; }
+}
+// What the relay page restates, stored against the token (POST /api/v1/relay/teaser, internal key; the backend
+// validates every field). Fire and forget: a failed store means the page shows the tool and the link, nothing invented.
+const _ASK_SAFE = /[^A-Za-z0-9 _=,.:;/()%$&+'-]/g;
+function _relayEverywhereAsk(args) {
+  try {
+    const a = (args && typeof args === 'object') ? args : {};
+    const parts = Object.entries(a).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v))
+      .map(([k, v]) => (k + '=' + String(v)).replace(_ASK_SAFE, ' ').trim());
+    const s = parts.join(', ').slice(0, 159).trim();
+    return /^[A-Za-z0-9]/.test(s) ? s : '';
+  } catch (_) { return ''; }
+}
+function _relayEverywhereStore(longUrl, args, sc) {
+  try {
+    const m = /\/upgrade\/h\/([A-Za-z0-9_-]+\.[0-9a-f]{32})/.exec(String(longUrl || ''));
+    if (!m) return;
+    const h = _headlineOf(sc, { iso: args && typeof args.iso === 'string' ? args.iso : '' });
+    const body = { token: m[1], label: '', value: '',
+      ask: _relayEverywhereAsk(args),
+      withheld: _withheldList(_withheldFields(sc)).replace(/[^A-Za-z0-9 _=,.:;/()%$&+-]/g, ' ').slice(0, 200).trim(),
+      ...(h ? { headline: String(h.text).slice(0, 200), headline_as_of: String(h.when).slice(0, 40) } : {}) };
+    Promise.resolve(callAPIWrite('/api/v1/relay/teaser', body)).catch(() => {});
+  } catch (_) { /* a page restatement is never worth failing a response over */ }
+}
+export async function _relayEverywhereStep(result, name, args, c = getCtx()) {
+  try {
+    if (!_RE.wallRelayEverywhereOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    if (c.api_key && !(c.is_trial === true || /^dch_trial_/.test(String(c.api_key))) && _isPaidDepthTier(c.tier)) return result;
+    const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
+    const unlock = _wallUnlockFor(name, sc, c);
+    const client = _RE.relayClient({ platform: c.platform, userAgent: c.user_agent });
+    // Bound: a key in hand (the page binds the email to it), or a real transport session on a client that keeps it.
+    const sessionBound = !!c.api_key || (!_RE.freshSessionClient(client) && !!_realSession(c.session_id));
+    const longUrl = _relayEverywhereUrl(name, args, c, { unlock, client, sessionBound });
+    if (!longUrl) return result;
+    let link = longUrl;
+    try { link = await _shortRelayPageLink(longUrl, name); } catch (_) { link = longUrl; }
+    if (typeof link !== 'string' || !link) link = longUrl;
+    const message = _RE.relayHumanMessage({ tool: name, link, unlock, sessionBound });
+    let out = _RE.withRelayLink(result, { link, message, oldLink: typeof sc.human_url === 'string' ? sc.human_url : '' });
+    out = _VF.withHonestPromises(out, { emailOpens: unlock === _RE.UNLOCK_EMAIL, sessionBound });
+    c._relayEverywhereLink = link;
+    c._relayEverywhereUnlock = unlock;
+    c._relayEverywhereSessionBound = sessionBound;
+    c._relayEverywhereLong = longUrl;
+    _relayEverywhereStore(longUrl, args, out.structuredContent);
+    return out;
+  } catch (_) { return result; }   // a link is never worth failing a response over
+}
+// The one withheld list, written back to preview_scope (structuredContent and the JSON block) when any of the three
+// items is on: the (c) / (d) fixes of lib/withheld-copy.mjs, so "Withheld here:", the page and licence_unlocks agree
+// with the answer's own preview_scope.
+export function _withheldReconcileStep(result, name, c = getCtx()) {
+  try {
+    if (!(_RE.wallRelayEverywhereOn() || _VF.wallValueFirstOn() || _LB.licenceBlockOn())) return result;
+    if (_newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    const sc = result.structuredContent;
+    const next = _reconcilePreviewScope(sc);
+    if (next === sc) return result;
+    let done = false;
+    const content = result.content.map((b) => {
+      if (done || !b || b.type !== 'text' || typeof b.text !== 'string' || !/^\s*\{/.test(b.text)) return b;
+      done = true;
+      try {
+        const o = JSON.parse(b.text);
+        if (!o || typeof o !== 'object' || !o.preview_scope) return b;
+        return { ...b, text: JSON.stringify({ ...o, preview_scope: next.preview_scope }) };
+      } catch (_) { return b; }
+    });
+    return { ...result, content, structuredContent: next };
+  } catch (_) { return result; }
+}
+// item 4: trial_available from the offer logic that exists (never hard-coded): the keyless wall trial offer
+// (_keylessTrialOfferEligible: DCHUB_PRO_TRIAL_OFFER + DCHUB_PRO_TRIAL_OFFER_KEYLESS + the tool list), the keyed free
+// caller's offer (_proTrialOfferEligibleCaller), and the depth-wall trial line's own rule (lib/wall-depth-trial.mjs
+// depthTrialEligible, the page's "Start the 7-day trial" button). A licensed caller: false.
+export function _licenceTrialAvailable(result, name, c) {
+  try {
+    if (_LB.licenceTier({ apiKey: c && c.api_key, tier: c && c.tier }) === 'licensed') return false;
+    if (!(c && c.api_key) && _keylessTrialOfferEligible(c, name)) return true;
+    if (c && c.api_key && _proTrialOfferEligibleCaller(c, name)) return true;
+    const sc = (result && result.structuredContent) || {};
+    const f = _floorKindFor(name, sc, c);
+    return _depthTrialEligible({ tool: name, walled: true, depth: f.depth, paid: false, link: _humanLinkOf(result) });
+  } catch (_) { return false; }
+}
+export function _licenceBlockStep(result, name, c = getCtx()) {
+  try {
+    if (!_LB.licenceBlockOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
+    const block = _LB.licenceBlock({ tool: name, sc, apiKey: c.api_key || '', tier: c.tier || '',
+      trialAvailable: _licenceTrialAvailable(result, name, c) });
+    // The final answer no longer carries _upgrade; the one reader after this step (lib/plan-wall-sink.mjs
+    // planAskedTools, via _finishWallRow) reads it from here.
+    if (Object.prototype.hasOwnProperty.call(sc, '_upgrade')) c._upgradeBeforeLicence = sc._upgrade;
+    return _LB.withLicenceBlock(result, block);
+  } catch (_) { return result; }
+}
+// item 2: the LAST rewrite of a gated answer.
+export function _valueFirstStep(result, name, args, c = getCtx()) {
+  try {
+    if (!_VF.wallValueFirstOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    const sc0 = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
+    let out = result;
+    // (a) / (b) when item 1 did not run (it fixes both on the answer it rewrites).
+    if (!c._relayEverywhereLink) {
+      out = _VF.withHonestPromises(out, { emailOpens: _wallUnlockFor(name, sc0, c) === _RE.UNLOCK_EMAIL, sessionBound: false });
+    }
+    const sc = out.structuredContent && typeof out.structuredContent === 'object' ? out.structuredContent : {};
+    const iso = args && typeof args.iso === 'string' ? args.iso : '';
+    const lines = _VF.valueFirstLines({ headline: _headlineOf(sc, { iso }), fields: _withheldFields(sc),
+      link: typeof sc.human_url === 'string' ? sc.human_url : '' });
+    return _VF.withValueFirst(out, lines);
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -27197,13 +27391,22 @@ function _sourceLineCb(name, fn) {
       _final = _wallIdentityV2Step(_final, name, c);
       // DCHUB_WALL_COPY_V2 (default on under the v2 flag): the rest of the wall reads the v2 copy (lib/wall-copy-v2.mjs).
       _final = _wallCopyV2Step(_final, name, c);
+      // Wall items 1, 2 and 4 (default OFF each): the one withheld list, then the session-bound relay link (after the
+      // v2 copy, so its /mcp/connect rewrite never sees the /u/ link).
+      _final = _withheldReconcileStep(_final, name, c);
+      _final = await _relayEverywhereStep(_final, name, args, c);
       // DCHUB_WALL_PAID_LINE (default OFF): the paid-license A/B line, after the v2 copy so its tagged URL stays.
+      // With item 1 on it adds nothing: the licence link is the relay page's secondary action.
       _final = _wallPaidLineStep(_final, name, c);
+      // Item 4 (DCHUB_LICENCE_BLOCK): `licence` replaces `_upgrade`, after every step that reads `_upgrade`.
+      _final = _licenceBlockStep(_final, name, c);
       // Grok QA 2026-11-17: a keyless partial on /mcp/chatgpt or /mcp/claude carries the /u/ link (the profile's
       // scrub puts it back after its own rewrite). LAST, so it reads the result the profile will scrub.
       if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE) _final = await _directoryPartialLinkStep(_final, name, c);
       // Wall identity v2 device match: the matched key never reaches the answer; one welcome line. The LAST rewrite.
       _final = _deviceMatchExit(_final, name, c);
+      // Item 2 (DCHUB_WALL_VALUE_FIRST): content[0] opens with the dated headline, what was withheld and the link.
+      _final = _valueFirstStep(_final, name, args, c);
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
@@ -27246,7 +27449,9 @@ export const _noteWallViaForTest = (sid, wall) => _wallViaMemo.note(sid, wall); 
 // _wallOuterStep drops ask paragraphs and the _bind / pro_url keys, so a row read before it named asks
 // and offers the agent never received. G8 gap marks (_markAskGap) count only if their ask survived;
 // the claim hand-off line is read off the result (lib/offers-shown.mjs finalAskMark).
-function _finishWallRow(c, name, result) {
+function _finishWallRow(c, name, result0) {
+  // Item 4: the licence block replaced `_upgrade` on the answer; the wall row's readers still see the original.
+  const result = _withUpgradeForTelemetry(result0, c);
   try {
     if (_offersShownOn() && Array.isArray(c._pendingWallHits) && c._pendingWallHits.length) {
       const k = _finalAskMark({ emailAsk: c._emailAsk, gap: c._askGap, result });
@@ -27257,6 +27462,14 @@ function _finishWallRow(c, name, result) {
   } catch (_) { /* telemetry never touches a response */ }
   _flushQuotaWallHits(c, name);
   _drainPlanWallSink(c, result);
+}
+function _withUpgradeForTelemetry(result, c) {
+  try {
+    if (!c || c._upgradeBeforeLicence === undefined || !result || typeof result !== 'object') return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._upgrade !== undefined) return result;
+    return { ...result, structuredContent: { ...sc, _upgrade: c._upgradeBeforeLicence } };
+  } catch (_) { return result; }
 }
 // ── Keyless partials on /mcp/chatgpt and /mcp/claude carry the unlock link (Grok QA 2026-11-17) ──
 // g_canvas_pa, g_plan_pa, c_canvas_pa: site_selection_canvas / execute_plan for a PA / PJM ask, keyless,
