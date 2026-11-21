@@ -35,7 +35,7 @@ const ctx = (over = {}) => ({ intent: DAL, intent_class: 'siting_search', constr
 const NOW = Date.parse('2026-11-19T23:00:00Z');
 
 describe('planner 5.44: routing', () => {
-  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.55'); });
+  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.58'); });
 
   it('the Dallas prompt reads Dallas, the TX canvas at 300 MW / 36 months, search areas and the timeline', () => {
     const p = _planQuery(DAL, {});
@@ -50,7 +50,9 @@ describe('planner 5.44: routing', () => {
   it.each([
     ['how fast can 300 MW near Abilene TX get power', 'capacity_search'],   // one market, no superlative: keeps its class
     ['Fastest grid power in Texas', 'grid_headroom'],                        // superlative, no deadline, no size
-    ['fastest 300 MW data center site near Dallas Texas', 'capacity_search'], // superlative, no deadline
+    // 5.58 (owner 2026-11-21, "Yes, route them"): a speed superlative about a site NEAR one metro is siting with no deadline.
+    ['fastest 300 MW data center site near Dallas Texas', 'siting_search'],   // superlative near one metro, no deadline
+    ['fastest 100 MW site in Dallas', 'capacity_search'],                      // superlative, no deadline, no proximity
   ])('%s keeps %s', (t, cls) => { expect(_planQuery(t, {}).intent_class).toBe(cls); });
 });
 
