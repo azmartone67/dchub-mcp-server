@@ -226,6 +226,7 @@ import { CLAIM_TOOL as _CLAIM_TOOL, CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STA
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { resolveFacilityRef as _resolveFacilityRef } from './lib/facility-ref.mjs';
+import { setWithheldLabelGate as _setWithheldLabelGate } from './lib/attribution.mjs';
 import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating, COMPOSITE_LICENSE, COMPOSITE_LICENSE_TOOLS } from './lib/attribution.mjs';
 import { meteredTrialNote as _meteredTrialNote, limitedAnswerCopy as _limitedAnswerCopy } from './lib/metered-note.mjs';
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
@@ -1187,6 +1188,16 @@ export function _keylessEmailFirstTool(name, { wide = false, env = process.env }
 // profiles, a caller with an email on file). '' when it does not apply.
 // Kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0.
 const _sessionlessEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SESSIONLESS_EMAIL_ASK || '').trim());
+// Agent-incentive round (owner 2026-11-21, "yes to all items"): a preview's withheld_fields carry the
+// label "withheld (full figure needs a DC Hub license)". Behind DCHUB_WITHHELD_LABEL (default OFF) and never
+// on the directory (/mcp/chatgpt), Claude or core profiles. Values stay null; no gate or quota changes.
+export const _withheldLabelOn = (env = process.env) => /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_WITHHELD_LABEL) || '').trim());
+export function _withheldLabelAllowed(c, env = process.env) {
+  if (!_withheldLabelOn(env)) return false;
+  if (!c) return true;
+  return !(c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE);
+}
+_setWithheldLabelGate(() => { try { return _withheldLabelAllowed(ctx.getStore()); } catch (_) { return false; } });
 export function _sessionlessCapEmailAsk(c, name, { wide = false } = {}) {
   try {
     if (!_sessionlessEmailAskOn() || !_keylessEmailFirstOn() || !c || c.api_key || c.email || c.loopback_step) return '';
