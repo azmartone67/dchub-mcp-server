@@ -764,6 +764,7 @@ test/via-src-directory-attribution.test.mjs
 test/via-tags.test.mjs
 test/wall-alert-line-d.test.mjs
 test/wall-ask-guard.test.mjs
+test/wall-copy-v2.test.mjs
 test/wall-device-match-server.test.mjs
 test/wall-device-match.test.mjs
 test/wall-email-ask-daily.test.mjs

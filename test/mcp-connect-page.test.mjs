@@ -5,6 +5,7 @@
 // snippet from claim_free_key's own _persistConfig, and names no price, plan or tier.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import {
   CONNECT_PATH, SIGNUP_API, OAUTH_URL, KEY_PLACEHOLDER, CONNECT_SCRIPT, CONNECT_CSP,
@@ -19,15 +20,23 @@ const CLIENTS = ['', 'claude', 'cursor', 'chatgpt', 'windsurf', 'vscode', 'claud
   'copilot-cli', 'cline', 'antigravity', 'grok', 'perplexity', 'claude-desktop', 'nonsense'];
 
 const FLAG = 'DCHUB_WALL_IDENTITY_V2';
-let httpServer, BASE, prevFlag;
+let httpServer, BASE, prevFlag, stub, prevApiBase;
 beforeAll(async () => {
   prevFlag = process.env[FLAG];
+  // Hard-gate file: the POST /mcp comparison below runs the real MCP handler, which talks to the backend.
+  // Keep it on loopback with a 127.0.0.1 stub (DCHUB_API_BASE is read at import, so set it first).
+  stub = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end('{}'); });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  prevApiBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   const S = await import('../server.mjs');
   await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
   BASE = `http://127.0.0.1:${httpServer.address().port}`;
 }, 60_000);
 afterAll(async () => {
   await new Promise((r) => (httpServer ? httpServer.close(r) : r()));
+  await new Promise((r) => (stub ? stub.close(r) : r()));
+  if (prevApiBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevApiBase;
   if (prevFlag === undefined) delete process.env[FLAG]; else process.env[FLAG] = prevFlag;
 });
 const get = (path, accept, extra = {}) => fetch(BASE + path, { headers: { accept, ...extra } });
@@ -51,8 +60,14 @@ describe('flag off: /mcp/connect is unchanged', () => {
 describe('flag on: only a browser GET gets the page', () => {
   beforeAll(() => { process.env[FLAG] = '1'; });
 
-  it('POST is unchanged', async () => {
-    await isExpress404(await post(CONNECT_PATH), 'POST');
+  // Owner 2026-11-21 ("fix above"): POST /mcp/connect answers exactly like POST /mcp (it was Express's 404), with the
+  // flag on or off; the page itself stays GET/HEAD only.
+  it('POST answers like POST /mcp, never the 404', async () => {
+    const a = await post(CONNECT_PATH);
+    const b = await post('/mcp');
+    expect(a.status).not.toBe(404);
+    expect(a.status).toBe(b.status);
+    expect(await a.text()).not.toContain(`Cannot POST ${CONNECT_PATH}`);
   });
 
   it.each(['application/json', '*/*', 'application/json, text/event-stream', 'text/event-stream', 'text/html, text/event-stream'])(

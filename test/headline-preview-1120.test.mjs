@@ -269,7 +269,14 @@ const withoutV2EmailAsk = (r) => {
   return [{ ...r, msg }, dropped];
 };
 describe('flag on leaves alone what already had its headline, and the surfaces it must not touch', () => {
+  // DCHUB_WALL_COPY_V2 (lib/wall-copy-v2.mjs, owner 2026-11-21) also rides DCHUB_WALL_IDENTITY_V2 and rewrites the
+  // rest of the wall copy; it is not the headline's change, so these comparisons switch it off on both sides
+  // (test/wall-copy-v2.test.mjs covers it).
   const same = async (tool, args, opts) => {
+    process.env.DCHUB_WALL_COPY_V2 = '0';
+    try { return await _same(tool, args, opts); } finally { delete process.env.DCHUB_WALL_COPY_V2; }
+  };
+  const _same = async (tool, args, opts) => {
     const off = await call(H, tool, args, opts);
     process.env[FLAG] = '1';
     const on = await call(H, tool, args, opts);
