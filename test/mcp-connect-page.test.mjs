@@ -5,6 +5,7 @@
 // snippet from claim_free_key's own _persistConfig, and names no price, plan or tier.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import {
   CONNECT_PATH, SIGNUP_API, OAUTH_URL, KEY_PLACEHOLDER, CONNECT_SCRIPT, CONNECT_CSP,
@@ -19,15 +20,23 @@ const CLIENTS = ['', 'claude', 'cursor', 'chatgpt', 'windsurf', 'vscode', 'claud
   'copilot-cli', 'cline', 'antigravity', 'grok', 'perplexity', 'claude-desktop', 'nonsense'];
 
 const FLAG = 'DCHUB_WALL_IDENTITY_V2';
-let httpServer, BASE, prevFlag;
+let httpServer, BASE, prevFlag, stub, prevApiBase;
 beforeAll(async () => {
   prevFlag = process.env[FLAG];
+  // Hard-gate file: the POST /mcp comparison below runs the real MCP handler, which talks to the backend.
+  // Keep it on loopback with a 127.0.0.1 stub (DCHUB_API_BASE is read at import, so set it first).
+  stub = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end('{}'); });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  prevApiBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   const S = await import('../server.mjs');
   await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
   BASE = `http://127.0.0.1:${httpServer.address().port}`;
 }, 60_000);
 afterAll(async () => {
   await new Promise((r) => (httpServer ? httpServer.close(r) : r()));
+  await new Promise((r) => (stub ? stub.close(r) : r()));
+  if (prevApiBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevApiBase;
   if (prevFlag === undefined) delete process.env[FLAG]; else process.env[FLAG] = prevFlag;
 });
 const get = (path, accept, extra = {}) => fetch(BASE + path, { headers: { accept, ...extra } });
