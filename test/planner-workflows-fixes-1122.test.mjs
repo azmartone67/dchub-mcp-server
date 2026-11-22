@@ -70,6 +70,12 @@ describe('§7.2 a fiber + substations + sites ask reads the overlap', () => {
     const fr = seq(p).find((s) => s.tool === 'get_fiber_readiness');
     expect(fr && isNum(fr.args_hint.lat) && isNum(fr.args_hint.lon)).toBe(true);
   });
+  it('a metro centroid never becomes the lead-in route\'s site (plan_fiber_leadin keeps the placeholder)', () => {
+    const p = _planQuery('Fiber routes in Columbus');
+    const li = seq(p).find((s) => s.tool === 'plan_fiber_leadin');
+    expect(li, 'plan_fiber_leadin planned').toBeTruthy();
+    expect(li.args_hint.from).toBe('<site "lat,lng" or address>');
+  });
   it('a fiber ask that names no substation or site adds neither', () => {
     const p = _planQuery('Fiber routes in Columbus');
     expect(tools(p)).not.toContain('find_sites');
