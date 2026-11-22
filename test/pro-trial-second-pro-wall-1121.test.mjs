@@ -12,7 +12,7 @@
 //   * on the decided call the offer arm's wall link carries ?offer=pro_trial_7d and the holdout's
 //     carries none, in every channel, with no trace of the old link; an undecided call is untouched;
 //   * the wiring: the stamp site runs it on a stamped wall, before the wall-link hash is taken.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
@@ -21,7 +21,21 @@ import {
 } from '../server.mjs';
 import { rewriteText, wallCopyV2 } from '../lib/wall-copy-v2.mjs';
 
-beforeAll(() => { process.env.DCHUB_INTERNAL_KEY = process.env.DCHUB_INTERNAL_KEY || 'test-internal'; });
+// Hard-gate file: stay on loopback. Item 1's relay step mints a /u/ link from the backend; here every
+// off-loopback fetch fails exactly as a refused connect would, without opening a socket.
+let realFetch;
+const offLoopback = [];
+beforeAll(() => {
+  process.env.DCHUB_INTERNAL_KEY = process.env.DCHUB_INTERNAL_KEY || 'test-internal';
+  realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const u = new URL(typeof input === 'string' ? input : input.url);
+    if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return realFetch(input, init);
+    offLoopback.push(u.hostname);
+    throw new TypeError('fetch failed');
+  };
+});
+afterAll(() => { globalThis.fetch = realFetch; });
 
 const ON = { DCHUB_PRO_TRIAL_OFFER: '1', DCHUB_PRO_TRIAL_OFFER_PRO_WALL: '1' };
 const FREE = { api_key: 'dch_live_prowall0000000000000', tier: 'free', session_id: 'sess-pw-1', platform: 'claude-desktop' };
