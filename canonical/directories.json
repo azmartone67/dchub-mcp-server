@@ -88,14 +88,14 @@
     {
       "id": "mcp-marketplace",
       "name": "mcp-marketplace.io",
-      "status": "live",
+      "status": "offline",
       "listing_url": "https://mcp-marketplace.io/server/cloud-dchub-mcp-server",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
       "added_at": "2026-10-09",
-      "note": "Listing URL returns 404 since the 2026-11-22 12:05Z scan (re-confirmed 2026-11-22; slugs dchub-mcp-server, cloud-dchub, dc-hub, azmartone67-dchub-mcp-server also 404; site search shows no DC Hub). Was live 2.12.60 on 2026-11-21 08:13Z. Cause unknown (removal or re-slug). status stays live until a second confirming read, then offline."
+      "note": "Listing URL returns 404 since the 2026-11-22 12:05Z scan (re-confirmed 2026-11-22; slugs dchub-mcp-server, cloud-dchub, dc-hub, azmartone67-dchub-mcp-server also 404; site search shows no DC Hub). Was live 2.12.60 on 2026-11-21 08:13Z. Cause unknown (removal or re-slug). Second confirming read 404 at ~17Z 2026-11-22; status set offline (owner 2026-11-22)."
     },
     {
       "id": "gemini-cli",
