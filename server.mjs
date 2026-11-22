@@ -341,6 +341,8 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
+import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
+import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
@@ -5734,6 +5736,82 @@ export function _wallPaidLineStep(result, name, c = getCtx()) {
     if (arm !== _WPL.ARM_PAID_LINE || _askOnceSeen(c.session_id, 'paid_line', name)) return result;
     return _WPL.withPaidLine(result);
   } catch (_) { return result; }
+}
+// ── Nov 22 monetization tests with holdouts (lib/monetization-experiments.mjs; DRAFT, every flag OFF) ───────────────
+// The internal-key POST for exposure / outcome rows: fire-and-forget, 1.5 s cap, never throws.
+export function _mxPost(path, body, { fetchImpl = fetch } = {}) {
+  if (!INTERNAL_KEY) return Promise.resolve(null);
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 1500);
+  return Promise.resolve()
+    .then(() => fetchImpl(API_BASE + path, { method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY }, body: JSON.stringify(body) }))
+    .then(async (r) => (r && r.status === 200 ? r.json() : null))
+    .catch(() => null)
+    .finally(() => clearTimeout(t));
+}
+// Test B's decide: {fire, arm, exposed} from the backend, or null (any error = no line, no exposure).
+export async function _mxDecide(body, { fetchImpl = fetch } = {}) {
+  const d = await _mxPost(_MX.DECIDE_PATH, body, { fetchImpl });
+  return d && typeof d === 'object' ? d : null;
+}
+// Who the client tests may touch: never /mcp/chatgpt or a ChatGPT / OpenAI client, the directory / Claude / core
+// profiles, a clean platform, an execute_plan step, a device-matched caller, the key / account tools (all in
+// _newWallStepSkip), QA or internal traffic, or a gateway (one egress IP for many people: one identity, one arm).
+export function _mxAudience(c, name) {
+  try {
+    if (_newWallStepSkip(c, name)) return false;
+    if (_isQaCaller(c) || isBotOrInternalCtx(c) || _WPL.isGatewayCaller(c)) return false;
+    return true;
+  } catch (_) { return false; }
+}
+// The session already had an ask: #1594's once-per-session key entry, or any human line. One ask per session in total.
+function _mxSessionHadAsk(sid) {
+  if (!_isRealSession(sid)) return false;
+  return _HUMAN_LINE_SENT.has(sid) || _askOnceHas(sid, 'keypath', 'execute_plan');
+}
+// Test B (DCHUB_EXP_SAVE_KEY_PROMPT, lib/save-key-prompt.mjs): on a keyless identity's 3rd successful (non-walled)
+// call in a rolling 24 h, ask the backend (7-day rule, exposure recorded in both arms); the treatment arm's answer gains
+// one line after it. Skipped, no decide, when the answer is walled or already asks for a key, or the session already
+// had an ask. A fired line also takes the session's one key-path entry (#1594), so no second ask follows.
+export async function _expSaveKeyStep(result, name, c = getCtx(), { decide = _mxDecide } = {}) {
+  try {
+    if (!_MX.expOn(_MX.SAVE_KEY_PROMPT) || !c || c.api_key || !result || typeof result !== 'object'
+      || result.isError || !Array.isArray(result.content)) return result;
+    if (!_mxAudience(c, name) || _gatedAnswer(result, name, c)) return result;
+    const identity = _MX.identityOf(c);
+    if (!identity || !_SKP.countAndDue(identity)) return result;
+    const sid = c.session_id || '';
+    if (_SKP.answerAsks(result) || _mxSessionHadAsk(sid)) return result;
+    _SKP.markDecided(identity);
+    const test = _MX.SAVE_KEY_PROMPT;
+    const d = await decide({ test, identity, arm: _MX.armFor(identity, test), tool: name, session_id: sid,
+                             platform: c.platform || '' });
+    if (!d || d.exposed !== true) return result;
+    _MX.rememberExposure({ test, identity, session_id: sid });
+    c._mxExposureCall = true;
+    if (d.fire !== true || d.arm !== _MX.TREATMENT) return result;
+    _askOnceSeen(sid, 'keypath', 'execute_plan');
+    return _SKP.withSaveKeyLine(result);
+  } catch (_) { return result; }
+}
+// Outcomes for the client tests, after every tool call (fire-and-forget): continued, returned_next_day, and a keyless
+// caller's key mint. A caller that minted a key is also looked up by its keyless identity, so a converted caller's
+// return is not lost to the identity change.
+export function _expOutcomeStep(name, c, result, { post = _mxPost } = {}) {
+  try {
+    if (!c || c.loopback_step || !_MX.CLIENT_TESTS.some((t) => _MX.expOn(t))) return;
+    if (c.profile === DIRECTORY_PROFILE || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return;
+    if (_isQaCaller(c) || isBotOrInternalCtx(c)) return;
+    const sid = c.session_id || '';
+    const ids = [...new Set([_MX.identityOf(c), _MX.identityOf({ ...c, api_key: '' })].filter(Boolean))];
+    if ((name === 'claim_free_key' || name === 'get_api_key') && !c.api_key && ids[0]) {
+      _MX.noteMint(post, { identity: ids[0], result, session_id: sid });
+    }
+    for (const identity of ids) _MX.noteCall(post, { identity, session_id: sid, tool: name, exposureCall: !!c._mxExposureCall });
+  } catch (_) { /* telemetry never breaks an answer */ } finally {
+    if (c) c._mxExposureCall = false;   // the exposure call itself is never its own "continued"
+  }
 }
 // ── Wall items 1, 2 and 4 (owner 2026-11-21; each behind its own flag, default OFF, byte-identical when off) ──────────
 //   item 1  DCHUB_WALL_RELAY_EVERYWHERE  a session-bound /u/ relay link on every gated answer (lib/wall-relay-everywhere.mjs)
@@ -27518,8 +27596,11 @@ function _sourceLineCb(name, fn) {
       _final = _deviceMatchExit(_final, name, c);
       // Item 2 (DCHUB_WALL_VALUE_FIRST): content[0] opens with the dated headline, what was withheld and the link.
       _final = _valueFirstStep(_final, name, args, c);
+      // Nov 22 Test B (DCHUB_EXP_SAVE_KEY_PROMPT, default OFF): the save-key line on a keyless caller's 3rd good call.
+      _final = await _expSaveKeyStep(_final, name, c);
       return _final;
     } finally {
+      _expOutcomeStep(name, c, _final);   // Nov 22 tests: continued / returned_next_day / key_minted (flags OFF: no-op)
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
       // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
