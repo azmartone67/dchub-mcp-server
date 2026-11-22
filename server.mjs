@@ -9513,6 +9513,11 @@ export const WATCH_DESC_ADDENDUM = ' Power Watch and Market Watch kinds: "queue_
   + 'Each line carries its source and as_of date; a reload of the same data never fires. Each armed watch '
   + 'counts toward the alert limit on this key.';
 export function _watchesDesc(base) { return watchesOn() ? base + WATCH_DESC_ADDENDUM : base; }
+// Flag on: the new kinds, market_watch and channel=email (any kind but capacity) take the watches lane.
+// `channel` is declared only while the flag is on, and this returns false before reading it when off.
+export function _isWatchCall(kind, a) {
+  return watchesOn() && kind !== 'capacity' && (WATCH_KINDS.has(kind) || String((a && a.channel) || '').trim() === 'email');
+}
 export function _watchBody(kind, a, hook) {
   const params = {};
   for (const k of ['iso', 'state', 'ba', 'market', 'q', 'scope', 'topic']) if (a[k]) params[k] = a[k];
@@ -38728,7 +38733,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const hook = String(a.webhook_url || '').trim();
       // Power/Market Watch (DCHUB_WATCHES_V1, default off): the new kinds, market_watch and
       // channel=email go to the backend's watches lane (dchub-backend routes/watches_v1.py).
-      if (watchesOn() && kind !== 'capacity' && (WATCH_KINDS.has(kind) || String(a.channel || '').trim() === 'email')) {
+      if (_isWatchCall(kind, a)) {
         const out = await callAPIWrite('/api/v1/agentic/intents', _watchBody(kind, a, hook));
         return { content: [{ type: 'text', text: JSON.stringify(out) }] };
       }
