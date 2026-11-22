@@ -174,6 +174,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
+import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
@@ -4149,6 +4150,8 @@ export function _reportSessionInit(req, { sessionId = null, userAgent = '', clie
     const ev = _sessionInitEventBody({ body: req && req.body, sessionId, userAgent, clientIp,
       via: getVia(), src: _ls ? _ls.src : null, qaMarker, selfPath: !!_pathSelfTag(req), platform, path: _normPath(req),
       source: _pathSource(req) });
+    // Item 7 (DCHUB_SLIM_PROFILE_TEST): which tool list this session was served, so tool-call rates compare by list.
+    if (ev) { try { ev.tool_list = _toolListLabel(_pathPack(req), _normPath(req)); } catch (_) { ev.tool_list = null; } }
     _postSessionInitEvent(ev, { apiBase: API_BASE, internalKey: INTERNAL_KEY });
   } catch (_) { /* telemetry never touches a handshake */ }
 }
@@ -5005,6 +5008,8 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 // on bare /mcp when DCHUB_LIGHT_FOR_CLI is on (the default since 2026-11-12; set 0 to turn off).
 const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
 const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
+// Item 7 (DCHUB_SLIM_PROFILE_TEST, default OFF): the opt-in core list on bare /mcp (?tools=core), lib/slim-profile.mjs.
+const SLIM_PACK = Object.freeze({ pack: SLIM_PACK_NAME, spine: false, tools: SLIM_TOOLS, slim: true });
 
 // User-Agent, initialize clientInfo.name, a recalled session name, or X-MCP-Client. Gemini CLI often
 // has a generic UA and only names itself in clientInfo, which arrives on initialize and is recalled after.
@@ -5029,6 +5034,7 @@ export function _pathPack(req) {
   const p = _normPath(req);
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
+  if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
   if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req), fullCatalog: _wantsFullCatalog(req) })) return LIGHT_PACK_IMPLICIT;
   return MCP_PACKS.get(p) || null;
 }
@@ -5043,6 +5049,7 @@ export function _pathPack(req) {
 export function _packFilter(result, def) {
   if (def && def.compact) return _grokToolsList(result);
   if (def && def.light) return _lightToolsList(result);
+  if (def && def.slim) return _slimProfileToolsList(result);
   const want = packToolNames(def);
   const have = new Map((result?.tools || []).map((t) => [t.name, t]));
   const tools = [];
@@ -5088,6 +5095,7 @@ export function _lightServedNames() {
 // adjacent to createServer() where its own anchored guard reads it.
 export function _INSTR_TAIL_PACK(def) {
   if (!def) return '';
+  if (def.slim) return _slimInstructionsTail(_FULL_CATALOG_URL);
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): a light list states its count once, in the lead
   // (lib/light-list-instructions.mjs lightListInstructions), so this tail carries the rules and no second count.
