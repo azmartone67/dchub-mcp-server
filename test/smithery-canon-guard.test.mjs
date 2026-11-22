@@ -207,7 +207,9 @@ describe('smithery.yaml canonical-quantity guard', () => {
     ['21k+ facilities',    (s) => s.replace('On the demand side: ', 'On the demand side: 21k+ facilities, ')],
     [`${FACILITIES} facilities (= canon)`, (s) => s.replace('On the demand side: ', `On the demand side: ${FACILITIES} facilities, `)],
     ['1,400+ tracked M&A deals',
-      (s) => s.replace(`${DEALS} tracked M&A deals`, '1,400+ tracked M&A deals')],
+      // Owner 2026-11-22: smithery.yaml names no deal count, so the control
+      // re-adds a stale one to the count-free phrase.
+      (s) => s.replace('tenants and tracked M&A deals', 'tenants and 1,400+ tracked M&A deals')],
   ];
 
   for (const [label, mutate] of CONTROLS) {

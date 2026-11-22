@@ -125,7 +125,9 @@ function run(script, env = {}) {
 //   ★2026-09-27: the substitution walks the DEAL floor. The facility count is
 //   withdrawn from the About text (owner decision), so there is no facility
 //   figure left to substitute — the same no-op this note warns about.
-const DEALS_RE = /[\d,]+\+ tracked M&A deals/;
+//   ★2026-11-22: the deal count is withdrawn too (owner), so STALE now ADDS an
+//   old deal figure to the count-free phrase — still a live/canon difference.
+const DEALS_RE = /(?<![\d,]\+ )tracked M&A deals/;
 const STALE = CANON.replace(DEALS_RE, '1,100+ tracked M&A deals');
 
 describe('the extraction is pointed at the real step', () => {
