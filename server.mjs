@@ -178,6 +178,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
+import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
@@ -5009,6 +5010,9 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 // on bare /mcp when DCHUB_LIGHT_FOR_CLI is on (the default since 2026-11-12; set 0 to turn off).
 const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
 const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
+// F3 (DCHUB_CLI_STARTER, default OFF; lib/cli-starter.mjs): the six named coding clients get the implicit light list in the
+// starter order (five starter tools first, get_fiber_intel added, nothing removed).
+const LIGHT_PACK_STARTER = Object.freeze({ ...LIGHT_PACK_IMPLICIT, tools: _cliStarterOrder(LIGHT_TOOLS), starter: true });
 // Item 7 (DCHUB_SLIM_PROFILE_TEST, default OFF): the opt-in core list on bare /mcp (?tools=core), lib/slim-profile.mjs.
 const SLIM_PACK = Object.freeze({ pack: SLIM_PACK_NAME, spine: false, tools: SLIM_TOOLS, slim: true });
 
@@ -5036,7 +5040,12 @@ export function _pathPack(req) {
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
-  if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req), fullCatalog: _wantsFullCatalog(req) })) return LIGHT_PACK_IMPLICIT;
+  if (p === '/mcp') {
+    const _id = _lightIdentityFromReq(req);
+    if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
+      return (_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT;
+    }
+  }
   return MCP_PACKS.get(p) || null;
 }
 
@@ -5049,7 +5058,7 @@ export function _pathPack(req) {
 // an agent reads once per session.
 export function _packFilter(result, def) {
   if (def && def.compact) return _grokToolsList(result);
-  if (def && def.light) return _lightToolsList(result);
+  if (def && def.light) return _lightToolsList(result, undefined, def.tools);
   if (def && def.slim) return _slimProfileToolsList(result);
   const want = packToolNames(def);
   const have = new Map((result?.tools || []).map((t) => [t.name, t]));
@@ -5070,8 +5079,8 @@ export { MCP_PACKS, PACK_SPINE };
 
 // The names a light-list session's tools/list carries, in order: LIGHT_TOOLS less any name absent from the catalog
 // (lightToolsList serves short the same way). The A2 handshake derives its count and its "Tools:" line from this.
-export function _lightServedNames() {
-  return LIGHT_TOOLS.filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n));
+export function _lightServedNames(def) {
+  return ((def && Array.isArray(def.tools)) ? def.tools : LIGHT_TOOLS).filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n));
 }
 
 // The per-session instructions tail a pack path appends, or '' everywhere else.
@@ -5101,7 +5110,7 @@ export function _INSTR_TAIL_PACK(def) {
   // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): a light list states its count once, in the lead
   // (lib/light-list-instructions.mjs lightListInstructions), so this tail carries the rules and no second count.
   if (def.light && _lightListInstructionsV2On()) {
-    return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(), fullCatalogUrl: _FULL_CATALOG_URL });
+    return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(def), fullCatalogUrl: _FULL_CATALOG_URL });
   }
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
@@ -42167,8 +42176,12 @@ app.post(MCP_PATHS, async (req, res) => {
         } else if (_p && _p.light && _lightListInstructionsV2On()) {
           // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): the "Tools:" line names only listed tools,
           // execute_plan first, and the count is stated once (lib/light-list-instructions.mjs).
-          const _listed = _lightServedNames();
-          _instrRewrite = (t) => _lightListInstructions(t, { listed: _listed });
+          const _listed = _lightServedNames(_p);
+          _instrRewrite = _p.starter
+            ? (t) => _cliStarterInstructions(_lightListInstructions(t, { listed: _listed }))
+            : (t) => _lightListInstructions(t, { listed: _listed });
+        } else if (_p && _p.starter) {
+          _instrRewrite = (t) => _cliStarterInstructions(t);   // F3 with A2 off: the example + starter Tools: line only
         }
       } catch (_) { _instrRewrite = undefined; }
       // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
