@@ -765,6 +765,7 @@ test/track-auth-channel.test.mjs
 test/track-email-redaction.test.mjs
 test/trial-cap-email-ask-wcap.test.mjs
 test/trust-1020-human-url-line.test.mjs
+test/ttp-band-marker-consistent-1122.test.mjs
 test/ttp-block-anon-trim.test.mjs
 test/typed-iso-is-scope.test.mjs
 test/typed-preview-rank-markets.test.mjs
