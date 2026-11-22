@@ -13,6 +13,8 @@ U="${DCHUB_MCP_URL:-https://dchub.cloud/mcp}"
 K="${DCHUB_MCP_KEY:?set DCHUB_MCP_KEY to a paid/enterprise X-API-Key}"
 UA="${DCHUB_MCP_UA:-dchub-value-harness/1.0}"
 FAILED=0
+PASSED=0
+PAUSE="${DCHUB_HARNESS_PAUSE:-1}"   # seconds between calls (retries wait 3x); the test sets 0
 
 # Each line: tool|json-args|required-key (a key that MUST exist & be non-empty in the payload)
 # NB (2026-07-09): the required-key is the tool's OWN top-level array key — it is
@@ -57,31 +59,14 @@ mk_session() {
   printf '%s' "$SID"
 }
 
-# Classify a tool response. The harness exists to catch a LOGIC regression — a
-# success envelope with EMPTY data. It must NOT red on CI INFRA noise: GitHub
-# runner IPs hit a per-IP rate limit, so a tool can return an empty/garbled body
-# or an {error} envelope that is NOT a tool regression.
-#   PASS            valid envelope, required key non-empty
-#   REGRESSION:..   valid envelope, required key empty   -> HARD FAIL (real bug)
-#   TRANSIENT:..    empty body / non-JSON / {error}      -> retry, else SKIP+warn
+# Classify a tool response: tools/value_harness_classify.py (verdicts and why are in its docstring).
+# The harness exists to prove a PAID key gets full data. It must NOT red on CI infra noise (GitHub runner
+# IPs hit a per-IP rate limit: empty/garbled/{error} bodies are TRANSIENT), but a refused key (AUTH) or a
+# gated preview (GATED) is the thing it is here to catch, so those fail. Until 2026-11-22 a walled answer
+# read as 'text-not-json' noise and the job stayed green while the key was refused.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 classify() {  # $1=resp $2=reqkey
-  printf '%s' "$1" | python3 -c "
-import sys,json
-raw=sys.stdin.read(); rk='$2'
-if not raw.strip(): print('TRANSIENT:empty-response'); sys.exit()
-try: d=json.loads(raw)
-except Exception: print('TRANSIENT:non-json'); sys.exit()
-try: txt=d['result']['content'][0]['text']
-except Exception: print('TRANSIENT:no-content'); sys.exit()
-try: o=json.loads(txt)
-except Exception: print('TRANSIENT:text-not-json'); sys.exit()
-if isinstance(o,dict) and ('error' in o or 'detail' in o) and rk not in o:
-    print('TRANSIENT:error-envelope'); sys.exit()
-v=o.get(rk) if isinstance(o,dict) else None
-nonempty = v not in (None,'',[],{}) and not (isinstance(v,(list,dict)) and len(v)==0)
-keys=[k for k in (o.keys() if isinstance(o,dict) else []) if not k.startswith('_') and k not in ('next_session','citation','freshness')]
-print('PASS' if nonempty else 'REGRESSION:empty(%s);keys=%s'%(rk, keys[:6]))
-" 2>/dev/null
+  printf '%s' "$1" | python3 "$HERE/value_harness_classify.py" "$2" 2>/dev/null || echo 'TRANSIENT:classifier-error'
 }
 
 # Shared session keeps the request count low (the per-IP rate limit is the real
@@ -100,19 +85,32 @@ while IFS='|' read -r tool args reqkey; do
       | tr -d '\r' | grep '^data:' | sed 's/^data: //' | head -1)
     verdict=$(classify "$resp" "$reqkey")
     # stop retrying on a definitive verdict; keep retrying only transient infra noise
-    [[ "$verdict" == PASS || "$verdict" == REGRESSION:* ]] && break
-    sleep 3
+    [[ "$verdict" == PASS || "$verdict" == REGRESSION:* || "$verdict" == AUTH:* || "$verdict" == GATED:* ]] && break
+    sleep $((PAUSE * 3))
   done
+  if [[ "$verdict" == AUTH:* ]]; then
+    # Every later call would be refused the same way: stop here, with one clear line (never the key itself).
+    printf '  \033[31m✗\033[0m %-26s %s\n' "$tool" "$verdict"
+    echo "::error::value-harness: DC Hub refused the DCHUB_MCP_PAID_KEY key (${verdict#AUTH:}); every call is served anonymously behind the quota wall. Rotate the repo secret to a live paid/enterprise key."
+    exit 1
+  fi
   if [[ "$verdict" == PASS ]]; then
-    printf '  \033[32m✓\033[0m %-26s %s\n' "$tool" "($reqkey)"
+    printf '  \033[32m✓\033[0m %-26s %s\n' "$tool" "($reqkey)"; PASSED=$((PASSED+1))
   elif [[ "$verdict" == TRANSIENT:* ]]; then
     printf '  \033[33m~\033[0m %-26s SKIP (%s — CI infra/rate-limit, not a regression)\n' "$tool" "${verdict#TRANSIENT:}"
     echo "::warning::value-harness: $tool skipped (${verdict#TRANSIENT:}) — likely CI per-IP rate-limit, not a tool regression"
   else
     printf '  \033[31m✗\033[0m %-26s %s\n' "$tool" "$verdict"; FAILED=1
+    [[ "$verdict" == GATED:* ]] && echo "::error::value-harness: $tool answered a paid key with a gated preview (${verdict#GATED:})"
   fi
-  sleep 1   # spread requests to avoid bursting the per-IP rate limit
+  sleep "$PAUSE"   # spread requests to avoid bursting the per-IP rate limit
 done <<< "$CHECKS"
 
-if [ "$FAILED" -eq 0 ]; then echo "ALL GREEN (regressions only; transient infra skips warned)"; else echo "HARNESS FAIL — a flagship tool returned a valid envelope with EMPTY data (real regression)"; fi
+# A run where no tool passed checked nothing: every answer was skipped as noise. Fail it rather than
+# report green (2026-11-22: 0-1 of 10 passed in every run from 11-13 on, and the job stayed green).
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 0 ]; then
+  echo "::error::value-harness: no tool passed (every answer skipped as transient), so nothing was checked"
+  FAILED=1
+fi
+if [ "$FAILED" -eq 0 ]; then echo "ALL GREEN ($PASSED passed; transient infra skips warned)"; else echo "HARNESS FAIL — a flagship tool returned an empty, gated or refused answer, or none passed"; fi
 exit $FAILED
