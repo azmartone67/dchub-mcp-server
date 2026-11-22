@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "2.12.61",
+  "version": "2.12.62",
   "description": "DC Hub: the orchestration layer for data center and energy intelligence. One server for data center and energy intelligence: facilities, colocation, power and grid, interconnection queues, electricity and gas prices, fiber and site selection. Call execute_plan first. Includes the Data Center Power Index (DCPI).",
   "mcpServers": {
     "dchub": {

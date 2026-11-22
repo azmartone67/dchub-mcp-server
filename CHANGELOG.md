@@ -10,6 +10,10 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.62 (2026-11-22)
+
+- npm README says DC Hub is available in ChatGPT and links the ChatGPT apps listing and https://dchub.cloud/install/chatgpt. No tool or behaviour change.
+
 ## 2.12.61 (2026-11-22)
 
 - Registry listing: server.json title is now "DC Hub: Data Center & Energy Intelligence" and the description names execute_plan, DCPI, power grid and fiber. README lead names site selection, colocation, capacity and energy. No behaviour change.
