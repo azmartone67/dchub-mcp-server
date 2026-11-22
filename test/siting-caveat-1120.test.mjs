@@ -120,4 +120,4 @@ describe('withSitingCaveat', () => {
   });
 });
 
-it('is planner 5.55', () => { expect(PLANNER_VERSION).toBe('5.60'); });
+it('is planner 5.55', () => { expect(PLANNER_VERSION).toBe('5.61'); });

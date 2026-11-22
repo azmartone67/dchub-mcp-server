@@ -43,7 +43,7 @@ describe('5.59: named markets on a grid plan', () => {
     expect(S._planComparedMarkets('Columbus or Dallas')).toBe(null);   // the gated form is unchanged
   });
 
-  it('PLANNER_VERSION is 5.59', () => { expect(S.PLANNER_VERSION).toBe('5.60'); });
+  it('PLANNER_VERSION is 5.59', () => { expect(S.PLANNER_VERSION).toBe('5.61'); });
 });
 
 describe('5.59: the header of a grid plan with named markets leads with their verdicts', () => {

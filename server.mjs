@@ -385,6 +385,7 @@ import { permittingAsk as _permittingAsk, permittingSequence as _permittingSeque
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
 import { nearMetroSlug as _nearMetroSlug, nearMetroRadiusKm as _nearMetroRadiusKm } from './lib/metro-anchor.mjs';
+import { siteHuntAsk as _siteHuntAsk } from './lib/site-hunt.mjs';
 import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, landSearchFirst as _landSearchFirst,
   landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
@@ -24955,7 +24956,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.60';   // 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.61';   // 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26890,7 +26891,12 @@ export function _planQuery(intent, context) {
       // same as a lat/lon: "Screen 21571 Beaumeade Circle ... flood zone, zoning and parcel" read "zoning" and routed to
       // permitting (7.5 over site_analysis 6). The screen keeps its own permitting read (get_permitting_intel, state-held).
       const addrScreen = !!d.__address && _siteScreenVerb(text);
-      const kind = (d.coords || addrScreen) ? null : _permittingAsk(text);
+      // 5.61 (owner head-to-head 2026-11-22, lib/site-hunt.mjs): "find a Miami site for 50 MW ... check zoning, moratorium"
+      // asks for a site; the moratorium is one check on it. The plan keeps the class the site search would have had (the
+      // land flow: find_sites at the named place), and the moratorium read joins it (appended after routing).
+      const siteHunt = !d.coords && !addrScreen && _siteHuntAsk(text, d);
+      if (siteHunt) { const k0 = _permittingAsk(text); if (k0) d.__siteHuntPermit = k0; }
+      const kind = (d.coords || addrScreen || siteHunt) ? null : _permittingAsk(text);
       let b = null; for (const s of scored) if (s !== pz && (!b || s.score > b.score)) b = s;
       const held = !!b && b.score > 0 && ['air_permits', 'incentives_tax', 'colocation', 'pricing_out_of_scope', 'named_campus', 'generation_mix', 'gas_price'].includes(b.cls.id);
       const open = !b || b.score <= 0 || ['facility_search', 'dc_capacity', 'market_outlook', 'market_ranking', 'site_analysis', 'deals_ma'].includes(b.cls.id);
@@ -27189,7 +27195,11 @@ export function _planQuery(intent, context) {
   // last, state-wide (capacity_search). A land question with a size leads with find_sites around the place's point
   // (60 km), else its state; the other steps follow in their order (lib/land-search.mjs).
   try {
-    if (_LAND_FIRST_CLASSES.has(top.cls.id) && !_stateFan && !d.__stateCompare && _landSearchAsk(text, d)) {
+    // 5.61 (lib/site-hunt.mjs): "find a Miami site for a 50 MW data center ... fiber nearby, 115 kV" names one site
+    // (LAND_RE reads plural "sites") and its fiber / line wording routes it to fiber_power_pairing, which ran no
+    // find_sites. A site hunt held to one place is a land question in those classes too.
+    const _hunt = (_LAND_FIRST_CLASSES.has(top.cls.id) || top.cls.id === 'fiber_power_pairing') && _siteHuntAsk(text, d);
+    if ((_hunt || (_LAND_FIRST_CLASSES.has(top.cls.id) && _landSearchAsk(text, d))) && !_stateFan && !d.__stateCompare) {
       let pl = null;
       try { pl = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }); } catch (_e) { pl = null; }
       const pt = _dcHostingPoint(d, pl);
@@ -27197,9 +27207,16 @@ export function _planQuery(intent, context) {
       // No point in the planner's tables but a named town or market: the point is geocoded at execution (B1,
       // _planGeocodeTargets), and a miss falls back to the state search.
       const geo = !pt && st ? _planGeocodeTargets([{ args_hint: { lat: '<site lat>', lon: '<site lon>' } }], text, d) : null;
-      const args = geo ? { lat: '<site lat>', lon: '<site lon>', radius_km: _LAND_RADIUS_KM } : _landSearchArgs(pt, st);
+      let args = geo ? { lat: '<site lat>', lon: '<site lon>', radius_km: _LAND_RADIUS_KM } : _landSearchArgs(pt, st);
+      // 5.61: a site hunt held to one market with no point to use searches around that market (find_sites market=<slug>,
+      // the backend centres it, 60 km) rather than the whole state; the state stays as the backend's fallback.
+      if (_hunt && args && args.lat == null) {
+        const nm = Array.isArray(d.__namedMarkets) ? [...new Set(d.__namedMarkets)] : [];
+        const slug = (typeof d.market === 'string' && d.market) || (nm.length === 1 ? nm[0] : null);
+        if (slug) args = { market: slug, ...(args.state ? { state: args.state } : {}) };
+      }
       const label = (pt && pt.label) || (geo && `${geo.phrase}, ${geo.state}`) || (pl && pl.label) || null;
-      const fs = args ? _landSearchFirst(seq, args, `The land step, first: candidate SEARCH AREAS ${args.lat != null ? `within ${args.radius_km} km of ${label || 'the place'}` : `in ${args.state}`}, each anchored on a real substation with measured gas and fiber distance and its nearest market's DCPI verdict. A search area is not a parcel or land for sale; score a coordinate with analyze_site. Independent of the power reads: same wave.`) : null;
+      const fs = args ? _landSearchFirst(seq, args, `The land step, first: candidate SEARCH AREAS ${args.lat != null ? `within ${args.radius_km} km of ${label || 'the place'}` : (args.market ? `around ${args.market}` : `in ${args.state}`)}, each anchored on a real substation with measured gas and fiber distance and its nearest market's DCPI verdict. A search area is not a parcel or land for sale; score a coordinate with analyze_site. Independent of the power reads: same wave.`) : null;
       if (fs && label) fs.land_label = label;
       if (fs && geo) fs.geocode_fallback = { state: st };
     }
@@ -27227,6 +27244,24 @@ export function _planQuery(intent, context) {
           fs.metro_anchor = slug;
           fs.why = `Candidate search areas around ${slug}, the metro the question names (find_sites market=${slug}: centred on the market, ${rk || 60} km), each anchored on a real substation with gas and fiber distance and its nearest market's DCPI verdict${st ? `; the search falls back to ${st} if the market does not resolve` : ''}. A search area is not a parcel. Independent; runs in parallel.`;
         }
+      }
+    }
+  } catch (_e) { /* routing must never throw */ }
+  // 5.61 (lib/site-hunt.mjs): a site hunt that asked about moratoriums, zoning or bills keeps that check: the published
+  // moratorium records for the plan's state join the plan (one read, same wave), and a zoning / land-use ask reads the
+  // zoning class beside it.
+  try {
+    if (d.__siteHuntPermit && top.cls.id !== 'permitting' && !seq.some((s) => s && s.tool === 'get_permitting_intel')) {
+      const st = _planLeadState(d);
+      const stOk = typeof st === 'string' && /^[A-Z]{2}$/.test(st);
+      const where = stOk ? ' in ' + st : ' across the US';
+      seq.push({ step: seq.length + 1, tool: 'get_permitting_intel', depends_on: [], estimated_calls: 1,
+        why: `The check the question asked for: published data-center moratorium records${where} (jurisdiction, stage, date). Only an enacted local one bars a site. Independent; runs in parallel.`,
+        args_hint: stOk ? { class: 'moratorium', state: st } : { class: 'moratorium' } });
+      if (/\bzoning\b|\bland[\s-]?use\b/i.test(String(text || ''))) {
+        seq.push({ step: seq.length + 1, tool: 'get_permitting_intel', depends_on: [], estimated_calls: 1,
+          why: `Published zoning restrictions on data centers${where}. Independent; runs in parallel.`,
+          args_hint: stOk ? { class: 'zoning', state: st } : { class: 'zoning' } });
       }
     }
   } catch (_e) { /* routing must never throw */ }
