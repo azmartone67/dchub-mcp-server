@@ -1018,7 +1018,7 @@ describe('ecosystem-sync paste line', () => {
   const BASE_LINE = 'DC Hub: live data-center, power-grid, fiber and gas infrastructure data for AI agents. '
     // The facility count is withdrawn (owner decision 2026-09-27): the plain map
     // wording stands in whatever canon's numeric `facilities` says.
-    + '91 MCP tools, a global data-center facility map, 300+ markets, 2,200+ tracked deals. Remote MCP: https://dchub.cloud/mcp';
+    + '91 MCP tools, a global data-center facility map, markets scored daily (DCPI), tracked M&A deals. Remote MCP: https://dchub.cloud/mcp';
 
   it('control: the line exactly as it is composed without a capacity read', () => {
     expect(pasteLine({ ...SSOT })).toBe(BASE_LINE);

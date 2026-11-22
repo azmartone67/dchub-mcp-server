@@ -55,9 +55,13 @@ describe('instructions compose gate', () => {
   it('fresh + complete facts → figures, verbatim from the facts file', () => {
     const out = _composeInstructions(freshFacts(), NOW);
     expect(hasFigures(out)).toBe(true);
-    for (const k of ['markets', 'deals', 'countries', 'infrastructure_assets_total']) {
+    for (const k of ['countries', 'infrastructure_assets_total']) {
       expect(out).toContain(String(FACTS.numbers[k]));
     }
+    // ★2026-11-22 (owner): no market or deal count; the coverage is named.
+    expect(out).toContain('markets scored daily (Data Center Power Index / DCPI)');
+    expect(out).toContain('tracked M&A deals.');
+    expect(out).not.toMatch(/\b\d[\d,]*\+?\s+(?:markets?|(?:tracked\s+)?(?:M&A\s+)?deals?)\b/i);
     // ★2026-10-02 (mcp#612): the facility count is withdrawn (owner decision
     // 2026-09-27). facts.numbers.facilities is still exported, so the composed
     // string must NOT quote it. ★2026-10-15 (G-1014-33): it says the plain map,

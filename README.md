@@ -2,7 +2,7 @@
 
 DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.
 
-**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
+**[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, market by market.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; current values may be quoted with attribution under the [current-value and delayed CC-BY-4.0 terms](https://dchub.cloud/terms#dcpi-current-data).
 
 New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.
 
@@ -103,11 +103,11 @@ Your AI assistant gets real-time, structured answers, dated and cited.
 - **134,000+ substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Canada (IESO, AESO, Hydro-Québec), Great Britain (NESO), 30+ EU bidding zones (ENTSO-E), Taiwan, Japan, South Korea, Brazil & Australia — refreshed ~every 5 min; get_grid_data reads any one of them, compare_isos sets 2-4 side by side
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts — including live large-load queue depth where the ISO publishes it (ERCOT publishes a data-center-scale large-load feed)
-- **2,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
+- **Tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
+- **Market intelligence** — markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 - **Capacity Source** — data-center capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
 
 **98 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
@@ -172,7 +172,7 @@ The canonical MCP endpoint is `https://dchub.cloud/mcp` (Streamable HTTP). Start
 
 ## What DC Hub adds
 
-Facility directories list sites you can browse. DC Hub adds the power side, queryable live: grid demand and fuel mix, interconnection queues, substations and transmission, energy prices, and a daily power-availability verdict for 300+ markets (DCPI). It's the same data on the web pages, over REST and over MCP; results carry an `as_of` date. Where each layer comes from is listed under [Data sources](#data-sources).
+Facility directories list sites you can browse. DC Hub adds the power side, queryable live: grid demand and fuel mix, interconnection queues, substations and transmission, energy prices, and a daily power-availability verdict for every scored market (DCPI). It's the same data on the web pages, over REST and over MCP; results carry an `as_of` date. Where each layer comes from is listed under [Data sources](#data-sources).
 
 ## Install
 

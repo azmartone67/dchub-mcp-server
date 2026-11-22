@@ -155,12 +155,19 @@ describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
     const readme = path.join(ROOT, 'README.md');
     const warmer = fmt(TREE_DEALS * 0.97);
     const colder = fmt(TREE_DEALS * 0.94);
-    withFile(readme, (s) => s.split(SNAP.deals).join(warmer), () => {
+    // ★2026-11-22 the README names no deal count (owner), so the floor under
+    // test is planted on the count-free line first.
+    const ANCHOR = '- **Tracked M&A transactions**';
+    const plant = (v) => (s) => {
+      expect(s, 'README anchor for the planted deal floor is gone').toContain(ANCHOR);
+      return s.replace(ANCHOR, `- **${v} tracked M&A transactions**`);
+    };
+    withFile(readme, plant(warmer), () => {
       const r = check();
       expect(r.ok, r.out).toBe(true);
       expect(r.out).toMatch(/::warning::README\.md:.*within 5%/);
     });
-    withFile(readme, (s) => s.split(SNAP.deals).join(colder), () => {
+    withFile(readme, plant(colder), () => {
       expect(check().ok).toBe(false);
     });
   });
@@ -170,7 +177,11 @@ describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
   // is no longer a pass for this one quantity.
   it('a facility floor equal to canon in README fails as withdrawn', () => {
     const readme = path.join(ROOT, 'README.md');
-    withFile(readme, (s) => s.replace('300+ markets', `${SNAP.facilities} facilities, 300+ markets`), () => {
+    const ANCHOR = '— markets scored daily with DCPI';
+    withFile(readme, (s) => {
+      expect(s, 'README anchor for the planted facility floor is gone').toContain(ANCHOR);
+      return s.replace(ANCHOR, `— ${SNAP.facilities} facilities, markets scored daily with DCPI`);
+    }, () => {
       const r = check();
       expect(r.ok, 'a withdrawn facility count passed CHECK').toBe(false);
       expect(r.out).toMatch(/README\.md: .*facility count withdrawn — owner decision 2026-09-27/);

@@ -64,7 +64,7 @@ const DRY = !LIVE;
 // display-name used for the alphabetical guard + PR title
 // Counts kept current (was stale "70 tools / 300+ markets / 2,000+ deals" — the exact
 // pre-stale-entry bug the 07-13 audit flagged). Update alongside the honest-numbers.
-const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} markets), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
+const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
 
 // PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
 // appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
@@ -87,7 +87,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. No signup to start. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, tracked M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. No signup to start. In the official MCP Registry. CC-BY-4.0.`,
   },
   {
     // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
@@ -97,7 +97,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
     alphabetical: false,                    // section isn't sorted — append at end
-    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, no signup to start)`,
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index, market by market, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, no signup to start)`,
   },
   // ── VETTED 2026-09-06 · e2b-dev/awesome-mcp-gateways (★168) — NOT A FIT ──
   // Kept here DECLINED rather than deleted: discovery dedupes on presence in
