@@ -733,6 +733,7 @@ test/tier-vocabulary.test.mjs
 test/time-to-power-one-name.test.mjs
 test/tool-aliases-resolve.test.mjs
 test/tool-count-drift.test.mjs
+test/tool-desc-no-market-count-1121.test.mjs
 test/tool-description-honesty.test.mjs
 test/tool-descriptions-no-plan-or-price.test.mjs
 test/tool-guide-pointers.test.mjs
