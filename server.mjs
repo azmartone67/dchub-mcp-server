@@ -358,7 +358,9 @@ import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPrice
   colocationSequence as _colocationSequence, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
   guardPlanFacilitySteps as _guardPlanFacilitySteps, facilitySlugGuard as _facilitySlugGuard,
   facilitySlugsFromSearch as _facilitySlugsFromSearch, FACILITY_SLUG_PLACEHOLDER as _FACILITY_SLUG_PLACEHOLDER,
-  facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes, resolveColoMetro as _resolveColoMetroForFiber } from './lib/colocation-plan.mjs';
+  facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes } from './lib/colocation-plan.mjs';
+import { fiberOverlapSequence as _fiberOverlapSequence, dueDiligenceSequence as _ddSeq, dueDiligenceClass as _ddClass } from './lib/plan-workflows-1122.mjs';
+const _dueDiligenceClass = () => _ddClass((d) => _ddSeq(d, { stateScope: _planStateScope, isRto: _EXEC_IS_RTO, waterWhere: _planWaterWhere }));
 import { buildColocationAnswer as _buildColocationAnswer } from './lib/colocation-answer.mjs';
 // 5.38 (owner via Grok, 2026-11-17): a plan about a place reads both sides of it, data centers and power.
 import { pairStepFor as _pairStepFor, pairHeldBack as _pairHeldBack, pairHeldNote as _pairHeldNote, pairLines as _pairLines,
@@ -22704,28 +22706,7 @@ export const _PLAN_CLASSES = [
     ],
     coverage_notes: 'get_hosting_capacity is FULL at every tier (public utility GIS). Coverage is 18 utilities and NOT nationwide — Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista. Outside them it returns an explicit not-published answer plus the nearest covered markets, never a silent zero. CRITICAL: only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish "load" (what a new load can DRAW); "gen" is DER export headroom and must never be relayed as siteable capacity; "bus_headroom" (Avista) is transmission bus MW. Published rows are GIS vertices — read distinct_feeders, and check sample_complete/capacity_floor_mw before calling a capped read exhaustive. Informational, not binding interconnection guidance.',
   },
-  {
-    // 5.60 (/workflows spec §7.3, 2026-11-22): an investment / due-diligence read on a proposed campus. "Evaluate the
-    // infrastructure risks of a proposed 300 MW data center investment in Atlanta, Georgia: power, water, climate, fiber
-    // and permitting" routed to water_climate and read no power or fiber at all. Six steps fit the default budget, in
-    // this order: DCPI verdict, grid power, fiber at the point, water, FEMA hazard, permitting. A caller who passes
-    // max_steps 8 also gets the state's refined queue and the seismic/climate read (steps 7-8). Steps: _dueDiligenceSequence.
-    id: 'due_diligence', recipe: null,
-    patterns: [
-      [/\bdue[-\s]diligence\b/i, 7], [/\binfrastructure\s+risks?\b/i, 7],
-      [/\binvestment\s+(?:risks?|case|thesis|review|memo)\b/i, 4],
-      [/\b(?:evaluate|assess|underwrite|vet)\b[^.?!]{0,80}\b(?:investment|acquisition|campus\s+deal)\b/i, 4],
-    ],
-    rationale: 'One risk read across every side an investor underwrites: the market power verdict, grid supply, fiber, water, hazard and permitting, each a dated, cited read on the same place, run in one parallel wave.',
-    sequence: (d) => _dueDiligenceSequence(d),
-    alternatives: [
-      { tool: 'get_composite_site_score', when: 'You want ONE 0-100 verdict with a per-factor coverage map instead of the separate reads.',
-        rejected_because: 'An investment read keeps each side citable on its own; the composite folds them into one number.' },
-      { tool: 'generate_site_analysis', when: 'You want a written site report for one parcel.',
-        rejected_because: 'The intent asked for a multi-side risk read on a market or campus, not a report document.' },
-    ],
-    coverage_notes: 'Each step returns its own as_of and citation. Water and permitting read at state or point grain, so say which grain a figure is. Report an unavailable factor as unknown; never estimate.',
-  },
+  _dueDiligenceClass(),   // 5.60 /workflows spec §7.3: lib/plan-workflows-1122.mjs
   {
     id: 'water_climate', recipe: 'water_risk',
     patterns: [
@@ -22948,11 +22929,7 @@ export const _PLAN_CLASSES = [
     ],
     rationale: 'Map the carrier landscape and score the site in parallel, then plan lead-in routes to the POP the carrier map surfaces.',
     // 5.37 (gap 4): a point, metro or interconnection ask reads its own tools (lib/plan-routing.mjs); else the recipe.
-    // 5.60 (/workflows spec §7.2, 2026-11-22): with no point given, the metro the question or context.market names lends its
-    // published centroid (lib/colocation-plan.mjs COLO_METROS), so get_fiber_readiness runs instead of skipped_unresolved.
-    // A question that also names substations or candidate sites ("where do fiber routes, substations and candidate sites
-    // overlap around Hillsboro") gets the two reads that answer the overlap: get_infrastructure (substation counts around
-    // the point) and find_sites (substation-anchored search areas with fiber distance). Steps: _fiberOverlapSequence.
+    // 5.60 (/workflows spec §7.2): lib/plan-workflows-1122.mjs fiberOverlapSequence.
     sequence: (d) => _fiberKindSequence(d, d.__fiberText) || _fiberOverlapSequence(d, d.__fiberText),
     alternatives: [
       { tool: 'get_metro_fiber', when: 'You want the metro-level fiber map for a market rather than a state grid.',
@@ -24863,7 +24840,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.60';   // 5.60 (/workflows spec §7, 2026-11-22): a comparison reads every market it names (the pair sides plus the DCPI index matches, so "Northern Virginia, Columbus and Atlanta" reads Atlanta); the fiber recipe resolves a named metro's centroid and adds get_infrastructure + find_sites when the question names substations or candidate sites; new class due_diligence (DCPI, grid, fiber, water, hazard, permitting; queue + climate at max_steps 8). (prev) 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.60';   // 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -26649,88 +26626,6 @@ export function _planOutlookMarket(text, d) {
   } catch (_e) { /* fall through: nothing bound */ }
   return null;
 }
-// 5.60 (/workflows spec §7.2): the fiber class's default recipe. Exported for tests. Pure, never throws.
-const _FIBER_OVERLAP_SUBSTATION_RE = /\bsubstations?\b/i;
-const _FIBER_OVERLAP_SITES_RE = /\b(?:candidate|data[-\s]cent(?:er|re)|campus|buildable)\s+(?:data[-\s]cent(?:er|re)\s+)?sites?\b/i;
-export function _fiberOverlapSequence(d, text) {
-  const t = String(text || '');
-  let pt = (d && d.coords && Number.isFinite(d.coords.lat) && Number.isFinite(d.coords.lon)) ? { lat: d.coords.lat, lon: d.coords.lon, basis: 'given' } : null;
-  let metro = null;
-  try { metro = _resolveColoMetroForFiber(t, d && d.market) || null; } catch (_e) { metro = null; }
-  if (!pt && metro && metro.metro && Number.isFinite(metro.metro.lat) && Number.isFinite(metro.metro.lon)) {
-    pt = { lat: metro.metro.lat, lon: metro.metro.lon, basis: 'metro_centroid', label: metro.metro.label };
-  }
-  const fiberMarket = (d && d.market) || (metro && metro.metro && metro.metro.dcpi_slug) || null;
-  const seq = [
-    { step: 1, tool: 'get_fiber_intel', depends_on: [], estimated_calls: 1,
-      why: 'Long-haul / metro dark-fiber routes, carriers, and route density (GeoJSON) — optionally scoped to one metro.',
-      args_hint: { route_type: 'longhaul', market: fiberMarket || '<metro name or slug, e.g. dallas>' } },
-    { step: 2, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
-      why: pt && pt.basis === 'metro_centroid'
-        ? `Point-level connectivity score + nearest-carrier distance at ${pt.label}'s published centroid (no site point was given). Independent — run in parallel with step 1.`
-        : 'Point-level connectivity score + nearest-carrier distance for a specific site. Independent — run in parallel with step 1.',
-      args_hint: pt ? { lat: pt.lat, lon: pt.lon } : { lat: '<site lat>', lon: '<site lon>' } },
-  ];
-  const wantSubs = _FIBER_OVERLAP_SUBSTATION_RE.test(t);
-  const wantSites = _FIBER_OVERLAP_SITES_RE.test(t);
-  if (pt && wantSubs) {
-    seq.push({ step: 0, tool: 'get_infrastructure', depends_on: [], estimated_calls: 1,
-      why: `Substations (and transmission, gas and plants) counted within 25 km of ${pt.lat}, ${pt.lon}: the power side of the overlap the question asks for.`,
-      args_hint: { lat: pt.lat, lon: pt.lon, radius_km: 25 } });
-  }
-  if (pt && (wantSites || wantSubs)) {
-    seq.push({ step: 0, tool: 'find_sites', depends_on: [], estimated_calls: 1,
-      why: 'Candidate search areas anchored on real substations near the point, each with its fiber and gas distance: where fiber, substations and sites coincide. A search area is not a parcel.',
-      args_hint: { lat: pt.lat, lon: pt.lon } });
-  }
-  seq.push({ step: 0, tool: 'plan_fiber_leadin', depends_on: [1], estimated_calls: 1,
-    why: 'N diverse road-following lead-in routes from the site to a carrier hotel/POP, with indicative cost + diversity read — pick the POP from the step-1 carrier map.',
-    args_hint: { from: pt ? `${pt.lat},${pt.lon}` : '<site "lat,lng" or address>', to: '<carrier hotel / POP from the step-1 carrier map>', n: 4 } });
-  seq.forEach((x, i) => { x.step = i + 1; });
-  return seq;
-}
-// 5.60 (/workflows spec §7.3): the due_diligence class's steps. Exported for tests. Pure, never throws.
-export function _dueDiligenceSequence(d) {
-  const st = _planStateScope(d);
-  let pt = (d && d.coords && Number.isFinite(d.coords.lat) && Number.isFinite(d.coords.lon)) ? { lat: d.coords.lat, lon: d.coords.lon } : null;
-  const slug = (d && d.market) || (d && d.__outlook && typeof d.__outlook.slug === 'string' ? d.__outlook.slug : null);
-  // The market the caller typed or the text named lends its published centroid when no point was given.
-  let metro = null;
-  try { metro = slug ? (_resolveColoMetroForFiber('', slug) || null) : null; } catch (_e) { metro = null; }
-  if (!pt && metro && metro.metro && Number.isFinite(metro.metro.lat)) pt = { lat: metro.metro.lat, lon: metro.metro.lon };
-  const rawIso = d && (d.iso || d.isoFromPlace);
-  const stateOf = st || (metro && metro.metro && metro.metro.state) || null;
-  const P = (x) => (pt ? { lat: pt.lat, lon: pt.lon } : { lat: '<site lat>', lon: '<site lon>' });
-  const seq = [
-    { step: 0, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
-      why: 'The market\'s Data Center Power Index (DCPI) card: BUILD/CAUTION/AVOID verdict, time to power and its as_of. The power verdict an investment read leads with.',
-      args_hint: { market_slug: slug || '<market slug>' } },
-    _EXEC_IS_RTO(rawIso)
-      ? { step: 0, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
-          why: 'Grid supply for the ISO: headroom, constraints, generation additions and time to power.', args_hint: { iso: rawIso } }
-      : { step: 0, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
-          why: 'The state\'s power timeline (dated new capacity, retirements, queue context): grid supply where the place is on no US RTO.',
-          args_hint: { state: stateOf || '<2-letter state>' } },
-    { step: 0, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
-      why: 'Fiber at the site point: on-net / near-net status, nearest carrier distance and carrier diversity.', args_hint: P() },
-    { step: 0, tool: 'get_water_risk', depends_on: [], estimated_calls: 1,
-      why: 'Water availability (U.S. Drought Monitor / WRI Aqueduct water stress) for the place.',
-      args_hint: _planWaterWhere(d) || (stateOf ? { state: stateOf } : { state: '<2-letter state>' }) },
-    { step: 0, tool: 'get_disaster_risk', depends_on: [], estimated_calls: 1,
-      why: 'FEMA National Risk Index rating and top hazards at the point.', args_hint: P() },
-    { step: 0, tool: 'get_permitting_intel', depends_on: [], estimated_calls: 1,
-      why: 'Permitting climate for the state: moratoriums, zoning actions and local opposition signals.',
-      args_hint: { state: stateOf || '<2-letter state>' } },
-    // Steps 7-8 run only when the caller raises max_steps to 8.
-    { step: 0, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
-      why: 'Interconnection-queue survivors in the state (state filter): the queue side of grid risk.',
-      args_hint: { state: stateOf || '<2-letter state>', ...(d && d.mw ? { min_mw: d.mw } : {}), geocoded_only: true } },
-    { step: 0, tool: 'get_climate_intel', depends_on: [], estimated_calls: 1,
-      why: 'USGS seismic and NOAA cooling degree-days at the point.', args_hint: P() },
-  ];
-  seq.forEach((x, i) => { x.step = i + 1; });
-  return seq;
-}
 function _outlookUnresolvedNote(hit) {
   const TAIL = ' No market was read: this answer is unresolved and does not substitute another market.';
   const list = (ms) => ms.map((m) => m.slug ? `${m.name} (${m.state}, ${m.slug})` : m.phrase).join('; ');
@@ -27099,10 +26994,7 @@ export function _planQuery(intent, context) {
       }
     }
     // "Dallas, Atlanta and Columbus": a market comparison reads every named market's DCPI card, not the first two.
-    // 5.60 (/workflows spec §7.1, 2026-11-22): the named markets are the comparison pair's sides PLUS every DCPI market the
-    // text names. "Compare Northern Virginia, Columbus and Atlanta" matched only Columbus + Atlanta in the DCPI index
-    // (Northern Virginia is a metro, not an index market), so __namedMarkets had two entries, the >2 test failed, and the
-    // plan read the pair (northern-virginia, columbus) and dropped Atlanta.
+    // 5.60 (/workflows §7.1): the pair's sides count too (Northern Virginia is no DCPI index market).
     const _cmpNamed = (() => {
       const out = [];
       const cp = d.comparePair || {};
