@@ -322,6 +322,8 @@ import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotAppl
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
 import { recognizedClientFromName as _recognizedClientFromName, recognizedClientFromUa as _recognizedClientFromUa } from './lib/client-recognition.mjs';
+import * as _CA from './lib/checkout-attrib.mjs';   // checkout-attribution spec 2026-11-22 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF)
+import { platformFamily as _platformFamily } from './lib/platform-family.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
 import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader, getVerdict as _mcpGetVerdict, mcpGetDescription as _mcpGetDescription, sseDeclineFrame as _sseDeclineFrame, chunkText as _chunkText } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
@@ -5515,12 +5517,19 @@ function _floorKindFor(name, sc, c, ent = _wallEnt(c)) {
 // The wall's standing under the floor (owner 2026-11-11, "Measure allowed only"): 'allowed', or why the floor
 // skips it by design. It leaves on the wall row as offer_floor (lib/keyless-wall.mjs OFFER_FLOOR_STANDINGS), so
 // the funnel reads the 95% offer target over the walls the floor is allowed on.
+// Checkout-attribution spec 2026-11-22 section 6 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): a ChatGPT-family wall carries
+// the same email ask as other platforms (7d to 11-22: 23 ChatGPT walls, 0 with an ask). Response text only: no tool is
+// added or removed on /mcp/chatgpt, no quota or keyless rule changes. Off: the clean / profile exemption stands.
+export function _chatgptAskOn(c) {
+  return _CA.checkoutAttribOn() && _platformFamily({ client: c && c.platform }) === 'chatgpt';
+}
 function _floorStanding(c, name) {
   if (!_wallOfferFloorOn()) return 'off';
   if (c.loopback_step) return 'plan_step';
   if (_pcIsGrok(c.platform)) return 'grok';
-  if (_isCleanPlatform()) return 'clean';
-  if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
+  const chatgptAsk = _chatgptAskOn(c);
+  if (_isCleanPlatform() && !chatgptAsk) return 'clean';
+  if ((c.profile === DIRECTORY_PROFILE && !chatgptAsk) || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
   if (_FLOOR_SKIP_TOOLS.has(String(name || ''))) return 'tool';
   return 'allowed';
 }
@@ -27656,8 +27665,12 @@ function _sourceLineCb(name, fn) {
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
+      // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
+      // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
+      _final = _arefLinksStep(_final, name, c);
       return _final;
     } finally {
+      _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
       _expOutcomeStep(name, c, _final);   // Nov 22 tests: continued / returned_next_day / key_minted (flags OFF: no-op)
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
@@ -27667,6 +27680,32 @@ function _sourceLineCb(name, fn) {
       _flushTrackRows(c, name, _final);
     }
   };
+}
+// Checkout-attribution spec 2026-11-22, section 1: the aref on every checkout-bound link. Off: the result unchanged.
+export function _arefLinksStep(result, name, c) {
+  try {
+    if (!_CA.checkoutAttribOn() || !c || c.loopback_step) return result;
+    return _CA.withArefLinks(result, _CA.arefForCtx(c, name));
+  } catch (_) { return result; }
+}
+// Section 3: the first full-depth (not gated) answer to a licensed key, reported once per key per process; the
+// backend writes exactly one licence_activated per key (licence_activations PK). Off: nothing is sent.
+const _licenceActivatedSent = new Set();
+export function _licenceActivatedStep(name, c, result) {
+  try {
+    if (!_CA.checkoutAttribOn() || !c || c.loopback_step || !c.api_key || !INTERNAL_KEY) return false;
+    if (_LB.licenceTier({ apiKey: c.api_key, tier: c.tier }) !== 'licensed' || _gatedAnswer(result, name, c)) return false;
+    const kref = _CA.keyRef(c.api_key);
+    if (_licenceActivatedSent.has(kref)) return false;
+    _licenceActivatedSent.add(kref);
+    fetch(new URL('/api/v1/mcp/licence-activated', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ key_ref: kref, platform: String(c.platform || '').slice(0, 80), tool: name }),
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+    return true;
+  } catch (_) { return false; }
 }
 // The one send for a tool call's /api/v1/mcp/track row (lib/agent-outreach.mjs holdTrackRow). Held for the
 // outermost wrapper on the surfaces where the agent receives next_ask as built here; sent at once on the
