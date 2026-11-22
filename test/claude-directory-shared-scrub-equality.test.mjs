@@ -26,7 +26,16 @@ const REF = NEW.createDirectoryProfile({
 });
 
 let H, fence;
-beforeAll(async () => { fence = fenceNetwork(); H = await startHarness(); });
+// 2026-11-22: /mcp no longer publishes the root anyOf by default (lib/one-of-contract.mjs), while
+// the frozen /mcp/chatgpt profile re-applies it. This file compares the scrub of the two modules on the
+// /mcp output they were split from, so it runs with the rollback switch on: that is the /mcp output the
+// OLD fixture was taken against, and the NEW profile's re-apply is then a no-op (it never clobbers).
+let prevOneOf;
+beforeAll(async () => {
+  prevOneOf = process.env.DCHUB_ONEOF_ANYOF; process.env.DCHUB_ONEOF_ANYOF = '1';
+  fence = fenceNetwork(); H = await startHarness();
+});
+afterAll(() => { if (prevOneOf === undefined) delete process.env.DCHUB_ONEOF_ANYOF; else process.env.DCHUB_ONEOF_ANYOF = prevOneOf; });
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('the exported surface is unchanged', () => {
