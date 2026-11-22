@@ -107,6 +107,11 @@ describe('register_standing_intent watches, flag on', () => {
     expect(intentCalls()[0].body).toEqual({ kind: 'permitting_change', params: { state: 'OH' }, channel: 'email' });
   });
 
+  it('kind capacity with channel email keeps its own path (not the watches lane)', async () => {
+    await call({ kind: 'capacity', channel: 'email', target_mw: 20, markets: 'columbus' }).catch(() => {});
+    for (const c of intentCalls()) expect(c.body && c.body.channel).toBeUndefined();
+  });
+
   it('existing webhook kinds send exactly what they did', async () => {
     await call({ kind: 'news_keyword', q: 'moratorium', webhook_url: 'https://hooks.example.com/x' });
     expect(intentCalls()[0].body).toEqual({ kind: 'news_keyword', params: { q: 'moratorium' },

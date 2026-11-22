@@ -38728,7 +38728,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const hook = String(a.webhook_url || '').trim();
       // Power/Market Watch (DCHUB_WATCHES_V1, default off): the new kinds, market_watch and
       // channel=email go to the backend's watches lane (dchub-backend routes/watches_v1.py).
-      if (watchesOn() && (WATCH_KINDS.has(kind) || String(a.channel || '').trim() === 'email')) {
+      if (watchesOn() && kind !== 'capacity' && (WATCH_KINDS.has(kind) || String(a.channel || '').trim() === 'email')) {
         const out = await callAPIWrite('/api/v1/agentic/intents', _watchBody(kind, a, hook));
         return { content: [{ type: 'text', text: JSON.stringify(out) }] };
       }
