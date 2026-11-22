@@ -1226,7 +1226,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 // If a stale "N tools", version, or asset/facility floor reappears in those
 // phrases, fail; do not rewrite it to the current count.
 {
-  const THIRD_PARTY_COPY_FIELDS = ['short', 'long', 'glama_400', 'tight', 'glama_live', 'mcpmarket_live', 'tagline'];
+  const THIRD_PARTY_COPY_FIELDS = ['short', 'long', 'glama_400', 'tight', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live', 'tagline'];
   const TOOL_COUNT_PHRASE = /\b\d+(?: live| MCP| read-only)* tools\b/;
   const VERSION = /\bv?\d+\.\d+\.\d+\b/;
   const ASSET_FLOOR = /\b\d[\d,]*\+?\s+(?:mapped\s+)?(?:power,?\s+grid,?\s+gas(?:\s+and|,)\s+fiber\s+)?assets\b/i;
