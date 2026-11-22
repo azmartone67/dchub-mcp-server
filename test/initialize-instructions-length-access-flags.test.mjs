@@ -92,11 +92,14 @@ describe('with the access flags ON, every handshake still fits its budget', () =
 
   it('a path whose budget the line would pass is served the plain text, byte for byte', () => {
     const on = { ...FLAGS };
-    const plain = S._composeServedInstructionsForTest(undefined, undefined, { capacityIntro: true, instrBudget: 1 }, on);
-    expect(plain).not.toContain(S.ACCESS_INSTR_LINE);
-    expect(plain).toBe(S._composeServedInstructionsForTest(undefined, undefined, { capacityIntro: true }, {}));
-    const full = S._composeServedInstructionsForTest(undefined, undefined, { capacityIntro: true }, on);
+    const lean = S._INSTRUCTIONS_LEAN;
+    expect(S._accessFitForTest(lean, { instrBudget: 1 }, on)).toBe(lean);
+    expect(S._accessFitForTest(lean, undefined, {})).toBe(lean);
+    const full = S._accessFitForTest(lean, undefined, on);
     expect(full).toContain(S.ACCESS_INSTR_LINE);
-    expect(full.length).toBe(plain.length + S.ACCESS_INSTR_LINE.length + 1);
+    expect(full.length).toBe(lean.length + S.ACCESS_INSTR_LINE.length + 1);
+    expect(S._accessFitForTest(lean, { instrBudget: full.length }, on)).toBe(full);
+    expect(S._accessFitForTest(lean, { instrBudget: full.length - 1 }, on)).toBe(lean);
+    expect(CW.ACCESS_INSTR_BUDGET_COMPACT).toBe(GROK_BUDGET);
   });
 });

@@ -5814,172 +5814,26 @@ export function _expOutcomeStep(name, c, result, { post = _mxPost } = {}) {
     if (c) c._mxExposureCall = false;   // the exposure call itself is never its own "continued"
   }
 }
-// ── Agent Handoff P0-2: the commercial wall `access` block (lib/commercial-wall.mjs; DRAFT, every flag OFF) ─────────
-// Test A's treatment (DCHUB_EXP_UPGRADE_BLOCK, lib/monetization-experiments.mjs exp_upgrade_block, 80/20). On a walled
-// answer, for an audience the client tests may touch (_mxAudience) on a client DCHUB_COMMERCIAL_WALL_CLIENTS allows
-// (default grok,claude; never ChatGPT): `exposure` is recorded in BOTH arms at the point the block would show, once
-// per session; the treatment arm's answer gains `access` with a backend-minted handoff link (POST /api/v1/handoff/mint,
-// 800 ms; any failure attaches nothing and today's wall stands). One link per session (#1594): a later wall in the
-// same session carries `access` without a link or a human line. A keyless caller whose task an email would finish
-// (not a Pro-only tool, _wallUnlockFor 'email') keeps the identity ask and gets no block. execute_plan steps are
-// skipped (_mxAudience); the outer plan carries it once. Flag off: the same object back, untouched.
+// ── Agent Handoff P0-2 / P0-4 (lib/commercial-wall.mjs createRuntime; DRAFT, every flag OFF): the commercial wall
+// `access` block, the handoff elicitation, the linked-identity resolve and get_access_status. The rules live there.
 export const _COMMERCIAL_PRO_ONLY = () => new Set([...PRO_ONLY_TOOLS, ...LP_TOOLS]);
 export const _commercialCreditHeavy = () => new Set(CREDIT_HEAVY);
-let _cwMint = (body) => _CW.mintHandoff(body, { apiBase: API_BASE, internalKey: INTERNAL_KEY });
-let _cwPost = (path, body) => _mxPost(path, body);
-export function _setCommercialWallSeamsForTest({ mint, post } = {}) {
-  if (mint) _cwMint = mint;
-  if (post) _cwPost = post;
-}
-function _cwWalled(result, name, c) {
-  const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
-    ? result.structuredContent : null;
-  if (sc && _isRelayWall(sc, c)) return true;
-  if (_wallIsWalled(result, name, c)) return true;
-  if (name === 'execute_plan') {
-    try { const id = c._planWallSinkId; return !!id && _planWallSink.rows(id).length > 0; } catch (_) { return false; }
-  }
-  return false;
-}
-function _cwWallStatus(c, name) {
-  try {
-    const e = (Array.isArray(c._pendingWallHits) ? c._pendingWallHits : []).find((x) => x && x.name === name);
-    return e ? String(e.status || '') : '';
-  } catch (_) { return ''; }
-}
-export async function _commercialWallStep(result, name, args, c = getCtx()) {
-  try {
-    if (!_CW.commercialWallOn() || !_MX.expOn(_MX.UPGRADE_BLOCK)) return result;
-    if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content) || _isFailureEnvelope(result)) return result;
-    if (!_mxAudience(c, name) || !_CW.clientAllowed(c)) return result;
-    if (_tierRank(String(c.tier || '')) >= _tierRank('pro')) return result;   // nothing left to sell a Pro seat
-    if (!_cwWalled(result, name, c)) return result;
-    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
-      ? result.structuredContent : {};
-    if (sc.access !== undefined && sc.access !== 'partial') return result;   // the answer already says it is full (top-metro stamp)
-    const proOnlyTools = _COMMERCIAL_PRO_ONLY();
-    const proOnly = proOnlyTools.has(String(name || ''));
-    // A keyless task an email finishes: the identity ask (lib/wall-identity-v2.mjs) stays, no commercial block.
-    if (!c.api_key && !proOnly && _wallUnlockFor(name, sc, c) === _RE.UNLOCK_EMAIL) return result;
-    const identity = _MX.identityOf(c);
-    if (!identity) return result;
-    const test = _MX.UPGRADE_BLOCK;
-    const arm = _MX.armFor(identity, test);
-    const sid = c.session_id || '';
-    // `exposure` in both arms, once per session, at the point the block would show.
-    if (!_askOnceSeen(sid, 'handoff_exposure', 'session')) {
-      _MX.noteExposure(_cwPost, { test, identity, tool: name, session_id: sid, platform: c.platform || '' });
-      c._mxExposureCall = true;
-    }
-    if (arm !== _MX.TREATMENT) return result;
-    const unlocks_with = _CW.unlocksWith(name, { proOnlyTools, keyed: !!c.api_key,
-      freeKeyed: !!c.api_key && _tierRank(String(c.tier || 'free')) <= _tierRank('identified'),
-      creditHeavyTools: _commercialCreditHeavy(), wallStatus: _cwWallStatus(c, name), sc });
-    const iso = (args && typeof args === 'object' && typeof args.iso === 'string') ? args.iso : '';
-    const completed = _CW.completedFrom(sc, { iso });
-    const withheld = _CW.withheldShape(sc);
-    // A later wall in this session: `access` without a link or a human line.
-    if (_askOnceHas(sid, 'handoff', 'session')) {
-      return _CW.withAccess(result, _CW.buildAccess({ completed, withheld, unlocks_with }));
-    }
-    const minted = await _cwMint({ tool: name, args: _CW.sanitizeArgs(args || {}) || {}, label: _CW.labelFrom(args),
-      unlocks_with, completed, withheld, visible: _CW.visibleSummary(sc, { completed }), identity_ref: identity,
-      session_ref: _CW.sessionRef(sid), client: String(c.platform || '').slice(0, 40), endpoint: String(c.path || '/mcp').slice(0, 40),
-      is_qa: _isQaCaller(c), user_agent: String(c.user_agent || c.client_ua || '').slice(0, 200) });
-    if (!minted || !_CW.validHandoffUrl(minted.handoff_url)) return result;
-    _askOnceSeen(sid, 'handoff', 'session');
-    const block = _CW.buildAccess({ completed, withheld, unlocks_with, handoff_url: minted.handoff_url });
-    _handoffElicit(block.access, name, c);
-    return _CW.withAccess(result, block);
-  } catch (_) { return result; }
-}
-// DCHUB_HANDOFF_ELICIT (default OFF): the same human line and link as a URL elicitation, for a client that declared the
-// capability (the maybeUrlElicitClaim pattern): once per session, fire-and-forget, DCHUB_URL_ELICIT_DISABLE=1 wins, and
-// never after the claim elicitation already went out in that session.
-const _handoffElicitSent = new Set();
-function _handoffElicit(access, toolName, c) {
-  try {
-    if (!_CW.handoffElicitOn() || !access || !access.handoff_url || !access.for_your_human) return false;
-    const sid = (c && c.session_id) || '';
-    if (!sid || _handoffElicitSent.has(sid) || _urlElicitSent.has(sid)) return false;
-    const srv = sessionSrv.get(sid);
-    if (!srv || !srv.server) return false;
-    const caps = srv.server.getClientCapabilities ? srv.server.getClientCapabilities() : null;
-    if (!caps || !caps.elicitation) return false;
-    if (_handoffElicitSent.size >= 20000) _handoffElicitSent.clear();
-    _handoffElicitSent.add(sid);
-    Promise.resolve().then(() => srv.server.elicitInput({ mode: 'url', elicitationId: randomUUID(), url: access.handoff_url,
-      message: access.for_your_human }, { timeout: 120000 }))
-      .then((r) => console.log(`[handoff-elicit] result sid=${_logId(sid)} tool=${toolName} action=${(r && r.action) || '?'}`))
-      .catch((e) => console.log(`[handoff-elicit] failed sid=${_logId(sid)} tool=${toolName}: ${String((e && e.message) || e).slice(0, 140)}`));
-    return true;
-  } catch (_) { return false; }
-}
-// DCHUB_AGENT_HANDOFF_RESOLVE (default OFF): a KEYLESS call whose identity or session the backend linked to a buyer
-// after a handoff checkout (GET /api/v1/handoff/identity, X-Internal-Key, cached 60 s per identity, misses included,
-// 800 ms) is served at the buyer's tier for that call, so the next call after payment returns full fields with no
-// reconnect. The lookup answers {linked, api_key_hash, tier, linked_token?}: no key ever reaches this server, so the
-// TIER is lifted (developer / pro only, lib/commercial-wall.mjs liftTierFor), never a key. Never lowers a tier. Not on
-// ChatGPT surfaces, a plan step, QA or bot traffic.
-// P0-4 full fields: with the backend's flag on too, the lookup adds linked_token (a signed 10-minute token naming the
-// key HASH). The lifted call holds it as c.linked_token and callAPI / callAPIWrite forward it as X-DCHub-Linked-Key
-// (never X-API-Key), which the backend reads, next to X-Internal-Key only, as the buyer's key; the caller-tier header
-// and this server's own keyless caps (anon hard wall, anon soft cap) read the call at the lifted tier (_handoffLinked).
-let _hoLookup = async (identity, sref) => {
-  const q = new URLSearchParams({ identity_ref: identity || '', session_ref: sref || '' }).toString();
-  return _CW.fetchJson(new URL(_CW.IDENTITY_PATH + '?' + q, API_BASE).toString(), { headers: { 'X-Internal-Key': INTERNAL_KEY } });
-};
-const _hoCache = _CW.createTtlCache({ ttlMs: 60_000 });
-export function _setHandoffResolveLookupForTest(fn) { _hoLookup = fn || _hoLookup; _hoCache.clear(); }
-// A keyless call lifted by _handoffResolveEnter that also holds the backend's linked token: served as the buyer's
-// key, so the keyless caps below and the caller-tier header read it at the lifted tier.
-function _handoffLinked(c) {
-  return !!(c && !c.api_key && c.handoff_linked === true && typeof c.linked_token === 'string' && c.linked_token);
-}
-function _forwardLinkedKey(headers, c) {
-  if (_handoffLinked(c)) headers[_CW.LINKED_KEY_HEADER] = c.linked_token;
-}
-export async function _handoffResolveEnter(c, name) {
-  try {
-    if (!_CW.handoffResolveOn() || !c || c.api_key || c.loopback_step || !INTERNAL_KEY) return false;
-    if (c.profile === DIRECTORY_PROFILE || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return false;
-    if (_isQaCaller(c) || isBotOrInternalCtx(c)) return false;
-    const identity = _MX.identityOf(c);
-    const sref = _CW.sessionRef(c.session_id);
-    if (!identity && !sref) return false;
-    const ck = identity + '|' + sref;
-    let hit = _hoCache.get(ck);
-    if (hit === undefined) {
-      const j = await _hoLookup(identity, sref);
-      const t = (j && j.linked === true) ? _CW.liftTierFor(j.tier) : '';
-      hit = { tier: t, token: t ? _CW.linkedTokenOf(j) : '' };
-      _hoCache.set(ck, hit);
-    }
-    const tier = hit && hit.tier;
-    if (!tier || _tierRank(tier) <= _tierRank(String(c.tier || 'anonymous'))) return false;
-    c.tier = tier; c.handoff_linked = true;
-    if (hit.token) c.linked_token = hit.token;
-    return true;
-  } catch (_) { return false; }
-}
-// get_access_status (DCHUB_ACCESS_STATUS_TOOL, default OFF): callable by name, never listed (createServer registers it
-// only while the flag is on and the tools/list wrapper drops it), so no tool count or listing moves before the owner
-// flips it. A keyed caller is read with its own key; a keyless / OAuth caller with the internal key plus its
-// identity_ref and session_ref, so a handoff-linked identity reports its upgrade. Codes and numbers only.
-export async function _accessStatusTool(c = getCtx(), { fetchImpl = fetch } = {}) {
-  const keyed = !!(c && c.api_key);
-  const base = new URL(_CW.ENTITLEMENTS_ME_PATH, API_BASE);
-  let headers;
-  if (keyed) headers = { 'X-API-Key': c.api_key };
-  else {
-    base.searchParams.set('identity_ref', _MX.identityOf(c || {}) || '');
-    base.searchParams.set('session_ref', _CW.sessionRef(c && c.session_id));
-    headers = { 'X-Internal-Key': INTERNAL_KEY };
-  }
-  const raw = await _CW.fetchJson(base.toString(), { headers, fetchImpl, timeoutMs: 2500 });
-  const out = raw ? _CW.shapeAccessStatus(raw, { keyed }) : { ..._CW.shapeAccessStatus({}, { keyed }), status: 'unavailable' };
-  return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
-}
+const _CWR = _CW.createRuntime({
+  apiBase: () => API_BASE, internalKey: () => INTERNAL_KEY, post: (p, b) => _mxPost(p, b), MX: _MX,
+  mxAudience: (c, n) => _mxAudience(c, n), tierRank: (t) => _tierRank(t), isFailureEnvelope: (r) => _isFailureEnvelope(r),
+  isRelayWall: (sc, c) => _isRelayWall(sc, c), wallIsWalled: (r, n, c) => _wallIsWalled(r, n, c),
+  planWallRows: (id) => _planWallSink.rows(id), emailFinishes: (n, sc, c) => _wallUnlockFor(n, sc, c) === _RE.UNLOCK_EMAIL,
+  askOnceSeen: (s, k, v) => _askOnceSeen(s, k, v), askOnceHas: (s, k, v) => _askOnceHas(s, k, v),
+  proOnlyTools: () => _COMMERCIAL_PRO_ONLY(), creditHeavy: () => _commercialCreditHeavy(),
+  isQa: (c) => _isQaCaller(c), isBot: (c) => isBotOrInternalCtx(c), isDirectory: (c) => c.profile === DIRECTORY_PROFILE,
+  isCleanPlatform: () => _isCleanPlatform(), sessionServer: (sid) => sessionSrv.get(sid), urlElicitSent: (sid) => _urlElicitSent.has(sid),
+  uuid: () => randomUUID(), logId: (sid) => _logId(sid),
+});
+export const _setCommercialWallSeamsForTest = (seams) => _CWR.setSeams(seams);
+export const _commercialWallStep = (result, name, args, c = getCtx()) => _CWR.commercialWallStep(result, name, args, c);
+export const _setHandoffResolveLookupForTest = (fn) => _CWR.setLookup(fn);
+export const _handoffResolveEnter = (c, name) => _CWR.handoffResolveEnter(c, name);
+export const _accessStatusTool = (c = getCtx(), o) => _CWR.accessStatusTool(c, o);
 // ── Wall items 1, 2 and 4 (owner 2026-11-21; each behind its own flag, default OFF, byte-identical when off) ──────────
 //   item 1  DCHUB_WALL_RELAY_EVERYWHERE  a session-bound /u/ relay link on every gated answer (lib/wall-relay-everywhere.mjs)
 //   item 2  DCHUB_WALL_VALUE_FIRST       content[0] = the dated headline, what was withheld, the link (lib/wall-value-first.mjs)
@@ -8539,7 +8393,7 @@ export const CALLER_TIER_HEADER = 'X-DCHub-Caller-Tier';
 export function _callerTierFor(c) {
   if (c && typeof c === 'object' && c.kff_full_depth === true) return KEYLESS_FIRST_FULL_STEP_TIER;   // a first-full plan's step
   if (c && typeof c === 'object' && c.kff_email_depth === true) return 'free';   // M2.2 email_depth step: the email key's tier
-  if (_handoffLinked(c)) { const lt = String(c.tier || '').trim().toLowerCase(); return /^[a-z_]{1,32}$/.test(lt) ? lt : 'anonymous'; }
+  if (_CW.handoffLinked(c)) { const lt = String(c.tier || '').trim().toLowerCase(); return /^[a-z_]{1,32}$/.test(lt) ? lt : 'anonymous'; }
   if (!c || typeof c !== 'object' || !c.api_key) return 'anonymous';
   const t = String(c.tier || 'free').trim().toLowerCase();
   return /^[a-z_]{1,32}$/.test(t) ? t : 'free';
@@ -8566,7 +8420,7 @@ async function callAPI(path, params = {}, opts = {}) {
   if (c.session_id) headers['X-MCP-Session'] = c.session_id;
   if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
   _forwardCallerTier(headers, c, opts);
-  _forwardLinkedKey(headers, c);   // DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless call (never X-API-Key)
+  _CW.forwardLinkedKey(headers, c);   // DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless call (never X-API-Key)
   // r70 (2026-06-03): {internal:true} callers present a dchub- User-Agent so the
   // backend's server-to-server bypass (main.py:2465 phase19b_grid_intelligence —
   // _is_internal is UA/IP-based, NOT X-Internal-Key-based) returns UNGATED data.
@@ -8973,7 +8827,7 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   if (c.session_id) headers['X-MCP-Session']  = c.session_id;
   if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
   _forwardCallerTier(headers, c, opts);
-  _forwardLinkedKey(headers, c);   // DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless call (never X-API-Key)
+  _CW.forwardLinkedKey(headers, c);   // DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless call (never X-API-Key)
   // r-durable-key (2026-07-06): forward the REAL caller IP on writes so the
   // backend's /keys/claim dedupe ( metadata->>'ip', flask_mcp_endpoints.py )
   // keys on the actual agent — not this MCP server's shared proxy egress, which
@@ -28435,7 +28289,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
-      if (!c.api_key && !_handoffLinked(c) && c.kff_full_depth !== true && c.kff_email_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+      if (!c.api_key && !_CW.handoffLinked(c) && c.kff_full_depth !== true && c.kff_email_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall'; _limitHit(c, status);
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
@@ -28701,7 +28555,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
       // short-circuit is untouched).
       const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
-        ? (c.kff_full_depth === true || (_handoffLinked(c) && c.tier === 'pro') || await _paidKeyIsProOrAbove(c.api_key)) : undefined;
+        ? (c.kff_full_depth === true || (_CW.handoffLinked(c) && c.tier === 'pro') || await _paidKeyIsProOrAbove(c.api_key)) : undefined;
       // Capacity and facility-tier filters on search_facilities are applied only for a caller
       // whose answer carries those fields (lib/readable-filters.mjs). The backend answers this
       // server's own credential at full depth, so a filter the caller supplies would otherwise
@@ -30011,7 +29865,7 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
       // write tools ...) skip it. Measured at count 25 of 20: discover_tools walled as a plan step, and the
       // wall rewrote the terms link in request_capacity_intro / accept_capacity_terms and the licence link in
       // summarize_for_citation to the wall's own link.
-      if (!c.api_key && !_handoffLinked(c) && gate.keyless_full_trial !== true && c.kff_full_depth !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
+      if (!c.api_key && !_CW.handoffLinked(c) && gate.keyless_full_trial !== true && c.kff_full_depth !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -34013,24 +33867,11 @@ export async function _requestEnhancementTool(apiKey, a, fetchImpl, opts) {
   args.class = _enhancementClass(src);
   return _reportFindingTool(apiKey, args, fetchImpl, { ...(opts || {}), entryTool: 'request_enhancement' });
 }
-// Agent Handoff (DCHUB_EXP_UPGRADE_BLOCK or DCHUB_ACCESS_STATUS_TOOL on; default OFF): one sentence after the relay
-// contract on the handshake createServer serves. Never on the /mcp/chatgpt DIRECTORY_INSTRUCTIONS. Flags off: the text
-// itself, byte for byte. Only the purchase rule is new: the instructions already say to show a partial result's
-// human_message / for_your_human and its link. A path whose handshake would pass its budget with the line
-// (ACCESS_INSTR_BUDGET; /mcp/grok and /mcp/grok/oauth keep 48 characters of headroom, so 2,000) is served without it,
-// and every access block carries the same sentence as agent_note (lib/commercial-wall.mjs ACCESS_AGENT_NOTE).
+// Agent Handoff access line (lib/commercial-wall.mjs accessInstr / accessFit; flags off: the text, byte for byte).
 export const ACCESS_INSTR_LINE = _CW.ACCESS_AGENT_NOTE;
-export const ACCESS_INSTR_BUDGET = 2048;
-export const ACCESS_INSTR_BUDGET_COMPACT = 2000;
-export function _accessInstr(text, env = process.env) {
-  try {
-    if (typeof text !== 'string' || !(_CW.commercialWallOn(env) || _CW.accessStatusOn(env)) || text.includes(ACCESS_INSTR_LINE)) return text;
-    const i = text.indexOf(RELAY_CONTRACT);
-    if (i < 0) return text;
-    const j = i + RELAY_CONTRACT.length;
-    return text.slice(0, j) + ' ' + ACCESS_INSTR_LINE + text.slice(j);
-  } catch (_) { return text; }
-}
+export const _accessInstr = (text, env = process.env) => _CW.accessInstr(text, RELAY_CONTRACT, env);
+const _accessFit = (text, rewrite, env = process.env) => _CW.accessFit(text, RELAY_CONTRACT, rewrite && rewrite.instrBudget, env);
+export { _accessFit as _accessFitForTest };
 export const _INSTRUCTIONS_LEAN = (() => {
   const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
   // Option A (owner 2026-11-16): the Capacity Source copy is the teaser only (lib/capacity-source-summary.mjs
@@ -34358,22 +34199,6 @@ export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
 
-// The handshake text createServer serves. With the access flags on, the access line goes in only when the whole served
-// text still fits the path's budget (opts.instrBudget, else ACCESS_INSTR_BUDGET); flags off, or the line does not fit:
-// the text without it, byte for byte.
-function _composeServedInstructions(instructionsTail, instructionsRewrite, opts, env = process.env) {
-  const compose = (ai) => _keyToolPointerText(((typeof instructionsRewrite === 'function')
-    ? instructionsRewrite(ai(_capacityInstructions(_INSTRUCTIONS_LEAN)))
-    : (opts && opts.capacityIntro
-      ? _withWelcome(ai(_capacityInstructions(_INSTRUCTIONS_LEAN)))
-      : ai(_capacityInstructions(_INSTRUCTIONS_LEAN)))) + ((typeof instructionsTail === 'string') ? instructionsTail : ''));
-  const plain = compose((t) => t);
-  if (!(_CW.commercialWallOn(env) || _CW.accessStatusOn(env))) return plain;
-  const withLine = compose((t) => _accessInstr(t, env));
-  const budget = (opts && Number.isFinite(opts.instrBudget)) ? opts.instrBudget : ACCESS_INSTR_BUDGET;
-  return withLine.length <= budget ? withLine : plain;
-}
-export { _composeServedInstructions as _composeServedInstructionsForTest };
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   // Display name (Grok note L item 7, 2026-11-15): catalogs that build a toolkit name from
@@ -34392,7 +34217,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     // as the count that path serves (lib/grok-profile.mjs grokInstructions).
     // Every other path passes none, so their text is unchanged byte for byte.
     // 2026-11-17: the key tool is named by its listed name, get_api_key (lib/key-tool-name.mjs).
-    instructions: _composeServedInstructions(instructionsTail, instructionsRewrite, opts),
+    instructions: _accessFit(_keyToolPointerText(((typeof instructionsRewrite === 'function')
+      ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS_LEAN))
+      : (opts && opts.capacityIntro
+        ? _withWelcome(_capacityInstructions(_INSTRUCTIONS_LEAN))
+        : _capacityInstructions(_INSTRUCTIONS_LEAN))) + ((typeof instructionsTail === 'string') ? instructionsTail : '')), instructionsRewrite),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -40197,22 +40026,10 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         agentDemandPayload(await callAPI(AGENT_DEMAND_PATH, {}, { withStatus: true }))) }] }));
   }
 
-  // get_access_status (DCHUB_ACCESS_STATUS_TOOL, default OFF): registered only while the flag is on, straight on the SDK
-  // server (not trackedTool: no count, catalog or maturity row moves), and dropped from every tools/list below, so it
-  // is callable by name and never listed. The directory / Claude / core paths refuse it before dispatch.
-  if (_CW.accessStatusOn()) {
-    try {
-      srv.registerTool(_CW.ACCESS_STATUS_TOOL, { title: 'Access status', description: _CW.ACCESS_STATUS_DESCRIPTION, inputSchema: {},
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
-      async () => {
-        const c = getCtx() || {};
-        if (c.profile || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) {
-          return { content: [{ type: 'text', text: 'Unknown tool: ' + _CW.ACCESS_STATUS_TOOL }], isError: true };
-        }
-        return _accessStatusTool(c);
-      });
-    } catch (e) { console.error('[access-status] register failed: ' + String((e && e.message) || e).slice(0, 120)); }
-  }
+  // get_access_status (DCHUB_ACCESS_STATUS_TOOL, default OFF): callable by name, never listed (lib/commercial-wall.mjs
+  // registerAccessStatus). The directory / Claude / core paths and ChatGPT refuse it before dispatch.
+  _CW.registerAccessStatus(srv, { run: (c) => _accessStatusTool(c), ctx: () => getCtx() || {},
+    refused: (c) => !!c.profile || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || '')) });
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions
@@ -42306,6 +42123,7 @@ app.post(MCP_PATHS, async (req, res) => {
         if (_p && _p.compact) {
           const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
           _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
+          _instrRewrite.instrBudget = _CW.ACCESS_INSTR_BUDGET_COMPACT;   // the access line's fit (_accessFit)
         } else if (_p && _p.light && _lightListInstructionsV2On()) {
           // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): the "Tools:" line names only listed tools,
           // execute_plan first, and the count is stated once (lib/light-list-instructions.mjs).
@@ -42336,8 +42154,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req), leanPrompts: _leanPromptsFor(req),
-        instrBudget: (_pathPack(req) && _pathPack(req).compact) ? ACCESS_INSTR_BUDGET_COMPACT : ACCESS_INSTR_BUDGET });   // A3, DCHUB_PROMPTS_LEAN_V1 (default OFF)
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req), leanPrompts: _leanPromptsFor(req) });   // A3, DCHUB_PROMPTS_LEAN_V1 (default OFF)
       await mcpServer.connect(transport);
 
       return ctx.run({
