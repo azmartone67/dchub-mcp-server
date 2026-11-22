@@ -83,7 +83,7 @@ describe('no handshake states a served tool count (owner 2026-11-22)', () => {
       expect(served[p], p).toMatch(/ENDPOINT SCOPE: \/mcp\/\S+ (?:lists a subset of DC Hub tools, a listing scope|is a listing scope)/);
     }
     expect(served['implicit light, v2 off']).toMatch(/this client's \/mcp list shows a subset of DC Hub tools/);
-    expect(served['slim ?tools=core']).toMatch(/\(tools=core\) shows a subset of DC Hub tools/);
+    expect(served['slim ?tools=core']).toMatch(/\(tools=core\) is a listing scope, not a permission scope/);
   });
 
   it('lightCountSentence states no number', () => {

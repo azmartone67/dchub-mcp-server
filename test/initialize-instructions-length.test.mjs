@@ -31,6 +31,7 @@ async function init(path) {
 }
 
 const CORE = ['/mcp', '/mcp/grok', '/mcp/chatgpt', '/mcp/claude', '/mcp/core'];
+const SLIM = '/mcp?tools=core';
 let PACKS = [];
 
 beforeAll(async () => {
@@ -45,6 +46,12 @@ beforeAll(async () => {
   PORT = httpServer.address().port;
   PACKS = [...S.MCP_PACKS.keys()];
   for (const p of [...CORE, '/mcp/grok/oauth', ...PACKS]) served[p] = await init(p);
+  // Owner 2026-11-22 ("trim it"): the slim ?tools=core handshake measured 2,063 live, and no path here counted it.
+  const prevSlim = process.env.DCHUB_SLIM_PROFILE_TEST;
+  process.env.DCHUB_SLIM_PROFILE_TEST = '1';
+  try { served[SLIM] = await init(SLIM); } finally {
+    if (prevSlim === undefined) delete process.env.DCHUB_SLIM_PROFILE_TEST; else process.env.DCHUB_SLIM_PROFILE_TEST = prevSlim;
+  }
 }, 60_000);
 
 afterAll(async () => {
@@ -72,6 +79,12 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
   it.each(['/mcp/grok', '/mcp/grok/oauth'])('%s keeps 48 characters of headroom (at most 2,000)', (p) => {
     expect(typeof served[p], p + ' must be served, not skipped').toBe('string');
     expect(served[p].length, p + ' measured ' + served[p].length).toBeLessThanOrEqual(2000);
+  });
+
+  it('the slim ?tools=core handshake is served (flag on) and at most 2,048 characters', () => {
+    expect(typeof served[SLIM], 'slim must be served, not skipped').toBe('string');
+    expect(served[SLIM], 'the slim tail, not the plain /mcp text').toContain('(tools=core)');
+    expect(served[SLIM].length, SLIM + ' measured ' + served[SLIM].length).toBeLessThanOrEqual(BUDGET);
   });
 
   it('every pack path is at most 2,048 characters', () => {
