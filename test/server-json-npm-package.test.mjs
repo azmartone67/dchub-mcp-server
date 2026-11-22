@@ -47,11 +47,11 @@ describe('server.json packages: the npm launcher', () => {
   });
 
   it('server.json title and description stay within 100 chars and use the orchestration-layer wording', () => {
-    expect(SJ.title).toBe('DC Hub');
+    expect(SJ.title).toBe('DC Hub: Data Center & Energy Intelligence');
     expect(SJ.title.length).toBeLessThanOrEqual(100);
     expect(SJ.description.length).toBeLessThanOrEqual(100);
-    expect(SJ.description).toBe('Orchestration layer for data center and energy intelligence. Start with execute_plan.');
-    expect(SJ.description.length).toBe(85);
+    expect(SJ.description).toBe('Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.');
+    expect(SJ.description.length).toBe(99);
     expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bfree tier\b/i);
   });
 });

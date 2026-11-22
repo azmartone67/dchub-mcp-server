@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub",
-  "description": "Orchestration layer for data center and energy intelligence. Start with execute_plan.",
+  "title": "DC Hub: Data Center & Energy Intelligence",
+  "description": "Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.",
   "websiteUrl": "https://dchub.cloud",
   "icons": [
     {
@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.60",
+  "version": "2.12.61",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -37,7 +37,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "dchub-mcp-server",
-      "version": "2.12.60",
+      "version": "2.12.61",
       "transport": {
         "type": "stdio"
       },
