@@ -16365,6 +16365,12 @@ function _gatesHeadroom(k) {
   if (!GRID_HEADROOM_TIER) return false;
   const lk = String(k).toLowerCase();
   if (lk.endsWith('_preview') || lk.endsWith('_note')) return false;  // keep the free estimate/teaser
+  // 2026-11-22 (live keyless find_sites): the same keep rule the depth gate has (_DEPTH_KEEP_RE).
+  // A band is the free coarse range (mcp#1129, lib/iso-bands.mjs), and a `_<k>_in_pro` / `_<k>_withheld`
+  // marker is metadata, never a figure. Without this the regex matched `time_to_power` inside both:
+  // the siting block shipped "time_to_power_band":"under_24_months" beside "_time_to_power_band_withheld":
+  // true, and a second trim pass nulled the months marker and minted "__time_to_power_months_withheld_withheld".
+  if (lk.startsWith('_') || lk.endsWith('_band')) return false;
   if (_HEADROOM_GATE_KEYS.has(k)) return true;
   return _HEADROOM_GATE_RE.test(lk);
 }
