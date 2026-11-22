@@ -95,22 +95,24 @@ describe('server steps', () => {
     _pendingWallHits: [{ name: 'rank_markets', status: 'anon_hard_wall', sent: false }], ...o });
   const textOf = (r) => r.content.map((b) => b.text || '').join('\n');
   const on = (fn) => { process.env[FLAG] = '1'; try { return fn(); } finally { delete process.env[FLAG]; } };
+  // _isCleanPlatform reads the request's AsyncLocalStorage store, as in production: run the floor inside one.
+  const floor = (r, c) => S._runInCtxForTest(c, () => S._wallOfferFloorStep(r, 'rank_markets', c));
 
   it('T11 flag off: aref step and ChatGPT standing unchanged', () => {
     expect(checkoutAttribOn()).toBe(false);
     const r = wall();
     expect(S._arefLinksStep(r, 'rank_markets', ctx())).toBe(r);
-    for (const o of [{}, { profile: 'chatgpt_directory' }]) {
+    for (const o of [{}, { platform: 'chatgpt' }, { profile: 'chatgpt_directory' }]) {
       const c = ctx(o);
       const input = wall();
-      expect(S._wallOfferFloorStep(input, 'rank_markets', c)).toBe(input);
-      expect(['profile', 'clean']).toContain(c._offerFloor);
+      expect(floor(input, c)).toBe(input);
+      expect(c._offerFloor).toBe('clean');   // origin/main: the clean-platform exemption, before the profile check
     }
   });
   it('s6/T10 flag on: a ChatGPT-family wall on /mcp is allowed and carries the email ask', () => on(() => {
     for (const o of [{}, { platform: 'chatgpt' }]) {
       const c = ctx(o);
-      const out = S._wallOfferFloorStep(wall(), 'rank_markets', c);
+      const out = floor(wall(), c);
       expect(c._offerFloor).toBe('allowed');
       expect(textOf(out)).toContain(FLOOR_EMAIL_LEAD);
       expect(textOf(out)).toContain('bind_email');
@@ -118,13 +120,13 @@ describe('server steps', () => {
     // the /mcp/chatgpt directory profile (frozen copy, in OpenAI review) keeps its exemption
     const d = ctx({ profile: 'chatgpt_directory' });
     const din = wall();
-    expect(S._wallOfferFloorStep(din, 'rank_markets', d)).toBe(din);
+    expect(floor(din, d)).toBe(din);
     expect(d._offerFloor).toBe('profile');
     const g = ctx({ platform: 'grok' });
-    S._wallOfferFloorStep(wall(), 'rank_markets', g);
+    floor(wall(), g);
     expect(g._offerFloor).toBe('grok');   // other families keep their standing
     const cl = ctx({ platform: 'claude-code', profile: 'claude_directory' });
-    S._wallOfferFloorStep(wall(), 'rank_markets', cl);
+    floor(wall(), cl);
     expect(cl._offerFloor).toBe('profile');
   }));
   it('s1 flag on: the aref step tags the relay link with a verifiable aref', () => on(() => {
