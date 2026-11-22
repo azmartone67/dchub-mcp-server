@@ -64,7 +64,10 @@ function* files(dir) {
       if (isSeparateCheckout(p)) continue;
       yield* files(p);
     }
-    else if (st.size < 3_000_000) yield p;
+    // The size skip keeps huge generated blobs out of the walk; it must never skip server.mjs,
+    // which the coverage test below requires. server.mjs passed 3,000,000 bytes on 2026-11-22
+    // (main was at 2,997,774 with 2.2 KB left), and it is the only file in the repo over 2.9 MB.
+    else if (st.size < 4_000_000) yield p;
   }
 }
 
