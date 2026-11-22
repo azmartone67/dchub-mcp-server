@@ -9495,6 +9495,53 @@ export function _listingIntroBody(args, { termsVersion = null, client = null, re
   return body;
 }
 
+// ── Power Watch + Market Watch (2026-11-22, DCHUB_WATCHES_V1, default off) ──────
+// Flag off, register_standing_intent's description, schema and handler are byte-identical to
+// before (test/watches-v1-flag.test.mjs). On /mcp only: register_standing_intent is not on
+// /mcp/chatgpt (lib/chatgpt-directory.mjs DIRECTORY_REMOVED), whose list stays frozen.
+// read when a server is built (and per call), so the flag follows the env without a module reload
+export const watchesOn = () => /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_WATCHES_V1 || '').trim());
+export const WATCH_KINDS = new Set(['queue_change', 'new_generation', 'infra_project_change',
+  'pipeline_project', 'market_watch']);
+export const WATCH_DESC_ADDENDUM = ' Power Watch and Market Watch kinds: "queue_change" (iso, optional state; '
+  + 'fires when the active interconnection-queue request count moves by min_requests, default 5, or queued GW by '
+  + 'min_gw, default 1, between two different ISO queue files) · "new_generation" (state or ba; an EIA-860M '
+  + 'generator of min_mw, default 100, appears, changes status or moves its planned online year) · '
+  + '"infra_project_change" (state or iso; a transmission or gas pipeline project changes status) · '
+  + '"pipeline_project" (market; a new data center pipeline project of min_mw, default 50) · "market_watch" '
+  + '(market; one call arms the market\'s movement alerts, new pipeline projects and permitting changes for its '
+  + 'state). channel "webhook" (webhook_url, HMAC-signed as above) or "email" (sent only to the email bound to '
+  + 'this key after it confirmed: bind_email, then subscribe_digest), cadence "instant" | "daily" | "weekly". '
+  + 'Each line carries its source and as_of date; a reload of the same data never fires. Each armed watch '
+  + 'counts toward the alert limit on this key.';
+export function _watchesDesc(base) { return watchesOn() ? base + WATCH_DESC_ADDENDUM : base; }
+// Flag on: the new kinds, market_watch and channel=email (any kind but capacity) take the watches lane.
+// `channel` is declared only while the flag is on, and this returns false before reading it when off.
+export function _isWatchCall(kind, a) {
+  return watchesOn() && kind !== 'capacity' && (WATCH_KINDS.has(kind) || String((a && a.channel) || '').trim() === 'email');
+}
+export function _watchBody(kind, a, hook) {
+  const params = {};
+  for (const k of ['iso', 'state', 'ba', 'market', 'q', 'scope', 'topic']) if (a[k]) params[k] = a[k];
+  for (const k of ['min_requests', 'min_gw', 'min_mw']) if (a[k] !== undefined && a[k] !== null) params[k] = a[k];
+  const body = { kind, params };
+  if (a.channel) body.channel = String(a.channel).trim();
+  if (a.cadence) body.cadence = String(a.cadence).trim();
+  if (hook) body.webhook_url = hook;
+  return body;
+}
+const _WS = z.string().optional();
+const _WN = z.number().optional();
+export const WATCH_PARAM_SCHEMA = {
+  iso: _WS.describe('For queue_change / infra_project_change: the ISO, e.g. PJM'),
+  ba: _WS.describe('For new_generation: balancing-authority code, e.g. PJM or ERCO (or use state)'),
+  min_requests: _WN.describe('For queue_change: fire when active requests move by at least this many (default 5)'),
+  min_gw: _WN.describe('For queue_change: fire when queued GW moves by at least this much (default 1)'),
+  min_mw: _WN.describe('For new_generation (default 100) / pipeline_project and market_watch (default 50): smallest MW that counts'),
+  channel: z.enum(['webhook', 'email']).optional().describe('Where changes go: "webhook" (needs webhook_url) or "email" (the bound, confirmed email of this key)'),
+  cadence: z.enum(['instant', 'daily', 'weekly']).optional().describe('For channel email: send each change ("instant", default), a daily roll-up or a weekly digest'),
+};
+
 // ── register_standing_intent kind="capacity" (2026-09-28) ─────────────────
 // A capacity intent is a Capacity Source STANDING REQUIREMENT: the backend
 // (dchub-backend routes/agentic_master_shell.py, kind "capacity") registers it
@@ -38647,8 +38694,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'register_standing_intent',
-    'Use this when the user wants a webhook when data center deals change: Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: kind ("new_deal_in_market" watches deals in the market param · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel AND bill status changes on data-center bills, optionally per state; scope=records|legislation keeps one, topic narrows to bills with that impact tag), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll", "tell my orchestrator when a deal lands in Columbus". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. kind="capacity" instead registers a standing CAPACITY REQUIREMENT with DC Hub Capacity Source (no webhook_url): target_mw or target_kw, markets / states / regions / countries (comma-separated), optional available_by (YYYY-MM or YYYY-MM-DD), delivery_type, min_chunk_kw, max_sites (1-6), use_case, notes, plus your human\'s name and company and accept_terms=true only after they agreed to https://dchub.cloud/listings#terms. Needs a key with your human\'s email bound (claim_free_key, then bind_email) or an OAuth connection. Returns intent_id cap_<id>; DC Hub emails a confirmation link, then emails matching listings at most once a day. Do NOT use for one-shot reads (get_news / list_transactions), a one-off capacity search (source_capacity) or email alerts on a market (set_market_alert).',
-    { kind: Sreq.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change" | "capacity" (a Capacity Source requirement, emailed, no webhook)'),
+    _watchesDesc('Use this when the user wants a webhook when data center deals change: Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: kind ("new_deal_in_market" watches deals in the market param · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel AND bill status changes on data-center bills, optionally per state; scope=records|legislation keeps one, topic narrows to bills with that impact tag), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll", "tell my orchestrator when a deal lands in Columbus". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. kind="capacity" instead registers a standing CAPACITY REQUIREMENT with DC Hub Capacity Source (no webhook_url): target_mw or target_kw, markets / states / regions / countries (comma-separated), optional available_by (YYYY-MM or YYYY-MM-DD), delivery_type, min_chunk_kw, max_sites (1-6), use_case, notes, plus your human\'s name and company and accept_terms=true only after they agreed to https://dchub.cloud/listings#terms. Needs a key with your human\'s email bound (claim_free_key, then bind_email) or an OAuth connection. Returns intent_id cap_<id>; DC Hub emails a confirmation link, then emails matching listings at most once a day. Do NOT use for one-shot reads (get_news / list_transactions), a one-off capacity search (source_capacity) or email alerts on a market (set_market_alert).'),
+    { kind: Sreq.describe(watchesOn()
+        ? 'Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change" | "capacity" (a Capacity Source requirement, emailed, no webhook) | "queue_change" | "new_generation" | "infra_project_change" | "pipeline_project" | "market_watch"'
+        : 'Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change" | "capacity" (a Capacity Source requirement, emailed, no webhook)'),
+      ...(watchesOn() ? WATCH_PARAM_SCHEMA : {}),
       webhook_url: S.describe('Your public HTTPS webhook endpoint (required for every kind except capacity)'),
       market: S.describe('For new_deal_in_market: the market/region substring to watch, e.g. columbus'),
       q: S.describe('For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium'),
@@ -38689,6 +38739,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       //   webhook_url, and this is the message that tells them where to go.
       const kind = String(a.kind || '').trim();
       const hook = String(a.webhook_url || '').trim();
+      // Power/Market Watch (DCHUB_WATCHES_V1, default off): the new kinds, market_watch and
+      // channel=email go to the backend's watches lane (dchub-backend routes/watches_v1.py).
+      if (_isWatchCall(kind, a)) {
+        const out = await callAPIWrite('/api/v1/agentic/intents', _watchBody(kind, a, hook));
+        return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+      }
       if (!kind || !hook) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'missing_required_argument',
