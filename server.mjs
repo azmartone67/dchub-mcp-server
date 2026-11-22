@@ -341,6 +341,7 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
+import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
 import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
@@ -5392,8 +5393,9 @@ export function _quotaWallEventFor(c, name, status) {
   try {
     if (!_quotaWallEventOn()) return null;
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
-    return _WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
-                                 isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm);
+    return _WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+                                 isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm),
+                             c && c._wallOneDoorArm);
   } catch (_) { return null; }
 }
 // Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
@@ -5454,6 +5456,7 @@ function _drainPlanWallSink(c, result) {
       // A drained step row carries the plan answer's floor standing, not the step's own ('plan_step').
       if (sc && typeof sc === 'object' && c._offerFloor) sc._offerFloor = c._offerFloor;
       if (sc && typeof sc === 'object' && c._wallPaidLineArm) sc._wallPaidLineArm = c._wallPaidLineArm;   // the plan's A/B arm
+      if (sc && typeof sc === 'object' && c._wallOneDoorArm) sc._wallOneDoorArm = c._wallOneDoorArm;   // the plan's one-door arm
       if (e && asked.has(e.name)) _markEmailAsk(sc, 'line');
       if (e && digest.has(e.name)) _markEmailAsk(sc, 'digest_line');
       if (offersOn && result) { const o = _offersShown(result, sc._emailAsk); if (o) sc._offersShown = o; }
@@ -5921,6 +5924,24 @@ export function _valueFirstStep(result, name, args, c = getCtx()) {
     const lines = _VF.valueFirstLines({ headline: _headlineOf(sc, { iso }), fields: _withheldFields(sc),
       link: typeof sc.human_url === 'string' ? sc.human_url : '' });
     return _VF.withValueFirst(out, lines);
+  } catch (_) { return result; }
+}
+// DCHUB_WALL_ONE_DOOR (lib/wall-one-door.mjs, default OFF; owner 2026-11-22): the "one door" A/B on the generic /mcp
+// surface. A gated answer that carries the relay link (item 1) for a keyless or trial-key caller gets an arm from a
+// salted hash of the caller (c._wallOneDoorArm, recorded on the track row and the wall row); the one_door arm moves the
+// link into the answer-first line and drops the sign-in line, the "For your human" block and the identity footer.
+// AFTER _valueFirstStep, the last rewrite of a gated answer. Same skips as the other new wall steps, plus the paid-line
+// test's surface and caller rules.
+export function _wallOneDoorStep(result, name, c = getCtx()) {
+  try {
+    if (!_WOD.wallOneDoorOn() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const link = typeof c._relayEverywhereLink === 'string' ? c._relayEverywhereLink : '';
+    if (!link || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    if (!_WOD.oneDoorSurface(c, { grok: !!_pcIsGrok(c.platform), clean: _isCleanPlatform() }) || !_WOD.oneDoorCaller(c)) return result;
+    const arm = _WOD.oneDoorArm(_WOD.oneDoorCallerId(c));
+    if (!arm) return result;
+    c._wallOneDoorArm = arm;
+    return arm === _WOD.ARM_ONE_DOOR ? _WOD.withOneDoor(result, link) : result;
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -27518,12 +27539,15 @@ function _sourceLineCb(name, fn) {
       _final = _deviceMatchExit(_final, name, c);
       // Item 2 (DCHUB_WALL_VALUE_FIRST): content[0] opens with the dated headline, what was withheld and the link.
       _final = _valueFirstStep(_final, name, args, c);
+      // DCHUB_WALL_ONE_DOOR (default OFF): the one-door A/B, on the answer value-first just finished.
+      _final = _wallOneDoorStep(_final, name, c);
       return _final;
     } finally {
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
       // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
       if (c && c._wallPaidLineArm) _WPL.markHeldTrackRows(c, name, c._wallPaidLineArm);   // the A/B arm on the track row
+      if (c && c._wallOneDoorArm) _WOD.markHeldTrackRows(c, name, c._wallOneDoorArm);   // the one-door arm on the track row
       _flushTrackRows(c, name, _final);
     }
   };

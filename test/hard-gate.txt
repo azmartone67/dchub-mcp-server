@@ -806,6 +806,7 @@ test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-oauth-lead.test.mjs
 test/wall-offers.test.mjs
+test/wall-one-door-1122.test.mjs
 test/wall-one-route.test.mjs
 test/wall-paid-line-1121.test.mjs
 test/wall-relay-value-first-1121.test.mjs
