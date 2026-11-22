@@ -98,7 +98,9 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 // to what the SDK would serve. No network, pure public SDK API.
 import { Client as McpProbeClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ListToolsRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, InitializeRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+// A3 (owner course-correct 2026-11-21): DCHUB_PROMPTS_LEAN_V1 (default OFF), five prompts for light-list sessions.
+import { promptsLeanOn as _promptsLeanOn, LEAN_PROMPTS as _LEAN_PROMPTS, leanPromptsListing as _leanPromptsListing } from './lib/lean-prompts.mjs';
 // MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
 // mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
@@ -34067,6 +34069,15 @@ const _clientKeyFromNames = (...names) => {
 
 // Owner 2026-11-21: /mcp instructions name no other connector URL (https://dchub.cloud/mcp is the one public endpoint),
 // so the ten-tool /mcp/core suggestion (agent-incentive round, mcp#1627) is no longer appended. _isDefaultMcpPath stays.
+// A3 (DCHUB_PROMPTS_LEAN_V1, default OFF): true when this request's session gets the five lean prompts: the flag is
+// on and the request is served the light tool list (a light-list client on bare /mcp, or /mcp/light).
+export function _leanPromptsFor(req) {
+  try {
+    if (!_promptsLeanOn()) return false;
+    const p = _pathPack(req);
+    return !!(p && p.light);
+  } catch (_) { return false; }
+}
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
@@ -39572,12 +39583,20 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // r-recipes v2.6.1 (2026-07-26): every prompts/get is tracked as tool
   // `recipe:<name>` through the existing /track rail, so the per-platform
   // funnel measures recipe→call conversion for the WHOLE menu.
+  // A3 (DCHUB_PROMPTS_LEAN_V1, default OFF): the row also carries the caller's platform and client name, so
+  // prompts/get can be counted by client, and params._prompt_list says which list the session was served
+  // ('lean' or 'full'). session_id stays null on purpose: the backend's first-tool-call read
+  // (execute_plan_first) counts any row with a session id as a tool call, and a prompt fetch is not one.
+  const _leanPromptSession = !!(opts && opts.leanPrompts);
   const _P = (name, title, description, argsSchema, text) =>
     srv.registerPrompt(name, { title, description, argsSchema }, (a) => {
       try {
+        const _pc = _promptsLeanOn() ? getCtx() : null;
         trackToolCall({
           timestamp: new Date().toISOString(), tool: 'recipe:' + name,
-          params: a || {}, platform: 'unknown', client_name: null,
+          params: _pc ? { ...(a || {}), _prompt_list: _leanPromptSession ? 'lean' : 'full' } : (a || {}),
+          platform: (_pc && _pc.platform) || 'unknown',
+          client_name: _pc ? (_pc.client_name_raw || _pc.platform || null) : null,
           api_key: null, tier: null, session_id: null,
           status: 'success', duration_ms: 0,
         });
@@ -39743,6 +39762,18 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
          target_mw: z.string().optional().describe(CAPACITY_RFP_PROMPT.args.target_mw),
          state: z.string().optional().describe(CAPACITY_RFP_PROMPT.args.state) },
        capacityRfpPromptText);
+  }
+
+  // A3 (DCHUB_PROMPTS_LEAN_V1, default OFF; lib/lean-prompts.mjs): a light-list session lists five prompts,
+  // ask-dc-hub first. Every prompt registered above stays registered, so prompts/get still resolves the older
+  // names for anyone who calls them; only prompts/list changes. Other sessions never register these five.
+  if (_leanPromptSession) {
+    for (const p of _LEAN_PROMPTS) {
+      _P(p.name, p.title, p.description,
+         Object.fromEntries(p.args.map((x) => [x.name, x.required ? z.string().describe(x.description) : z.string().optional().describe(x.description)])),
+         p.text);
+    }
+    srv.server.setRequestHandler(ListPromptsRequestSchema, () => _leanPromptsListing());
   }
 
   // Reference resources (r-promres) — read-only, fail-soft. _RD = dynamic
@@ -41999,7 +42030,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req), leanPrompts: _leanPromptsFor(req) });   // A3, DCHUB_PROMPTS_LEAN_V1 (default OFF)
       await mcpServer.connect(transport);
 
       return ctx.run({
@@ -42173,7 +42204,7 @@ app.post(MCP_PATHS, async (req, res) => {
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
-      const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey }) : createServer(_descOverrides);
+      const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey, leanPrompts: _leanPromptsFor(req) }) : createServer(_descOverrides);   // A3 leanPrompts
       await ephServer.connect(ephTransport);
       if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);

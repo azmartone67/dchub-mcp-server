@@ -133,7 +133,8 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
   it('a keyless initialize gets the held key in-band, a keyed one never does', () => {
     // 2026-10-07: the call gained { keyed: !!apiKey } for dchub://inbox; the
     // held-key contract below is unchanged, and the inbox tail is keyed-only.
-    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req) });', 'per-session createServer');
+    // 2026-11-22 (A3, mcp#1636): the opts gained leanPrompts (DCHUB_PROMPTS_LEAN_V1); the held-key contract is unchanged.
+    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req), leanPrompts: _leanPromptsFor(req) });', 'per-session createServer');
     const window = SRC.slice(Math.max(0, i - 1200), i);
     // E4 (2026-11-14): and only under the restore switch (off by default: hosted callers share an egress IP).
     expect(window).toContain('if (!apiKey && _heldKeyByIpOn()) {');

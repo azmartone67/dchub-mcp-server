@@ -597,6 +597,7 @@ test/pro-trial-offer.test.mjs
 test/pro-trial-second-pro-wall-1121.test.mjs
 test/pro-wall-stamp.test.mjs
 test/problem-taxonomy.test.mjs
+test/prompts-lean-v1.test.mjs
 test/provenance-as-of-zones.test.mjs
 test/provenance-asof-headline-vs-oldest.test.mjs
 test/provenance-backend-null-as-of-stands.test.mjs
