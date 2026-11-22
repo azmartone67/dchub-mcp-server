@@ -162,8 +162,12 @@ describe('flag on: the opt-in core list', () => {
     const r = await post('/mcp?tools=core', init('slim-test'));
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
-    expect(ins).toMatch(/ENDPOINT SCOPE: this \/mcp list \(tools=core\) shows a subset of DC Hub tools/);   // owner 2026-11-22: no count
-    expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name; start with execute_plan/);
+    // Owner 2026-11-22: no count; trimmed to fit 2,048 (the opening canon sentence says "call execute_plan first",
+    // so the tail no longer repeats "start with execute_plan").
+    expect(ins).toMatch(/ENDPOINT SCOPE: this \/mcp list \(tools=core\) is a listing scope, not a permission scope/);
+    expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name; dchub_services lists DC Hub's services; the full list is at /);
+    expect(ins).toMatch(/call execute_plan first/);
+    expect(ins.length).toBeLessThanOrEqual(2048);
     expect(ins).not.toMatch(/\/mcp\/(oauth|core|light)\b/);
   });
 
