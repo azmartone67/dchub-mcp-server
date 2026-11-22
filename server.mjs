@@ -172,6 +172,8 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
+// A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
+import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
          installGrokResultCap as _installGrokResultCap,
@@ -4966,6 +4968,12 @@ export function _packFilter(result, def) {
 export const MCP_PACK_PATHS = [...MCP_PACKS.keys()];
 export { MCP_PACKS, PACK_SPINE };
 
+// The names a light-list session's tools/list carries, in order: LIGHT_TOOLS less any name absent from the catalog
+// (lightToolsList serves short the same way). The A2 handshake derives its count and its "Tools:" line from this.
+export function _lightServedNames() {
+  return LIGHT_TOOLS.filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n));
+}
+
 // The per-session instructions tail a pack path appends, or '' everywhere else.
 //
 // WHY IT EXISTS. The canonical instructions blob states the FULL catalog size,
@@ -4989,6 +4997,11 @@ export { MCP_PACKS, PACK_SPINE };
 export function _INSTR_TAIL_PACK(def) {
   if (!def) return '';
   const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
+  // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): a light list states its count once, in the lead
+  // (lib/light-list-instructions.mjs lightListInstructions), so this tail carries the rules and no second count.
+  if (def.light && _lightListInstructionsV2On()) {
+    return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(), fullCatalogUrl: _FULL_CATALOG_URL });
+  }
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
   if (def.implicit) return `\n\nENDPOINT SCOPE: this client's /mcp list shows ${n} DC Hub tools, a listing scope, not a permission scope: tools/call accepts any DC Hub tool by name; start with execute_plan; discover_tools lists the rest; the full list is at ${_FULL_CATALOG_URL}. get_api_key and get_changes are callable by name even when not listed.`;
@@ -41861,6 +41874,11 @@ app.post(MCP_PATHS, async (req, res) => {
         if (_p && _p.compact) {
           const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
           _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
+        } else if (_p && _p.light && _lightListInstructionsV2On()) {
+          // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): the "Tools:" line names only listed tools,
+          // execute_plan first, and the count is stated once (lib/light-list-instructions.mjs).
+          const _listed = _lightServedNames();
+          _instrRewrite = (t) => _lightListInstructions(t, { listed: _listed });
         }
       } catch (_) { _instrRewrite = undefined; }
       // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
