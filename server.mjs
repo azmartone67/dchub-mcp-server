@@ -153,6 +153,7 @@ import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyT
          KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED, keyToolName as _keyToolName } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
 import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest, keyLine as _keyLineText } from './lib/wall-key-line.mjs';
+import { grokKeyStickyOn as _grokKeyStickyOn, withGrokKeepKey as _withGrokKeepKey } from './lib/grok-key-sticky.mjs';   // Grok funnel F1
 import { wallOfferFloorV2On as _wallOfferFloorV2On, grokKeyFloorEligible as _grokKeyFloorEligible, createRepeatWallCounter as _createRepeatWallCounter, isRepeatWall as _isRepeatWall } from './lib/wall-offer-floor-v2.mjs';   // Grok funnel F2   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { fetchEmberMonthly, emberAreaForGrid } from './lib/ember-monthly.mjs';
@@ -7621,7 +7622,7 @@ export function _withReuseKeyLine(result, key) {
     if (!/^dch_live_/.test(k)) return result;          // only a durable key is "the one key"
     if (sc && (sc.error || sc.ok === false)) return result;   // nothing was handed back
     _noteKeyHanded(k);
-    if (!_reuseKeyLineOn()) return result;
+    if (!_reuseKeyLineOn()) return _grokKeepKeyFor(result);
     const content = Array.isArray(result.content) ? result.content : [];
     const has = content.some((b) => b && typeof b.text === 'string' && b.text.includes(REUSE_KEY_LINE));
     let nc = content;
@@ -7647,8 +7648,19 @@ export function _withReuseKeyLine(result, key) {
     }
     // api_key on a bind_email result means "this call minted it" to its callers (set_market_alert's
     // one-call watch), so a key the caller already held is named in bound_api_key instead.
-    return { ...result, content: nc,
+    const out = { ...result, content: nc,
       structuredContent: { ...(sc || {}), ...((sc && sc.api_key) ? {} : { bound_api_key: k }), reuse_key_line: REUSE_KEY_LINE } };
+    return _grokKeepKeyFor(out);
+  } catch (_) { return result; }
+}
+// F1 (DCHUB_GROK_KEY_STICKY, default off; lib/grok-key-sticky.mjs): a Grok caller's key reply says how to keep the key
+// attached (grok.com connector URL, xAI Remote MCP tool), with the key as a placeholder. Every other caller: unchanged.
+function _grokKeepKeyFor(result) {
+  try {
+    if (!_grokKeyStickyOn()) return result;
+    const c = getCtx();
+    if (!c || !_pcIsGrok(c.platform) || c.loopback_step) return result;
+    return _withGrokKeepKey(result);
   } catch (_) { return result; }
 }
 export const ALREADY_HAVE_KEY_GUIDANCE = 'You already have a DC Hub key: keep using it (send it as X-API-Key) and do not claim again. ' +
