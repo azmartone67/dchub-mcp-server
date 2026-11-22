@@ -30,6 +30,7 @@
 //
 // Qualifies for the hard gate: real /mcp handler over loopback HTTP, a 127.0.0.1
 // stub backend, every off-loopback connect refused and recorded.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -287,7 +288,7 @@ const SEATS = [
 ];
 const relayTokenRaw = (url) => {
   const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}/.exec(String(url || ''));
-  return m ? Buffer.from(m[1], 'base64url').toString('utf8') : '';
+  return m ? unsealPayload(m[1]) : '';
 };
 const counterKeysFor = (ip, tool) => [...S._trialDayCounts.keys()].filter((k) => k.startsWith(ip + ':') && k.includes(':' + tool + ':'));
 // #826: a keyed seat's budget is counted on its KEY (plus the per-IP ceiling bucket), not the

@@ -115,6 +115,11 @@ export const COPY_RULES = [
   ['ten_unlocks_full_answers', /\$\s?10\b[^.]{0,40}?\bunlocks?\b[^.]{0,20}?\bfull\s+answers?\b/gi,
     'no "$10 unlocks full answers"'],
   ['seven_layers', /\b(?:seven|7)\s+(?:[a-z-]+\s+)?layers?\b/gi, 'no "seven layers"'],
+  // Owner 2026-11-21 ("fix the 300+ markets in the listing copy too"): no market
+  // count, the same as tools and facilities. "DCPI scores 300+ markets daily" was
+  // the approved shape until then; "DCPI scores markets daily" is now.
+  ['market_count', /\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/gi,
+    'no market count (owner 2026-11-21)'],
   ...INTERNAL_DIRECTIVE_RULES,
 ];
 

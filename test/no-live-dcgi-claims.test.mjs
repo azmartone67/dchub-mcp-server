@@ -198,10 +198,13 @@ describe('prose copy matches the CURRENT state of each withdrawn capability', ()
 describe('scripts/smithery_description.txt is the single origin the daily check compares', () => {
   const txt = read('scripts/smithery_description.txt');
   // ★2026-09-28 owner decision: the listing is now the short site-selection
-  // copy. It states markets only (no deals/countries), and no facility count.
-  it('carries the canon market quantity the healer owns', () => {
+  // copy (no deals/countries), and no facility count. ★2026-11-21 (owner): and
+  // no market count either — "DCPI scores markets daily".
+  it('carries no market count (owner 2026-11-21)', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
-    expect(txt, 'markets').toContain(canon.markets);
+    expect(txt, 'markets').not.toContain(canon.markets);
+    expect(txt).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
+    expect(txt).toContain('DCPI scores markets daily');
   });
   it('carries no facility count (withdrawn, owner decision 2026-09-27)', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));

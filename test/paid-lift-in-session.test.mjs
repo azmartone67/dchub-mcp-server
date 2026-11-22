@@ -20,6 +20,7 @@
 // when that read shows an upgrade. The no-payment test pins that down, and its k- link
 // assertion proves each key was really handed a link — "no validate" is also what a path
 // that never probes at all produces.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -187,7 +188,7 @@ const walled = (text) => S.isHardWallText(text);
 /** The client_reference_id each signed /go/c link in `text` carries (plan|ref|sid). */
 function goRefs(text) {
   return [...String(text).matchAll(/https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]+/g)]
-    .map((m) => Buffer.from(m[1], 'base64url').toString().split('|')[1] || '');
+    .map((m) => unsealPayload(m[1]).split('|')[1] || '');
 }
 
 /** The JSON object a data tool leads its text with (a markdown block may follow it). */

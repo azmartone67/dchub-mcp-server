@@ -140,7 +140,7 @@ describe('the manifests the registries ingest', () => {
 
 describe('the canonical floors survive in the copy that carries them', () => {
   // The Capacity Source line must not have been paid for by dropping a floor.
-  it('the About text still states tools, the facility map (no count), markets and deals', () => {
+  it('the About text still states tools, the facility map (no count), DCPI (no market count) and deals', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
     // ★2026-09-23: the TOOL count is not a canon phrase here. sync-tools-manifest
     // heals every tool count from the trackedTool() set in server.mjs, while
@@ -155,7 +155,10 @@ describe('the canonical floors survive in the copy that carries them', () => {
     // The facility count is withdrawn (owner decision 2026-09-27): the map, no number.
     expect(ABOUT).not.toContain(canon.facilities);
     expect(ABOUT).toMatch(/global facility map/i);
-    expect(ABOUT).toContain(canon.markets);
+    // Owner 2026-11-21: no market count in listing copy.
+    expect(ABOUT).not.toContain(canon.markets);
+    expect(ABOUT).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
+    expect(ABOUT).toMatch(/Data Center Power Index/);
     expect(ABOUT).toContain(canon.deals);
   });
 });

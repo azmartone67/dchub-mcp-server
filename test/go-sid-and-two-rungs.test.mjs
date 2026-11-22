@@ -11,6 +11,7 @@
 //   3. The relayed ask names BOTH rungs — $10 on the human page, then Developer on /go/c
 //      (Pro instead only when the gated tool is Pro-only; r-dev-rung 2026-09-21) — with
 //      the price read from the canon, and composeHumanCta keeps both links.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -51,7 +52,7 @@ function fields(url, prefix) {
   const payload = token.slice(0, i);
   const sig = createHmac('sha256', SECRET).update(payload).digest('hex').slice(0, 32);
   expect(token.slice(i + 1)).toBe(sig);
-  return { payload, parts: Buffer.from(payload, 'base64url').toString().split('|') };
+  return { payload, parts: unsealPayload(payload).split('|') };
 }
 const GO = 'https://dchub.cloud/go/c/';
 const RELAY = 'https://dchub.cloud/upgrade/h/';
@@ -67,7 +68,13 @@ describe('r-go-sid — /go/c binds the session beside a key ref', () => {
     const url = withCtx({ session_id: SID }, () => _goUrl(PACK + '?client_reference_id=' + SID));
     const { payload, parts } = fields(url, GO);
     expect(parts).toEqual(['metered', SID]);
-    expect(payload).toBe(Buffer.from('metered|' + SID).toString('base64url'));
+    // The sealed payload carries the same line (lib/token-seal.mjs); the kill switch restores the bytes.
+    expect(unsealPayload(payload)).toBe('metered|' + SID);
+    process.env.DCHUB_TOKEN_SEAL = '0';
+    try {
+      const legacy = withCtx({ session_id: SID }, () => _goUrl(PACK + '?client_reference_id=' + SID));
+      expect(fields(legacy, GO).payload).toBe(Buffer.from('metered|' + SID).toString('base64url'));
+    } finally { delete process.env.DCHUB_TOKEN_SEAL; }
   });
 
   it('an explicit sessionId argument is used when the store has none', () => {

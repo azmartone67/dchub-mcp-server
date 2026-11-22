@@ -111,6 +111,7 @@ import './lib/web-bot-auth-preload.mjs';
 import { slimToolsList as _slimToolsList, slimTool as _slimTool, TOOL_GUIDE_TOOLS, toolGuideUri } from './lib/list-slim.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
+import { sealPayload as _sealTokenPayload, unsealPayload as _unsealTokenPayload } from './lib/token-seal.mjs';
 import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog, redactEmails as _redactEmails } from './lib/log-redact.mjs';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -860,7 +861,7 @@ function _relayMemoHit(memo, key, base) {
 // as buildHumanRelay's own mint, which stays inline there: test/wall-exits scans that function's
 // body for the URL literal and the render directive.
 function _signRelayPayload(raw) {
-  const _payload = Buffer.from(raw).toString('base64url');
+  const _payload = _sealTokenPayload(raw, process.env.DCHUB_INTERNAL_KEY);
   const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
     .update(_payload).digest('hex').slice(0, 32);
   return 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig;
@@ -1024,7 +1025,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     const _hit = _relayMemoHit(_memo, _mk, _mb);
     if (_hit) return _hit;
     const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}` + _tail;
-    const _payload = Buffer.from(_raw).toString('base64url');
+    const _payload = _sealTokenPayload(_raw, process.env.DCHUB_INTERNAL_KEY);
     const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
       .update(_payload).digest('hex').slice(0, 32);
     const _url = 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig
@@ -1107,7 +1108,7 @@ export async function _proTrialOfferDecide(c, toolName, { fetchImpl = fetch, tri
       headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
       body: JSON.stringify({ identity: identity || _proTrialIdentity(c.api_key), tool: toolName,
                              session_id: c.session_id || '', platform: c.platform || '',
-                             ...((trigger === 'cap' || trigger === 'keyless_wall') ? { trigger } : {}) }),
+                             ...((trigger === 'cap' || trigger === 'keyless_wall' || trigger === 'pro_wall') ? { trigger } : {}) }),
     });
     if (!r || r.status !== 200) return null;
     const d = await r.json();
@@ -1179,6 +1180,82 @@ export async function _keylessTrialOfferRelay(c, toolName, tier, wall, hadData,
     const r = buildHumanRelay(toolName, tier || 'free', c.session_id, { wall, offer: PRO_TRIAL_OFFER });
     return (r && r.url) ? r : null;
   } catch (_) { return null; }
+}
+
+// ── second Pro wall trial offer (Brain upgrade-funnel item 5, owner 2026-11-21) ──────────────
+// The offer arm was never shown (funnel pro_trial_offer: offer eligible 0, holdout 8,
+// identities_at_threshold_7d 0): the 5th-call rule needs 5 data-returning analyze_site calls from
+// one key in 7 days, and the keyless rule fires only on an analyze_site wall. People hit the
+// decision-layer walls instead (paid_tool_demand_30d: analyze_site 1,455 calls from 745 callers).
+// Here the 2nd WALLED call to a PRO_ONLY_TOOLS member (analyze_site, compare_sites,
+// get_dchub_recommendation, generate_site_analysis, export_dataset) by one identity in 7 days is
+// the decision: counted by key (pk-, a free key) or by transport session (sk-, keyless with a real
+// session), never by IP. A caller with neither has no stable identity and gets no offer, the same
+// rule as the keyless wall. The backend (dchub-backend routes/pro_trial_offer PRO-WALL TRIGGER)
+// counts, applies once per 30 days, excludes operators and splits 50/50.
+// On the decided call, BOTH arms get a freshly minted relay for the wall: the offer arm's carries
+// ?offer=pro_trial_7d, the holdout's does not. So the arms differ only in that parameter (a Pro
+// wall can already carry ?offer= today, which would leak the offer into the holdout).
+// That link is minted short here (/u/<code>; the /u/ mint keeps ?offer=) and kept through the two later
+// link rewrites, which would otherwise erase the arm: _wallCopyV2Step (every relay link -> /mcp/connect
+// for keyless callers) keeps this exact link, and _relayEverywhereStep (item 1's /u/ page, which shows no
+// trial) leaves this one answer alone. c._proWallTrialLink carries it. Every other call is untouched.
+// DEFAULT OFF: needs DCHUB_PRO_TRIAL_OFFER (on in production) AND DCHUB_PRO_TRIAL_OFFER_PRO_WALL. The
+// backend half must deploy before this flag goes on.
+export function proWallTrialOn(env = process.env) {
+  return proTrialOfferEnabled(env)
+    && /^(1|true|on|yes)$/i.test(String((env && env.DCHUB_PRO_TRIAL_OFFER_PRO_WALL) || '').trim());
+}
+// The decide identity for this caller, or '' when the caller is not in the audience.
+export function _proWallTrialIdentity(c, toolName, env = process.env) {
+  try {
+    if (!proWallTrialOn(env) || !c || !PRO_ONLY_TOOLS.has(toolName)) return '';
+    try { if (_excludedFromRelayReadout(c)) return ''; } catch (_) {}
+    if (isBotOrInternalCtx(c) || _isQaCaller(c) || _selfTestTelemetryTag(c)) return '';
+    if (_isCleanPlatform()) return '';
+    if (c.api_key) {
+      return _tierRank(c.tier || 'free') >= _tierRank('starter') ? '' : _proTrialIdentity(c.api_key);   // FREE keys only
+    }
+    if (!_keylessTrialOfferOn(env) || !_realSession(c.session_id)) return '';
+    return _sessionIdentity(c.session_id);
+  } catch (_) { return ''; }
+}
+// Every string in a JSON-shaped value with `from` replaced by `to`.
+function _swapString(v, from, to) {
+  if (typeof v === 'string') return v.split(from).join(to);
+  if (Array.isArray(v)) return v.map((x) => _swapString(x, from, to));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = _swapString(x, from, to);
+    return o;
+  }
+  return v;
+}
+// `result` is a stamped Pro wall (_stampProWall wall:true). Returns it with the wall's link swapped
+// for the arm's relay on the decided call, else unchanged. Never throws.
+export async function _withProWallTrialOffer(result, toolName, c, env = process.env, decide = _proTrialOfferDecide,
+                                             shorten = _shortRelayPageLink) {
+  try {
+    const identity = _proWallTrialIdentity(c, toolName, env);
+    if (!identity) return result;
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._wall !== true) return result;
+    const fyh = (sc.for_your_human && typeof sc.for_your_human === 'object') ? sc.for_your_human : null;
+    const old = (fyh && typeof fyh.url === 'string') ? fyh.url : '';
+    if (!old) return result;
+    const d = await decide(c, toolName, { trigger: 'pro_wall', identity });
+    if (!d) return result;
+    const relay = buildHumanRelay(toolName, c.tier || 'free', c.session_id || '',
+      d.arm === 'offer' ? { offer: PRO_TRIAL_OFFER } : undefined);
+    if (!relay || !relay.url || relay.url === old) return result;
+    let link = relay.url;
+    try { const sh = await shorten(relay.url, toolName); if (typeof sh === 'string' && /^https:\/\/dchub\.cloud\//.test(sh)) link = sh; } catch (_) {}
+    const out = _swapString(result, old, link);
+    out.structuredContent = { ...out.structuredContent, for_your_human: { ...out.structuredContent.for_your_human, url: link } };
+    try { c._proWallTrialLink = link; } catch (_) {}   // the later link rewrites keep it (see above)
+    try { _noteProWall(c.session_id, toolName, link); } catch (_) {}   // unlock_more_data repeats this link
+    return out;
+  } catch (_) { return result; }
 }
 
 // ── keyless anonymous-cap wall, email first (lib/keyless-wall.mjs) ──────────────
@@ -3147,7 +3224,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // shows what the agent was doing and one attributed upgrade button —
   // and every open is measured (relay_opens), the first human-eyeball
   // metric this funnel has ever had. Token contract mirrors the backend:
-  // base64url(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32].
+  // payload(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32]; payload = lib/token-seal.mjs.
   // Kill: DCHUB_HUMAN_RELAY=0 (envelopes simply omit the block).
   const for_your_human = buildHumanRelay(toolName, currentTier, sessionId);
   // r-mpp-at-wall: the autonomous exit rides at the SAME level as the human
@@ -3611,7 +3688,7 @@ function _goUrl(url, sessionId) {
     let raw = plan + '|' + ref + (sid && sid !== ref ? '|' + sid : '');
     const { tool: _gt, arm: _ga } = _goToolArm();
     if (_gt) raw = plan + '|' + ref + '|' + (sid || '') + '|' + _gt + (_ga ? '|' + _ga : '');
-    const payload = Buffer.from(raw).toString('base64url');
+    const payload = _sealTokenPayload(raw, secret);
     const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
     return 'https://dchub.cloud/go/c/' + payload + '.' + sig;
   } catch (_) {
@@ -5611,6 +5688,7 @@ export function _wallCopyV2Step(result, name, c = getCtx()) {
     const grok = !!_pcIsGrok(c.platform);
     const market = c._wallIdMarket || '';
     return _wallCopyV2(result, { keyless: !c.api_key, grok,
+      keepLink: typeof c._proWallTrialLink === 'string' ? c._proWallTrialLink : '',   // item 5: the decided trial link stays
       planAsk: grok && name === 'execute_plan' ? { line: _wallIdEmailAskLine(market), call: _wallIdEmailAskCall(market) } : null });
   } catch (_) { return result; }
 }
@@ -5737,6 +5815,8 @@ function _relayEverywhereStore(longUrl, args, sc) {
 export async function _relayEverywhereStep(result, name, args, c = getCtx()) {
   try {
     if (!_RE.wallRelayEverywhereOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    // Item 5: on the call that decided the trial offer arm, the wall keeps that arm's link (this page shows no trial).
+    if (c && c._proWallTrialLink) return result;
     if (c.api_key && !(c.is_trial === true || /^dch_trial_/.test(String(c.api_key))) && _isPaidDepthTier(c.tier)) return result;
     const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
     const unlock = _wallUnlockFor(name, sc, c);
@@ -12604,7 +12684,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
   let request_id = null;
   try {
     const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(relay.url);
-    const sid = m ? Buffer.from(m[1], 'base64url').toString().split('|')[0] : '';
+    const sid = m ? _unsealTokenPayload(m[1], process.env.DCHUB_INTERNAL_KEY).split('|')[0] : '';
     if (sid && sid !== 'no-session') request_id = sid;
   } catch (_) { request_id = null; }
   const sc = {
@@ -30447,6 +30527,8 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
     })();
     const _pw = _stampProWall(_proWallRaw, name, c);
     if (_pw.wall) status = 'pro_wall';
+    // Brain item 5: the 2nd walled decision-layer call in 7 days decides the trial offer arm (default off).
+    if (_pw.wall) _pw.result = await _withProWallTrialOffer(_pw.result, name, c);
     // conversion metric step 1: the call row names the exact link this wall handed out.
     // /mcp/claude strips every relay link before the reply leaves (lib/claude-directory.mjs), so no link was
     // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
@@ -32263,7 +32345,7 @@ function _relayTokenFields(url) {
   try {
     const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(String(url || ''));
     if (!m) return null;
-    const f = Buffer.from(m[1], 'base64url').toString().split('|');
+    const f = _unsealTokenPayload(m[1], process.env.DCHUB_INTERNAL_KEY).split('|');
     return f.length >= 4 && f.length <= 7 ? f : null;   // 7: |pk- |w- |m- (option D)
   } catch (_) { return null; }
 }
@@ -35074,7 +35156,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. DCPI joins the grid side of a data center market (headroom, queue, modeled time-to-power) to that market; get_market_intel gives the same market\'s facility supply and pipeline, and execute_plan returns both in one answer. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
+    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. DCPI joins the grid side of a data center market (headroom, queue, modeled time-to-power) to that market; get_market_intel gives the same market\'s facility supply and pipeline, and execute_plan returns both in one answer. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
@@ -38306,7 +38388,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'simulate_scenario',
-    'Use this when the user asks how data center power market rankings change under what-if conditions: re-scores 300+ DC Hub markets under your deltas. Params (all optional, pass at least one delta): avg_kwh_cents_pct (power-price % change, e.g. 30), time_to_power_months_delta (months added/removed), queue_wait_months_delta, reserve_margin_pct_delta (points), curtailment_pct_delta (points), market (one slug, e.g. abilene), top_n (default 10, max 25 — ranked by |score change|). Returns per-market baseline vs scenario composite + component breakdown + the EXACT formula/weights in every response (transparent scenario_composite — deliberately NOT the DCPI). Keyless callers get a top-3 preview; any live key (claim_free_key) returns up to 25. Answers "what happens to the ranking if power prices jump 30%", "which markets survive a tighter build rate". Try: simulate_scenario avg_kwh_cents_pct=30 top_n=10. Do NOT use for the present-day ranking (use rank_markets) or trajectory extrapolation (use predict_market_trajectory); this answers explicit hypotheticals.',
+    'Use this when the user asks how data center power market rankings change under what-if conditions: re-scores every DC Hub market under your deltas. Params (all optional, pass at least one delta): avg_kwh_cents_pct (power-price % change, e.g. 30), time_to_power_months_delta (months added/removed), queue_wait_months_delta, reserve_margin_pct_delta (points), curtailment_pct_delta (points), market (one slug, e.g. abilene), top_n (default 10, max 25 — ranked by |score change|). Returns per-market baseline vs scenario composite + component breakdown + the EXACT formula/weights in every response (transparent scenario_composite — deliberately NOT the DCPI). Keyless callers get a top-3 preview; any live key (claim_free_key) returns up to 25. Answers "what happens to the ranking if power prices jump 30%", "which markets survive a tighter build rate". Try: simulate_scenario avg_kwh_cents_pct=30 top_n=10. Do NOT use for the present-day ranking (use rank_markets) or trajectory extrapolation (use predict_market_trajectory); this answers explicit hypotheticals.',
     { avg_kwh_cents_pct: N.describe('Power price % change, e.g. 30 for +30% or -20 for -20%'),
       time_to_power_months_delta: N.describe('Months added (+) or removed (-) from time-to-power, e.g. 12'),
       queue_wait_months_delta: N.describe('Months added/removed from interconnection queue wait'),

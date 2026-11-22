@@ -186,6 +186,10 @@ describe('copy rules', () => {
     ['plan_price', 'Developer ($49) and Pro ($99)'],
     ['internal_canon_label', 'Canon prices: $10 pack.'],
     ['internal_do_not', 'Do not print exact facility counts.'],
+    ['market_count', 'DCPI scores 300+ markets daily'],
+    ['market_count', 'across 300+ markets'],
+    ['market_count', 'Data Center Power Index (DCPI): 300+ markets daily.'],
+    ['market_count', '300+ DCPI markets'],
   ])('%s is caught in %j', (rule, text) => {
     expect(copyRuleViolations(text).map((v) => v.rule)).toContain(rule);
   });
@@ -193,7 +197,8 @@ describe('copy rules', () => {
   it('does not flag the approved copy shapes', () => {
     expect(copyRuleViolations('a $10 one-time pack of 1,000 API credits')).toEqual([]);
     expect(copyRuleViolations('live grid feeds from the seven US ISOs')).toEqual([]);
-    expect(copyRuleViolations('scores 300+ markets daily')).toEqual([]);
+    expect(copyRuleViolations('DCPI scores markets daily')).toEqual([]);
+    expect(copyRuleViolations('scores where data centers can get grid power, market by market, daily')).toEqual([]);
     expect(copyRuleViolations('Developer docs and a Pro tier are described at dchub.cloud/pricing')).toEqual([]);
     expect(copyRuleViolations('Canonical surfaces: /api/v1/canon/phrases (the canon prices object is public)')).toEqual([]);
   });

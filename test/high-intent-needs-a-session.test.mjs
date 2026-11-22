@@ -14,6 +14,7 @@
 //
 // Qualifies for the hard gate: the only sockets are a 127.0.0.1 backend stub and the real
 // express app listening on 127.0.0.1.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
@@ -139,7 +140,7 @@ function fields(url, prefix) {
   const payload = token.slice(0, i);
   const sig = createHmac('sha256', SECRET).update(payload).digest('hex').slice(0, 32);
   expect(token.slice(i + 1)).toBe(sig);
-  return { payload, parts: Buffer.from(payload, 'base64url').toString().split('|') };
+  return { payload, parts: unsealPayload(payload).split('|') };
 }
 
 describe('the high-intent count needs a real session', () => {
