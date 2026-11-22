@@ -53,12 +53,12 @@ const routes = () => async (p, req, body, u) => {
   }
   if (p === MX.EXPOSURE_PATH) { if (body && body.event === 'exposure') exposures.push(body); else outcomes.push(body); return { ok: true }; }
   if (p === CW.IDENTITY_PATH) {
-    identityReads.push({ internal: req.headers['x-internal-key'] || '', q: Object.fromEntries(u.searchParams) });
+    identityReads.push({ internal: req.headers['x-internal-key'] || '', method: req.method, q: Object.fromEntries(u.searchParams), body });
     return linked ? { linked: true, api_key_hash: 'e'.repeat(64), tier: linked, ...(linkedToken ? { linked_token: linkedToken } : {}) }
       : { linked: false };   // be#9214: a hash, never a key
   }
   if (p === CW.ENTITLEMENTS_ME_PATH) {
-    entitlementReads.push({ key: req.headers['x-api-key'] || '', internal: req.headers['x-internal-key'] || '', q: Object.fromEntries(u.searchParams) });
+    entitlementReads.push({ key: req.headers['x-api-key'] || '', internal: req.headers['x-internal-key'] || '', method: req.method, q: Object.fromEntries(u.searchParams), body });
     // be#9213/9214 shape, plus price / plan junk the shaper must drop
     return { schema_version: 1, tier: 'developer', keyed: !!req.headers['x-api-key'],
       allowance: { calls_per_day: 500, used_today: 3, remaining_today: 497 }, full_answers_per_tool_per_day: 25, credits: 0,
@@ -583,8 +583,12 @@ describe('get_access_status (DCHUB_ACCESS_STATUS_TOOL)', () => {
     const read = entitlementReads.at(-1);
     expect(read.key).toBe('');
     expect(read.internal).toBeTruthy();
-    expect(read.q.identity_ref).toBe('ip-' + sha(ip));
-    expect(JSON.stringify(read.q)).not.toContain(ip);
+    // the refs ride in a POST body, never the query string (a credential-shaped arg is cacheable at the edge)
+    expect(read.method).toBe('POST');
+    expect(read.q).toEqual({});
+    expect(read.body.identity_ref).toBe('ip-' + sha(ip));
+    expect(read.body).toHaveProperty('session_ref');
+    expect(JSON.stringify(read.body)).not.toContain(ip);
   }, 60_000);
 });
 
@@ -610,8 +614,11 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     expect(blob).not.toMatch(/Access: partial|dchub\.cloud\/h\//);   // a lifted Pro call gets no handoff block
     const read = identityReads.slice(n)[0];
     expect(read.internal).toBeTruthy();
-    expect(read.q.identity_ref).toBe('ip-' + sha(ip));
-    expect(JSON.stringify(read.q)).not.toContain(ip);
+    expect(read.method).toBe('POST');
+    expect(read.q).toEqual({});
+    expect(read.body.identity_ref).toBe('ip-' + sha(ip));
+    expect(read.body).toHaveProperty('session_ref');
+    expect(JSON.stringify(read.body)).not.toContain(ip);
     linked = 'developer';
     S._setHandoffResolveLookupForTest(null);
     expect(tierOf(await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() }))).toBe('developer');
