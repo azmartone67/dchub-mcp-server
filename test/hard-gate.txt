@@ -401,7 +401,9 @@ test/leaf-catchment.test.mjs
 test/lean-keeps-daily-site-note.test.mjs
 test/lean-response.test.mjs
 test/licence-coherence.test.mjs
+test/licence-page-url-1122.test.mjs
 test/license-per-layer-envelope.test.mjs
+test/light-list-instructions-v2.test.mjs
 test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
@@ -768,6 +770,7 @@ test/upgrade-names-what-you-missed.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
 test/utf8-charset.test.mjs
+test/value-harness-classify.test.mjs
 test/verbatim-follower-is-data.test.mjs
 test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
