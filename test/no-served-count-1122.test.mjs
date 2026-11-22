@@ -89,7 +89,7 @@ describe('no handshake states a served tool count (owner 2026-11-22)', () => {
   it('lightCountSentence states no number', () => {
     for (const listed of [['a'], ['a', 'discover_tools'], Array.from({ length: 12 }, (_, i) => `t${i}`)]) {
       expect(L.lightCountSentence(listed)).not.toMatch(COUNT);
-      expect(L.lightCountSentence(listed)).toMatch(/^This list shows a subset of DC Hub tools/);
+      expect(L.lightCountSentence(listed)).toMatch(/^(?:discover_tools lists the rest\.|This list shows a subset of DC Hub tools\.)$/);
     }
   });
 
