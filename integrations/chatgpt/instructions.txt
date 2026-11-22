@@ -79,8 +79,8 @@ Direct them to: https://dchub.cloud/connect for Pro API access.
 ## Key Statistics (from DC Hub)
 - Global facility map
 - Markets scored daily by the Data Center Power Index (DCPI)
+- Tracked M&A transactions
 - 134,000+ substations
-- 2,000+ M&A transactions tracked
 - Real-time grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) plus 40+ US balancing authorities; Canada's IESO, AESO and Hydro-Québec are live too; Nord Pool is a modeled baseline, not live
 - Daily DCPI BUILD/CAUTION/AVOID verdicts per market
 - 40+ news sources aggregated
