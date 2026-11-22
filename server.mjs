@@ -1105,7 +1105,7 @@ export async function _proTrialOfferDecide(c, toolName, { fetchImpl = fetch, tri
       headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
       body: JSON.stringify({ identity: identity || _proTrialIdentity(c.api_key), tool: toolName,
                              session_id: c.session_id || '', platform: c.platform || '',
-                             ...((trigger === 'cap' || trigger === 'keyless_wall') ? { trigger } : {}) }),
+                             ...((trigger === 'cap' || trigger === 'keyless_wall' || trigger === 'pro_wall') ? { trigger } : {}) }),
     });
     if (!r || r.status !== 200) return null;
     const d = await r.json();
@@ -1177,6 +1177,82 @@ export async function _keylessTrialOfferRelay(c, toolName, tier, wall, hadData,
     const r = buildHumanRelay(toolName, tier || 'free', c.session_id, { wall, offer: PRO_TRIAL_OFFER });
     return (r && r.url) ? r : null;
   } catch (_) { return null; }
+}
+
+// ── second Pro wall trial offer (Brain upgrade-funnel item 5, owner 2026-11-21) ──────────────
+// The offer arm was never shown (funnel pro_trial_offer: offer eligible 0, holdout 8,
+// identities_at_threshold_7d 0): the 5th-call rule needs 5 data-returning analyze_site calls from
+// one key in 7 days, and the keyless rule fires only on an analyze_site wall. People hit the
+// decision-layer walls instead (paid_tool_demand_30d: analyze_site 1,455 calls from 745 callers).
+// Here the 2nd WALLED call to a PRO_ONLY_TOOLS member (analyze_site, compare_sites,
+// get_dchub_recommendation, generate_site_analysis, export_dataset) by one identity in 7 days is
+// the decision: counted by key (pk-, a free key) or by transport session (sk-, keyless with a real
+// session), never by IP. A caller with neither has no stable identity and gets no offer, the same
+// rule as the keyless wall. The backend (dchub-backend routes/pro_trial_offer PRO-WALL TRIGGER)
+// counts, applies once per 30 days, excludes operators and splits 50/50.
+// On the decided call, BOTH arms get a freshly minted relay for the wall: the offer arm's carries
+// ?offer=pro_trial_7d, the holdout's does not. So the arms differ only in that parameter (a Pro
+// wall can already carry ?offer= today, which would leak the offer into the holdout).
+// That link is minted short here (/u/<code>; the /u/ mint keeps ?offer=) and kept through the two later
+// link rewrites, which would otherwise erase the arm: _wallCopyV2Step (every relay link -> /mcp/connect
+// for keyless callers) keeps this exact link, and _relayEverywhereStep (item 1's /u/ page, which shows no
+// trial) leaves this one answer alone. c._proWallTrialLink carries it. Every other call is untouched.
+// DEFAULT OFF: needs DCHUB_PRO_TRIAL_OFFER (on in production) AND DCHUB_PRO_TRIAL_OFFER_PRO_WALL. The
+// backend half must deploy before this flag goes on.
+export function proWallTrialOn(env = process.env) {
+  return proTrialOfferEnabled(env)
+    && /^(1|true|on|yes)$/i.test(String((env && env.DCHUB_PRO_TRIAL_OFFER_PRO_WALL) || '').trim());
+}
+// The decide identity for this caller, or '' when the caller is not in the audience.
+export function _proWallTrialIdentity(c, toolName, env = process.env) {
+  try {
+    if (!proWallTrialOn(env) || !c || !PRO_ONLY_TOOLS.has(toolName)) return '';
+    try { if (_excludedFromRelayReadout(c)) return ''; } catch (_) {}
+    if (isBotOrInternalCtx(c) || _isQaCaller(c) || _selfTestTelemetryTag(c)) return '';
+    if (_isCleanPlatform()) return '';
+    if (c.api_key) {
+      return _tierRank(c.tier || 'free') >= _tierRank('starter') ? '' : _proTrialIdentity(c.api_key);   // FREE keys only
+    }
+    if (!_keylessTrialOfferOn(env) || !_realSession(c.session_id)) return '';
+    return _sessionIdentity(c.session_id);
+  } catch (_) { return ''; }
+}
+// Every string in a JSON-shaped value with `from` replaced by `to`.
+function _swapString(v, from, to) {
+  if (typeof v === 'string') return v.split(from).join(to);
+  if (Array.isArray(v)) return v.map((x) => _swapString(x, from, to));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = _swapString(x, from, to);
+    return o;
+  }
+  return v;
+}
+// `result` is a stamped Pro wall (_stampProWall wall:true). Returns it with the wall's link swapped
+// for the arm's relay on the decided call, else unchanged. Never throws.
+export async function _withProWallTrialOffer(result, toolName, c, env = process.env, decide = _proTrialOfferDecide,
+                                             shorten = _shortRelayPageLink) {
+  try {
+    const identity = _proWallTrialIdentity(c, toolName, env);
+    if (!identity) return result;
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._wall !== true) return result;
+    const fyh = (sc.for_your_human && typeof sc.for_your_human === 'object') ? sc.for_your_human : null;
+    const old = (fyh && typeof fyh.url === 'string') ? fyh.url : '';
+    if (!old) return result;
+    const d = await decide(c, toolName, { trigger: 'pro_wall', identity });
+    if (!d) return result;
+    const relay = buildHumanRelay(toolName, c.tier || 'free', c.session_id || '',
+      d.arm === 'offer' ? { offer: PRO_TRIAL_OFFER } : undefined);
+    if (!relay || !relay.url || relay.url === old) return result;
+    let link = relay.url;
+    try { const sh = await shorten(relay.url, toolName); if (typeof sh === 'string' && /^https:\/\/dchub\.cloud\//.test(sh)) link = sh; } catch (_) {}
+    const out = _swapString(result, old, link);
+    out.structuredContent = { ...out.structuredContent, for_your_human: { ...out.structuredContent.for_your_human, url: link } };
+    try { c._proWallTrialLink = link; } catch (_) {}   // the later link rewrites keep it (see above)
+    try { _noteProWall(c.session_id, toolName, link); } catch (_) {}   // unlock_more_data repeats this link
+    return out;
+  } catch (_) { return result; }
 }
 
 // ── keyless anonymous-cap wall, email first (lib/keyless-wall.mjs) ──────────────
@@ -5598,6 +5674,7 @@ export function _wallCopyV2Step(result, name, c = getCtx()) {
     const grok = !!_pcIsGrok(c.platform);
     const market = c._wallIdMarket || '';
     return _wallCopyV2(result, { keyless: !c.api_key, grok,
+      keepLink: typeof c._proWallTrialLink === 'string' ? c._proWallTrialLink : '',   // item 5: the decided trial link stays
       planAsk: grok && name === 'execute_plan' ? { line: _wallIdEmailAskLine(market), call: _wallIdEmailAskCall(market) } : null });
   } catch (_) { return result; }
 }
@@ -5724,6 +5801,8 @@ function _relayEverywhereStore(longUrl, args, sc) {
 export async function _relayEverywhereStep(result, name, args, c = getCtx()) {
   try {
     if (!_RE.wallRelayEverywhereOn() || _newWallStepSkip(c, name) || !_gatedAnswer(result, name, c)) return result;
+    // Item 5: on the call that decided the trial offer arm, the wall keeps that arm's link (this page shows no trial).
+    if (c && c._proWallTrialLink) return result;
     if (c.api_key && !(c.is_trial === true || /^dch_trial_/.test(String(c.api_key))) && _isPaidDepthTier(c.tier)) return result;
     const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
     const unlock = _wallUnlockFor(name, sc, c);
@@ -30434,6 +30513,8 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
     })();
     const _pw = _stampProWall(_proWallRaw, name, c);
     if (_pw.wall) status = 'pro_wall';
+    // Brain item 5: the 2nd walled decision-layer call in 7 days decides the trial offer arm (default off).
+    if (_pw.wall) _pw.result = await _withProWallTrialOffer(_pw.result, name, c);
     // conversion metric step 1: the call row names the exact link this wall handed out.
     // /mcp/claude strips every relay link before the reply leaves (lib/claude-directory.mjs), so no link was
     // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
