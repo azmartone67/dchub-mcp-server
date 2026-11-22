@@ -23,7 +23,7 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
 describe('planner 5.60', () => {
   it('bumps the planner version', () => {
-    expect(PLANNER_VERSION).toBe('5.60');
+    expect(PLANNER_VERSION).toBe('5.61');
   });
 });
 

@@ -590,6 +590,7 @@ test/planner-546-bare-city-and-withheld-lead.test.mjs
 test/planner-547-siting-oldest-input.test.mjs
 test/planner-548-market-lead-first.test.mjs
 test/planner-559-named-markets-on-grid-plans.test.mjs
+test/planner-561-site-hunt.test.mjs
 test/planner-dallas-capacity-near-cut.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs

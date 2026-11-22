@@ -19,7 +19,7 @@ const ex = (step, tool, args, result, extra = {}) => ({ step, tool, args, status
 const asMap = (rows) => new Map(rows.map((e) => [e, e.result]));
 const NOW = Date.parse('2026-11-20T20:00:00Z');
 
-it('is planner 5.57 or later (5.58)', () => { expect(PLANNER_VERSION).toBe('5.60'); });
+it('is planner 5.57 or later (5.58)', () => { expect(PLANNER_VERSION).toBe('5.61'); });
 
 describe('6 Phoenix time to power', () => {
   const Q = 'how soon can a 100 MW load get power in Phoenix';
