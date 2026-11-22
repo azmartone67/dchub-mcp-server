@@ -99,6 +99,7 @@ async function handshake(c, path = '/mcp') {
     sid,
     instructions: (init.json && init.json.result && init.json.result.instructions) || '',
     tools: ((list.json && list.json.result && list.json.result.tools) || []).map((t) => t.name),
+    listBytes: Buffer.byteLength(JSON.stringify((list.json && list.json.result) || {})),
   };
 }
 
@@ -148,6 +149,7 @@ describe('F3 coding-CLI starter', () => {
       expect(toolsLine(hs.instructions), label(c)).toEqual(L.CLI_STARTER_TOOLS.slice());
       expect(hs.tools.slice(0, 5), label(c)).toEqual(L.CLI_STARTER_TOOLS.slice());
       for (const n of before.tools) expect(hs.tools, label(c) + ' lost ' + n).toContain(n);
+      expect(hs.listBytes, label(c) + ' tools/list bytes').toBeLessThan(P.LIGHT_TOOLS_LIST_MAX_BYTES);
       for (const n of toolsLine(hs.instructions)) expect(hs.tools, label(c)).toContain(n);
       expect(hs.instructions).not.toMatch(/\bfree\b|\btrial\b|credits?\b|calls\/day|\$\d|\b\d+ tools\b/i);
     }

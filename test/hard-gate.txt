@@ -135,6 +135,7 @@ test/claude-review-blockers-1023.test.mjs
 test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
 test/cli-returns-attribution-1118.test.mjs
+test/cli-starter.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/client-paths.test.mjs
 test/cm4-substation-pro-only.test.mjs
@@ -330,6 +331,7 @@ test/grok-daily-routing-1120d-e2e.test.mjs
 test/grok-daily-routing-1120d.test.mjs
 test/grok-ident-log.test.mjs
 test/grok-instructions-tool-count.test.mjs
+test/grok-key-sticky.test.mjs
 test/grok-no-facility-count.test.mjs
 test/grok-profile.test.mjs
 test/grok-relay-label.test.mjs
@@ -811,6 +813,7 @@ test/wall-no-required-plan-all-tools.test.mjs
 test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-oauth-lead.test.mjs
+test/wall-offer-floor-v2.test.mjs
 test/wall-offers.test.mjs
 test/wall-one-door-1122.test.mjs
 test/wall-one-route.test.mjs
