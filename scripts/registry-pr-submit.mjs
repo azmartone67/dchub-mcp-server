@@ -37,9 +37,8 @@ const HOMEPAGE = 'https://dchub.cloud/mcp';
 const _ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const _readJ = (f) => { try { return JSON.parse(readFileSync(path.join(_ROOT, f), 'utf8')); } catch { return null; } };
 const _snap = _readJ('canonical/canon_phrases.json') || {};
-const _phrase = (v, fb) => (typeof v === 'string' && /^\d[\d,]*\+$/.test(v) ? v : fb);
-const MARKETS = _phrase(_snap.markets, '300+');
-const DEALS = _phrase(_snap.deals, '1,600+');
+// ★2026-11-22: only the tool count is a quantity here now; market and deal counts
+// are not stated in any entry this script writes (owner).
 const N_TOOLS = (Number.isInteger(_snap.tools) && _snap.tools > 20 && _snap.tools < 500)
   ? _snap.tools
   : (_readJ('server.json')?._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.toolCount || 81);
@@ -481,12 +480,17 @@ export const REFRESH_TARGETS = [
   { key: 'punkpeye', upstream: 'punkpeye/awesome-mcp-servers', base: 'main', path: 'README.md' },
 ];
 
-// Replace stale counts ONLY on lines that are our own entry (match the repo slug) so we
-// never touch another server's text. Honest numbers resolve from the canon snapshot above.
+// Fix counts ONLY on lines that are our own entry (match the repo slug) so we never
+// touch another server's text. The tool count is refreshed from the canon snapshot.
+// ★2026-11-22 (owner, "fix the registry refresh pass counts too"): market and deal
+// counts are REMOVED, not refreshed — the same rule as every other listing surface.
+// "232 US power markets" -> "DCPI-scored US power markets", "2,000 deals" ->
+// "tracked M&A deals". The output carries no number for either, so a second pass is
+// a no-op.
 // 2026-07-17: 4,000+ was an over-claim — it counted duplicate ROWS (the AUTO id embeds
 // the ingest date, so one deal accrues a row per day). ~1,420 distinct. See
 // canonical_stats.deals_phrase in dchub-backend.
-function refreshOurCounts(text) {
+export function refreshOurCounts(text) {
   const lines = text.split('\n');
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
@@ -494,8 +498,8 @@ function refreshOurCounts(text) {
     const before = lines[i];
     lines[i] = lines[i]
       .replace(/\b\d{1,3}\s+tools\b/gi, `${N_TOOLS} tools`)
-      .replace(/\b\d{2,3}\+?\s+(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `${MARKETS} ${a}${b}markets`)
-      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `${DEALS} ${tr}M&A deals`);
+      .replace(/\b\d[\d,]*\+?\s+(?:DCPI(?:-scored)?\s+)?(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `DCPI-scored ${a}${b}markets`)
+      .replace(/\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(deals|transactions)\b/gi, (m, noun) => `tracked M&A ${noun.toLowerCase()}`);
     if (lines[i] !== before) changed = true;
   }
   return changed ? lines.join('\n') : null;
@@ -937,7 +941,7 @@ if (_IS_MAIN) (async () => {
     if (!res.ok) { console.log(`  ~ ${t.key} (refresh): fetch ${res.status} — skip`); continue; }
     const refreshed = refreshOurCounts(await res.text());
     if (!refreshed) { console.log(`  ✓ ${t.key} (refresh): our entry already current — skip`); continue; }
-    console.log(`  ● ${t.key} (refresh): STALE → ${N_TOOLS} tools / ${MARKETS} markets / ${DEALS} deals`);
+    console.log(`  ● ${t.key} (refresh): STALE → ${N_TOOLS} tools, no market or deal count`);
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
@@ -945,9 +949,9 @@ if (_IS_MAIN) (async () => {
       if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: `${t.key}-refresh`, why: gate.skipped }); continue; }
       const r = await openPR(t, refreshed, {
         branch: headBranch(t, 'refresh'),
-        title: `Refresh DC Hub MCP entry (${N_TOOLS} tools, ${MARKETS} markets, ${DEALS} deals)`,
+        title: `Refresh DC Hub MCP entry (${N_TOOLS} tools; drop stale market and deal counts)`,
         message: 'Refresh DC Hub stats',
-        body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (Data Center Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+        body: `Updates the existing DC Hub entry: **${N_TOOLS} tools**, and the market and deal counts are dropped (they go stale; the entry now says DCPI-scored markets and tracked M&A deals). In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
       if (r.skipped) { console.log(`      skip: ${r.skipped}`); receipt(t, 'refresh', r.pr); }
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }
