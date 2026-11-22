@@ -11,6 +11,7 @@
 // would still succeed and nobody would notice for weeks — the payment would
 // just stop attaching to the key that earned it. That is a silent revenue
 // bug, so the ref is asserted to survive the round trip byte-for-byte.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { _goUrl } from '../server.mjs';
@@ -42,7 +43,7 @@ function verifyAsBackend(url, secret = SECRET) {
   const sig = token.slice(i + 1);
   const expect_ = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
   if (expect_ !== sig) return null;
-  const [plan, ref] = Buffer.from(payload, 'base64url').toString().split('|');
+  const [plan, ref] = unsealPayload(payload).split('|');
   return { plan, ref };
 }
 

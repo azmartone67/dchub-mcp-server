@@ -10,6 +10,7 @@
 //   6. the per-request relay memo never shares a token across two markets.
 //
 // Real server.mjs app on loopback, stub backend (test/helpers/claude-directory-harness.mjs); no network.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
@@ -63,7 +64,7 @@ function relayFields(url) {
   const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.([0-9a-f]{32})/.exec(url || '');
   if (!m) return null;
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
-  return { fields: Buffer.from(m[1], 'base64url').toString().split('|'), sigOk: sig === m[2] };
+  return { fields: unsealPayload(m[1]).split('|'), sigOk: sig === m[2] };
 }
 const mFields = (rel) => rel.fields.filter((f) => f.startsWith('m-'));
 // The session id and provenance.retrieved_at are the only per-call bytes in a walled response here

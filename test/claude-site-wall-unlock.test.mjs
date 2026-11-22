@@ -10,6 +10,7 @@
 // tool on the profile is as before. DCHUB_CLAUDE_SITE_UNLOCK=0 serves the earlier wall.
 //
 // The real server.mjs on loopback against the claude-directory stub backend (no network).
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE, scrubClaudeToolResult, claudeSiteUnlock, claudeSiteUnlockTools,
@@ -67,8 +68,8 @@ describe('/mcp/claude keyless analyze_site wall carries the free unlock link', (
     const m = (await H.call('/mcp', 'analyze_site', SITE)).msg.result.structuredContent.human_url;
     const kind = (u) => {   // the signed payload names the tool and the wall kind
       const p = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(u);
-      return p ? Buffer.from(p[1], 'base64url').toString('utf8').split('|').slice(1, 3).concat(
-        Buffer.from(p[1], 'base64url').toString('utf8').split('|').slice(4)).join('|') : u.replace(/\/u\/.*/, '/u/');
+      return p ? unsealPayload(p[1]).split('|').slice(1, 3).concat(
+        unsealPayload(p[1]).split('|').slice(4)).join('|') : u.replace(/\/u\/.*/, '/u/');
     };
     expect(kind(c)).toBe(kind(m));
   }, 60_000);

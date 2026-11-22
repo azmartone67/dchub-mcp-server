@@ -14,6 +14,7 @@
 //       baked into its own link, and each registers its own paid hit and a wl=1 claim check.
 // No network (fenceNetwork), no disk writes. Qualifies for the hard gate: the only sockets are a
 // 127.0.0.1 backend stub and the real express app listening on 127.0.0.1.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHash } from 'node:crypto';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
@@ -23,7 +24,7 @@ const ARGS = { lat: 33.45, lon: -112.07 };
 const SHORT = 'https://dchub.cloud/u/abc234';
 const sha32 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 32);
 const tokenOf = (url) => (String(url || '').match(/\/upgrade\/h\/([A-Za-z0-9_-]+\.[0-9a-f]{32})/) || [])[1];
-const sidOf = (url) => Buffer.from(tokenOf(url).split('.')[0], 'base64url').toString().split('|')[0];
+const sidOf = (url) => unsealPayload(tokenOf(url).split('.')[0]).split('|')[0];
 
 let H, fence;
 let shortOn = false;

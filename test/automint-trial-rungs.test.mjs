@@ -21,6 +21,7 @@
 // ★WHY THE dch_live_ CONTROL. "No token carries a k- ref" is also what a path that never
 // binds ANY key produces. The control proves this handler still emits k- for a key the
 // webhook can find, so the trial assertions mean "trial keys bind the session".
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
@@ -222,7 +223,7 @@ function goTokens(body) {
   const out = [];
   for (const m of body.matchAll(/https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.([0-9a-f]{32})/g)) {
     expect(createHmac('sha256', SECRET).update(m[1]).digest('hex').slice(0, 32)).toBe(m[2]);
-    const [plan, ref = '', sid = ''] = Buffer.from(m[1], 'base64url').toString().split('|');
+    const [plan, ref = '', sid = ''] = unsealPayload(m[1]).split('|');
     out.push({ plan, ref, sid });
   }
   return out;

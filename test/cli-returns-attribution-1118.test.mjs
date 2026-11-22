@@ -8,6 +8,7 @@
 //   4. A wall's plain /connect link was counted on no channel (owner 2026-11-19: count it as mcp-wall, wall=connect).
 //
 // Real server on a real port (execute_plan's steps loop back through /mcp), against a backend stub.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -157,7 +158,7 @@ describe('3) the key reply\'s "Full access" link is bound to the minted key', ()
     const text = r.content.map((b) => b.text || '').join('\n');
     const m = /Full access: (https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]+)/.exec(text);
     expect(m, 'a signed /go/c link follows "Full access:"').toBeTruthy();
-    const fields = Buffer.from(m[2], 'base64url').toString().split('|');
+    const fields = unsealPayload(m[2]).split('|');
     expect(fields[0]).toBe('developer');
     expect(fields[1]).toBe('k-' + createHash('sha256').update(FAKE_KEY).digest('hex'));
   }, 60_000);
@@ -173,7 +174,7 @@ describe('3) the key reply\'s "Full access" link is bound to the minted key', ()
       const text = r.content.map((b) => b.text || '').join('\n');
       const m = /Full access: (https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]+)/.exec(text);
       expect(m, 'a signed /go/c link follows "Full access:"').toBeTruthy();
-      const fields = Buffer.from(m[2], 'base64url').toString().split('|');
+      const fields = unsealPayload(m[2]).split('|');
       expect(fields[1]).toBe('k-' + createHash('sha256').update(REUSED_KEY).digest('hex'));
     } finally {
       claimReply = null;

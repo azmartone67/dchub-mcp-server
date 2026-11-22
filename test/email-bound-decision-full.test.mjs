@@ -15,6 +15,7 @@
 //   D) the published clause is built from the enforced cap.
 //
 // Real /mcp handler over loopback HTTP, a 127.0.0.1 stub backend, off-loopback connects refused.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -421,7 +422,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
       expect(links[0]).toMatch(/^https:\/\/dchub\.cloud\/(upgrade\/h|u)\//);
       // the one link is the DEPTH page (the pack opens neither tool), never the capacity / pack page
       const raw = r4.text.match(/https:\/\/dchub\.cloud\/upgrade\/h\/([A-Za-z0-9_-]+)\./);
-      if (raw) expect(Buffer.from(raw[1], 'base64url').toString('utf8').split('|')).toContain('w-depth');
+      if (raw) expect(unsealPayload(raw[1]).split('|')).toContain('w-depth');
       // the prose a person reads carries that one link and no other https link at all
       expect((proseOf(r4).match(/https?:\/\/\S+/g) || []).length, proseOf(r4)).toBe(1);
       { const i = r4.text.search(PLAN_OR_PRICE); expect(i, 'no pack, plan name or price on the capped preview: ' + r4.text.slice(Math.max(0, i - 300), i + 200)).toBe(-1); }

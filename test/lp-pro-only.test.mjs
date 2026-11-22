@@ -20,6 +20,7 @@
 //
 // These run the REAL registered handlers (createServer()._registeredTools) under
 // a real caller seat (_ctxALS), with only the backend stubbed.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 // This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
 // are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
@@ -156,7 +157,7 @@ function head(r) {
 }
 function plansOf(r) {
   return [...all(r).matchAll(/https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\./g)]
-    .map((m) => Buffer.from(m[1], 'base64url').toString().split('|')[0]);
+    .map((m) => unsealPayload(m[1]).split('|')[0]);
 }
 
 const LOC = { lat: 39.0412345, lon: -77.4845678, state: 'VA' };

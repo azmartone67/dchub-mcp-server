@@ -14,6 +14,7 @@
 //   3. both tokens carry the caller's identity: the session, plus the key's hash
 //      for a keyed caller;
 //   4. no checkout link repeats, and the MPP option follows the human ask.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { _unlockMoreDataEnvelope, _ctxALS, HUMAN_FIRST_MARKER } from '../server.mjs';
@@ -49,7 +50,7 @@ function fields(url, prefix) {
   const i = token.lastIndexOf('.');
   const payload = token.slice(0, i);
   expect(token.slice(i + 1)).toBe(createHmac('sha256', SECRET).update(payload).digest('hex').slice(0, 32));
-  return Buffer.from(payload, 'base64url').toString().split('|');
+  return unsealPayload(payload).split('|');
 }
 
 describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () => {

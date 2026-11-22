@@ -12,7 +12,7 @@ registry:
     name: "dchub"
     type: "remote"
     title: "DC Hub"
-    description: "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores 300+ markets."
+    description: "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores markets daily."
     icon: "https://dchub.cloud/icons/icon-192.png"
     readme: "https://github.com/azmartone67/dchub-mcp-server/blob/main/integrations/docker/README.md"
     remote:
@@ -210,7 +210,7 @@ registry:
       - name: "set_site_alert"
         description: "Use this when the user wants an email watch on a saved data center site (needs a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move."
       - name: "simulate_scenario"
-        description: "Use this when the user asks how data center power market rankings change under what-if conditions: re-scores 300+ DC Hub markets under your deltas."
+        description: "Use this when the user asks how data center power market rankings change under what-if conditions: re-scores every DC Hub market under your deltas."
       - name: "site_selection_canvas"
         description: "Use this when the user wants guided data-center site selection."
       - name: "source_capacity"

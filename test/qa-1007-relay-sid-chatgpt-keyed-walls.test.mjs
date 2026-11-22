@@ -22,6 +22,7 @@
 // Each fix has a CONTROL in the other direction so a pass means the branch was taken, not
 // that the assertion is vacuous: the anonymous seat still mints (F-1), the kill switch
 // restores the empty sid (C2), and the step switched off leaves no user_message (C4).
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
@@ -55,12 +56,12 @@ const RELAY_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/([A-Za-z0-9_-]+)\.[0-9a-f
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Fields of a signed token's payload (plan|ref|sid|tool|arm for /go/c; sid|tool|tier|ts|kref for /upgrade/h). */
-const goParts = (url) => Buffer.from(url.replace('https://dchub.cloud/go/c/', '').split('.')[0], 'base64url').toString().split('|');
+const goParts = (url) => unsealPayload(url.replace('https://dchub.cloud/go/c/', '').split('.')[0]).split('|');
 const relayParts = (url) => {
   // a /u/ short link resolves to the relay page it was minted for (wall-to-paid P1, 2026-10-23)
   const m = RELAY_RE.exec(String((S && S._shortLinkTargetOf(url)) || url || ''));
   if (!m) throw new Error('not a long relay link: ' + url);
-  return Buffer.from(m[1], 'base64url').toString().split('|');
+  return unsealPayload(m[1]).split('|');
 };
 const text = (r) => r.content.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
 

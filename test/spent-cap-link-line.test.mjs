@@ -2,6 +2,7 @@
 // spent) returns the preview AND ends with one plain "Full report: <link>" line holding the response's
 // own key-bound relay link. Real server.mjs app on loopback, stub backend whose counter mimics
 // dchub-backend routes/mcp_lp_free_runs.py (limit 3); no network, no disk writes.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { createHash } from 'node:crypto';
@@ -118,7 +119,7 @@ describe.each(Object.entries(CLIENTS))('%s: 3 full reports, then the preview end
     const r4 = await call(FREE_KEY, client);
     const token = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(r4.sc.human_url);
     expect(token, 'the long relay link (a /u/ short link would resolve to the same token server-side)').not.toBeNull();
-    const decoded = Buffer.from(token[1], 'base64url').toString('utf8');
+    const decoded = unsealPayload(token[1]);
     expect(decoded).toContain('pk-' + createHash('sha256').update(FREE_KEY).digest('hex'));
     expect(decoded).toContain('analyze_site');
     const line = lineOf(r4)[0];

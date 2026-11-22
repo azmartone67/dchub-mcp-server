@@ -1,6 +1,7 @@
 // grid-lastfree.test.mjs — fix 5 (owner 2026-10-03, DCHUB_LASTFREE_ASK): a keyed free caller's
 // LAST free full get_grid_intelligence answer of the day carries one human line with the
 // key-bound pack link. The answer and the caps are unchanged. Real handler, backend stubbed.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { lastFreeLine } from '../lib/grid-sell-line.mjs';
 
@@ -80,7 +81,7 @@ const env = (k, v) => { const p = process.env[k]; if (v === undefined) delete pr
 const KEY = 'dch_live_lastfree_fixture_key_0001';
 const keyed = (ip, key = KEY) => ({ api_key: key, tier: 'free', platform: 'claude', client_name_raw: 'claude-ai',
   client_ip: ip, session_id: 'sess-lastfree-' + (++n) });
-const payload = (u) => Buffer.from(u.split('/go/c/')[1].split('.')[0], 'base64url').toString().split('|');
+const payload = (u) => unsealPayload(u.split('/go/c/')[1].split('.')[0]).split('|');
 
 describe('keyed free caller, three calls in one UTC day', () => {
   it('only the 2nd (last free full) answer carries the ask, with a key-bound /go/c link; the 3rd is the preview as before', async () => {
