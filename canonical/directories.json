@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Status 'offline' (2026-11-14) is a directory that listed us and took the listing down: hidden on /mcp/directories, shown as Offline on /mcp-standing. Status 'stale' (2026-11-15) is a list that still names us but is no longer maintained: hidden on /mcp/directories, shown as Stale on /mcp-standing, never counted as listed. Optional status_text (short, public) is shown beside a non-live row on /mcp-standing; note stays internal. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-21T23:59:00Z",
+  "updated_at": "2026-11-22T17:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -94,7 +94,8 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
-      "added_at": "2026-10-09"
+      "added_at": "2026-10-09",
+      "note": "Listing URL returns 404 since the 2026-11-22 12:05Z scan (re-confirmed 2026-11-22; slugs dchub-mcp-server, cloud-dchub, dc-hub, azmartone67-dchub-mcp-server also 404; site search shows no DC Hub). Was live 2.12.60 on 2026-11-21 08:13Z. Cause unknown (removal or re-slug). status stays live until a second confirming read, then offline."
     },
     {
       "id": "gemini-cli",
@@ -1735,6 +1736,186 @@
       "added_at": "2026-11-21",
       "tracking_url": "https://github.com/Rohianon/awesome-mcp-servers/pull/36",
       "note": "PR #36 opened 2026-11-16; open with no comments as of 2026-11-21."
+    },
+    {
+      "id": "mcp-site",
+      "name": "mcp.site",
+      "status": "live",
+      "listing_url": "https://mcp.site/servers/dc-hub-data-center-power-intelligence",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-22",
+      "added_at": "2026-11-22",
+      "note": "Auto-listed; page shows v2.12.2 and 'Unverified' (HTTP 200 2026-11-22). Ownership claim submitted 2026-11-22 ~08:07Z, verification link to the dchub.cloud inbox (valid to ~2026-11-24 08Z). Refresh name/description/version after the claim verifies. added_at is first tracked, not mcp.site's own listing date."
+    },
+    {
+      "id": "opencode-cafe",
+      "name": "opencode.cafe",
+      "status": "pending",
+      "listing_url": "https://www.opencode.cafe/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "note": "Submitted 2026-11-22 ~07:27Z; account page shows 'DC Hub [pending] MCP Server'."
+    },
+    {
+      "id": "xai-plugin-marketplace",
+      "name": "xai-org plugin-marketplace (Grok Build)",
+      "status": "pending",
+      "listing_url": "https://github.com/xai-org/plugin-marketplace",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/xai-org/plugin-marketplace/pull/2212",
+      "note": "PR #2212 opened 2026-11-22, path plugins/dchub-copilot; no comments as of 2026-11-22."
+    },
+    {
+      "id": "minimax-code-plugins",
+      "name": "MiniMax Code Plugins",
+      "status": "pending",
+      "listing_url": "https://github.com/MiniMax-AI/MiniMax-Code-Plugins",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/MiniMax-AI/MiniMax-Code-Plugins/pull/86",
+      "note": "PR #86 opened 2026-11-22; no comments as of 2026-11-22."
+    },
+    {
+      "id": "awesome-ai-in-finance",
+      "name": "georgezouq awesome-ai-in-finance",
+      "status": "pending",
+      "listing_url": "https://github.com/georgezouq/awesome-ai-in-finance",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/georgezouq/awesome-ai-in-finance/pull/390",
+      "note": "PR #390 (MCP Servers > Research & Analysis) opened 2026-11-22."
+    },
+    {
+      "id": "claude-code-templates",
+      "name": "davila7 claude-code-templates",
+      "status": "pending",
+      "listing_url": "https://github.com/davila7/claude-code-templates",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/davila7/claude-code-templates/pull/1660",
+      "note": "PR #1660 (mcps, research) opened 2026-11-22; triage bot says nothing to change, awaiting maintainer merge."
+    },
+    {
+      "id": "noahfraiture-awesome-codex-plugins",
+      "name": "noahfraiture awesome-codex-plugins",
+      "status": "pending",
+      "listing_url": "https://github.com/noahfraiture/awesome-codex-plugins",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/noahfraiture/awesome-codex-plugins/pull/27",
+      "note": "PR #27 opened 2026-11-22. Distinct from the hashgraph-online awesome-codex-plugins row."
+    },
+    {
+      "id": "darknorth-awesome-codex-plugins",
+      "name": "darknorth-123 Awesome-Codex-Plugins",
+      "status": "pending",
+      "listing_url": "https://github.com/darknorth-123/Awesome-Codex-Plugins",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/darknorth-123/Awesome-Codex-Plugins/pull/22",
+      "note": "PR #22 (Integrations) opened 2026-11-22."
+    },
+    {
+      "id": "awesome-developer-finance",
+      "name": "mrtnrocks awesome-developer-finance",
+      "status": "pending",
+      "listing_url": "https://github.com/mrtnrocks/awesome-developer-finance",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/mrtnrocks/awesome-developer-finance/pull/41",
+      "note": "PR #41 (Data APIs) opened 2026-11-22; CodeRabbit summary only."
+    },
+    {
+      "id": "awesome-alternative-data",
+      "name": "happyendpointhq awesome-alternative-data",
+      "status": "pending",
+      "listing_url": "https://github.com/happyendpointhq/awesome-alternative-data",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/happyendpointhq/awesome-alternative-data/pull/7",
+      "note": "PR #7 (Property and real estate) opened 2026-11-22."
+    },
+    {
+      "id": "awesome-quant-skills",
+      "name": "JerryLiu369 awesome-quant-skills",
+      "status": "live",
+      "listing_url": "https://github.com/JerryLiu369/awesome-quant-skills/blob/main/README.md",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-22",
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/JerryLiu369/awesome-quant-skills/pull/5",
+      "note": "PR #5 merged 2026-11-22 16:05Z (Market Feeds & Fundamentals); README line 306 names azmartone67/dchub-mcp-server (checked 2026-11-22)."
+    },
+    {
+      "id": "thuquant-awesome-quant",
+      "name": "thuquant awesome-quant",
+      "status": "pending",
+      "listing_url": "https://github.com/thuquant/awesome-quant",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/thuquant/awesome-quant/pull/123",
+      "note": "PR #123 (数据源) opened 2026-11-22."
+    },
+    {
+      "id": "jqueryscript-awesome-codex",
+      "name": "jqueryscript awesome-codex",
+      "status": "pending",
+      "listing_url": "https://github.com/jqueryscript/awesome-codex",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/jqueryscript/awesome-codex/pull/33",
+      "note": "PR #33 opened 2026-11-22; maintainer regenerates the list from a ledger, so treat the PR as a proposal."
+    },
+    {
+      "id": "awesome-grok-bot",
+      "name": "RongleCat awesome-grok-bot",
+      "status": "pending",
+      "listing_url": "https://github.com/RongleCat/awesome-grok-bot",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-22",
+      "tracking_url": "https://github.com/RongleCat/awesome-grok-bot/pull/42",
+      "note": "PR #42 (Skills, Plugins & MCP) opened 2026-11-22."
     }
   ]
 }
