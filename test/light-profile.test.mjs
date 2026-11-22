@@ -143,7 +143,7 @@ describe('/mcp/light lists the light, front-door-first catalog', () => {
     const r = await post('/mcp/light', INIT);
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
-    expect(ins).toMatch(/ENDPOINT SCOPE: \/mcp\/light lists 10 DC Hub tools/);
+    expect(ins).toMatch(/ENDPOINT SCOPE: \/mcp\/light lists a subset of DC Hub tools/);   // owner 2026-11-22: no count
     expect(ins).toMatch(/the full list is at https:\/\/dchub\.cloud\/mcp/);
     expect(ins).toMatch(/start with execute_plan/);
     expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name/);
@@ -325,7 +325,7 @@ describe('multi-server IDE hosts: light list on /mcp, full catalog on request (D
       { 'user-agent': 'node' });
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
-    expect(ins).toMatch(/ENDPOINT SCOPE: this client's \/mcp list shows 10 DC Hub tools/);
+    expect(ins).toMatch(/ENDPOINT SCOPE: this client's \/mcp list shows a subset of DC Hub tools/);   // owner 2026-11-22: no count
     expect(ins).toContain('the full list is at https://dchub.cloud/mcp?catalog=full');
   });
 

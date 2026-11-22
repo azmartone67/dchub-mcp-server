@@ -483,6 +483,7 @@ test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-root-schema-combinators.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
+test/no-served-count-1122.test.mjs
 test/no-sql-tokens-in-output.test.mjs
 test/no-starter-offer.test.mjs
 test/no-tool-count-1122.test.mjs

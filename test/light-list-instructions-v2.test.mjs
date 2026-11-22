@@ -137,14 +137,15 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     }
   });
 
-  it('the count is stated once, from the served list: "This list shows 10 tools; discover_tools lists the rest."', async () => {
+  it('the list is described once, with no count (owner 2026-11-22): "This list shows a subset of DC Hub tools; discover_tools lists the rest."', async () => {
     process.env[FLAG] = '1';
     for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
       const hs = await handshake(c);
-      expect(hs.instructions, label(c)).toContain(`This list shows ${hs.tools.length} tools; discover_tools lists the rest.`);
+      expect(hs.instructions, label(c)).toContain('This list shows a subset of DC Hub tools; discover_tools lists the rest.');
       expect(hs.tools.length).toBe(10);
       expect(hs.instructions, label(c)).not.toMatch(/DC Hub: \d+ tools/);
-      expect((hs.instructions.match(/\b\d+ (DC Hub )?tools\b/g) || []).length, label(c)).toBe(1);
+      expect((hs.instructions.match(/\b\d+ (DC Hub )?tools\b/g) || []).length, label(c)).toBe(0);   // owner 2026-11-22: no count
+      expect((hs.instructions.match(/a subset of DC Hub tools/g) || []).length, label(c)).toBe(1);
       expect(hs.instructions).toContain('a listing scope, not a permission scope');
       expect(hs.instructions).toContain('tools/call accepts any DC Hub tool by name');
       expect(hs.instructions).toContain('call execute_plan first');
@@ -169,7 +170,7 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     const hs = await handshake({ name: 'light-v2-test' }, '/mcp/light');
     expect(hs.tools.length).toBe(10);
     expect(notListed(hs)).toEqual([]);
-    expect(hs.instructions).toContain('This list shows 10 tools; discover_tools lists the rest.');
+    expect(hs.instructions).toContain('This list shows a subset of DC Hub tools; discover_tools lists the rest.');
     expect(hs.instructions).toContain('ENDPOINT SCOPE: /mcp/light is a listing scope');
   });
 
@@ -191,7 +192,7 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
       expect(notListed(hs), label(c)).toEqual(expect.arrayContaining(['get_grid_data', 'get_market_intel']));
       // ★2026-11-22 (owner): the shared text no longer says "DC Hub: N tools."
       expect(hs.instructions).not.toMatch(/DC Hub: \d+ tools/);
-      expect(hs.instructions).toMatch(/this client's \/mcp list shows 10 DC Hub tools/);
+      expect(hs.instructions).toMatch(/this client's \/mcp list shows a subset of DC Hub tools/);
     }
   });
 });
@@ -213,9 +214,9 @@ describe('lib/light-list-instructions.mjs', () => {
   it('lightListInstructions rewrites the Tools line and the count, leaves the rest, never throws', () => {
     const t = 'Lead. Tools: execute_plan, get_grid_data, source_capacity. Cite. DC Hub: 98 tools. Data moves daily.';
     const out = L.lightListInstructions(t, { listed: ['execute_plan', 'discover_tools', 'source_capacity'] });
-    expect(out).toBe('Lead. Tools: execute_plan, source_capacity. Cite. This list shows 3 tools; discover_tools lists the rest. Data moves daily.');
+    expect(out).toBe('Lead. Tools: execute_plan, source_capacity. Cite. This list shows a subset of DC Hub tools; discover_tools lists the rest. Data moves daily.');
     expect(L.lightListInstructions(t, { listed: [] })).toBe(t);
-    expect(L.lightListInstructions(null, { listed: ['execute_plan'] })).toContain('This list shows 1 tools.');
-    expect(L.lightListInstructions('DC Hub. x', { listed: ['execute_plan', 'discover_tools'] })).toBe('This list shows 2 tools; discover_tools lists the rest. x');
+    expect(L.lightListInstructions(null, { listed: ['execute_plan'] })).toContain('This list shows a subset of DC Hub tools.');
+    expect(L.lightListInstructions('DC Hub. x', { listed: ['execute_plan', 'discover_tools'] })).toBe('This list shows a subset of DC Hub tools; discover_tools lists the rest. x');
   });
 });
