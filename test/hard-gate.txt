@@ -417,6 +417,7 @@ test/listing-links-receipt.test.mjs
 test/listing-links-survive-wall.test.mjs
 test/listing-no-monthly-price.test.mjs
 test/listing-paste-single-origin.test.mjs
+test/live-handshakes-unit.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs
 test/log-redaction.test.mjs
