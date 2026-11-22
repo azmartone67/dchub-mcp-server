@@ -1231,6 +1231,19 @@ function _swapString(v, from, to) {
 }
 // `result` is a stamped Pro wall (_stampProWall wall:true). Returns it with the wall's link swapped
 // for the arm's relay on the decided call, else unchanged. Never throws.
+// Two relay links that open the same token: equal strings, or two /upgrade/h/ links with the same query whose payloads
+// unseal to the same fields. A sealed token (lib/token-seal.mjs) carries a random nonce, so minting the same relay twice
+// no longer gives the same string; comparing strings made the offer arm re-mint a link the wall already held.
+export function _sameRelayLink(a, b) {
+  if (a === b) return true;
+  try {
+    const re = /^https:\/\/dchub\.cloud\/upgrade\/h\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}(\?.*)?$/;
+    const ma = re.exec(String(a || '')), mb = re.exec(String(b || ''));
+    if (!ma || !mb || (ma[2] || '') !== (mb[2] || '')) return false;
+    const ra = _unsealTokenPayload(ma[1], process.env.DCHUB_INTERNAL_KEY);
+    return !!ra && ra === _unsealTokenPayload(mb[1], process.env.DCHUB_INTERNAL_KEY);
+  } catch (_) { return false; }
+}
 export async function _withProWallTrialOffer(result, toolName, c, env = process.env, decide = _proTrialOfferDecide,
                                              shorten = _shortRelayPageLink) {
   try {
@@ -1245,7 +1258,7 @@ export async function _withProWallTrialOffer(result, toolName, c, env = process.
     if (!d) return result;
     const relay = buildHumanRelay(toolName, c.tier || 'free', c.session_id || '',
       d.arm === 'offer' ? { offer: PRO_TRIAL_OFFER } : undefined);
-    if (!relay || !relay.url || relay.url === old) return result;
+    if (!relay || !relay.url || _sameRelayLink(relay.url, old)) return result;
     let link = relay.url;
     try { const sh = await shorten(relay.url, toolName); if (typeof sh === 'string' && /^https:\/\/dchub\.cloud\//.test(sh)) link = sh; } catch (_) {}
     const out = _swapString(result, old, link);

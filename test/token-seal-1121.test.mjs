@@ -11,7 +11,7 @@ import { mintedOnly } from '../lib/wall-offers.mjs';
 import { LONG_RELAY_RE } from '../lib/wall-tag.mjs';
 import { PARTIAL_RELAY_LINK_RE } from '../lib/chatgpt-directory.mjs';
 import {
-  _goUrl, _ctxALS, buildHumanRelay, _relayEverywhereUrl, _relayTokenFields, _restampRelayUrl,
+  _goUrl, _ctxALS, buildHumanRelay, _relayEverywhereUrl, _relayTokenFields, _restampRelayUrl, _sameRelayLink,
 } from '../server.mjs';
 
 const VEC_KEY = 'test-internal-key';
@@ -193,5 +193,34 @@ describe('URL validators still match a sealed link', () => {
   it('wall-offers mintedOnly keeps a line naming the sealed link', () => {
     const offers = [{ line: 'Open ' + withQuery + ' to see the rest.' }];
     expect(mintedOnly(offers, withQuery, {})).toEqual(offers);
+  });
+});
+
+// A sealed token carries a random nonce: the same relay minted twice is two strings. _withProWallTrialOffer asked
+// "is this the link the wall already holds?" with ===, and re-minted (main's smoke red from 672457c, 2026-11-22).
+describe('_sameRelayLink: one relay, two seals', () => {
+  const KEY = 'test-internal-key';
+  let prevKey, prevSeal;
+  beforeEach(() => { prevKey = process.env.DCHUB_INTERNAL_KEY; prevSeal = process.env.DCHUB_TOKEN_SEAL;
+    process.env.DCHUB_INTERNAL_KEY = KEY; delete process.env.DCHUB_TOKEN_SEAL; });
+  afterEach(() => { process.env.DCHUB_INTERNAL_KEY = prevKey;
+    if (prevSeal === undefined) delete process.env.DCHUB_TOKEN_SEAL; else process.env.DCHUB_TOKEN_SEAL = prevSeal; });
+  const link = (raw, q = '') => { const p = sealPayload(raw, KEY); return 'https://dchub.cloud/upgrade/h/' + p + '.' + signPayload(p, KEY) + q; };
+  const RAW = 'sid-1|compare_sites|free|1795303314';
+
+  it('two seals of the same fields are the same link, though the strings differ', () => {
+    const a = link(RAW, '?offer=pro_trial_7d'), b = link(RAW, '?offer=pro_trial_7d');
+    expect(a).not.toBe(b);
+    expect(_sameRelayLink(a, b)).toBe(true);
+  });
+  it('a different field, a different query or a non-relay link is not', () => {
+    expect(_sameRelayLink(link(RAW), link(RAW.replace('compare_sites', 'rank_sites')))).toBe(false);
+    expect(_sameRelayLink(link(RAW, '?offer=pro_trial_7d'), link(RAW))).toBe(false);
+    expect(_sameRelayLink(link(RAW), 'https://dchub.cloud/u/abc123')).toBe(false);
+    expect(_sameRelayLink('', link(RAW))).toBe(false);
+  });
+  it('a legacy (plain) payload and a sealed one of the same fields are the same link', () => {
+    const p = Buffer.from(RAW).toString('base64url');
+    expect(_sameRelayLink('https://dchub.cloud/upgrade/h/' + p + '.' + signPayload(p, KEY), link(RAW))).toBe(true);
   });
 });
