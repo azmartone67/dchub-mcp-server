@@ -17,7 +17,7 @@ const GI = { ok: true, states: [{ state: 'TX', gas_price: 2.803, gas_price_perio
 
 describe('5.52: a bare Henry Hub ask reads the Henry Hub spot', () => {
   it('plans get_energy_prices and no unresolvable gas-economics step', () => {
-    expect(PLANNER_VERSION).toBe('5.59');
+    expect(PLANNER_VERSION).toBe('5.60');
     const p = _planQuery('what is the Henry Hub gas price today');
     expect(p.intent_class).toBe('gas_price');
     const t = p.recommended_sequence.map((s) => s.tool);

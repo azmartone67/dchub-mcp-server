@@ -592,6 +592,7 @@ test/planner-dallas-capacity-near-cut.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
+test/planner-workflows-fixes-1122.test.mjs
 test/platform-desc-sync.test.mjs
 test/platform-header.test.mjs
 test/platform-recall.test.mjs
