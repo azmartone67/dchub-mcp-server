@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Status 'offline' (2026-11-14) is a directory that listed us and took the listing down: hidden on /mcp/directories, shown as Offline on /mcp-standing. Status 'stale' (2026-11-15) is a list that still names us but is no longer maintained: hidden on /mcp/directories, shown as Stale on /mcp-standing, never counted as listed. Optional status_text (short, public) is shown beside a non-live row on /mcp-standing; note stays internal. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub), scan ('manual' only, for a store page rendered in the browser so a server read cannot see our name: the tracker shows Live on verified_at for 30 days, then Checking, and a 404/410 still reads Not found; re-check it by hand and bump verified_at). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-11-18T12:00:00Z",
+  "updated_at": "2026-11-21T23:59:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -652,13 +652,13 @@
       "id": "abordage",
       "name": "abordage awesome-mcp",
       "status": "live",
-      "listing_url": "https://github.com/abordage/awesome-mcp",
+      "listing_url": "https://github.com/abordage/awesome-mcp/blob/main/repositories.yaml",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-11-13",
+      "verified_at": "2026-11-21",
       "added_at": "2026-10-14",
-      "note": "repositories.yaml L1704-1705 lists DC Hub (confirmed 2026-11-13)."
+      "note": "repositories.yaml (Data & Analytics > Data APIs) lists DC Hub, merged PR #161 on 2026-10-14; re-checked 2026-11-21. The generated README omits it (likely a star filter in their generator), so the tracker reads the yaml. The yaml description still says 94 tools."
     },
     {
       "id": "mcpservers-org",
@@ -1553,13 +1553,13 @@
       "id": "mcpdir",
       "name": "mcpdir (eL1fe)",
       "status": "live",
-      "listing_url": "https://github.com/eL1fe/mcpdir",
+      "listing_url": "https://mcpdir.dev/servers/dc-hub-data-center-power-intelligence",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-11-13",
+      "verified_at": "2026-11-21",
       "added_at": "2026-11-13",
-      "note": "Listed in the mcpdir catalog; re-crawl request eL1fe/mcpdir#22 is open."
+      "note": "Listing live on mcpdir.dev (re-checked 2026-11-21) but stale: v2.12.0, 82 tools and an old price label. Re-crawl request eL1fe/mcpdir#22 is open; last comment ours 2026-10-27."
     },
     {
       "id": "baditaflorin-awesome-live-mcp-servers",
@@ -1577,13 +1577,13 @@
       "id": "flow-steward-mcps",
       "name": "Flow-Steward mcps",
       "status": "live",
-      "listing_url": "https://github.com/Flow-Steward/mcps",
+      "listing_url": "https://github.com/Flow-Steward/mcps/blob/main/servers/dchub/catalog.yaml",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-11-13",
+      "verified_at": "2026-11-21",
       "added_at": "2026-11-13",
-      "note": "PR #33 merged; servers/dchub/catalog.yaml is live."
+      "note": "PR #33 merged 2026-11-07; servers/dchub/catalog.yaml is live (re-checked 2026-11-21). Its description still has free-preview / paid-plan wording."
     },
     {
       "id": "sayitvid-awesome-mcp-servers",
@@ -1637,13 +1637,13 @@
       "id": "bai-2008-dsh-mcp-center",
       "name": "Bai-2008 dsh-mcp-center",
       "status": "live",
-      "listing_url": "https://github.com/Bai-2008/dsh-mcp-center",
+      "listing_url": "https://bai-2008.github.io/dsh-mcp-center/servers/cloud.dchub__mcp-server/",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-11-13",
+      "verified_at": "2026-11-21",
       "added_at": "2026-11-13",
-      "note": "registry/m/cloud.dchub__mcp-server.yaml is live."
+      "note": "Site page live (softwareVersion 2.12.44, re-checked 2026-11-21); maintainer confirmed on issue #1 (2026-10-31). Maintainer PR #4 'chore: sync tools' updates our yaml."
     },
     {
       "id": "mcp-toplist",
@@ -1698,6 +1698,43 @@
       "tracking_url": "https://github.com/osama-ata/Awesome-AECO/pull/35",
       "added_at": "2026-11-18",
       "note": "PR #35 opened 2026-11-18 6:40 AM MST (13:40Z), entry under '## AI & Automation for AECO' in readme.md. Once merged: live when readme.md lists azmartone67/dchub-mcp-server under that heading; listing_url https://github.com/osama-ata/Awesome-AECO, verified_at the merge date."
+    },
+    {
+      "id": "ever-works",
+      "name": "Awesome MCP Servers (ever-works)",
+      "status": "live",
+      "listing_url": "https://mcpserver.ever.works/items/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-21",
+      "added_at": "2026-11-21",
+      "note": "ever-works/awesome-mcp-servers#198 closed 2026-11-17 by evereq after merging the entry via awesome-mcp-servers-data#34; item page HTTP 200 on 2026-11-21, endpoint https://dchub.cloud/mcp, no version or tool count."
+    },
+    {
+      "id": "awesome-codex-plugins",
+      "name": "awesome-codex-plugins (hashgraph-online)",
+      "status": "live",
+      "listing_url": "https://github.com/hashgraph-online/awesome-codex-plugins/blob/main/README.md",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-21",
+      "added_at": "2026-11-21",
+      "note": "PR #774 merged 2026-11-20; README lists DC Hub (re-checked 2026-11-21)."
+    },
+    {
+      "id": "rohianon-awesome-mcp",
+      "name": "Rohianon awesome-mcp-servers",
+      "status": "pending",
+      "listing_url": "https://github.com/Rohianon/awesome-mcp-servers",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-11-21",
+      "tracking_url": "https://github.com/Rohianon/awesome-mcp-servers/pull/36",
+      "note": "PR #36 opened 2026-11-16; open with no comments as of 2026-11-21."
     }
   ]
 }
