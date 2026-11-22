@@ -5517,9 +5517,11 @@ function _floorKindFor(name, sc, c, ent = _wallEnt(c)) {
 // The wall's standing under the floor (owner 2026-11-11, "Measure allowed only"): 'allowed', or why the floor
 // skips it by design. It leaves on the wall row as offer_floor (lib/keyless-wall.mjs OFFER_FLOOR_STANDINGS), so
 // the funnel reads the 95% offer target over the walls the floor is allowed on.
-// Checkout-attribution spec 2026-11-22 section 6 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): a ChatGPT-family wall carries
-// the same email ask as other platforms (7d to 11-22: 23 ChatGPT walls, 0 with an ask). Response text only: no tool is
-// added or removed on /mcp/chatgpt, no quota or keyless rule changes. Off: the clean / profile exemption stands.
+// Checkout-attribution spec 2026-11-22 section 6 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): a ChatGPT-family wall on /mcp
+// carries the same email ask as other platforms (7d to 11-22: 23 ChatGPT walls, 0 with an ask): the clean-platform
+// exemption no longer applies to it. The /mcp/chatgpt directory profile KEEPS its exemption: its copy is frozen while
+// it is in OpenAI review, and changing it is the owner's call. Response text only: no tool added or removed, no quota
+// or keyless rule changes. Off: the clean exemption stands.
 export function _chatgptAskOn(c) {
   return _CA.checkoutAttribOn() && _platformFamily({ client: c && c.platform }) === 'chatgpt';
 }
@@ -5529,7 +5531,7 @@ function _floorStanding(c, name) {
   if (_pcIsGrok(c.platform)) return 'grok';
   const chatgptAsk = _chatgptAskOn(c);
   if (_isCleanPlatform() && !chatgptAsk) return 'clean';
-  if ((c.profile === DIRECTORY_PROFILE && !chatgptAsk) || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
   if (_FLOOR_SKIP_TOOLS.has(String(name || ''))) return 'tool';
   return 'allowed';
 }

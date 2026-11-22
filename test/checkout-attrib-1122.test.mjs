@@ -107,14 +107,19 @@ describe('server steps', () => {
       expect(['profile', 'clean']).toContain(c._offerFloor);
     }
   });
-  it('s6/T10 flag on: a ChatGPT-family wall is allowed and carries the email ask', () => on(() => {
-    for (const o of [{}, { profile: 'chatgpt_directory' }, { platform: 'chatgpt' }]) {
+  it('s6/T10 flag on: a ChatGPT-family wall on /mcp is allowed and carries the email ask', () => on(() => {
+    for (const o of [{}, { platform: 'chatgpt' }]) {
       const c = ctx(o);
       const out = S._wallOfferFloorStep(wall(), 'rank_markets', c);
       expect(c._offerFloor).toBe('allowed');
       expect(textOf(out)).toContain(FLOOR_EMAIL_LEAD);
       expect(textOf(out)).toContain('bind_email');
     }
+    // the /mcp/chatgpt directory profile (frozen copy, in OpenAI review) keeps its exemption
+    const d = ctx({ profile: 'chatgpt_directory' });
+    const din = wall();
+    expect(S._wallOfferFloorStep(din, 'rank_markets', d)).toBe(din);
+    expect(d._offerFloor).toBe('profile');
     const g = ctx({ platform: 'grok' });
     S._wallOfferFloorStep(wall(), 'rank_markets', g);
     expect(g._offerFloor).toBe('grok');   // other families keep their standing
