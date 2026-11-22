@@ -152,7 +152,8 @@ import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyT
          keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
          KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED, keyToolName as _keyToolName } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
-import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
+import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest, keyLine as _keyLineText } from './lib/wall-key-line.mjs';
+import { wallOfferFloorV2On as _wallOfferFloorV2On, grokKeyFloorEligible as _grokKeyFloorEligible, createRepeatWallCounter as _createRepeatWallCounter, isRepeatWall as _isRepeatWall } from './lib/wall-offer-floor-v2.mjs';   // Grok funnel F2   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { fetchEmberMonthly, emberAreaForGrid } from './lib/ember-monthly.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
@@ -5634,6 +5635,15 @@ function _wallIsWalled(out, name, c) {
   }
   return walled;
 }
+// F2 R2 (lib/wall-offer-floor-v2.mjs): walls per (identity, tool) over 24h. Identity: the key's hash, else the IP's hash,
+// else the session's (the same hashes lib/keyless-wall.mjs uses for the cap wall).
+const _repeatWalls = _createRepeatWallCounter();
+function _repeatWallIdentity(c) {
+  try {
+    if (c && c.api_key) return 'k-' + createHash('sha256').update(String(c.api_key)).digest('hex');
+    return _capWallIdentity(c || {});
+  } catch (_) { return ''; }
+}
 export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
     if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -5644,8 +5654,17 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
       if (!_wallIsWalled(result, name, c)) return result;
       const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
       const f = _floorKindFor(name, sc, c, ent);
-      return _placeWallOffers(result, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
+      let g = _placeWallOffers(result, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
         workosEnabled, grok: true }), name, c);
+      // F2 R1 (DCHUB_WALL_OFFER_FLOOR_V2, default off): the G3 block names no free offer, so the key line is the floor.
+      if (_wallOfferFloorV2On()) {
+        const kl = _keyLineText({ keyed: ent.keyed });
+        if (_grokKeyFloorEligible({ shownOffers: _offersShown(g, c._emailAsk) || [], bound: ent.bound, paid: ent.paid, line: kl })) {
+          g = _withFloorLine(g, kl);
+          _markEmailAsk(c, 'key_line');
+        }
+      }
+      return g;
     }
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
@@ -5667,7 +5686,11 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     const freeOfferShown = _hasFreeOffer(shownOffers);
     // Ask once per tool per session (owner 2026-11-09): the free-key line went out on this tool earlier in the session,
     // so the same tool again reads the floor's one digest line only (test/ask-once-per-tool), never the key ask again.
-    const keyLineSent = _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
+    // F2 R2 (DCHUB_WALL_OFFER_FLOOR_V2, default off): the 3rd wall or more of this identity on this tool in 24h reads the
+    // key line again, ahead of the digest offer, though the session was already asked.
+    let repeatWall = false;
+    try { repeatWall = _wallOfferFloorV2On() && _isRepeatWall(_repeatWalls.record(_repeatWallIdentity(c), name)); } catch (_) { repeatWall = false; }
+    const keyLineSent = !repeatWall && _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
     return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
       link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent }), name, c);
   } catch (_) { return result; }
