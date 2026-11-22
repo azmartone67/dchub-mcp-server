@@ -243,7 +243,7 @@ describe('MUST-FAIL CONTROLS: the guard bites, the allow-list and dead-entry che
     expect(rules).toEqual(['internal_canon_label', 'internal_do_not']);
     // ...and copyRuleViolations (what a read-back runs) names the plan prices too.
     expect(copyRuleViolations(LEAKED).map((v) => v.rule).sort())
-      .toEqual(['internal_canon_label', 'internal_do_not', 'plan_price', 'plan_price']);
+      .toEqual(['internal_canon_label', 'internal_do_not', 'market_count', 'plan_price', 'plan_price']);
   });
 
   it.each([

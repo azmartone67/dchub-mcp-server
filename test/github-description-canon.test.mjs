@@ -81,10 +81,13 @@ describe('the healed content matches canon', () => {
     expect(DESC).toMatch(/global facility map/i);
   });
 
-  it('carries the canonical market and deal counts', () => {
+  it('carries the canonical deal count and no market count', () => {
     // The GOVERNANCE quantities — facilities, countries, markets, deals — are
     // owned by the backend's canon and mirrored into canon_phrases.json.
-    expect(DESC).toContain(CANON.markets);
+    // Owner 2026-11-21: listing copy names no market count ("market by market").
+    expect(DESC).not.toContain(CANON.markets);
+    expect(DESC).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
+    expect(DESC).toMatch(/market by market/);
     expect(DESC).toContain(CANON.deals);
   });
 
