@@ -10,7 +10,14 @@
 // shape: a structural check would pass on an anyOf that accepts everything.
 import { describe, it, expect } from 'vitest';
 import Ajv from 'ajv';
-import { applyOneOfAnyOf, ONE_OF_REQUIRED, ONE_OF_PUBLISHED } from '../server.mjs';
+import { applyOneOfAnyOf as _applyServed, ONE_OF_REQUIRED, ONE_OF_PUBLISHED } from '../server.mjs';
+import { withRootOneOfAnyOf } from '../lib/one-of-contract.mjs';
+
+// 2026-11-22: the served tools/list no longer carries the root anyOf (model APIs reject it; see
+// lib/one-of-contract.mjs and test/no-root-schema-combinators.test.mjs). The builder below is what
+// the frozen /mcp/chatgpt profile and the DCHUB_ONEOF_ANYOF=1 rollback still use, so its contract
+// stays pinned here.
+const applyOneOfAnyOf = (schema, tool) => withRootOneOfAnyOf(schema, ONE_OF_PUBLISHED[tool]);
 
 // The real get_grid_intelligence shape, trimmed to what matters here.
 const GRID_SCHEMA = {
@@ -101,6 +108,22 @@ describe('the two tables cannot drift', () => {
     // cost the better error.
     expect(ONE_OF_PUBLISHED.get_grid_intelligence).toBeTruthy();
     expect(ONE_OF_REQUIRED.get_grid_intelligence).toBeUndefined();
+  });
+});
+
+describe('the served path publishes no root anyOf by default (2026-11-22)', () => {
+  it('applyOneOfAnyOf returns the schema unchanged unless DCHUB_ONEOF_ANYOF=1', () => {
+    const prev = process.env.DCHUB_ONEOF_ANYOF;
+    try {
+      delete process.env.DCHUB_ONEOF_ANYOF;
+      expect(_applyServed(GRID_SCHEMA, 'get_grid_intelligence')).toBe(GRID_SCHEMA);
+      process.env.DCHUB_ONEOF_ANYOF = '0';
+      expect(_applyServed(GRID_SCHEMA, 'get_grid_intelligence')).toBe(GRID_SCHEMA);
+      process.env.DCHUB_ONEOF_ANYOF = '1';   // the rollback switch
+      expect(_applyServed(GRID_SCHEMA, 'get_grid_intelligence').anyOf).toHaveLength(4);
+    } finally {
+      if (prev === undefined) delete process.env.DCHUB_ONEOF_ANYOF; else process.env.DCHUB_ONEOF_ANYOF = prev;
+    }
   });
 });
 

@@ -128,6 +128,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { utf8CharsetMiddleware } from './lib/utf8-charset.mjs';
 import { honestCallerTier as _honestCallerTier, stampTierPair as _stampTierPair } from './lib/honest-tier.mjs';
+import { withRootOneOfAnyOf as _withRootOneOfAnyOf } from './lib/one-of-contract.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
          DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
@@ -596,35 +597,29 @@ const ONE_OF_PUBLISHED = {
   get_grid_intelligence: ['region_id', 'iso', 'region', 'market'],
 };
 
-// Kill switch. `anyOf` is standard JSON Schema and an unsupported keyword is
-// ignored, so the worst case for a naive client is TODAY'S behaviour — but this
-// file already records Claude clients rejecting a schema over its dialect stamp,
-// so a flagship tool gets an off switch that needs no deploy to reason about.
-const ONEOF_ANYOF_OFF = String(process.env.DCHUB_ONEOF_ANYOF || '').trim() === '0';
+// 2026-11-22: the one-of is NO LONGER published at the schema root by default.
+// The comment that used to sit here assumed "an unsupported keyword is ignored,
+// so the worst case for a naive client is TODAY'S behaviour". Model APIs do not
+// ignore it: OpenAI and Anthropic both reject anyOf/oneOf/allOf at the top level
+// of a function schema, and one bad tool fails the whole request
+// (lib/one-of-contract.mjs has the citations). The contract is still enforced at
+// runtime (ONE_OF_REQUIRED -> missing_identifier; get_grid_intelligence's own
+// valid_regions error), and each property description still says "(required)".
+//
+// Rollback without a revert: DCHUB_ONEOF_ANYOF=1 re-publishes the root anyOf on
+// every surface (the previous behaviour). Any other value, or unset, publishes
+// nothing at the root. test/no-root-schema-combinators.test.mjs fails if any
+// served surface other than the frozen /mcp/chatgpt catalog carries one.
+// /mcp/chatgpt keeps its reviewed root anyOf through its own profile
+// (CHATGPT_FROZEN_ROOT_ANYOF in lib/chatgpt-directory.mjs), independent of this.
+const ONEOF_ANYOF_ROOT_ON = () => String(process.env.DCHUB_ONEOF_ANYOF || '').trim() === '1';
 
-// Publish the one-of as `anyOf: [{required:[k]}, …]` over the args the schema
-// ACTUALLY declares. Filtering on properties is load-bearing: Zod strips an
-// undeclared argument before the handler runs, so a branch requiring one would
-// be a rule no caller could satisfy by obeying it.
+// Kept at its one call site (tools/list) so the rollback switch is a single
+// place. Off: returns the schema unchanged. On: the #470 shape over the args the
+// schema ACTUALLY declares (lib/one-of-contract.mjs withRootOneOfAnyOf).
 export function applyOneOfAnyOf(schema, toolName) {
-  if (ONEOF_ANYOF_OFF) return schema;
-  const oneOf = ONE_OF_PUBLISHED[toolName];
-  if (!oneOf || !schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
-  if (Array.isArray(schema.anyOf)) return schema;      // never clobber an existing one
-  const props = schema.properties;
-  if (!props || typeof props !== 'object') return schema;
-  const declared = oneOf.filter((k) => Object.prototype.hasOwnProperty.call(props, k));
-  if (!declared.length) return schema;
-  // ★ Each branch re-declares the property it requires. Ajv 2020-12 STRICT —
-  // which test/schema-dialect-neutral.test.mjs runs because it is what the
-  // Claude client does — raises `strictRequired` on a bare
-  // {required:['region_id']}: the property must be defined in the SAME
-  // subschema, not merely in its parent. `{}` (the always-true schema) adds
-  // no constraint the parent does not already impose, so this declares the
-  // name without duplicating — or being able to contradict — its real
-  // definition above.
-  return { ...schema,
-           anyOf: declared.map((k) => ({ properties: { [k]: {} }, required: [k] })) };
+  if (!ONEOF_ANYOF_ROOT_ON()) return schema;
+  return _withRootOneOfAnyOf(schema, ONE_OF_PUBLISHED[toolName]);
 }
 
 
