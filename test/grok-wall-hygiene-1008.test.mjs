@@ -14,6 +14,7 @@
 //   5. partner_inbox: a partner key's unread notes ride the first result of its session and
 //      every get_changes, with the session's own key; a non-partner session probes once; a
 //      keyless session never probes. No new tool. Kill switch DCHUB_PARTNER_INBOX=0.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
@@ -113,7 +114,7 @@ function tokenFields(url) {
   if (!m) return null;
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
   expect(sig, 'the re-signed token verifies under the internal key').toBe(m[2]);
-  return Buffer.from(m[1], 'base64url').toString().split('|');
+  return unsealPayload(m[1]).split('|');
 }
 
 // ── 1. one link ───────────────────────────────────────────────────────────────

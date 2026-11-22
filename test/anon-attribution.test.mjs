@@ -15,6 +15,7 @@
 // a cohort that already HAD an identity, emitting a second competing
 // client_reference_id and silently detaching payments from the key that earned
 // them. That second class is asserted from both directions.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -57,7 +58,7 @@ function verifyAsBackend(url, secret = SECRET) {
   const sig = token.slice(i + 1);
   const expect_ = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
   if (expect_ !== sig) return null;
-  const [plan, ref] = Buffer.from(payload, 'base64url').toString().split('|');
+  const [plan, ref] = unsealPayload(payload).split('|');
   return { plan, ref };
 }
 

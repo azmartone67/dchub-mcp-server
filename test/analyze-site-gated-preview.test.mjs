@@ -8,6 +8,7 @@
 // DCHUB_GATED_PREVIEW=0 serves the earlier wall (test/analyze-site-email-unlock-teaser.test.mjs pins it).
 //
 // Real server.mjs app on loopback, stub backend; no network.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { createHmac } from 'node:crypto';
@@ -51,7 +52,7 @@ function relayFields(url) {
   const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.([0-9a-f]{32})/.exec(url);
   if (!m) return null;
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
-  return { fields: Buffer.from(m[1], 'base64url').toString().split('|'), sigOk: sig === m[2] };
+  return { fields: unsealPayload(m[1]).split('|'), sigOk: sig === m[2] };
 }
 function pageLinks(res) {
   const s = JSON.stringify(res);

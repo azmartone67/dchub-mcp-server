@@ -2,6 +2,7 @@
 // sentence with a one-click link (owner-approved 2026-10-03), the same on both A/B
 // arms, behind DCHUB_GRID_SELL_LINE; and r-go-tool: /go/c carries tool and arm
 // (DCHUB_GO_TOOL). Real registered handler, backend stubbed.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { gridSellLine, buyUrl, gridAgentLine, fiberAgentLine, fiberSellLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
@@ -203,7 +204,7 @@ describe('keyed and unrelated calls are untouched', () => {
 
 describe('r-go-tool: /go/c carries tool and arm', () => {
   const link = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i?client_reference_id=sess-x-1';
-  const payload = (u) => Buffer.from(u.split('/go/c/')[1].split('.')[0], 'base64url').toString().split('|');
+  const payload = (u) => unsealPayload(u.split('/go/c/')[1].split('.')[0]).split('|');
   it('stamps tool and arm from the call context, and never without a tool', () => {
     const run = (ctx, fn) => S._ctxALS.run(ctx, fn);
     const off1 = env('DCHUB_PAYWALL_CONTRACT', 'on');

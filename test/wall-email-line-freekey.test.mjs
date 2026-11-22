@@ -13,6 +13,7 @@
 // interconnection-queue-by-iso-miso.json) and answers the /u/ mint as production does. mcp#1143's
 // line passed a hand-built wall and never fired on a real one. The code-default transport is
 // covered in test/retention-email-ask.test.mjs.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -146,7 +147,7 @@ const humanLines = (t) => t.split('\n').filter((l) => l.includes(HUMAN) || /^\s*
 // The w-freekey marker rides in the long relay token (base64url field 5/6) the /u/ code was minted from.
 const freekeyMinted = () => minted.some((m) => {
   const t = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(m);
-  return !!t && Buffer.from(t[1], 'base64url').toString().split('|').includes('w-freekey');
+  return !!t && unsealPayload(t[1]).split('|').includes('w-freekey');
 });
 const withEnv = async (k, v, fn) => {
   const was = process.env[k];
@@ -155,7 +156,7 @@ const withEnv = async (k, v, fn) => {
 };
 const lastKind = () => {
   const t = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(minted.at(-1) || '');
-  return t ? Buffer.from(t[1], 'base64url').toString().split('|').slice(4).filter((x) => x.startsWith('w-')).join(',') : null;
+  return t ? unsealPayload(t[1]).split('|').slice(4).filter((x) => x.startsWith('w-')).join(',') : null;
 };
 
 describe('option A line on a keyless free-key wall, production transport', () => {

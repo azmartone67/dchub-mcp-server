@@ -19,6 +19,7 @@
 //
 // Qualifies for the hard gate: the only sockets are a 127.0.0.1 backend stub and the real
 // express app listening on 127.0.0.1.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
@@ -175,7 +176,7 @@ function fields(url, prefix) {
   expect(token.slice(i + 1)).toBe(sig);
   // r-go-tool (2026-10-03): fields 4 and 5 (tool, arm) are attribution only; the
   // identity this file pins is plan|ref|sid, so the readout stops there.
-  const all = Buffer.from(payload, 'base64url').toString().split('|');
+  const all = unsealPayload(payload).split('|');
   const parts = all.length > 3 ? all.slice(0, 3).filter((x, k) => k < 2 || (x !== '' && x !== all[1])) : all;
   return { payload, parts, tool: all[3] || '', arm: all[4] || '' };
 }
@@ -190,7 +191,7 @@ function starterOffers(result) {
   if (/"starter_url"|"starter":\s*"http/.test(text)) found.push('a starter link field');
   if (/\$9\/mo|\bStarter\b\s*(\$|=|·|→)|\bor Starter\b/.test(text)) found.push('Starter priced in prose');
   for (const m of text.matchAll(/https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}/g)) {
-    if (Buffer.from(m[1], 'base64url').toString().split('|')[0] === 'starter') found.push('a /go/c starter token');
+    if (unsealPayload(m[1]).split('|')[0] === 'starter') found.push('a /go/c starter token');
   }
   return found;
 }

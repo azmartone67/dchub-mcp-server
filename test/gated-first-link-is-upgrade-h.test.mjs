@@ -8,6 +8,7 @@
 //   3. the token is signed for that tool and the page answers 200 (the stub serves /upgrade/h
 //      only for a correctly signed token, as the backend does; a tampered token is refused);
 //   4. structuredContent carries the same relay URL.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -124,7 +125,7 @@ describe('keyless wall: the first human link is the /upgrade/h relay page', () =
     const href = (text.match(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s)>\]"]+/) || [''])[0].replace(/[.,;:]+$/, '');
     expect(href).not.toBe('');
     const path = new URL(href).pathname;
-    const payload = Buffer.from(path.split('/').pop().split('.')[0], 'base64url').toString();
+    const payload = unsealPayload(path.split('/').pop().split('.')[0]);
     expect(payload.split('|')[1], 'token names the tool').toBe(name);
     const base = `http://127.0.0.1:${stub.address().port}`;
     expect((await fetch(base + path)).status).toBe(200);
