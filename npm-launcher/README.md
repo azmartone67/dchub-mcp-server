@@ -4,6 +4,8 @@ The orchestration layer for data center and energy intelligence, from [DC Hub](h
 
 DC Hub is a **hosted** MCP server at `https://dchub.cloud/mcp` (Streamable HTTP). If your client supports remote MCP servers, point it at that URL directly. This package is a small launcher for clients that only run local (stdio) servers: it connects them to the hosted server.
 
+Available in ChatGPT: [DC Hub in the ChatGPT apps directory](https://chatgpt.com/plugins/plugin_asdk_app_6add46d40f448191905e327e261ec86c) (setup page: https://dchub.cloud/install/chatgpt).
+
 ## Use
 
 ```bash

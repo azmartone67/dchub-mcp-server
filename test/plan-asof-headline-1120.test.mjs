@@ -37,7 +37,7 @@ const line0 = (p) => p.fact_header.split('\n')[0];
 const ageDays = (iso) => (NOW - Date.parse(iso)) / 86400000;
 
 describe('planner 5.54: AS_OF is the headline verdict\'s date; the oldest input keeps its own', () => {
-  it('PLANNER_VERSION is 5.55 (5.54 introduced this rule)', () => { expect(PLANNER_VERSION).toBe('5.59'); });
+  it('PLANNER_VERSION is 5.55 (5.54 introduced this rule)', () => { expect(PLANNER_VERSION).toBe('5.60'); });
 
   it('Grok 11-20 Dallas: AS_OF is the DCPI read (under 7 days old), ERCOT\'s 10-31 report is named and dated beside it', () => {
     const p = plan([retire, queue, dcpi()]);
