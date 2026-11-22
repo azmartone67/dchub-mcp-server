@@ -162,7 +162,7 @@ describe('flag on: the opt-in core list', () => {
     const r = await post('/mcp?tools=core', init('slim-test'));
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
-    expect(ins).toMatch(/ENDPOINT SCOPE: this \/mcp list \(tools=core\) shows 7 DC Hub tools/);
+    expect(ins).toMatch(/ENDPOINT SCOPE: this \/mcp list \(tools=core\) shows a subset of DC Hub tools/);   // owner 2026-11-22: no count
     expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name; start with execute_plan/);
     expect(ins).not.toMatch(/\/mcp\/(oauth|core|light)\b/);
   });
