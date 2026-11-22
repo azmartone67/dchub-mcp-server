@@ -249,7 +249,9 @@ Optional: set header `X-API-Key` from https://dchub.cloud/connect. Cursor Market
 
 ### ChatGPT
 
-Custom connector (works today): ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp`. Leave auth blank to start. Apps directory listing for **DC Hub** is in review separately; until it is public, use the custom URL. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
+Available in ChatGPT: [DC Hub in the ChatGPT apps directory](https://chatgpt.com/plugins/plugin_asdk_app_6add46d40f448191905e327e261ec86c) (setup page: https://dchub.cloud/install/chatgpt).
+
+Custom connector instead: ChatGPT → Settings → Connectors → Add → MCP URL `https://dchub.cloud/mcp`. Leave auth blank to start. Deep Research clients can use the same host's `search` / `fetch` tools on that endpoint.
 
 DC Hub is the data-center and energy layer beside other research sources: power, grid, interconnection queues, facilities and markets, with a dated citation on every result. Prefer `execute_plan` for a multi-part question.
 
