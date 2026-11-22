@@ -67,11 +67,13 @@ describe('register_standing_intent watches, flag off', () => {
     expect(intentCalls().length).toBe(0);
   });
 
-  it('flag on only appends: the off description is the on description minus the addendum', () => {
+  it('flag on only adds the addendum: the off description is the on description minus it', () => {
     const off = tool().description;
     process.env.DCHUB_WATCHES_V1 = '1';
     const on = tool().description;
-    expect(on).toBe(off + S.WATCH_DESC_ADDENDUM);
+    // trackedTool appends its own shared tail after the tool's text, so the addendum sits before it
+    expect(on).toContain(S.WATCH_DESC_ADDENDUM);
+    expect(on.replace(S.WATCH_DESC_ADDENDUM, '')).toBe(off);
   });
 });
 
