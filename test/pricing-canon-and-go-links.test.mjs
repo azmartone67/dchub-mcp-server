@@ -21,6 +21,7 @@
 // #7 MEASURED 2026-09-02 00:32Z: /upgrade?key=… (three emit sites) 302s to the
 //    /pricing WALL (paywall_nointent); only /go/c/<token> reaches Stripe (3/3).
 //    The three sites emit key-bound /go/c links (k-/pk- refs the webhook honours).
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -53,7 +54,7 @@ function decode(url) {
   const i = token.lastIndexOf('.');
   const payload = token.slice(0, i), sig = token.slice(i + 1);
   expect(createHmac('sha256', SECRET).update(payload).digest('hex').slice(0, 32)).toBe(sig);
-  const [plan, ref] = Buffer.from(payload, 'base64url').toString().split('|');
+  const [plan, ref] = unsealPayload(payload).split('|');
   return { plan, ref };
 }
 
@@ -206,7 +207,7 @@ describe('#7b — key-bound builders also carry the session (ref_kind=session, v
   function decodeAll(url) {
     const token = url.replace('https://dchub.cloud/go/c/', '');
     const payload = token.slice(0, token.lastIndexOf('.'));
-    return Buffer.from(payload, 'base64url').toString().split('|');
+    return unsealPayload(payload).split('|');
   }
   it('_keyBoundSubUrl: k-<hash> gains the session as a third field', () => {
     const url = withCtx({ session_id: SID, api_key: KEY }, () => _keyBoundSubUrl(PRO_URL, KEY));

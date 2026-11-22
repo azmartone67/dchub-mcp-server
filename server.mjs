@@ -111,6 +111,7 @@ import './lib/web-bot-auth-preload.mjs';
 import { slimToolsList as _slimToolsList, slimTool as _slimTool, TOOL_GUIDE_TOOLS, toolGuideUri } from './lib/list-slim.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
+import { sealPayload as _sealTokenPayload, unsealPayload as _unsealTokenPayload } from './lib/token-seal.mjs';
 import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog, redactEmails as _redactEmails } from './lib/log-redact.mjs';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -858,7 +859,7 @@ function _relayMemoHit(memo, key, base) {
 // as buildHumanRelay's own mint, which stays inline there: test/wall-exits scans that function's
 // body for the URL literal and the render directive.
 function _signRelayPayload(raw) {
-  const _payload = Buffer.from(raw).toString('base64url');
+  const _payload = _sealTokenPayload(raw, process.env.DCHUB_INTERNAL_KEY);
   const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
     .update(_payload).digest('hex').slice(0, 32);
   return 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig;
@@ -1022,7 +1023,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     const _hit = _relayMemoHit(_memo, _mk, _mb);
     if (_hit) return _hit;
     const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}` + _tail;
-    const _payload = Buffer.from(_raw).toString('base64url');
+    const _payload = _sealTokenPayload(_raw, process.env.DCHUB_INTERNAL_KEY);
     const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
       .update(_payload).digest('hex').slice(0, 32);
     const _url = 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig
@@ -3145,7 +3146,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // shows what the agent was doing and one attributed upgrade button —
   // and every open is measured (relay_opens), the first human-eyeball
   // metric this funnel has ever had. Token contract mirrors the backend:
-  // base64url(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32].
+  // payload(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32]; payload = lib/token-seal.mjs.
   // Kill: DCHUB_HUMAN_RELAY=0 (envelopes simply omit the block).
   const for_your_human = buildHumanRelay(toolName, currentTier, sessionId);
   // r-mpp-at-wall: the autonomous exit rides at the SAME level as the human
@@ -3609,7 +3610,7 @@ function _goUrl(url, sessionId) {
     let raw = plan + '|' + ref + (sid && sid !== ref ? '|' + sid : '');
     const { tool: _gt, arm: _ga } = _goToolArm();
     if (_gt) raw = plan + '|' + ref + '|' + (sid || '') + '|' + _gt + (_ga ? '|' + _ga : '');
-    const payload = Buffer.from(raw).toString('base64url');
+    const payload = _sealTokenPayload(raw, secret);
     const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
     return 'https://dchub.cloud/go/c/' + payload + '.' + sig;
   } catch (_) {
@@ -12591,7 +12592,7 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
   let request_id = null;
   try {
     const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(relay.url);
-    const sid = m ? Buffer.from(m[1], 'base64url').toString().split('|')[0] : '';
+    const sid = m ? _unsealTokenPayload(m[1], process.env.DCHUB_INTERNAL_KEY).split('|')[0] : '';
     if (sid && sid !== 'no-session') request_id = sid;
   } catch (_) { request_id = null; }
   const sc = {
@@ -32250,7 +32251,7 @@ function _relayTokenFields(url) {
   try {
     const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(String(url || ''));
     if (!m) return null;
-    const f = Buffer.from(m[1], 'base64url').toString().split('|');
+    const f = _unsealTokenPayload(m[1], process.env.DCHUB_INTERNAL_KEY).split('|');
     return f.length >= 4 && f.length <= 7 ? f : null;   // 7: |pk- |w- |m- (option D)
   } catch (_) { return null; }
 }

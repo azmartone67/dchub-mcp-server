@@ -17,6 +17,7 @@
 //     "licence", "this session") matches the unlock the relay page will show (the token's u- field);
 //   * DCHUB_WALL_PAID_LINE on with item 1: one copy path, no paid line;
 //   * mintedOnly keeps a /u/ line only while item 1 is on.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
@@ -119,7 +120,7 @@ async function call(h, p, name, args, { ua = 'cursor/1.0', headers = {}, ip = ''
 const RERUN_TOK = /pr1\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+/g;
 const rerunBody = (m, b) => {
   try {
-    const { t, ...rest } = JSON.parse(Buffer.from(b, 'base64url').toString());
+    const { t, ...rest } = JSON.parse(unsealPayload(b));
     // each step's result hashes ([3], [7]) cover the step's served timestamps, so they differ run to run
     if (Array.isArray(rest.s)) rest.s = rest.s.map((x) => (Array.isArray(x) ? x.map((v, i) => (i === 3 || i === 7 ? 'H' : v)) : x));
     return 'RERUN.' + Buffer.from(JSON.stringify(rest)).toString('base64url');
@@ -140,7 +141,7 @@ const isJson = (t) => /^\s*\{/.test(String(t || ''));
 function decodeRelay(url) {
   const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}(?:\?(.*))?$/.exec(String(url || ''));
   if (!m) return null;
-  const parts = Buffer.from(m[1], 'base64url').toString().split('|');
+  const parts = unsealPayload(m[1]).split('|');
   const field = (p) => (parts.slice(4).find((x) => x.startsWith(p)) || '').slice(p.length);
   return { parts, tool: parts[1], a: field('a-'), c: field('c-'), u: field('u-'), s: field('s-'), query: m[2] || '' };
 }

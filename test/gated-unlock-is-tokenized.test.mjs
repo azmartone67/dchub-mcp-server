@@ -23,6 +23,7 @@
 //
 // These are CALLS, not greps. A source scan cannot tell a live bare URL from
 // one a comment mentions, and it cannot see a URL assembled from parts.
+import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -135,7 +136,7 @@ describe('the unlock URL a gated tool composes', () => {
                         () => _unlockUrl('get_fiber_intel', SID));
     expect(isSigned(url)).toBe(true);
     const payload = url.split('/').pop().split('.')[0];
-    const decoded = Buffer.from(payload, 'base64url').toString();
+    const decoded = unsealPayload(payload);
     expect(decoded).toContain('pk-' + createHash('sha256').update(KEY).digest('hex'));
   });
 
@@ -284,7 +285,7 @@ describe('the upgrade_url fields inside the tool dispatcher', () => {
     expect(banned([url])).toEqual([]);
     // it carries THIS caller's session
     const payload = url.split('/').pop().split('.')[0];
-    expect(Buffer.from(payload, 'base64url').toString()).toContain(SID);
+    expect(unsealPayload(payload)).toContain(SID);
   });
 
   it('…and never degrades into a checkout link on that platform', () => {
