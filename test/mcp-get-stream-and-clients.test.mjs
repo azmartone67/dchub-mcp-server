@@ -391,6 +391,17 @@ describe('client recognition (names and UAs from each client\'s public source)',
     // a name that merely contains the word is not claimed
     expect(S.detectPlatformFromInit(init('my-opencode-fork-tool'), 'node')).not.toBe('opencode');
   });
+  it('new (2026-11-22): the Pipeworx gateway by User-Agent and by clientInfo name, a sessionless call included', () => {
+    // The UA the Railway http log recorded for every Pipeworx call (no clientInfo, key or session): was 'mcp'.
+    expect(S.detectPlatformFromInit(null, 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)')).toBe('pipeworx');
+    expect(S.detectPlatformFromInit(null, 'Pipeworx/2.0')).toBe('pipeworx');
+    expect(S.detectPlatformFromInit(init('pipeworx'), 'node')).toBe('pipeworx');
+    expect(S.detectPlatformFromInit(init('pipeworx-gateway'), 'node')).toBe('pipeworx');
+    expect(S.detectPlatformFromInit(null, 'node', 'pipeworx')).toBe('pipeworx');   // explicit platform header
+    // the word elsewhere in a UA or name is not claimed
+    expect(S.detectPlatformFromInit(null, 'node (+https://example.com/pipeworx)')).not.toBe('pipeworx');
+    expect(S.detectPlatformFromInit(init('my-pipeworx-fork'), 'node')).not.toBe('pipeworx');
+  });
   it('existing labels do not move', () => {
     expect(S.detectPlatformFromInit(init('gemini-cli-mcp-client'), 'node')).toBe('gemini');
     expect(S.detectPlatformFromInit(init('windsurf-client'), 'node')).toBe('windsurf');

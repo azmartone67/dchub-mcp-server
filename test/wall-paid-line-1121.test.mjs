@@ -256,6 +256,24 @@ describe('lib/wall-paid-line.mjs: placement and telemetry', () => {
   });
 });
 
+describe('lib/wall-paid-line.mjs: gateways stay out of the split (2026-11-22)', () => {
+  it('isGatewayCaller: the Pipeworx label or UA; nothing else', () => {
+    expect(W.isGatewayCaller({ platform: 'pipeworx' })).toBe(true);
+    expect(W.isGatewayCaller({ platform: 'Pipeworx ' })).toBe(true);
+    expect(W.isGatewayCaller({ client_ua: 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)' })).toBe(true);
+    expect(W.isGatewayCaller({ user_agent: 'pipeworx-mcp-dchub/1.0' })).toBe(true);
+    for (const c of [{}, null, { platform: 'mcp' }, { platform: 'cursor', client_ua: 'cursor/1.0' },
+      { client_ua: 'node (+https://example.com/pipeworx/)' }, { platform: 'mcp-generic-client', client_ua: 'node' }]) {
+      expect(W.isGatewayCaller(c), JSON.stringify(c)).toBe(false);
+    }
+  });
+  it('paidLineSurface: a gateway on /mcp is off the surface; the same call from a non-gateway is on it', () => {
+    expect(W.paidLineSurface({ path: '/mcp', platform: 'cursor' })).toBe(true);
+    expect(W.paidLineSurface({ path: '/mcp', platform: 'pipeworx' })).toBe(false);
+    expect(W.paidLineSurface({ path: '/mcp', platform: 'mcp', client_ua: 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)' })).toBe(false);
+  });
+});
+
 describe('_wallPaidLineStep: the generic /mcp surface only', () => {
   const wall = () => ({ content: [{ type: 'text', text: '{"preview":true}' }, { type: 'text', text: SIGNIN_LINE }, { type: 'text', text: 'Source: DC Hub (dchub.cloud)' }], structuredContent: { preview: true } });
   const ctx = (o = {}, tool = 'get_grid_intelligence') => ({ session_id: '', platform: 'cursor', tier: 'anonymous', path: '/mcp',
@@ -294,6 +312,10 @@ describe('_wallPaidLineStep: the generic /mcp surface only', () => {
     ['get_api_key', {}, 'get_api_key'],
     ['an account tool', {}, 'bind_email'],
     ['not walled', { _pendingWallHits: [] }],
+    ['the Pipeworx gateway (platform label)', { platform: 'pipeworx' }],
+    ['the Pipeworx gateway (raw UA, platform still generic)', { platform: 'mcp', client_ua: 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)' }],
+    ['the Pipeworx gateway forwarding an end client\'s clientInfo', { platform: 'claude', client_ua: 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)' }],
+    ['the Pipeworx gateway with a trial key', { platform: 'pipeworx', api_key: 'dch_trial_PL' + 'a'.repeat(20), tier: 'trial' }],
   ])('%s: untouched, no arm', (_l, o, tool = 'get_grid_intelligence') => {
     setEnv({ DCHUB_WALL_PAID_LINE: '1' });
     const w = wall(); const c = ctx(o, tool);
@@ -438,6 +460,23 @@ describe('flag ON, /mcp: the A/B', () => {
     expect(paid).toBeGreaterThan(24);
     expect(paid).toBeLessThan(56);
   }, 240_000);
+  it('Pipeworx on /mcp (its real UA, keyless, sessionless): no line, no arm, on both arms\' IPs', async () => {
+    setEnv({ ...COPY_ON, DCHUB_WALL_PAID_LINE: '1' });
+    anonCount = 999;
+    let walls = 0;
+    for (const arm of [W.ARM_PAID_LINE, W.ARM_CONTROL]) {
+      const r = await call(H, '/mcp', 'get_interconnection_queue', { iso: 'PJM' }, { ip: ipIn(arm), ua: 'pipeworx-mcp-dchub/1.0 (+https://pipeworx.io)' });
+      if (count(r.result, SIGNIN_LINE) > 0 || r.rows.length > 0) walls += 1;
+      expect(JSON.stringify(r.result)).not.toContain('v=paid-line');
+      expect(r.tracks.length, 'the call posted its track row').toBeGreaterThan(0);
+      for (const t of r.tracks) {
+        expect(t.params || {}).not.toHaveProperty(W.TRACK_FIELD);
+        expect(t.platform, 'the row is labelled pipeworx, not the generic mcp').toBe('pipeworx');
+      }
+      for (const row of r.rows) expect(row).not.toHaveProperty(W.EVENT_FIELD);
+    }
+    expect(walls, 'both calls were walls (a check over no wall proves nothing)').toBe(2);
+  }, 120_000);
   it('Grok on /mcp (grokbot UA): no line, no arm', async () => {
     setEnv({ ...COPY_ON, DCHUB_WALL_PAID_LINE: '1' });
     anonCount = 999;
