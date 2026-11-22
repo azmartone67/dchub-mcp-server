@@ -81,14 +81,17 @@ describe('the healed content matches canon', () => {
     expect(DESC).toMatch(/global facility map/i);
   });
 
-  it('carries the canonical deal count and no market count', () => {
+  it('carries no market count and no deal count', () => {
     // The GOVERNANCE quantities — facilities, countries, markets, deals — are
     // owned by the backend's canon and mirrored into canon_phrases.json.
     // Owner 2026-11-21: listing copy names no market count ("market by market").
     expect(DESC).not.toContain(CANON.markets);
     expect(DESC).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
     expect(DESC).toMatch(/market by market/);
-    expect(DESC).toContain(CANON.deals);
+    // Owner 2026-11-22: no deal count either ("tracked M&A deals").
+    expect(DESC).not.toContain(`${CANON.deals} tracked`);
+    expect(DESC).not.toMatch(/\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(?:deals?|transactions?)\b/i);
+    expect(DESC).toMatch(/tracked M&A deals/);
   });
 
   it('carries the tool count from the owner that actually owns it', () => {

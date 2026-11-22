@@ -120,6 +120,10 @@ export const COPY_RULES = [
   // the approved shape until then; "DCPI scores markets daily" is now.
   ['market_count', /\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/gi,
     'no market count (owner 2026-11-21)'],
+  // Owner 2026-11-22 ("fix the 2,000+ deals count too"): no deal count either.
+  // "tracked M&A deals" names the coverage without a number.
+  ['deal_count', /\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(?:deals?|transactions?)\b/gi,
+    'no deal count (owner 2026-11-22)'],
   ...INTERNAL_DIRECTIVE_RULES,
 ];
 
