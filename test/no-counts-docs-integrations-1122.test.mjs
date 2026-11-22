@@ -80,3 +80,15 @@ describe('power-grid, Arcade and Copilot name no served size (owner 2026-11-22)'
     });
   }
 });
+
+describe('the Copilot planner prompt states no tool count (owner 2026-11-22, "fix the 6 countries x 8 tools count too")', () => {
+  const TOOLS = /\b\d+\s+(?:[\w-]+\s+)?tools?\b/i;
+  it('CONTROL: the detector reads the old line', () => {
+    expect('Total planned calls: 6 countries x 8 tools = 48 + 3 market reports + 3 news = 54.').toMatch(TOOLS);
+  });
+  it('integrations/copilot/planner-system-prompt.txt names no tool count', () => {
+    const text = fs.readFileSync(path.join(ROOT, 'integrations/copilot/planner-system-prompt.txt'), 'utf8');
+    expect(text).toContain('Total planned calls:');
+    expect(text.match(TOOLS)?.[0] ?? null).toBeNull();
+  });
+});
