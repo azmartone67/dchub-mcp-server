@@ -1338,7 +1338,7 @@ export function attachCapacity(ssot, res) {
 
 export function pasteLine(ssot) {
   const parts = [
-    `${ssot.tools} MCP tools`,
+    'MCP tools',   // owner 2026-11-22: no tool count either
     FACILITY_MAP_PROSE,   // the count is withdrawn (owner decision 2026-09-27)
     // Owner 2026-11-21/22: no market or deal count in listing copy.
     'markets scored daily (DCPI)',

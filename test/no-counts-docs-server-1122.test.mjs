@@ -63,7 +63,7 @@ describe('no market or deal count in docs, skills and server text (owner 2026-11
   it('the ecosystem-sync paste line names neither count, even when the SSOT has them', () => {
     const line = pasteLine({ tools: 98, markets: '300+', deals: '2,000+' });
     expect(counts(line)).toEqual([]);
-    expect(line).toContain('98 MCP tools');
+    expect(line).toContain('MCP tools');
     expect(line).toContain('tracked M&A deals');
   });
 

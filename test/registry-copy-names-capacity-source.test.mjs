@@ -151,7 +151,9 @@ describe('the canonical floors survive in the copy that carries them', () => {
     const registered = new Set([...read('server.mjs')
       .matchAll(/trackedTool\(srv,\s*'([a-z_]+)'/g)].map((m) => m[1])).size;
     expect(registered).toBeGreaterThan(50);
-    expect(ABOUT).toContain(`${registered} tools`);
+    // ★2026-11-22 (owner): no tool count in the About text either.
+    expect(ABOUT).not.toContain(`${registered} tools`);
+    expect(ABOUT).not.toMatch(/\b\d+\+?\s+(?:MCP\s+)?tools?\b/i);
     // The facility count is withdrawn (owner decision 2026-09-27): the map, no number.
     expect(ABOUT).not.toContain(canon.facilities);
     expect(ABOUT).toMatch(/global facility map/i);

@@ -1206,18 +1206,18 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 }
 
 // ---- canonical/listing-copy.json endpoints (our-surface field only) ---------
-// Heal the structured endpoints line when the tool count moves. Do not write
-// that line back into long / glama_400 / short / tight.
+// ★2026-11-22 (owner, "fix the 98 tools count too"): the endpoints line names no
+// tool count ("The full MCP tool catalog at …"). It used to be healed to COUNT;
+// now a count written back into it is a PROBLEM, and a missing line still is.
 {
   const LC = 'canonical/listing-copy.json';
   const lc = readCur(LC);
-  const EPRX = /^(  "endpoints": ")(\d+)( MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1)(",?)$/m;
+  const EPRX = /^  "endpoints": "(.*)",?$/m;
   const em = EPRX.exec(lc);
   if (!em) {
-    problems.push(`${LC}: \`"endpoints": "N MCP tools at …"\` line NOT FOUND — re-anchor this heal`);
-  } else if (Number(em[2]) !== COUNT) {
-    problems.push(`${LC} endpoints tool count ${em[2]} != ${COUNT}`);
-    if (FIX) pend(LC, lc.replace(EPRX, `$1${COUNT}$3$4`));
+    problems.push(`${LC}: \`"endpoints": …\` line NOT FOUND — re-anchor this check`);
+  } else if (/\b\d+\+?\s+(?:MCP\s+)?tools?\b/i.test(em[1])) {
+    problems.push(`${LC} endpoints states a tool count — no tool count in listing copy (owner 2026-11-22)`);
   }
 }
 

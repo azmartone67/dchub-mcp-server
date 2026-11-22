@@ -28,20 +28,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const NAME = 'DC Hub';
 const HOMEPAGE = 'https://dchub.cloud/mcp';
 
-// ★2026-07-30: canon quantities resolve from the committed snapshot + derived
-// tool count — this file was a THIRD hand-pinned copy ("79 tools / 311 markets
-// / 1,400+ deals") and its refresh pass was actively rewriting external
-// listings back to stale numbers. Same resolution as sync-tools-manifest.mjs:
-// canonical/canon_phrases.json first (refreshed daily from
-// /api/v1/canon/phrases), pinned fallbacks only if the snapshot is unreadable.
+// ★2026-11-22 (owner): no entry this script writes states a tool, market or deal
+// count — the refresh pass removes them from our line instead of refreshing them.
 const _ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const _readJ = (f) => { try { return JSON.parse(readFileSync(path.join(_ROOT, f), 'utf8')); } catch { return null; } };
-const _snap = _readJ('canonical/canon_phrases.json') || {};
-// ★2026-11-22: only the tool count is a quantity here now; market and deal counts
-// are not stated in any entry this script writes (owner).
-const N_TOOLS = (Number.isInteger(_snap.tools) && _snap.tools > 20 && _snap.tools < 500)
-  ? _snap.tools
-  : (_readJ('server.json')?._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.toolCount || 81);
 const REPO_URL = 'https://github.com/azmartone67/dchub-mcp-server';
 
 // ★2026-09-07 — ONE spelling of our head-branch name. There were three live ones
@@ -63,7 +52,7 @@ const DRY = !LIVE;
 // display-name used for the alphabetical guard + PR title
 // Counts kept current (was stale "70 tools / 300+ markets / 2,000+ deals" — the exact
 // pre-stale-entry bug the 07-13 audit flagged). Update alongside the honest-numbers.
-const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
+const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily), ISO grid telemetry, fiber routes. Remote MCP at ${HOMEPAGE} — query and cite.`;
 
 // PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
 // appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
@@ -86,7 +75,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, tracked M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. No signup to start. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (markets scored daily, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, tracked M&A deals. Streamable HTTP endpoint at https://dchub.cloud/mcp. No signup to start. In the official MCP Registry. CC-BY-4.0.`,
   },
   {
     // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
@@ -96,7 +85,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
     alphabetical: false,                    // section isn't sorted — append at end
-    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index, market by market, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, no signup to start)`,
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index, market by market, ISO grid telemetry, fiber routes; no signup to start)`,
   },
   // ── VETTED 2026-09-06 · e2b-dev/awesome-mcp-gateways (★168) — NOT A FIT ──
   // Kept here DECLINED rather than deleted: discovery dedupes on presence in
@@ -497,7 +486,7 @@ export function refreshOurCounts(text) {
     if (!/azmartone67\/dchub|dchub-mcp-server/i.test(lines[i])) continue;
     const before = lines[i];
     lines[i] = lines[i]
-      .replace(/\b\d{1,3}\s+tools\b/gi, `${N_TOOLS} tools`)
+      .replace(/\b\d{1,3}\+?\s+(?:MCP\s+)?tools\b/gi, 'MCP tools')
       .replace(/\b\d[\d,]*\+?\s+(?:DCPI(?:-scored)?\s+)?(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `DCPI-scored ${a}${b}markets`)
       .replace(/\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(deals|transactions)\b/gi, (m, noun) => `tracked M&A ${noun.toLowerCase()}`);
     if (lines[i] !== before) changed = true;
@@ -941,7 +930,7 @@ if (_IS_MAIN) (async () => {
     if (!res.ok) { console.log(`  ~ ${t.key} (refresh): fetch ${res.status} — skip`); continue; }
     const refreshed = refreshOurCounts(await res.text());
     if (!refreshed) { console.log(`  ✓ ${t.key} (refresh): our entry already current — skip`); continue; }
-    console.log(`  ● ${t.key} (refresh): STALE → ${N_TOOLS} tools, no market or deal count`);
+    console.log(`  ● ${t.key} (refresh): STALE → dropping tool, market and deal counts`);
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
@@ -949,9 +938,9 @@ if (_IS_MAIN) (async () => {
       if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: `${t.key}-refresh`, why: gate.skipped }); continue; }
       const r = await openPR(t, refreshed, {
         branch: headBranch(t, 'refresh'),
-        title: `Refresh DC Hub MCP entry (${N_TOOLS} tools; drop stale market and deal counts)`,
+        title: 'Refresh DC Hub MCP entry (drop stale tool, market and deal counts)',
         message: 'Refresh DC Hub stats',
-        body: `Updates the existing DC Hub entry: **${N_TOOLS} tools**, and the market and deal counts are dropped (they go stale; the entry now says DCPI-scored markets and tracked M&A deals). In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+        body: `Updates the existing DC Hub entry: the tool, market and deal counts are dropped (they go stale; the entry now says MCP tools, DCPI-scored markets and tracked M&A deals). In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
       if (r.skipped) { console.log(`      skip: ${r.skipped}`); receipt(t, 'refresh', r.pr); }
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }

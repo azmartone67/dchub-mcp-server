@@ -100,7 +100,10 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['neutral connect line', /re-sends a lost one\. More detail is available at dchub\.cloud\/connect\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['reference', /Reference: resource `dchub:\/\/instructions`/],
-    ['served count', /\b\d+ tools \(a curated subset of \d+\)/],
+    // ★2026-11-22 (owner): the shared text names no catalog total, so the lead
+    // "N tools (a curated subset of TOTAL)" rewrite has nothing to rewrite; the
+    // served count is stated by the ENDPOINT SCOPE line below.
+    ['no catalog total', /^(?![\s\S]*curated subset)/],
     ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists \d+ DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
   ])('/mcp/grok keeps the rule: %s', (_n, re) => {
     expect(served['/mcp/grok']).toMatch(re);

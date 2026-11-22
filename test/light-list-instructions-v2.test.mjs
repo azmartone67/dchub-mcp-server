@@ -184,12 +184,13 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     }
   });
 
-  it('CONTROL (flag off, today): the same check finds tools named but not listed, and two counts', async () => {
+  it('CONTROL (flag off, today): the same check finds tools named but not listed, and one count', async () => {
     delete process.env[FLAG];
     for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
       const hs = await handshake(c);
       expect(notListed(hs), label(c)).toEqual(expect.arrayContaining(['get_grid_data', 'get_market_intel']));
-      expect(hs.instructions).toMatch(/DC Hub: \d+ tools/);
+      // ★2026-11-22 (owner): the shared text no longer says "DC Hub: N tools."
+      expect(hs.instructions).not.toMatch(/DC Hub: \d+ tools/);
       expect(hs.instructions).toMatch(/this client's \/mcp list shows 10 DC Hub tools/);
     }
   });

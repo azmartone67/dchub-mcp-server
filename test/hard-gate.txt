@@ -485,6 +485,7 @@ test/no-root-schema-combinators.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
 test/no-sql-tokens-in-output.test.mjs
 test/no-starter-offer.test.mjs
+test/no-tool-count-1122.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
 test/note-f-agent-prose-1117.test.mjs

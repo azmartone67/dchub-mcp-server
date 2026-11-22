@@ -6,7 +6,7 @@
   "glama_400": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices, site selection and power grid questions. The Data Center Power Index (DCPI) scores where data centers can get grid power, market by market, daily. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start.",
   "tight": "DC Hub is the orchestration layer for data center and energy intelligence. Data Center Power Index (DCPI): scored daily. MCP: https://dchub.cloud/mcp",
   "tool_count": 98,
-  "endpoints": "98 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1",
+  "endpoints": "The full MCP tool catalog at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1",
   "capacity_blurb": "Capacity Source by DC Hub: operators and brokers list available data-center capacity (a fee applies only if a deal closes); buyers and AI agents source it by size (kW or MW) and location with the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if the provider accepts.",
   "updated_at": "2026-11-22",
   "glama_live": "Start with execute_plan. Live, dated data for data center, colocation, power grid, site selection, interconnection and energy questions. Rank data center and datacenter markets, check interconnection queues and grid headroom across PJM, ERCOT, CAISO, MISO, SPP, NYISO and ISO-NE, pull electricity and natural gas prices, and review fiber. Cited answers. Connect: https://dchub.cloud/mcp",

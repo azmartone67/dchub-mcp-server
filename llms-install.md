@@ -38,7 +38,7 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 ```
 
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
-98 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
+the full tool list, including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
 
 Then try one data call with no key: **"Use DC Hub to list data centers in Ashburn, VA, and

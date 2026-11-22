@@ -11,7 +11,7 @@ The orchestration layer for data center and energy intelligence: a global data c
 
 ## Connect
 
-- **MCP (preferred):** remote Streamable HTTP at `https://dchub.cloud/mcp`, 98 tools. `DCHUB_API_KEY` is optional. Setup for Claude, ChatGPT, Cursor, VS Code, Gemini CLI and Grok: https://dchub.cloud/connect-mcp
+- **MCP (preferred):** remote Streamable HTTP at `https://dchub.cloud/mcp`. `DCHUB_API_KEY` is optional. Setup for Claude, ChatGPT, Cursor, VS Code, Gemini CLI and Grok: https://dchub.cloud/connect-mcp
 - **REST (no MCP client):** `https://dchub.cloud/api/v1` (for example `/stats`, `/facilities?search=`, `/transactions`, `/news`). Docs: https://dchub.cloud/api-docs
 
 ## When to use DC Hub, and when not to
