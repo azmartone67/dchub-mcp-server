@@ -5636,12 +5636,12 @@ function _wallIsWalled(out, name, c) {
   }
   return walled;
 }
-// F2 R2 (lib/wall-offer-floor-v2.mjs): walls per (identity, tool) over 24h. Identity: the key's hash, else the IP's hash,
+// F2 R2 (lib/wall-offer-floor-v2.mjs): walls per (identity, tool) over 24h. Identity: the key's pk- ref, else the IP's hash,
 // else the session's (the same hashes lib/keyless-wall.mjs uses for the cap wall).
 const _repeatWalls = _createRepeatWallCounter();
 function _repeatWallIdentity(c) {
   try {
-    if (c && c.api_key) return 'k-' + createHash('sha256').update(String(c.api_key)).digest('hex');
+    if (c && c.api_key) return _proTrialIdentity(c.api_key);   // the existing pk- key ref (no new hash site)
     return _capWallIdentity(c || {});
   } catch (_) { return ''; }
 }
