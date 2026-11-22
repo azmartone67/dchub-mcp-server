@@ -141,10 +141,10 @@ describe('copy rules', () => {
     }
   });
 
-  it('endpoints is exactly the approved line for the current tool count, and stays off third-party description text', () => {
-    expect(COPY.endpoints).toBe(endpointsLine(COPY.tool_count));
-    expect(COPY.endpoints).toBe('94 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1'
-      .replace(/^\d+/, String(COPY.tool_count)));
+  it('endpoints is exactly the approved count-free line, and stays off third-party description text', () => {
+    expect(COPY.endpoints).toBe(endpointsLine());
+    // Owner 2026-11-22: no tool count.
+    expect(COPY.endpoints).toBe('The full MCP tool catalog at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1');
     expect(COPY.long).toContain(MCP_URL);
     expect(COPY.long).toContain('https://dchub.cloud/api/v1');
     expect(COPY.glama_400).toContain(MCP_URL);

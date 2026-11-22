@@ -10,6 +10,9 @@ on:
     - cron: "0 13 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -349,7 +352,8 @@ jobs:
           MCP_API_KEY: ${{ secrets.MCP_API_KEY || secrets.DC_HUB_API_KEY }}
           # Web Bot Auth: probes to dchub.cloud are signed (vitest setupFile); unsigned if unset.
           WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
-        run: npx vitest run test/mcp.test.mjs test/regression.test.mjs
+        # live-handshakes (owner 2026-11-22): initialize on every MCP path, no tool count, within 2,048, scope line.
+        run: npx vitest run test/mcp.test.mjs test/regression.test.mjs test/live-handshakes.test.mjs
 
       - name: Upload live-suite output
         if: always()

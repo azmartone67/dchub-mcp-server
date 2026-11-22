@@ -31,6 +31,7 @@ async function init(path) {
 }
 
 const CORE = ['/mcp', '/mcp/grok', '/mcp/chatgpt', '/mcp/claude', '/mcp/core'];
+const SLIM = '/mcp?tools=core';
 let PACKS = [];
 
 beforeAll(async () => {
@@ -45,6 +46,12 @@ beforeAll(async () => {
   PORT = httpServer.address().port;
   PACKS = [...S.MCP_PACKS.keys()];
   for (const p of [...CORE, '/mcp/grok/oauth', ...PACKS]) served[p] = await init(p);
+  // Owner 2026-11-22 ("trim it"): the slim ?tools=core handshake measured 2,063 live, and no path here counted it.
+  const prevSlim = process.env.DCHUB_SLIM_PROFILE_TEST;
+  process.env.DCHUB_SLIM_PROFILE_TEST = '1';
+  try { served[SLIM] = await init(SLIM); } finally {
+    if (prevSlim === undefined) delete process.env.DCHUB_SLIM_PROFILE_TEST; else process.env.DCHUB_SLIM_PROFILE_TEST = prevSlim;
+  }
 }, 60_000);
 
 afterAll(async () => {
@@ -74,6 +81,12 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     expect(served[p].length, p + ' measured ' + served[p].length).toBeLessThanOrEqual(2000);
   });
 
+  it('the slim ?tools=core handshake is served (flag on) and at most 2,048 characters', () => {
+    expect(typeof served[SLIM], 'slim must be served, not skipped').toBe('string');
+    expect(served[SLIM], 'the slim tail, not the plain /mcp text').toContain('(tools=core)');
+    expect(served[SLIM].length, SLIM + ' measured ' + served[SLIM].length).toBeLessThanOrEqual(BUDGET);
+  });
+
   it('every pack path is at most 2,048 characters', () => {
     const over = PACKS.filter((p) => served[p].length > BUDGET).map((p) => p + ' ' + served[p].length);
     expect(over).toEqual([]);
@@ -100,13 +113,16 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['neutral connect line', /re-sends a lost one\. More detail is available at dchub\.cloud\/connect\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['reference', /Reference: resource `dchub:\/\/instructions`/],
-    ['served count', /\b\d+ tools \(a curated subset of \d+\)/],
-    ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists \d+ DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
+    // ★2026-11-22 (owner): the shared text names no catalog total, so the lead
+    // "N tools (a curated subset of TOTAL)" rewrite has nothing to rewrite, and
+    // the ENDPOINT SCOPE line below states no served count either (owner 2026-11-22).
+    ['no catalog total', /^(?![\s\S]*curated subset)/],
+    ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists a subset of DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
   ])('/mcp/grok keeps the rule: %s', (_n, re) => {
     expect(served['/mcp/grok']).toMatch(re);
   });
 
   it('a pack path keeps its scope notice', () => {
-    for (const p of PACKS) expect(served[p], p).toMatch(/ENDPOINT SCOPE: \/mcp\/\S+ lists \d+ DC Hub tools, a listing scope, not a permission scope/);
+    for (const p of PACKS) expect(served[p], p).toMatch(/ENDPOINT SCOPE: \/mcp\/\S+ lists a subset of DC Hub tools, a listing scope, not a permission scope/);
   });
 });

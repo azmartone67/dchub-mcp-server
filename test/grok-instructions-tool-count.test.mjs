@@ -59,7 +59,9 @@ const LIST = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize',
   params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'grok-toolcount-test', version: '1.0' } } };
 
-describe('/mcp/grok initialize instructions state the served tool count', () => {
+// ★2026-11-22 (owner, "fix the 10 DC Hub tools count too"): the handshake states no
+// tool count at all, served or total; the scope line says "lists a subset of DC Hub tools".
+describe('/mcp/grok initialize instructions state no tool count', () => {
   it('CONTROL: the detector reads the pre-fix wording as a 92-tool claim', () => {
     expect(statedToolCounts('behind AI: 92 tools over a global data-center facility map')).toEqual([92]);
     expect(statedToolCounts('which lists 11 DC Hub tools chosen')).toEqual([11]);
@@ -67,18 +69,19 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
   });
 
   for (const path of ['/mcp/grok', '/mcp/grok/oauth']) {
-    it(`${path}: every stated tool count equals the served tools/list length`, async () => {
+    it(`${path}: states no tool count, served or total`, async () => {
       const auth = path.endsWith('/oauth') ? { 'x-api-key': 'dchub_test_grokcount' } : {};
       const served = (await post('/mcp/grok', LIST)).json.result.tools.length;
       expect(served).toBe(G.GROK_TOOLS.length);
       const init = await post(path, INIT, auth);
       const instr = init.json?.result?.instructions;
       if (instr === undefined) return;   // the OAuth URL may challenge; the plain path is the one pinned
-      const counts = statedToolCounts(instr);
-      expect(counts.length, 'the Grok handshake states its tool count').toBeGreaterThan(0);
-      for (const n of counts) expect(n, instr.slice(0, 400)).toBe(served);
+      expect(statedToolCounts(instr), instr.slice(0, 400)).toEqual([]);
       expect(instr).not.toMatch(new RegExp(`\\b${TOTAL} tools\\b`));
-      expect(instr).toContain(`${served} tools (a curated subset of ${TOTAL})`);
+      // ★2026-11-22 (owner): the shared text names no catalog total, so there is no
+      // "(a curated subset of N)" lead; the served count is the ENDPOINT SCOPE line's.
+      expect(instr).not.toContain('curated subset');
+      expect(instr).toContain('/mcp/grok lists a subset of DC Hub tools');
     });
   }
 
@@ -88,14 +91,17 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     expect(init.json.result.instructions).toContain('/mcp/grok lists ');
   });
 
-  it('CONTROL: /mcp keeps the full-catalog lead sentence unchanged', async () => {
+  it('CONTROL: /mcp states no catalog total (owner 2026-11-22)', async () => {
     const init = await post('/mcp', INIT);
     const instr = init.json.result.instructions;
+    expect(statedToolCounts(instr), 'no served count either (owner 2026-11-22)').toEqual([]);
+    // ★2026-11-22 (owner, "fix the 98 tools count too"): neither the lean handshake
+    // ("DC Hub: N tools.") nor the long form ("N tools over") states the catalog total.
+    expect(instr).not.toMatch(new RegExp(`\\b${TOTAL} tools\\b`));
+    expect(S._INSTRUCTIONS).not.toMatch(new RegExp(`\\b${TOTAL} tools\\b`));
     // 2026-10-06 (item 7): the handshake is the lean text, which states the count once as "(N tools)";
     // the full-catalog "N tools over" sentence is in the long form, the resource dchub://instructions.
     // Owner GO 2026-10-20 (directory-safe wording): the lean text states the count as "DC Hub: N tools."
-    expect(instr).toMatch(new RegExp(`DC Hub: ${TOTAL} tools\\.`));
-    expect(S._INSTRUCTIONS).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
     expect(instr).not.toContain('curated subset');
     // Capacity handoff item 5 (owner 2026-11-11): /mcp alone adds the buy/RFP clause after the routing sentence.
     // Front desk item 4 (owner 2026-11-13): and the welcome after its lead.

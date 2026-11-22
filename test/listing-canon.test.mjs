@@ -107,7 +107,8 @@ describe('skill.md and its copies', () => {
   });
   it.each([
     ['a stale metadata count', (s) => s.replace(`"tools":${L.tool_count}`, '"tools":81')],
-    ['a stale prose count', (s) => s.replace(`${L.tool_count} tools`, '81 tools')],
+    // ★2026-11-22 the prose names no tool count (owner); plant a stale one.
+    ['a stale prose count', (s) => s.replace('(remote MCP https://dchub.cloud/mcp)', '(remote MCP https://dchub.cloud/mcp, 81 tools)')],
     ['a price', (s) => s + '\nPro is $99.'],
     ['a facility number', (s) => s + '\n24,900+ facilities.'],
     ['an over-long description', (s) => s.replace(/^description: .*$/m, 'description: ' + 'x'.repeat(1025))],

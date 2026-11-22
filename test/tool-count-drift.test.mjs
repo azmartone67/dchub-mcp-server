@@ -70,12 +70,7 @@ const isPackCount = (line, idx, len) => {
 // Named non-catalog counts the context rule cannot see. Each entry must still
 // match a claim, so this list cannot outlive the text it excuses.
 const KNOWN_NON_CATALOG = [
-  ['integrations/arcade/README.md', '**Read-only (67 tools):**', 'Arcade read-only gateway profile = the /mcp/claude directory set (next line)'],
   ['scripts/claude_directory_listing.txt', 'gives Claude 67 read-only tools', 'Claude directory connector profile, pinned by its own tests'],
-  ['integrations/copilot/planner-system-prompt.txt', '6 countries x 8 tools = 48', 'arithmetic in a planner prompt'],
-  ['docs/power-grid-server.md', 'it advertises 15 tools', 'the /mcp/power pack this doc is about'],
-  ['docs/power-grid-server.md', '15 tools = 11 listed', 'the /mcp/power pack this doc is about'],
-  ['docs/power-grid-server.md', 'returns 15 tools', 'the /mcp/power pack this doc is about'],
   ['scripts/canon-floor.mjs', "findFacilityFloors('92 tools over", 'self-test input string'],
   ['sdk/python/dchub/manifest.py', '(53 tools, 45 with', 'dated snapshot of the REST tools-manifest it embeds, not /mcp'],
 ];
@@ -150,10 +145,12 @@ describe(`first-party tool-count claims equal the catalog (${COUNT})`, () => {
     expect(scanned.length).toBeGreaterThan(300);
     // These carry the count today and are healed daily; if the guard stops
     // seeing them it has stopped working, not found a clean tree.
-    for (const f of ['README.md', 'smithery.yaml', 'llms-install.md']) {
-      expect(scanned, f).toContain(f);
-      expect(claims.some((c) => c.file === f && c.n === COUNT), `${f} has a ${COUNT} claim`).toBe(true);
-    }
+    // ★2026-11-22 (owner): README, smithery.yaml and llms-install name no tool
+    // count now. They are still scanned, and the tree still holds current claims
+    // (docs/, integration READMEs), so the scan stays non-vacuous.
+    for (const f of ['README.md', 'smithery.yaml', 'llms-install.md']) expect(scanned, f).toContain(f);
+    expect(claims.length).toBeGreaterThan(5);
+    expect(claims.some((c) => c.n === COUNT), `some file has a ${COUNT} claim`).toBe(true);
   });
 
   it('every stated tool count equals the full catalog, or is a named narrower surface', () => {

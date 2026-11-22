@@ -21,6 +21,9 @@ concurrency:
   group: docker-build-check-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-and-introspect:
     runs-on: ubuntu-latest

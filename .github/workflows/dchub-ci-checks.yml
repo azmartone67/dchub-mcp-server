@@ -16,6 +16,9 @@ on:
     - cron: "23 7 * * *" # nightly — catch live manifest / paywall drift
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   dchub-checks:
     # Probes the LIVE dchub.cloud surface with secrets.DC_HUB_API_KEY, so it

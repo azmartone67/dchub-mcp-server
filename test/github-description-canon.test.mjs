@@ -94,7 +94,7 @@ describe('the healed content matches canon', () => {
     expect(DESC).toMatch(/tracked M&A deals/);
   });
 
-  it('carries the tool count from the owner that actually owns it', () => {
+  it('carries no tool count (owner 2026-11-22)', () => {
     // ★ NOT CANON.tools. canonical/mcp_facts.json states the split in writing:
     // "version + tool_count are owned by sync-tools-manifest.mjs (server.json /
     // server.mjs)"; canon_phrases mirrors the BACKEND's live canon, which
@@ -106,7 +106,9 @@ describe('the healed content matches canon', () => {
     // this assertion to canon_phrases made every tool-adding PR red for a
     // reason that was never about the description being stale. Found by the PR
     // that added the 83rd tool.
-    expect(DESC).toContain(String(TOOL_COUNT_OWNER));
+    // ★2026-11-22 (owner, "fix the 98 tools count too"): no tool count at all now.
+    expect(DESC).not.toMatch(new RegExp(`\\b${TOOL_COUNT_OWNER}\\s+(?:MCP\\s+)?tools\\b`));
+    expect(DESC).not.toMatch(/\b\d+\+?\s+(?:MCP\s+)?tools?\b/i);
   });
 });
 

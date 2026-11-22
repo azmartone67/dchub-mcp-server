@@ -22,9 +22,11 @@ describe('renderBuildersPage', () => {
   it('covers composition, keyless previews, rate limits, attribution, citation and partner keys', () => {
     for (const must of ['https://dchub.cloud/mcp', '/mcp/core', 'openapi.json', 'human_message',
       'per source IP', 'partner key', '?via=', VIA_HEADER, 'DC Hub (dchub.cloud), as of &lt;date&gt;',
-      'dedicated service address', 'partnerships@dchub.cloud', 'https://dchub.cloud/partners', '94 tools']) {
+      'dedicated service address', 'partnerships@dchub.cloud', 'https://dchub.cloud/partners', 'One endpoint for every tool.']) {
       expect(html, must).toContain(must);
     }
+    // Owner 2026-11-22: no tool count on the page, even when one is passed in.
+    expect(html).not.toMatch(/\b\d+ tools\b/);
   });
 
   // Grok 2026-11-19 item 9: no free tier, calls/day, allowance or plan wording; the /connect line instead.

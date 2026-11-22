@@ -9,6 +9,9 @@ on:
   pull_request:
     paths: ['integrations/chatgpt/openapi.json', 'integrations/chatgpt/validate_actions_openapi.py']
   workflow_dispatch: {}
+permissions:
+  contents: read
+
 jobs:
   # ★2026-09-07 renamed from `check`. A job with no `name:` posts its JOB ID as the
   # status context, and `check` is one of the three REQUIRED contexts on main —

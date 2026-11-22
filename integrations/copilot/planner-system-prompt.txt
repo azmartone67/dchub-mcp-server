@@ -140,7 +140,7 @@ Then, for the TOP 3 MARKETS BY VALUE (US, DE, SG), perform 6 additional calls:
       - ESG-related developments
       - major M&A headlines
 
-Total planned calls: 6 countries x 8 tools = 48 + 3 market reports + 3 news = 54.
+Total planned calls: the per-country calls above for every country, plus 3 market reports and 3 news calls.
 
 ==================================================
 2. NORMALIZATION INTO COUNTRY-LEVEL FEATURE MATRIX

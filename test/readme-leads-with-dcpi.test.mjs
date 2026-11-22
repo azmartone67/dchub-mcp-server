@@ -13,7 +13,7 @@ const afterH1 = readme.split(/^# .+$/m)[1] ?? '';
 const paras = afterH1.trim().split(/\n\s*\n/);
 const firstPara = paras[0] ?? '';
 const dcpiPara = paras[1] ?? '';
-const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.';
+const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for data center site selection, colocation, capacity, energy, electricity prices and power grid questions.';
 
 describe('README opening', () => {
   it('first paragraph under the H1 is the orchestration lead', () => {

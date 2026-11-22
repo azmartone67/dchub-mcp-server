@@ -144,7 +144,12 @@ describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
   it('tool count off by one -> fail (tools are exact)', () => {
     const readme = path.join(ROOT, 'README.md');
     const tools = SNAP.tools;
-    withFile(readme, (s) => s.replace(`all ${tools} tools`, `all ${tools - 1} tools`), () => {
+    // ★2026-11-22 the README names no tool count (owner); plant one, off by one.
+    const ANCHOR = 'serves the full tool catalog to';
+    withFile(readme, (s) => {
+      expect(s, 'README anchor for the planted tool count is gone').toContain(ANCHOR);
+      return s.replace(ANCHOR, `serves the full tool catalog (all ${tools - 1} tools) to`);
+    }, () => {
       const r = check();
       expect(r.ok, 'a tool count one below canon passed').toBe(false);
       expect(r.out).toMatch(new RegExp(`tool-count\\(s\\) ${tools - 1} != ${tools}`));

@@ -10,6 +10,9 @@ on:
     # at 1/4 the quota burn.
     - cron: '17 * * * *'
   workflow_dispatch: {}
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
