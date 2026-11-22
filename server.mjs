@@ -152,7 +152,9 @@ import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyT
          keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
          KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED, keyToolName as _keyToolName } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
-import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest } from './lib/wall-key-line.mjs';   // Grok note N item 1
+import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest, keyLine as _keyLineText } from './lib/wall-key-line.mjs';
+import { grokKeyStickyOn as _grokKeyStickyOn, withGrokKeepKey as _withGrokKeepKey } from './lib/grok-key-sticky.mjs';   // Grok funnel F1
+import { wallOfferFloorV2On as _wallOfferFloorV2On, grokKeyFloorEligible as _grokKeyFloorEligible, createRepeatWallCounter as _createRepeatWallCounter, isRepeatWall as _isRepeatWall } from './lib/wall-offer-floor-v2.mjs';   // Grok funnel F2   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
 import { fetchEmberMonthly, emberAreaForGrid } from './lib/ember-monthly.mjs';
 import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, backendWithheld as _backendWithheld, TOP_METRO_ACCESS_BASIS, TOP_METRO_PARTIAL_BASIS } from './lib/top-metros.mjs';
@@ -178,6 +180,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
+import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
@@ -5009,6 +5012,9 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 // on bare /mcp when DCHUB_LIGHT_FOR_CLI is on (the default since 2026-11-12; set 0 to turn off).
 const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
 const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
+// F3 (DCHUB_CLI_STARTER, default OFF; lib/cli-starter.mjs): the six named coding clients get the implicit light list in the
+// starter order (five starter tools first, get_fiber_intel added, nothing removed).
+const LIGHT_PACK_STARTER = Object.freeze({ ...LIGHT_PACK_IMPLICIT, tools: _cliStarterOrder(LIGHT_TOOLS), starter: true });
 // Item 7 (DCHUB_SLIM_PROFILE_TEST, default OFF): the opt-in core list on bare /mcp (?tools=core), lib/slim-profile.mjs.
 const SLIM_PACK = Object.freeze({ pack: SLIM_PACK_NAME, spine: false, tools: SLIM_TOOLS, slim: true });
 
@@ -5036,7 +5042,12 @@ export function _pathPack(req) {
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
-  if (p === '/mcp' && _lightForRequest({ path: p, ..._lightIdentityFromReq(req), fullCatalog: _wantsFullCatalog(req) })) return LIGHT_PACK_IMPLICIT;
+  if (p === '/mcp') {
+    const _id = _lightIdentityFromReq(req);
+    if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
+      return (_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT;
+    }
+  }
   return MCP_PACKS.get(p) || null;
 }
 
@@ -5049,7 +5060,7 @@ export function _pathPack(req) {
 // an agent reads once per session.
 export function _packFilter(result, def) {
   if (def && def.compact) return _grokToolsList(result);
-  if (def && def.light) return _lightToolsList(result);
+  if (def && def.light) return _lightToolsList(result, undefined, def.tools);
   if (def && def.slim) return _slimProfileToolsList(result);
   const want = packToolNames(def);
   const have = new Map((result?.tools || []).map((t) => [t.name, t]));
@@ -5070,8 +5081,8 @@ export { MCP_PACKS, PACK_SPINE };
 
 // The names a light-list session's tools/list carries, in order: LIGHT_TOOLS less any name absent from the catalog
 // (lightToolsList serves short the same way). The A2 handshake derives its count and its "Tools:" line from this.
-export function _lightServedNames() {
-  return LIGHT_TOOLS.filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n));
+export function _lightServedNames(def) {
+  return ((def && Array.isArray(def.tools)) ? def.tools : LIGHT_TOOLS).filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n));
 }
 
 // The per-session instructions tail a pack path appends, or '' everywhere else.
@@ -5101,7 +5112,7 @@ export function _INSTR_TAIL_PACK(def) {
   // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): a light list states its count once, in the lead
   // (lib/light-list-instructions.mjs lightListInstructions), so this tail carries the rules and no second count.
   if (def.light && _lightListInstructionsV2On()) {
-    return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(), fullCatalogUrl: _FULL_CATALOG_URL });
+    return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(def), fullCatalogUrl: _FULL_CATALOG_URL });
   }
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
   // (listed count, listing scope not permission scope, tools/call takes any tool, discover_tools) stay.
@@ -5625,6 +5636,15 @@ function _wallIsWalled(out, name, c) {
   }
   return walled;
 }
+// F2 R2 (lib/wall-offer-floor-v2.mjs): walls per (identity, tool) over 24h. Identity: the key's pk- ref, else the IP's hash,
+// else the session's (the same hashes lib/keyless-wall.mjs uses for the cap wall).
+const _repeatWalls = _createRepeatWallCounter();
+function _repeatWallIdentity(c) {
+  try {
+    if (c && c.api_key) return _proTrialIdentity(c.api_key);   // the existing pk- key ref (no new hash site)
+    return _capWallIdentity(c || {});
+  } catch (_) { return ''; }
+}
 export function _wallOfferFloorStep(result, name, c = getCtx()) {
   try {
     if (!c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -5635,8 +5655,17 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
       if (!_wallIsWalled(result, name, c)) return result;
       const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
       const f = _floorKindFor(name, sc, c, ent);
-      return _placeWallOffers(result, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
+      let g = _placeWallOffers(result, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
         workosEnabled, grok: true }), name, c);
+      // F2 R1 (DCHUB_WALL_OFFER_FLOOR_V2, default off): the G3 block names no free offer, so the key line is the floor.
+      if (_wallOfferFloorV2On()) {
+        const kl = _keyLineText({ keyed: ent.keyed });
+        if (_grokKeyFloorEligible({ shownOffers: _offersShown(g, c._emailAsk) || [], bound: ent.bound, paid: ent.paid, line: kl })) {
+          g = _withFloorLine(g, kl);
+          _markEmailAsk(c, 'key_line');
+        }
+      }
+      return g;
     }
     if (c._offerFloor !== 'allowed') return result;
     let out = name === 'execute_plan' ? _planFloor(result, c) : result;
@@ -5658,7 +5687,11 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     const freeOfferShown = _hasFreeOffer(shownOffers);
     // Ask once per tool per session (owner 2026-11-09): the free-key line went out on this tool earlier in the session,
     // so the same tool again reads the floor's one digest line only (test/ask-once-per-tool), never the key ask again.
-    const keyLineSent = _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
+    // F2 R2 (DCHUB_WALL_OFFER_FLOOR_V2, default off): the 3rd wall or more of this identity on this tool in 24h reads the
+    // key line again, ahead of the digest offer, though the session was already asked.
+    let repeatWall = false;
+    try { repeatWall = _wallOfferFloorV2On() && _isRepeatWall(_repeatWalls.record(_repeatWallIdentity(c), name)); } catch (_) { repeatWall = false; }
+    const keyLineSent = !repeatWall && _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
     return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
       link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent }), name, c);
   } catch (_) { return result; }
@@ -7589,7 +7622,7 @@ export function _withReuseKeyLine(result, key) {
     if (!/^dch_live_/.test(k)) return result;          // only a durable key is "the one key"
     if (sc && (sc.error || sc.ok === false)) return result;   // nothing was handed back
     _noteKeyHanded(k);
-    if (!_reuseKeyLineOn()) return result;
+    if (!_reuseKeyLineOn()) return _grokKeepKeyFor(result);
     const content = Array.isArray(result.content) ? result.content : [];
     const has = content.some((b) => b && typeof b.text === 'string' && b.text.includes(REUSE_KEY_LINE));
     let nc = content;
@@ -7615,8 +7648,19 @@ export function _withReuseKeyLine(result, key) {
     }
     // api_key on a bind_email result means "this call minted it" to its callers (set_market_alert's
     // one-call watch), so a key the caller already held is named in bound_api_key instead.
-    return { ...result, content: nc,
+    const out = { ...result, content: nc,
       structuredContent: { ...(sc || {}), ...((sc && sc.api_key) ? {} : { bound_api_key: k }), reuse_key_line: REUSE_KEY_LINE } };
+    return _grokKeepKeyFor(out);
+  } catch (_) { return result; }
+}
+// F1 (DCHUB_GROK_KEY_STICKY, default off; lib/grok-key-sticky.mjs): a Grok caller's key reply says how to keep the key
+// attached (grok.com connector URL, xAI Remote MCP tool), with the key as a placeholder. Every other caller: unchanged.
+function _grokKeepKeyFor(result) {
+  try {
+    if (!_grokKeyStickyOn()) return result;
+    const c = getCtx();
+    if (!c || !_pcIsGrok(c.platform) || c.loopback_step) return result;
+    return _withGrokKeepKey(result);
   } catch (_) { return result; }
 }
 export const ALREADY_HAVE_KEY_GUIDANCE = 'You already have a DC Hub key: keep using it (send it as X-API-Key) and do not claim again. ' +
@@ -42223,8 +42267,12 @@ app.post(MCP_PATHS, async (req, res) => {
         } else if (_p && _p.light && _lightListInstructionsV2On()) {
           // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): the "Tools:" line names only listed tools,
           // execute_plan first, and the count is stated once (lib/light-list-instructions.mjs).
-          const _listed = _lightServedNames();
-          _instrRewrite = (t) => _lightListInstructions(t, { listed: _listed });
+          const _listed = _lightServedNames(_p);
+          _instrRewrite = _p.starter
+            ? (t) => _cliStarterInstructions(_lightListInstructions(t, { listed: _listed }))
+            : (t) => _lightListInstructions(t, { listed: _listed });
+        } else if (_p && _p.starter) {
+          _instrRewrite = (t) => _cliStarterInstructions(t);   // F3 with A2 off: the example + starter Tools: line only
         }
       } catch (_) { _instrRewrite = undefined; }
       // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
