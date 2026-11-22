@@ -142,6 +142,7 @@ test/colocation-answer-preview-count.test.mjs
 test/colocation-city-fit-1117.test.mjs
 test/colocation-h2h-round2-1117.test.mjs
 test/colocation-h2h-round3-1117.test.mjs
+test/commercial-wall-p02-1122.test.mjs
 test/compact-fiber-answer-1117.test.mjs
 test/compare-isos-array-arg.test.mjs
 test/compare-isos-bands-forwarded-tier.test.mjs
