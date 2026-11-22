@@ -10,6 +10,10 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.61 (2026-11-22)
+
+- Registry listing: server.json title is now "DC Hub: Data Center & Energy Intelligence" and the description names execute_plan, DCPI, power grid and fiber. README lead names site selection, colocation, capacity and energy. No behaviour change.
+
 ## 2.12.60 (2026-11-21)
 
 - New `accept_capacity_intro` tool (98 tools): the operator of a Capacity Source listing accepts a buyer's registration by lead id, and gets back the acceptance receipt DC Hub records in its lead register. Nothing is sent without `confirm=true` and a lead id in the register's shape. The backend's `DCHUB_OPERATOR_TERMS_V1` is the switch: while it is off, the backend answers `not_enabled` and the tool points to the accept link in DC Hub's lead email. Not listed on `/mcp/claude`.
