@@ -652,6 +652,7 @@ test/registry-name-single-source.test.mjs
 test/registry-publish-ref-gated.test.mjs
 test/registry-reflex-honesty.test.mjs
 test/registry-refresh-gate.test.mjs
+test/registry-refresh-no-counts-1122.test.mjs
 test/registry-refresh-publish-fails-loud.test.mjs
 test/registry-remotes.test.mjs
 test/registry-schema-limits.test.mjs
