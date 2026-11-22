@@ -33,7 +33,9 @@ const ROWS = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: 'Row ' + i
 const MINT_URL = 'https://dchub.cloud/h/hx1.AbCdEfGh12345678';
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
 
-let H, O, SB, S, fence, why = '', anonCount = 999, mintMode = 'ok', linked = null;
+let H, O, SB, S, fence, why = '', anonCount = 999, mintMode = 'ok', linked = null, linkedToken = '';
+const LINKED_TOKEN = 'dchl1.x1' + 'Q'.repeat(40) + '.' + 'f'.repeat(32);   // be#9214 util/linked_key shape
+const dataHits = [];   // data reads: which credential headers reached the backend
 const mints = [];
 const exposures = [];
 const outcomes = [];   // continued / returned_next_day / key_minted rows (_expOutcomeStep)
@@ -52,7 +54,8 @@ const routes = () => async (p, req, body, u) => {
   if (p === MX.EXPOSURE_PATH) { if (body && body.event === 'exposure') exposures.push(body); else outcomes.push(body); return { ok: true }; }
   if (p === CW.IDENTITY_PATH) {
     identityReads.push({ internal: req.headers['x-internal-key'] || '', q: Object.fromEntries(u.searchParams) });
-    return linked ? { linked: true, api_key_hash: 'e'.repeat(64), tier: linked } : { linked: false };   // be#9214: a hash, never a key
+    return linked ? { linked: true, api_key_hash: 'e'.repeat(64), tier: linked, ...(linkedToken ? { linked_token: linkedToken } : {}) }
+      : { linked: false };   // be#9214: a hash, never a key
   }
   if (p === CW.ENTITLEMENTS_ME_PATH) {
     entitlementReads.push({ key: req.headers['x-api-key'] || '', internal: req.headers['x-internal-key'] || '', q: Object.fromEntries(u.searchParams) });
@@ -64,6 +67,13 @@ const routes = () => async (p, req, body, u) => {
   }
   if (p === '/api/v1/relay/short') return { ok: true, url: 'https://dchub.cloud/u/abcdef' };
   if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
+  dataHits.push({ path: p, apiKey: req.headers['x-api-key'] || '', linked: req.headers['x-dchub-linked-key'] || '',
+    callerTier: req.headers['x-dchub-caller-tier'] || '' });
+  // A backend that honours X-DCHub-Linked-Key (be#9214, next to X-Internal-Key) answers the buyer's key: the full row.
+  if (req.headers['x-dchub-linked-key'] === LINKED_TOKEN && req.headers['x-internal-key']) {
+    return { success: true, count: 3, total: 3, score: 71, demand_mw: 18000,
+      data: [{ id: 1, name: 'Ashburn Campus A', market: 'northern-virginia', capacity_mw: 120, score: 71 }] };
+  }
   return undefined;   // the harness's data body: a relay wall (_score_in_pro) for a caller below Pro
 };
 const CLIENT_PORTS = new Set();
@@ -96,7 +106,7 @@ afterAll(async () => {
   if (fence) fence.restore();
   clearFlags();
 });
-afterEach(() => { clearFlags(); anonCount = 999; mintMode = 'ok'; linked = null; });
+afterEach(() => { clearFlags(); anonCount = 999; mintMode = 'ok'; linked = null; linkedToken = ''; });
 
 let rid = 1, ipN = 1;
 function rpc(h, p, body, headers = {}) {
@@ -251,6 +261,18 @@ describe('lib/commercial-wall.mjs', () => {
     expect(CW.shapeAccessStatus({ tier: 'pro', base_tier: 'keyless', linked_via: 'handoff' }).upgraded_since_handoff).toBe(true);
     expect(CW.shapeAccessStatus({ tier: 'pro', linked_via: '' }).upgraded_since_handoff).toBe(false);
     expect(CW.shapeAccessStatus({ tier: 'pro', upgraded_since_handoff: true }).upgraded_since_handoff).toBe(true);
+  });
+  it('linkedTokenOf keeps only the be#9214 linked-token shape (dchl1.x1<sealed>.<32 hex>)', () => {
+    expect(CW.LINKED_KEY_HEADER).toBe('X-DCHub-Linked-Key');
+    const tok = 'dchl1.x1' + 'Ab_-'.repeat(10) + '.' + '0123456789abcdef'.repeat(2);
+    expect(CW.linkedTokenOf({ linked_token: tok })).toBe(tok);
+    for (const bad of ['', 'dch_live_' + 'a'.repeat(32), 'dchl1.' + 'a'.repeat(40) + '.' + 'f'.repeat(32),
+      'dchl1.x1' + 'a'.repeat(40) + '.' + 'F'.repeat(32), 'dchl1.x1short.' + 'f'.repeat(32), tok + '\nX-API-Key: x', 7, null]) {
+      expect(CW.linkedTokenOf({ linked_token: bad }), String(bad)).toBe('');
+    }
+    expect(CW.linkedTokenOf(null)).toBe('');
+    expect(CW.buildAccess({ unlocks_with: 'pro' }).access.agent_note).toBe(CW.ACCESS_AGENT_NOTE);
+    expect(CW.ACCESS_AGENT_NOTE).not.toMatch(CW.AGENT_TEXT_BANNED);
   });
   it('sessionRef is the bare sha256 hex the backend accepts; liftTierFor lifts developer and pro only', () => {
     expect(CW.sessionRef('abc-123')).toBe(sha('abc-123'));
@@ -607,5 +629,56 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { key: trialKey() });
     expect(identityReads.length).toBe(n);
     linked = null;
+  }, 90_000);
+  it('P0-4: a linked keyless identity\'s next call to the same tool has no withheld field; the token rides X-DCHub-Linked-Key, never X-API-Key', async () => {
+    const withheld = (r) => /_withheld|_in_pro|"score":null/.test(JSON.stringify(r && r.result));
+    const ip = nextIp();
+    anonCount = 0;
+    process.env.DCHUB_AGENT_HANDOFF_RESOLVE = '1';
+    // before payment: no link, the keyless answer is a preview
+    S._setHandoffResolveLookupForTest(null);
+    let n = dataHits.length;
+    const before = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip });
+    expect(withheld(before)).toBe(true);
+    expect(dataHits.slice(n).every((h) => !h.linked && !h.apiKey)).toBe(true);
+    // a link with no token (the backend's flag off): the tier lift alone, nothing forwarded, the backend still
+    // answers keyless, so fields stay withheld (what P0-4 fixes)
+    linked = 'pro'; linkedToken = '';
+    S._setHandoffResolveLookupForTest(null);
+    n = dataHits.length;
+    const liftOnly = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip });
+    expect(dataHits.slice(n).every((h) => !h.linked && !h.apiKey)).toBe(true);
+    expect(withheld(liftOnly)).toBe(true);
+    // the human paid: the identity is linked and the backend hands this server a linked token
+    linkedToken = LINKED_TOKEN;
+    S._setHandoffResolveLookupForTest(null);
+    n = dataHits.length;
+    const after = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip });
+    expect(after.error).toBeFalsy();
+    expect(withheld(after)).toBe(false);
+    expect(JSON.stringify(after.result)).toContain('"completeness":"unrestricted"');
+    const hits = dataHits.slice(n);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.some((h) => h.linked === LINKED_TOKEN)).toBe(true);
+    expect(hits.every((h) => h.apiKey === '')).toBe(true);   // never as X-API-Key
+    expect(hits.filter((h) => h.linked).every((h) => h.callerTier === 'pro')).toBe(true);
+    const blob = JSON.stringify(after.result);
+    expect(blob).not.toContain(LINKED_TOKEN);
+    expect(blob).not.toContain('e'.repeat(64));
+    // flag off on this server: no lookup, no header, even with a token on offer
+    delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
+    linkedToken = LINKED_TOKEN;
+    S._setHandoffResolveLookupForTest(null);
+    n = dataHits.length;
+    const off = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
+    expect(dataHits.slice(n).every((h) => !h.linked)).toBe(true);
+    expect(withheld(off)).toBe(true);
+    // a malformed token is never forwarded
+    process.env.DCHUB_AGENT_HANDOFF_RESOLVE = '1';
+    linkedToken = 'dchl1.not-a-token';
+    S._setHandoffResolveLookupForTest(null);
+    n = dataHits.length;
+    await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
+    expect(dataHits.slice(n).every((h) => !h.linked)).toBe(true);
   }, 90_000);
 });
