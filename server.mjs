@@ -339,7 +339,7 @@ import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EV
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
 import * as _LB from './lib/licence-block.mjs';           // DCHUB_LICENCE_BLOCK (default OFF)
-import { withheldFields as _withheldFields, withheldList as _withheldList, reconcilePreviewScope as _reconcilePreviewScope } from './lib/withheld-copy.mjs';
+import { withheldFields as _withheldFields, withheldListFit as _withheldListFit, reconcilePreviewScope as _reconcilePreviewScope } from './lib/withheld-copy.mjs';
 import { KEY_LINE_RE as _KEY_LINE_RE } from './lib/wall-key-line.mjs';
 import { humanLinkOf as _humanLinkOf, withDepthTrialLine as _withDepthTrialLine, depthTrialEligible as _depthTrialEligible } from './lib/wall-depth-trial.mjs';
 import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } from './lib/wall-offers.mjs';
@@ -5794,7 +5794,7 @@ function _relayEverywhereStore(longUrl, args, sc) {
     const h = _headlineOf(sc, { iso: args && typeof args.iso === 'string' ? args.iso : '' });
     const body = { token: m[1], label: '', value: '',
       ask: _relayEverywhereAsk(args),
-      withheld: _withheldList(_withheldFields(sc)).replace(/[^A-Za-z0-9 _=,.:;/()%$&+-]/g, ' ').slice(0, 200).trim(),
+      withheld: _withheldListFit(_withheldFields(sc), 200).replace(/[^A-Za-z0-9 _=,.:;/()%$&+-]/g, ' ').trim(),
       ...(h ? { headline: String(h.text).slice(0, 200), headline_as_of: String(h.when).slice(0, 40) } : {}) };
     Promise.resolve(callAPIWrite('/api/v1/relay/teaser', body)).catch(() => {});
   } catch (_) { /* a page restatement is never worth failing a response over */ }
