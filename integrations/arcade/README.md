@@ -28,18 +28,18 @@ The machine-readable version of this page is [`arcade-remote-server.json`](./arc
 Open **MCP Gateways**, then **Create Gateway**, then **Select tools**, and filter by `dchub`.
 Use one of these profiles:
 
-**Lean (recommended default, 12 tools):** `execute_plan`, `search_facilities`,
+**Lean (recommended default):** `execute_plan`, `search_facilities`,
 `get_facility`, `get_market_intel`, `get_market_dcpi_rank`, `rank_markets`, `get_grid_data`,
 `get_interconnection_queue`, `find_sites`, `get_fiber_intel`, `source_capacity`,
 `summarize_for_citation`.
 
-**Read-only (67 tools):** every tool except the key, email, alert, shortlist, saved-site,
+**Read-only:** every tool except the key, email, alert, shortlist, saved-site,
 capacity-terms and other write tools. This is the `/mcp/claude` directory profile without
 its two feedback tools (`report_finding`, `request_enhancement`). The list is
 `gateway_profiles.read_only` in the JSON.
 
 **Core endpoint (alternative):** register `https://dchub.cloud/mcp/core` as a second server
-with ID `dchub-core`. It exposes ten composite read-only tools that share one
+with ID `dchub-core`. It exposes composite read-only tools that share one
 `as_of`/`sources`/`access` envelope. See [`docs/core-profile.md`](../../docs/core-profile.md).
 
 Clients connect to the gateway at `https://api.arcade.dev/mcp/<your-gateway-slug>`. From the

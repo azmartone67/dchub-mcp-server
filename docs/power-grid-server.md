@@ -5,9 +5,9 @@ Grok MCP platform ranking plan, 2026-10-18, R2. Status: DRAFT PR; nothing publis
 ## What it is
 `https://dchub.cloud/mcp/power`, a pack path on the existing server (`MCP_PACKS` in `server.mjs`, `pack: power`).
 Same backend, same keys, same gates and keyless access as `/mcp`. It is a **listing scope, not an entitlement scope**:
-it advertises 15 tools; `tools/call` still accepts any DC Hub tool by name under the caller's own key.
+it advertises a focused subset of DC Hub tools; `tools/call` still accepts any DC Hub tool by name under the caller's own key.
 
-15 tools = 11 listed + the 4-tool shared spine every pack carries (a pack must never be a dead end):
+The list is the power and grid tools below plus the shared spine every pack carries (a pack must never be a dead end):
 
 | Question an energy/utility searcher asks | Tool |
 |---|---|
@@ -21,7 +21,7 @@ it advertises 15 tools; `tools/call` still accepts any DC Hub tool by name under
 | Does this site / where should I look | `analyze_site`, `find_sites` |
 | spine | `discover_tools`, `claim_free_key`, `unlock_more_data`, `summarize_for_citation` |
 
-Deliberately left to `/mcp/grid` (17 tools) and `/mcp`: `get_refined_queue`, `get_power_pipeline`, `get_grid_data`,
+Deliberately left to `/mcp/grid` and `/mcp`: `get_refined_queue`, `get_power_pipeline`, `get_grid_data`,
 `get_iso_context`, `get_infra_projects`, `execute_plan`. Swap any of them in `MCP_PACKS` and bump
 `power` in `test/mcp-packs.test.mjs` in the same commit if the first-week data says so.
 
@@ -37,7 +37,7 @@ this changes nothing live.
 
 ## Publish plan (owner steps in bold)
 1. Merge this PR, let the MCP server deploy, then verify from outside:
-   `curl -s -X POST https://dchub.cloud/mcp/power -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` returns 15 tools.
+   `curl -s -X POST https://dchub.cloud/mcp/power -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` returns the tools in the table above.
    (GET on any `/mcp/*` path answers 200 from the zone health blob; only POST proves the mount.)
 2. **Official registry:** `./mcp-publisher publish registry/power-grid.server.json` (DNS auth for `cloud.dchub`
    is already in place for the other entry). Re-publishing needs a version bump; follow `server.json`'s version.

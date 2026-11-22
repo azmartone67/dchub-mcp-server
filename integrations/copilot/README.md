@@ -36,7 +36,7 @@ DC Hub documentation and connection guides:
 
 ## 3. Tools Overview
 
-This guide uses a subset of 10 tools (`tools/list` on `/mcp` returns the full catalog):
+This guide uses a subset of DC Hub tools (`tools/list` on `/mcp` returns the full catalog):
 
 1. `search_facilities` — search facilities by country, region, provider, or query.
 2. `get_energy_prices` — energy pricing stats for a grid/market region.
@@ -105,7 +105,7 @@ After registering the MCP server:
 ### 4.6 `get_transactions`
 
 **Prompt:**
-> Call `get_transactions` for country="DE" since "2022-01-01" and list the last 5 deals with price per MW.
+> Call `get_transactions` for country="DE" since "2022-01-01" and list the most recent deals with price per MW.
 
 ### 4.7 `get_capacity_pipeline`
 

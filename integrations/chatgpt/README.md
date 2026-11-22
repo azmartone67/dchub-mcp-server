@@ -30,7 +30,7 @@ Create a Custom GPT powered by DC Hub's data center intelligence platform with d
 ### Step 5: Publish
 Click "Save" → Choose "Everyone" or "Only people with a link" → "Confirm"
 
-## Available Actions (12 Tools)
+## Available Actions
 
 | Action | Endpoint | Description |
 |--------|----------|-------------|
