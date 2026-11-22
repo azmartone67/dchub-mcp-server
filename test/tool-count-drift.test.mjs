@@ -71,7 +71,6 @@ const isPackCount = (line, idx, len) => {
 // match a claim, so this list cannot outlive the text it excuses.
 const KNOWN_NON_CATALOG = [
   ['scripts/claude_directory_listing.txt', 'gives Claude 67 read-only tools', 'Claude directory connector profile, pinned by its own tests'],
-  ['integrations/copilot/planner-system-prompt.txt', '6 countries x 8 tools = 48', 'arithmetic in a planner prompt'],
   ['scripts/canon-floor.mjs', "findFacilityFloors('92 tools over", 'self-test input string'],
   ['sdk/python/dchub/manifest.py', '(53 tools, 45 with', 'dated snapshot of the REST tools-manifest it embeds, not /mcp'],
 ];
