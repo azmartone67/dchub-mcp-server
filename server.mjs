@@ -42012,8 +42012,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
       // gets the resource listed; a keyless one sees neither (its text is unchanged).
       if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req),
-        leanPrompts: _leanPromptsFor(req) });   // A3, DCHUB_PROMPTS_LEAN_V1 (default OFF)
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey, capacityIntro: !_pathPack(req), leanPrompts: _leanPromptsFor(req) });   // A3, DCHUB_PROMPTS_LEAN_V1 (default OFF)
       await mcpServer.connect(transport);
 
       return ctx.run({
