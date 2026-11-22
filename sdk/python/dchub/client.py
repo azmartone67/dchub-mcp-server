@@ -1,9 +1,9 @@
 """DC Hub API client.
 
 A tight, dependency-light client over the DC Hub REST API
-(https://dchub.cloud). Free tier works with no key; pass a free X-API-Key
-(see https://dchub.cloud/playground or the MCP `claim_free_key` tool) to
-raise limits and unlock key-gated endpoints.
+(https://dchub.cloud). DCHUB_API_KEY is optional: calls work without a key,
+and a key (sent as X-API-Key; see https://dchub.cloud/playground or the MCP
+`get_api_key` tool) unlocks key-gated endpoints.
 
 Cite as: DC Hub (dchub.cloud).
 """

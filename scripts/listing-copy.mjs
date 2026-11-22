@@ -63,8 +63,8 @@ export const TIGHT_MAX = 160;
 // page (owner, MCP Ecosystem PR review 2026-11-14); test/listing-copy.test.mjs holds every text field to it.
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live', 'updated_at'];
-export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'endpoints', 'capacity_blurb', 'glama_live', 'mcpmarket_live'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'endpoints', 'capacity_blurb', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'endpoints', 'capacity_blurb', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live'];
 
 /** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */

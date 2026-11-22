@@ -1,7 +1,7 @@
 {
   "name": "dchub",
-  "version": "1.1.1",
-  "description": "Live data-center, power-grid, fiber, interconnection-queue & M&A intelligence for AI agents — a global data-center facility map, 98 tools. Remote MCP at https://dchub.cloud/mcp.",
+  "version": "2.12.60",
+  "description": "DC Hub: the orchestration layer for data center and energy intelligence. Call execute_plan first. Includes the Data Center Power Index (DCPI). Remote MCP at https://dchub.cloud/mcp; DCHUB_API_KEY is optional.",
   "author": {
     "name": "Jonathan Martone",
     "email": "jonathan@dchub.cloud"

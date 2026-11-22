@@ -8,7 +8,8 @@
   "tool_count": 98,
   "endpoints": "98 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1",
   "capacity_blurb": "Capacity Source by DC Hub: operators and brokers list available data-center capacity (a fee applies only if a deal closes); buyers and AI agents source it by size (kW or MW) and location with the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if the provider accepts.",
-  "updated_at": "2026-11-21",
+  "updated_at": "2026-11-22",
   "glama_live": "Start with execute_plan. Live, dated data for data center, colocation, power grid, site selection, interconnection and energy questions. Rank data center and datacenter markets, check interconnection queues and grid headroom across PJM, ERCOT, CAISO, MISO, SPP, NYISO and ISO-NE, pull electricity and natural gas prices, and review fiber. Cited answers. Connect: https://dchub.cloud/mcp",
+  "glama_setup_restrictions": "DCHUB_API_KEY is optional.",
   "mcpmarket_live": "Start with execute_plan for live, dated data center, colocation, power grid, site selection, interconnection and energy answers. DC Hub: Data Center, Power Grid & Energy Intelligence. DC Hub gives AI agents live, dated data on data centers and the power behind them. Rank markets for a data center or datacenter campus, screen sites, check the interconnection queue and grid headroom across PJM, ERCOT, CAISO, MISO, SPP, NYISO and ISO-NE, pull electricity and natural gas prices, review fiber and latency, and search colocation and powered-land capacity. The Data Center Power Index (DCPI) scores markets daily. Every answer carries an as-of date and a citation line. Previews need no key. Topics: data center, datacenter, colocation, site selection, power grid, interconnection queue, electricity, natural gas, energy, fiber, power availability, DCPI, ERCOT, PJM."
 }
