@@ -15,8 +15,8 @@ Four ways in, one package:
 | DC Hub tools inside **your own** MCP server | `dchub.compose.dchub_tool_definitions` |
 | LangChain or smolagents tools | `dchub_langchain_tools()`, `dchub_smolagents_tools()` |
 
-Anonymous use returns previews and needs no key. A free key raises limits and unlocks full
-answers: claim one at <https://dchub.cloud/signup> or with the MCP `claim_free_key` tool.
+`DCHUB_API_KEY` is optional: calls work without a key. A key (sent as `X-API-Key`) unlocks
+key-gated endpoints: get one at <https://dchub.cloud/signup> or with the MCP `get_api_key` tool.
 
 ## Install
 
@@ -46,7 +46,7 @@ dc.get_changes(since="24h")                       # incremental diffs
 
 Every method returns parsed JSON (a `dict`). Non-2xx responses raise `DCHubError`,
 which carries `.status_code` and the API's self-correcting `.detail` (for example,
-how to claim a free key).
+how to get an API key).
 
 Any REST-backed tool in `dchub.TOOL_MANIFEST` can be called by name; path placeholders
 are filled from kwargs and the rest become the query string:
@@ -69,7 +69,7 @@ dc.call("search_facilities", provider="Equinix", limit=3)
 | `get_grid_intelligence(iso)` | `/api/v1/grid/intelligence/<iso>` |
 | `list_transactions(**f)` | `/api/v1/deals` |
 | `get_news(**f)` | `/api/news` |
-| `get_pipeline(**f)` | `/api/v1/pipeline` (needs a free key) |
+| `get_pipeline(**f)` | `/api/v1/pipeline` (needs an API key) |
 
 ## MCP client (new in 0.3.0)
 

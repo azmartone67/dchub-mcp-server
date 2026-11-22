@@ -45,6 +45,15 @@ describe('Glama connector Restrictions row: canonical source', () => {
   });
 });
 
+describe('mcpmarket_live listing copy (2026-11-22)', () => {
+  const COPY = JSON.parse(read('canonical/listing-copy.json'));
+  it('says the key is optional instead of "Previews need no key", with no commerce or count', () => {
+    expect(COPY.mcpmarket_live).toMatch(/DCHUB_API_KEY is optional\./);
+    expect(COPY.mcpmarket_live).not.toMatch(/previews? need no key/i);
+    expect(violations(COPY.mcpmarket_live, [...COMMERCE, ...COUNTS])).toEqual([]);
+  });
+});
+
 describe('repo-root Cursor / Grok Build manifest', () => {
   const M = JSON.parse(read('.cursor-plugin/plugin.json'));
   const PKG = JSON.parse(read('package.json'));
@@ -98,5 +107,14 @@ describe('Python SDK module docstring', () => {
     const doc = read('sdk/python/dchub/client.py').split('"""')[1];
     expect(doc).toMatch(/DCHUB_API_KEY is optional/);
     expect(violations(doc, COMMERCE)).toEqual([]);
+  });
+});
+
+describe('Python SDK README (sdk/python/README.md)', () => {
+  const s = read('sdk/python/README.md');
+  it('names get_api_key, not claim_free_key, and has no commerce wording', () => {
+    expect(s).toMatch(/`get_api_key`/);
+    expect(s).toMatch(/DCHUB_API_KEY` is optional/);
+    expect(violations(s, COMMERCE)).toEqual([]);
   });
 });
