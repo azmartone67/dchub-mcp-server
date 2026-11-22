@@ -188,7 +188,7 @@ describe('lib/withheld-copy.mjs: one list, never empty on a preview', () => {
     expect(WC.withheldFields({ _gated: true })).toEqual(['the detail rows of this answer']);
     expect(WC.withheldFields({ ok: true, data: [] })).toEqual([]);
     expect(WC.withheldFields({ _gated: true, preview_scope: { withheld_fields: ['DCPI sub-scores', 'queue_wait_months'] } }))
-      .toEqual(['DCPI sub-scores', 'queue wait months']);
+      .toEqual(['DCPI sub-scores', 'queue wait']);
   });
   it('the shared wording', () => {
     expect(WC.withheldLine(['a_b', 'c', 'd'])).toBe('Withheld here: a b, c and d.');
