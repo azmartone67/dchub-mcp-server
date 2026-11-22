@@ -10,17 +10,18 @@ import { fileURLToPath } from 'node:url';
 import { refreshOurCounts } from '../scripts/registry-pr-submit.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const N_TOOLS = JSON.parse(fs.readFileSync(path.join(ROOT, 'canonical/canon_phrases.json'), 'utf8')).tools;
 const OURS = '- [azmartone67/dchub-mcp-server](https://github.com/azmartone67/dchub-mcp-server) - DC Hub: ';
 const COUNT = /\b\d[\d,]*\+?\s+(?:(?:DCPI(?:-scored)?|US|power|tracked|M&A)\s+)*(?:markets?|deals?|transactions?)\b/i;
 
 describe('registry refresh pass removes market and deal counts (owner 2026-11-22)', () => {
-  it('strips every market and deal count from our line and refreshes tools', () => {
+  it('strips every tool, market and deal count from our line', () => {
     const line = `${OURS}33 tools / 232 markets / 2,000 deals; DCPI (300+ US power markets), 1,600+ tracked M&A deals, 1,500+ M&A transactions, 300+ DCPI markets.`;
     const out = refreshOurCounts(line);
     expect(out).not.toBeNull();
     expect(out).not.toMatch(COUNT);
-    expect(out).toContain(`${N_TOOLS} tools`);
+    // ★2026-11-22 (owner, "fix the 98 tools count too"): tools lose their count too.
+    expect(out).not.toMatch(/\b\d+\s+(?:MCP\s+)?tools\b/);
+    expect(out).toContain('MCP tools');
     expect(out).toContain('DCPI-scored US power markets');
     expect(out).toContain('tracked M&A deals');
     expect(out).toContain('tracked M&A transactions');
@@ -48,6 +49,7 @@ describe('registry refresh pass removes market and deal counts (owner 2026-11-22
   it('the refresh PR title and body state no market or deal count', () => {
     const src = fs.readFileSync(path.join(ROOT, 'scripts/registry-pr-submit.mjs'), 'utf8');
     expect(src).not.toMatch(/\$\{MARKETS\}|\$\{DEALS\}/);
-    expect(src).toMatch(/title: `Refresh DC Hub MCP entry \(\$\{N_TOOLS\} tools; drop stale market and deal counts\)`/);
+    expect(src).not.toMatch(/\$\{N_TOOLS\}/);
+    expect(src).toContain("title: 'Refresh DC Hub MCP entry (drop stale tool, market and deal counts)'");
   });
 });

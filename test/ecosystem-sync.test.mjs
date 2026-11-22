@@ -308,7 +308,8 @@ describe('escalation: who needs a person, and when to say so', () => {
 
   it('the paste line is built from the live source and quotes no banned price', () => {
     const line = pasteLine(SSOT);
-    expect(line).toContain('90 MCP tools');
+    expect(line).toContain('MCP tools');   // owner 2026-11-22: no tool count
+    expect(line).not.toMatch(/\b\d+ MCP tools/);
     expect(line).toContain('a global data-center facility map');
     expect(line).not.toMatch(/corroborated count pending/i);
     expect(facilityFloors(line)).toEqual([]);

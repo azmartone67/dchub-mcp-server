@@ -150,10 +150,12 @@ describe(`first-party tool-count claims equal the catalog (${COUNT})`, () => {
     expect(scanned.length).toBeGreaterThan(300);
     // These carry the count today and are healed daily; if the guard stops
     // seeing them it has stopped working, not found a clean tree.
-    for (const f of ['README.md', 'smithery.yaml', 'llms-install.md']) {
-      expect(scanned, f).toContain(f);
-      expect(claims.some((c) => c.file === f && c.n === COUNT), `${f} has a ${COUNT} claim`).toBe(true);
-    }
+    // ★2026-11-22 (owner): README, smithery.yaml and llms-install name no tool
+    // count now. They are still scanned, and the tree still holds current claims
+    // (docs/, integration READMEs), so the scan stays non-vacuous.
+    for (const f of ['README.md', 'smithery.yaml', 'llms-install.md']) expect(scanned, f).toContain(f);
+    expect(claims.length).toBeGreaterThan(5);
+    expect(claims.some((c) => c.n === COUNT), `some file has a ${COUNT} claim`).toBe(true);
   });
 
   it('every stated tool count equals the full catalog, or is a named narrower surface', () => {

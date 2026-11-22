@@ -53,7 +53,9 @@ describe('the committed descriptions ARE the render', () => {
   });
   it('both long descriptions carry the same key and tool-count facts, and no plan or price', () => {
     const r = renderAll(ctx);
-    expect(r.smithery_yaml).toContain(`${count} tools.`);
+    // Owner 2026-11-22: no tool count in either rendered description.
+    expect(r.smithery_yaml).not.toContain(`${count} tools`);
+    expect(r.mcp_server_json).not.toContain(`${count} tools`);
     for (const t of [r.smithery_yaml, r.mcp_server_json]) {
       // 2026-11-14 (owner): no plan, free-tier or pricing language; the key is optional.
       expect(t).not.toMatch(/paid plans|dchub\.cloud\/pricing|free tier|free to start/i);

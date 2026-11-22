@@ -88,7 +88,9 @@ describe('renderDirectoriesPage', () => {
 
   it('carries the brief copy and the live tool count', () => {
     expect(html).toContain('<h1>Find DC Hub in your MCP directory</h1>');
-    expect(html).toContain('One server, listed wherever agents look. Same 94 tools everywhere.');
+    // Owner 2026-11-22: no tool count, even when one is passed in.
+    expect(html).toContain('One server, listed wherever agents look. Same tools everywhere.');
+    expect(html).not.toMatch(/Same \d+ tools/);
   });
 
   it('renders every live directory and no pending one', () => {

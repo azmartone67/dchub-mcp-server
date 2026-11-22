@@ -24,7 +24,7 @@
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
 //               Kept for our own surfaces; not pasted into third-party directory
 //               description text.
-//   endpoints   exactly endpointsLine(tool_count); our-surface field only
+//   endpoints   exactly endpointsLine(); our-surface field only, no tool count (owner 2026-11-22)
 //   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
 //               price-free, and it names source_capacity and dchub.cloud/listings
 //   updated_at  YYYY-MM-DD of the last copy edit
@@ -76,7 +76,8 @@ export const TAGLINE_SUPERLATIVE = /\b(?:the only|only|first|on the planet|world
 /** Where the Capacity Source sentence starts inside `long` (owner, 2026-09-29). */
 export const CAPACITY_SENTENCE_ANCHOR = 'Capacity Source adds';
 
-export const endpointsLine = (n) => `${n} MCP tools at ${MCP_URL} plus a REST API at ${REST_URL}`;
+// The argument is ignored since 2026-11-22 (owner): no tool count in listing copy.
+export const endpointsLine = () => `The full MCP tool catalog at ${MCP_URL} plus a REST API at ${REST_URL}`;
 
 // Internal-directive markers (finding #116292, 2026-10-15). Each is a phrase that
 // only makes sense said to the PERSON OR AGENT WRITING a listing, or that names
