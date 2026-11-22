@@ -1340,8 +1340,9 @@ export function pasteLine(ssot) {
   const parts = [
     `${ssot.tools} MCP tools`,
     FACILITY_MAP_PROSE,   // the count is withdrawn (owner decision 2026-09-27)
-    ssot.markets ? `${ssot.markets} markets` : null,
-    ssot.deals ? `${ssot.deals} tracked deals` : null,
+    // Owner 2026-11-21/22: no market or deal count in listing copy.
+    'markets scored daily (DCPI)',
+    'tracked M&A deals',
   ].filter(Boolean);
   // Capacity Source joins the line only while GET /api/v1/listings/summary
   // reports live listings. Unknown or zero leaves the line byte-identical.

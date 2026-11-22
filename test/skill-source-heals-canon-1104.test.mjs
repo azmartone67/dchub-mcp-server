@@ -28,26 +28,37 @@ const run = (args = []) => {
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const SKILL_FILES = [SKILL_SOURCE, ...SKILL_TARGETS.map((t) => t.path)];
 
-describe('a canon deal-count move heals canonical/skill.md and every rendered copy', () => {
+// ★2026-11-22 (owner): the skill files name no deal or market count any more
+// ("tracked M&A deals", "markets scored daily"), so the heal path is exercised on
+// the canon count they still carry, countries. Same bug class: --fix must heal
+// canonical/skill.md, or the skill block re-renders the old figure into every copy.
+describe('a canon count move heals canonical/skill.md and every rendered copy', () => {
   const original = fs.readFileSync(PHRASES, 'utf8');
-  const was = JSON.parse(original).deals;                       // e.g. "1,800+"
+  const was = JSON.parse(original).countries;                   // e.g. "170+"
   const n = Number(String(was).replace(/[^\d]/g, ''));
-  const now = `${(n - 100).toLocaleString('en-US')}+`;          // canon moves DOWN, as on 11-01
+  const now = `${n - 10}+`;                                     // canon moves DOWN, as on 11-01
+  const COUNT = /\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b|\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(?:deals?|transactions?)\b/i;
 
-  it('the committed skill files state the committed canon (precondition)', () => {
-    expect(n).toBeGreaterThan(100);
-    for (const f of SKILL_FILES) expect(read(f), f).toContain(`${was} tracked deals`);
+  it('the committed skill files state the committed canon and no market or deal count (precondition)', () => {
+    expect(n).toBeGreaterThan(20);
+    for (const f of SKILL_FILES) {
+      const t = read(f);
+      expect(t, f).toContain(`${was} countries`);
+      expect(t, f).not.toMatch(COUNT);
+      expect(t, f).toContain('tracked M&A deals');
+    }
   });
 
   it('--fix carries the new canon into all four skill files, and CHECK then passes', () => {
-    SANDBOX.write(PHRASES, original.replace(`"deals": "${was}"`, `"deals": "${now}"`));
+    SANDBOX.write(PHRASES, original.replace(`"countries": "${was}"`, `"countries": "${now}"`));
     try {
-      expect(JSON.parse(fs.readFileSync(PHRASES, 'utf8')).deals).toBe(now);   // the mutation applied
+      expect(JSON.parse(fs.readFileSync(PHRASES, 'utf8')).countries).toBe(now);   // the mutation applied
       run(['--fix']);
       for (const f of SKILL_FILES) {
         const t = read(f);
-        expect(t, `${f} kept the old canon`).not.toContain(`${was} tracked deals`);
-        expect(t, `${f} did not take the new canon`).toContain(`${now} tracked deals`);
+        expect(t, `${f} kept the old canon`).not.toContain(`${was} countries`);
+        expect(t, `${f} did not take the new canon`).toContain(`${now} countries`);
+        expect(t, `${f} gained a market or deal count`).not.toMatch(COUNT);
       }
       const after = run();
       expect(after.ok, `guard should pass on the healed tree:\n${after.out}`).toBe(true);

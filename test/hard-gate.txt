@@ -471,6 +471,7 @@ test/neutral-connect-plan-steps.test.mjs
 test/news-footer.test.mjs
 test/next-ask-args.test.mjs
 test/next-call.test.mjs
+test/no-counts-docs-server-1122.test.mjs
 test/no-deal-count-1122.test.mjs
 test/no-dxt-so-links.test.mjs
 test/no-free-wording-1121.test.mjs

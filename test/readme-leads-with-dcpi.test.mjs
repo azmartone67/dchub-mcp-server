@@ -2,7 +2,7 @@
 // paragraph under the H1 is the first thing a directory reader sees. It must
 // lead with the orchestration / execute_plan sentence (electricity prices and
 // power grid). The DCPI paragraph follows immediately and must still name
-// Data Center Power Index (DCPI), carry the canon "300+ markets", and have
+// Data Center Power Index (DCPI), say "market by market" (no market count, owner 2026-11-22), and have
 // no "$", no em dash. A teaser for new capacity listings (source_capacity /
 // /listings) follows DCPI; it names no partner, MW figure, date, or price.
 import { describe, it, expect } from 'vitest';
@@ -19,10 +19,12 @@ describe('README opening', () => {
   it('first paragraph under the H1 is the orchestration lead', () => {
     expect(firstPara).toBe(LEAD);
   });
-  it('the next paragraph names DCPI and 300+ markets', () => {
+  it('the next paragraph names DCPI, market by market, with no market count', () => {
     expect(dcpiPara.startsWith('**[DCPI')).toBe(true);
     expect(dcpiPara).toContain('Data Center Power Index');
-    expect(dcpiPara).toContain('300+ markets');
+    // ★2026-11-22 (owner): no market count; "market by market".
+    expect(dcpiPara).toContain('market by market');
+    expect(dcpiPara).not.toMatch(/\b\d[\d,]*\+?\s+markets?\b/);
     expect(dcpiPara).toContain('https://dchub.cloud/dcpi');
   });
   it('the third paragraph teases new capacity listings, unnamed and without figures or dates', () => {
