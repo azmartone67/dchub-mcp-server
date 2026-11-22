@@ -55,6 +55,10 @@ describe('withArefLinks', () => {
     expect(out).toContain('https://dchub.cloud/connect and');
     expect(out).toContain('https://dchub.cloud/u/tok.9?aref=x');
   });
+  it('punctuation after a link stays outside it', () => {
+    expect(addArefToText('see https://dchub.cloud/u/t.1. Or https://dchub.cloud/go/p/pro?x=1, ok', 'A'))
+      .toBe('see https://dchub.cloud/u/t.1?aref=A. Or https://dchub.cloud/go/p/pro?x=1&aref=A, ok');
+  });
   it('rewrites JSON blocks and structuredContent, keeping JSON valid', () => {
     const sc = { human_url: 'https://dchub.cloud/u/tok', licence: { licence_url: 'https://dchub.cloud/licence?via=mcp' } };
     const r = { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
