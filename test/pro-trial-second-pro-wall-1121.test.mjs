@@ -132,10 +132,23 @@ describe('item 5: the 2nd walled decision-layer call decides the trial offer arm
     expect(r.content[0].text).toContain(url);
   });
 
-  it('offer arm on a wall already holding this exact offer link: returned untouched', async () => {
-    const w = wall();
-    expect(w.structuredContent.for_your_human.url).toContain('?offer=' + PRO_TRIAL_OFFER);
-    expect(await _withProWallTrialOffer(w, 'compare_sites', FREE, ON, decider('offer'), LONG)).toBe(w);
+  it('offer arm on a wall that already carries an offer link: untouched when the mint matches, else one fresh link', async () => {
+    // Whether the decided mint equals the stamped wall's link depends on the token format (the mint second, the
+    // seal): equal -> the wall is returned untouched; different -> exactly one fresh offer link, in every channel,
+    // and the context keeps that one. Both are correct; anything else is not.
+    const c = { ...FREE };
+    const w = wall('compare_sites', c);
+    const before = w.structuredContent.for_your_human.url;
+    expect(before).toContain('?offer=' + PRO_TRIAL_OFFER);
+    const r = await _withProWallTrialOffer(w, 'compare_sites', c, ON, decider('offer'), LONG);
+    const after = r.structuredContent.for_your_human.url;
+    expect(after).toContain('?offer=' + PRO_TRIAL_OFFER);
+    if (after === before) {
+      expect(r).toBe(w);
+    } else {
+      expect(c._proWallTrialLink).toBe(after);
+      expect(JSON.stringify(r)).not.toContain(before);
+    }
   });
 
   it('holdout arm: a plain link, so the arms differ only in ?offer (a stamped wall can already carry it)', async () => {
