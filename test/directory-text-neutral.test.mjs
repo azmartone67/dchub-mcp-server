@@ -51,7 +51,7 @@ describe('README: the opening describes, it does not instruct', () => {
   const dcpi = paras[1] ?? '';
   const teaser = paras[2] ?? '';
   const description = paras[3] ?? '';
-  const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices and power grid questions.';
+  const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for data center site selection, colocation, capacity, energy, electricity prices and power grid questions.';
   const CAPACITY_TEASER = 'New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 
   it('the opener is the orchestration lead, then DCPI, then the capacity teaser, then the description', () => {

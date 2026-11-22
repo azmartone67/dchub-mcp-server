@@ -1329,8 +1329,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // search-term title and the "query and cite" / "capacity to buy or lease"
   // lead stay on surfaces that are not capped at 100 characters
   // (mcp-server.json, smithery.yaml).
-  if (sjDesc !== 'Orchestration layer for data center and energy intelligence. Start with execute_plan.')
-    problems.push('server.json: description lost canonical positioning (must be "Orchestration layer for data center and energy intelligence. Start with execute_plan.")');
+  if (sjDesc !== 'Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.')
+    problems.push('server.json: description lost canonical positioning (must be "Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans

@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub",
-  "description": "Orchestration layer for data center and energy intelligence. Start with execute_plan.",
+  "title": "DC Hub: Data Center & Energy Intelligence",
+  "description": "Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.",
   "websiteUrl": "https://dchub.cloud",
   "icons": [
     {
