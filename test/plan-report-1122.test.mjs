@@ -144,13 +144,16 @@ describe('server _planReportStep', () => {
     expect(await _planReportStep(r, 'execute_plan', { platform: 'claude' })).toBe(r);
   });
 
-  it('is wired after every rewrite, right before the aref step', () => {
+  it('is wired after the commercial wall, before wall-to-key (a handed-back key never reaches a report) and aref', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     const i = src.indexOf('      _final = await _planReportStep(_final, name, c);\n');
-    const j = src.indexOf('      _final = _arefLinksStep(_final, name, c);\n      return _final;');
     const k = src.indexOf('      _final = await _commercialWallStep(_final, name, args, c);');
+    const w = src.indexOf('      _final = _wallToKeyStep(_final, name, c);');
+    const j = src.indexOf('      _final = _arefLinksStep(_final, name, c);\n');
+    expect(k).toBeGreaterThan(0);
     expect(i).toBeGreaterThan(k);
-    expect(j).toBeGreaterThan(i);
+    expect(w).toBeGreaterThan(i);
+    expect(j).toBeGreaterThan(w);
     expect(src).toMatch(/c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| _isCleanPlatform\(\)/);
   });
 });
