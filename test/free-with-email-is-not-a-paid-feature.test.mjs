@@ -189,7 +189,10 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
   it('annotates only the capped-full-taste tools with the daily cap', () => {
     const hint = _trialUnlockedHint();
     expect(hint).toMatch(/get_fiber_intel \(full, \d+\/day\)/);
-    // get_water_risk passes the gate outright (KEYED_FREE_BONUS), not as a taste.
-    expect(hint).not.toMatch(/get_water_risk \(full, \d+\/day\)/);
+    // 2026-11-23: the KEYED_FREE_BONUS tools are capped tastes now (DCHUB_BONUS_TASTE_CAP), so they carry the cap too.
+    expect(hint).toMatch(/get_water_risk \(full, \d+\/day\)/);
+    expect(hint).toMatch(/get_renewable_energy \(full, \d+\/day\)/);
+    // A preview-only bonus tool has no budget, so it is never annotated as full.
+    expect(hint).not.toMatch(/get_market_intel \(full/);
   });
 });
