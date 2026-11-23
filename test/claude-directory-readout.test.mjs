@@ -117,13 +117,14 @@ describe('/mcp/claude is excluded from the readout', () => {
 });
 
 describe('the predicate', () => {
-  it('excludes the Claude profile and the claude-directory source, nothing else', () => {
+  it('excludes the Claude profile and its two sources (claude-directory, meta-muse), nothing else', () => {
     expect(excludedFromRelayReadout({ profile: CLAUDE_PROFILE })).toBe(true);
     expect(excludedFromRelayReadout({ source: CLAUDE_SOURCE })).toBe(true);
     expect(excludedFromRelayReadout({ source: 'anthropic-directory' })).toBe(false);   // /mcp/anthropic stays in
     expect(excludedFromRelayReadout({ profile: 'chatgpt_directory' })).toBe(false);
     expect(excludedFromRelayReadout({})).toBe(false);
     expect(excludedFromRelayReadout(null)).toBe(false);
-    expect([...RELAY_READOUT_EXCLUDED_SOURCES]).toEqual([CLAUDE_SOURCE]);
+    expect(excludedFromRelayReadout({ source: 'meta-muse' })).toBe(true);   // /mcp/muse, same profile (2026-11-23)
+    expect([...RELAY_READOUT_EXCLUDED_SOURCES]).toEqual([CLAUDE_SOURCE, 'meta-muse']);
   });
 });
