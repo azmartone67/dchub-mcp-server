@@ -275,6 +275,7 @@ import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerW
          keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
 import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
 import * as _WD from './lib/wall-device-match.mjs';
+import { nudgeOnce as _nudgeOnce, nudgeIdentity as _nudgeIdentity, createNudgeMemo as _createNudgeMemo } from './lib/email-nudge-once.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -12360,6 +12361,12 @@ export function _keylessSiteDailyFor(c, name = 'analyze_site') {
     if (cc.api_key) return 0;
     return _keylessSiteFullSeat(name, cc) ? _keylessSiteFullCap() : 0;
   } catch (_) { return 0; }
+}
+// The daily site lane's cap as it RUNS, whoever the caller is (0 = off, cap 0, or not analyze_site): the cap the
+// analyze_site description states (_analyzeSiteDescDailySentence). The keyless wall quotes it to a caller the lane
+// does not seat, so the wall and the description say the same allowance (QA 2026-11-23).
+export function _keylessSiteLaneCap(name = 'analyze_site', env = process.env) {
+  try { return name === 'analyze_site' && _wfnSiteFullOn(env) ? _keylessSiteFullCap(env) : 0; } catch (_) { return 0; }
 }
 export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
@@ -28081,6 +28088,9 @@ function _sourceLineCb(name, fn) {
       // F4 (DCHUB_EMAIL_ASK_AB, default OFF): arm B's unlock ask names the call's market or ISO. After every step, so it
       // rewrites the line the agent actually gets, and sees any other step's email_ask (wall to key) and stands down.
       _final = _emailAskAbStep(_final, name, args, c);
+      // #1594 (QA 2026-11-23): the get_api_key email nudge once per MCP session (no session: client name + IP /24 for
+      // 30 minutes). LAST, so it sees the sentence wherever an earlier step put it. Copy only (lib/email-nudge-once.mjs).
+      _final = _emailNudgeOnceStep(_final, c);
       return _final;
     } finally {
       _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
@@ -28096,6 +28106,17 @@ function _sourceLineCb(name, fn) {
       _flushTrackRows(c, name, _final);
     }
   };
+}
+// #1594: one get_api_key email nudge per MCP session. Never /mcp/chatgpt or a ChatGPT client (frozen), never a loopback
+// plan step (the plan's own answer is the one the agent reads). Kill switch DCHUB_EMAIL_NUDGE_ONCE=0.
+const _emailNudgeMemo = _createNudgeMemo();
+export function _emailNudgeOnceStep(result, c = getCtx()) {
+  try {
+    if (!c || c.loopback_step || c.profile === DIRECTORY_PROFILE || /chatgpt|openai/i.test(String(c.platform || ''))) return result;
+    const id = _nudgeIdentity(c, { ipPrefix: _WD.ipPrefix, clientNameOf: _WD.clientNameOf,
+      realSession: (s) => (_isRealSession(s) ? String(s) : '') });
+    return _nudgeOnce(result, id, _emailNudgeMemo);
+  } catch (_) { return result; }
 }
 // F4 email-ask A/B (lib/email-ask-ab.mjs; DCHUB_EMAIL_ASK_AB, default OFF). On an unlock-ask wall (the keyless cap wall's
 // email link, email_ask 'link' / 'link_exit'), arm B's line names the call's market or ISO; arm A is untouched. Same
@@ -28989,7 +29010,8 @@ function trackedTool(srv, name, description, schema, handler) {
             if (_ew) {
               const _ewKey = _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
               return _withSiteContextPreview(c.profile === CLAUDE_PROFILE ? _ewKey
-                : _withKeylessWallQuota(_ewKey, new Date(), { dailyCap: _keylessSiteDailyFor(c, name) }), _scWall);
+                : _withKeylessWallQuota(_ewKey, new Date(), { dailyCap: _keylessSiteDailyFor(c, name),
+                  laneCap: c.profile === DIRECTORY_PROFILE ? 0 : _keylessSiteLaneCap(name) }), _scWall);
             }
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
