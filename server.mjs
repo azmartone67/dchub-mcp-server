@@ -671,6 +671,12 @@ const ARG_ALIASES = {
   //   aliased because it is not a filter on this tool at all (the description
   //   routes it to get_pipeline), and a rename cannot fix a missing capability.
   search_facilities:        { min_mw: 'min_capacity_mw' },
+  // ★2026-11-23 MEASURED: get_market_dcpi_rank(market:"dallas") -> -32602 "expected string, received
+  //   undefined at market_slug". Every other market tool takes `market` (get_market_intel, get_fiber_intel,
+  //   execute_plan's market=), so it is the name an agent carries over. The value is the same metro slug, so
+  //   this is a pure rename. predict_market_trajectory requires the same market_slug and gets the same entry.
+  get_market_dcpi_rank:     { market: 'market_slug' },
+  predict_market_trajectory: { market: 'market_slug' },
   get_energy_prices:        { location: 'state', region: 'state' },
   list_transactions:        { limit_results: 'limit' },
 };

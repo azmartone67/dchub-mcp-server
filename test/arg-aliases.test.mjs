@@ -38,6 +38,9 @@ const EXPECTED_TARGETS = {
   //   `status` is deliberately not aliased — it is not a filter on this tool,
   //   and a rename cannot add a capability.
   search_facilities: 'min_capacity_mw',
+  // 2026-11-23, reviewed: the market tools that require market_slug take `market` as the same slug.
+  get_market_dcpi_rank: 'market_slug',
+  predict_market_trajectory: 'market_slug',
 };
 
 // ★The guesses that were MEASURED to fail in production. Structure tests alone
@@ -52,6 +55,9 @@ const MEASURED_GUESSES = [
   ['get_market_intel', 'market_slug', 'market'],
   // search_facilities' own description names min_mw as a thing agents try.
   ['search_facilities', 'min_mw', 'min_capacity_mw'],
+  // 2026-11-23, live: get_market_dcpi_rank(market:"dallas") -> -32602 market_slug undefined.
+  ['get_market_dcpi_rank', 'market', 'market_slug'],
+  ['predict_market_trajectory', 'market', 'market_slug'],
 ];
 
 describe('ARG_ALIASES measured guesses', () => {
