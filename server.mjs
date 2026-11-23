@@ -176,6 +176,8 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
+// Plan report link (2026-11-22, DCHUB_PLAN_REPORT_LINK): lib/plan-report.mjs.
+import * as _PR from './lib/plan-report.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
@@ -5887,6 +5889,31 @@ const _CWR = _CW.createRuntime({
 });
 export const _setCommercialWallSeamsForTest = (seams) => _CWR.setSeams(seams);
 export const _commercialWallStep = (result, name, args, c = getCtx()) => _CWR.commercialWallStep(result, name, args, c);
+// Plan report link (lib/plan-report.mjs, flag DCHUB_PLAN_REPORT_LINK, default OFF): the /r/a/<id> page of a finished
+// execute_plan answer. Not /mcp/chatgpt or /mcp/claude (frozen reviewed copy), a clean platform or a loopback step.
+let _planReportMint = (body) => _mintPlanReport(body);
+export const _setPlanReportMintForTest = (fn) => { _planReportMint = fn || ((body) => _mintPlanReport(body)); };
+export async function _mintPlanReport(body, timeoutMs = _PR.PLAN_REPORT_TIMEOUT_MS) {
+  if (!API_BASE || !INTERNAL_KEY) return null;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(new URL('/api/v1/plan-report/mint', API_BASE).toString(), { method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY }, body: JSON.stringify(body) });
+    if (!r || r.status !== 200) return null;
+    return await r.json();
+  } catch (_) { return null; } finally { clearTimeout(t); }
+}
+export async function _planReportStep(result, name, c = getCtx()) {
+  if (name !== 'execute_plan' || !_PR.planReportOn()) return result;
+  return _PR.planReportStep(result, name, {
+    skip: !c || !!c.loopback_step || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || _isCleanPlatform(),
+    mint: (body) => _planReportMint(body),
+    client: String((c && c.platform) || 'unknown').slice(0, 40),
+    callerClass: _planCallerPaid(c) ? 'paid' : (c && c.api_key ? 'keyed' : 'keyless'),
+    isQa: _isQaCaller(c) || isBotOrInternalCtx(c),
+  });
+}
 export const _setHandoffResolveLookupForTest = (fn) => _CWR.setLookup(fn);
 export const _handoffResolveEnter = (c, name) => _CWR.handoffResolveEnter(c, name);
 export const _accessStatusTool = (c = getCtx(), o) => _CWR.accessStatusTool(c, o);
@@ -27883,6 +27910,9 @@ function _sourceLineCb(name, fn) {
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
+      // Plan report link (DCHUB_PLAN_REPORT_LINK, default OFF): report_url + one closing line, minted from the
+      // answer exactly as this caller received it (lib/plan-report.mjs). Before wall-to-key, so a key it hands back never reaches a report.
+      _final = await _planReportStep(_final, name, c);
       // Wall to key (DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_*, all default OFF): the email ask on licence-only walls, the one
       // sign_in_url, the claimed key handed back once, the native email ask. Just before the aref step, which stays LAST.
       _final = _wallToKeyStep(_final, name, c);
