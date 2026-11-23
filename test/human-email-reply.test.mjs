@@ -230,21 +230,22 @@ async function keylessQueueWall() {
 }
 
 describe('real /mcp handler: a keyless get_interconnection_queue wall', () => {
-  it('every person-facing field carries the reply sentence; the agent ask and the machine fields are unchanged', async () => {
+  // ★ Owner 2026-11-23 (lib/paid-full-only.mjs): get_interconnection_queue is paid-full-only, so a bound email no
+  // longer unlocks its full answer and the person line must not say "reply with your email and your assistant can
+  // unlock the full answer". The reply rewrite itself stays pinned by the pure and step cases above; on this wall the
+  // person line keeps its link and gains no unlock promise, and the machine fields no longer route to bind_email.
+  it('the person line carries no "reply with your email ... unlock the full answer" sentence; the machine fields do not route to bind_email', async () => {
     const w = await keylessQueueWall();
-    const agent = w.blocks.find((t) => t.includes('`bind_email`') && !t.startsWith('{'));
-    expect(agent, 'the fixture is vacuous unless the wall asked the agent for the email').toBeTruthy();
     const human = w.blocks.find((t) => t.includes(MARKER));
     expect(human, 'the wall carries the person line').toBeTruthy();
-    expect(human).toMatch(REPLY_CORE);
-    expect(human).not.toMatch(/paid layer/);
+    expect(human).not.toMatch(REPLY_CORE);
     expect(w.sc.human_url).toMatch(/^https:\/\/dchub\.cloud\//);
     for (const k of ['user_message', 'human_message']) {
-      if (typeof w.sc[k] === 'string') expect(w.sc[k], k).toMatch(REPLY_CORE);
+      if (typeof w.sc[k] === 'string') expect(w.sc[k], k).not.toMatch(REPLY_CORE);
     }
-    expect(w.sc.for_your_human && w.sc.for_your_human.text).toMatch(REPLY_CORE);
-    expect(w.sc.next_call && w.sc.next_call.tool).toBe('bind_email');
-    expect(w.sc._upgrade && w.sc._upgrade.next_tool).toBe('bind_email');
+    expect(String(w.sc.for_your_human && w.sc.for_your_human.text)).not.toMatch(REPLY_CORE);
+    expect(w.sc.next_call && w.sc.next_call.tool).not.toBe('bind_email');
+    expect(w.sc._upgrade && w.sc._upgrade.next_tool).not.toBe('bind_email');
     // one person line, one link: nothing stacked
     expect(w.blocks.filter((t) => t.includes(MARKER))).toHaveLength(1);
   });

@@ -176,7 +176,7 @@ function checkSides(o, t) {
   expect(JSON.stringify(ps)).not.toMatch(/\$\s?\d|\bcredits?\b|free key|calls?\s*\/\s*day|per day|free tier/i);
 }
 
-describe('planner 5.38: both sides of the place, end to end (keyless first answer, compact)', () => {
+describe('planner 5.38: both sides of the place, end to end (keyless, compact)', () => {
   for (const t of TEN) {
     describe(t.q, () => {
       let o;
@@ -199,8 +199,11 @@ describe('planner 5.38: both sides of the place, end to end (keyless first answe
         it(`the ${t.added === 'power' ? 'power' : 'data-center'} pairing step ran, and replay records it`, () => {
           const ps = o.executed.find((e) => e.pair_side === t.added);
           expect(ps, JSON.stringify(o.executed.map((e) => [e.step, e.tool, e.status]))).toBeTruthy();
-          expect(ps.status).toBe('executed');
-          expect(o.replay.decisions.find((d) => d.id === 'P1')).toMatchObject({ step: ps.step, status: 'executed' });
+          // A keyless plan's steps run at preview depth since 2026-11-23 (owner): ran = executed or gated_preview.
+          expect(['executed', 'gated_preview']).toContain(ps.status);
+          const p1 = o.replay.decisions.find((d) => d.id === 'P1');
+          expect(p1).toMatchObject({ step: ps.step });
+          expect(['executed', 'gated_preview']).toContain(p1.status);
         });
       } else {
         it('both sides were already in the plan: no pairing step, and replay says so', () => {
@@ -253,7 +256,9 @@ describe('planner 5.38: the pairing step never displaces a step that answers the
     const ps = o.executed.find((e) => e.pair_side === 'data_center');
     expect(ps).toMatchObject({ tool: 'get_market_intel', status: 'not_run' });
     // (the keyless first answer's compact rows carry no note; replay and the side's line carry it)
-    expect(o.executed.filter((e) => e.step < ps.step).map((e) => e.status)).toEqual(['executed', 'executed', 'executed']);
+    const ran = o.executed.filter((e) => e.step < ps.step).map((e) => e.status);
+    expect(ran).toHaveLength(3);
+    for (const st of ran) expect(['executed', 'gated_preview']).toContain(st);
     const p1 = o.replay.decisions.find((d) => d.id === 'P1');
     expect(p1).toMatchObject({ step: ps.step, status: 'not_run' });
     expect(p1.status_note).toMatch(/^pairing step held back: max_steps 3 leaves no room after the steps that answer the question\. The data-center side was not read: call get_market_intel \{"market":"columbus"\} directly/);

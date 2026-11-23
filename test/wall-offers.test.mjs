@@ -175,6 +175,7 @@ describe('3. /mcp: a key past its daily allowance is offered only what it does n
   });
 
   let ip = 10, rid = 1;
+  const ARGS = { get_water_risk: { state: 'VA' }, get_renewable_energy: { state: 'VA' } };
   function rpc(headers, body) {
     const data = JSON.stringify(body);
     return new Promise((resolve, reject) => {
@@ -192,17 +193,30 @@ describe('3. /mcp: a key past its daily allowance is offered only what it does n
       req.end(data);
     });
   }
-  async function call(tool, { keyed = true } = {}) {
+  async function call(tool, { keyed = true, args = ARGS[tool] || { market: 'dallas', iso: 'ERCOT' } } = {}) {
     const before = events.length;
     const hdr = { 'x-forwarded-for': '198.51.100.' + (ip++), ...(keyed ? { 'x-api-key': KEY } : {}) };
     const m = await rpc(hdr, { jsonrpc: '2.0', id: rid++, method: 'tools/call',
-      params: { name: tool, arguments: { market: 'dallas', iso: 'ERCOT' } } });
+      params: { name: tool, arguments: args } });
     for (let i = 0; i < 50 && !events.slice(before).some((e) => e.tool === tool); i++) await new Promise((r) => setTimeout(r, 10));
     const content = (m.result && m.result.content) || [];
     const prose = content.filter((b) => b.type === 'text' && !/^\s*[{[]/.test(b.text)).map((b) => b.text).join('\n');
     return { prose, sc: (m.result && m.result.structuredContent) || {}, row: events.slice(before).find((e) => e.tool === tool) || null };
   }
-  const EMAIL_WALLS = ['rank_markets', 'get_interconnection_queue'];   // walls whose floor offer is the email ask
+  // walls whose floor offer is the email ask. rank_markets and get_interconnection_queue were these until owner
+  // 2026-11-23 made them paid-only (lib/paid-full-only.mjs: an email no longer opens them; pinned below).
+  const EMAIL_WALLS = ['get_water_risk', 'get_renewable_energy'];
+  const PAID_ONLY_WALLS = ['rank_markets', 'get_interconnection_queue'];
+
+  it('paid-only walls (owner 2026-11-23), keyless: no email-unlock ask, the wall says an email does not open them', async () => {
+    for (const t of PAID_ONLY_WALLS) {
+      const { prose, row } = await call(t, { keyed: false });
+      expect(row, t + ': the call walled').toBeTruthy();
+      expect(['line', 'link', 'link_exit', 'bind_field'], t).not.toContain(row.email_ask);
+      expect(row.offers_shown || [], t).not.toContain('email_unlock');
+      expect(prose, t).not.toMatch(/email (on this page )?opens the full answer|shows all \d+ markets/i);
+    }
+  }, 120_000);
 
   it('CONTROL: keyless, the same walls carry the email ask, the free key path and the sign-in', async () => {
     for (const t of EMAIL_WALLS) {
@@ -214,16 +228,19 @@ describe('3. /mcp: a key past its daily allowance is offered only what it does n
     }
   }, 120_000);
 
-  it('identified key over its day: no email ask, no key ask, no sign-in; the bound digest offer, tagged', async () => {
+  // Owner 2026-11-23: these two are paid-only now; an identified key over its day still reads only the digest offer
+  // (rank_markets the depth wording, queue the bound wording: see the report on _depthWallTool), never an email ask.
+  it('identified key over its day: no email ask, no key ask, no sign-in; the digest offer, tagged', async () => {
     TIER = 'identified'; H.S._dropQuotaCache(KEY);
-    for (const t of EMAIL_WALLS) {
+    for (const t of PAID_ONLY_WALLS) {
       const { prose, sc, row } = await call(t);
       expect((sc.identity || {}).daily_quota_reached, t).toBeTruthy();   // it really is the over-quota path
       expect(prose, t).not.toContain('Share your email');
       expect(prose, t).not.toMatch(/`bind_email`|`claim_free_key`/);
       expect(prose, t).not.toContain(OAUTH_SIGNIN_URL);
       // 2026-11-19 (Grok item 13, owner go-ahead): the digest ask carries no "free" (lib/neutral-connect.mjs rewrites)
-      expect(prose, t).toContain('Next step for your user: "DC Hub can email you a weekly summary');
+      expect(prose, t).toContain('call `subscribe_digest` with');
+      expect(prose, t).toContain('source "depth_wall"');
       expect(prose, t).not.toMatch(/\bfree\b/i);
       expect(row && row.email_ask, t).toBe('digest_line');
       expect(row && row.offers_shown, t).toEqual(expect.arrayContaining(['digest']));

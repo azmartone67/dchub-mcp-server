@@ -199,10 +199,15 @@ describe('applyTierGate — tier access', () => {
   it('keyed-free bonus unlocks the demand tools with an api key', () => {
     // Use a bonus-ONLY tool: get_market_intel is also in ALWAYS_PARTIAL_PREVIEW,
     // whose branch runs first (r-tease-wow → trial_taste), so it no longer reaches
-    // the bonus path. get_grid_data is purely KEYED_FREE_BONUS.
-    const g = applyTierGate('get_grid_data', {}, 'free', true, false);
+    // the bonus path. get_water_risk is purely KEYED_FREE_BONUS.
+    const g = applyTierGate('get_water_risk', {}, 'free', true, false);
     expect(g.allowed).toBe(true);
     expect(g.bonus).toBe(true);
+  });
+  // Owner 2026-11-23: get_grid_data left the bonus; a free key gets its preview.
+  it('a free key no longer passes the gate on get_grid_data; developer does', () => {
+    expect(applyTierGate('get_grid_data', {}, 'free', true, false).allowed).toBe(false);
+    expect(applyTierGate('get_grid_data', {}, 'developer', true, false).allowed).toBe(true);
   });
   // Owner 2026-10-08: the three decision tools never enter the taste path on a non-paid
   // seat (test/free-decision-tools-preview-only.test.mjs); the kill switch restores it.
@@ -223,7 +228,9 @@ describe('applyTierGate — tier access', () => {
     process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
     try {
       expect(applyTierGate('get_market_intel', {}, 'free', true, false).trial_taste).toBe(true);
-      expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).trial_taste).toBe(true);
+      // Owner 2026-11-23: grid is paid-full-only; the kill switch no longer gives a trial its taste.
+      expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).trial_taste).toBeUndefined();
+      expect(applyTierGate('get_fiber_intel', {}, 'free', false, true).trial_taste).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
       else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;

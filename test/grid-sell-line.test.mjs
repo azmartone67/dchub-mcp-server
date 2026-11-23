@@ -246,8 +246,11 @@ describe('repeat keyless grid call in one session (fail 1)', () => {
     const t1 = text(r1), t2 = text(r2);
     // Item 3 (owner 2026-10-16; full-stack QA 2026-10-24): the first keyless preview's agent line points at
     // the email ask (an email-bound key gets the full brief); the pay-first line is the switch-off control below.
-    expect(t1).toContain('unlock the full brief with their email');
-    expect(t1).not.toContain('After they pay, call');
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): an email-bound key no longer gets the full grid brief, so the first
+    // keyless preview's agent line is the pay-first line again, never the email-unlock line.
+    expect(t1).not.toContain('unlock the full brief with their email');
+    expect(t1).toContain('Show your user the next line unchanged');
+    expect(t1).toContain('After they pay, call get_grid_intelligence again');
     for (const t of [t1, t2]) {
       expect(t).not.toMatch(/(?:Free f|F)ull answers left today/);
       expect(t).not.toContain('from earlier in this session');

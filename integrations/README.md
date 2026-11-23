@@ -45,7 +45,7 @@ POST https://dchub.cloud/mcp                                  # the full MCP ser
 ```
 
 ## Access and keys
-- **Access:** No key is needed to start; some figures return at preview depth until the caller is identified, and the result says so. An optional key (or OAuth sign-in) gives fuller answers and keeps saved shortlists, alerts and tracked changes across sessions. Details: https://dchub.cloud/connect. Claim a key (optional):
+- **Access:** A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional; it keeps saved work across sessions):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
 - **Sending a key:** pass it as the **`X-API-Key`** header (REST) or in your MCP client config. Never commit it to shared code.
 

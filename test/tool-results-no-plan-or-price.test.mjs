@@ -8,7 +8,8 @@
 //      and the full text served as the resource dchub://instructions;
 //   2. the RESULTS of the five energy tools (execute_plan, get_grid_intelligence,
 //      get_interconnection_queue, get_grid_data, get_energy_prices), keyless, rendered three ways each:
-//      the first full answer of the day, the next call from the same caller, and the preview
+//      the first call of the day (the first full answer until owner 2026-11-23 made all five paid-only; a preview
+//      now), the next call from the same caller, and the preview
 //      (DCHUB_KEYLESS_FIRST_FULL=0), for a coding-agent seat and a Grok seat with a browser UA.
 //
 // Measured on 2.12.55 by an outside tester (anonymous, clientInfo grok): a "FREE TIER" block with
@@ -288,10 +289,13 @@ describe('the five energy tools\' results name no plan and state no price (keyle
     for (const sn of Object.keys(SEATS)) {
       for (const tool of Object.keys(TOOLS5)) {
         const r = R[`${tool}@${sn}`];
-        expect(isFirstFull(r.first), `${tool}@${sn}: call 1 is not the first full answer`).toBe(true);
+        // Owner 2026-11-23 (lib/paid-full-only.mjs): all five are paid-only, so the keyless first full answer of the
+        // day no longer serves any of them: call 1 is the preview too (it was the first full answer before).
+        expect(isFirstFull(r.first), `${tool}@${sn}: call 1 is a first full answer`).toBe(false);
         expect(isFirstFull(r.preview), `${tool}@${sn}: the flag-off call carries a first-full block`).toBe(false);
         if (tool !== 'execute_plan') {
-          expect(isFirstFull(r.next), `${tool}@${sn}: call 2 is still a first full answer`).toBe(false);
+          expect(isFirstFull(r.next), `${tool}@${sn}: call 2 is a first full answer`).toBe(false);
+          expect(isPreview(r.first), `${tool}@${sn}: call 1 is not a preview`).toBe(true);
           expect(isPreview(r.preview), `${tool}@${sn}: the flag-off call is not a preview`).toBe(true);
         }
       }

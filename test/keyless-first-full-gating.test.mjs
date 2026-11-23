@@ -14,10 +14,17 @@
 //   M) "<N> MW data center in <place>" is planned as a capacity search, not an inventory lookup, and the
 //      compact first plan never leads with answer_guide's instruction to the agent.
 //
+// ★ Owner 2026-11-23 (lib/paid-full-only.mjs): the lane lists NO tools (KEYLESS_FIRST_FULL_TOOLS = []): grid, queue,
+// energy, grid_data and execute_plan give a full answer only to a paid key. The flag and the lane code stay, so H-L
+// now pin that the empty lane is safe: no first full answer, no charge, no "first full answer" stamp, for every
+// caller. The caller rule the lane would apply (H, I, J) is pinned on keylessCallerSeat with the lane's own bot rule
+// (isBotOrInternalCtxForSiteLane), so a future tool added back to the lane inherits a tested rule.
+//
 // Seats are built the way the /mcp handler builds them: platform from _resolvePlatform(body, UA, …).
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
+import { keylessCallerSeat } from '../lib/keyless-full-trial.mjs';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 process.env.DCHUB_TOP_METROS_FREE = '0';
 process.env.DCHUB_LEAN_RESPONSES = '0';
@@ -43,8 +50,10 @@ const ARGS = {
   get_grid_data: { iso: 'PJM' },
   get_energy_prices: { iso: 'CAISO' },
 };
-const OLD_REASON = (tool) => 'NOT APPLICABLE: `' + tool + '` is a preview for anonymous callers and keys without a bound '
-  + 'email; no daily full-answer budget is charged here. A key with a bound email gets full answers.';   // option A: no daily allowance
+// The stamp on a paid-full-only decision tool, lane on or off: preview on every non-paid seat, no email promise.
+const PREVIEW_REASON = (tool) => 'NOT APPLICABLE: `' + tool + '` is a preview on every non-paid seat (anonymous, DC Hub key, '
+  + 'trial, email-bound); no daily full-answer budget is charged for it. This result is partial: some fields are not '
+  + 'included at this access level.';
 
 const writes = { track: [], consume: [] };
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -110,20 +119,27 @@ const kffConsumes = (ip) => writes.consume.filter((w) => w.identity === kffId(ip
 const settle = () => new Promise((r) => setTimeout(r, 25));
 const PLAN_OR_PRICE = /\b(Developer|Pro|Starter|Enterprise|Founding)\b|\$\s?\d|\/mo\b/;
 
-describe('H) an agent behind a plain HTTP client gets the first full answer', () => {
+// The lane's own caller rule, as server.mjs _keylessFirstFullSeat hands it to the lib.
+const laneCaller = (c) => keylessCallerSeat(c, { isBot: S.isBotOrInternalCtxForSiteLane,
+  isQa: (x) => S._isQaCaller(x) || x.qa_header === true || !!S._selfTestTelemetryTag(x) });
+const LANE_TOOLS_BEFORE = ['get_grid_intelligence', 'get_interconnection_queue', 'get_energy_prices'];
+
+describe('H) an agent behind a plain HTTP client: still a keyless caller, but the empty lane serves it no first full answer', () => {
   const UAS = ['curl/8.4.0', 'python-requests/2.31.0', 'Wget/1.21.4', 'Go-http-client/1.1', 'HTTPie/3.2.2',
     'PostmanRuntime/7.36.0', 'FastMCPClient/2.3'];
+  it('the lane lists no tools', () => { expect([...F.KEYLESS_FIRST_FULL_TOOLS]).toEqual([]); });
   UAS.forEach((ua, i) => {
-    it(`${ua}: call 1 is the full answer and is charged; call 2 is the preview`, async () => {
+    it(`${ua}: the caller rule admits it; call 1 and call 2 are previews; nothing is charged`, async () => {
       const ip = `198.18.60.${i + 1}`;
-      expect(S._keylessFirstFullSeat('get_grid_data', seat({ ua, ip }))).toBe('charge');
-      const r1 = await call('get_grid_data', seat({ ua, ip }));
-      expect(r1.isError).not.toBe(true);
-      expect(isFirstFull(r1), 'call 1 carries first_full_answer').toBe(true);
-      const r2 = await call('get_grid_data', seat({ ua, ip }));
+      expect(laneCaller(seat({ ua, ip }))).toBe('charge');
+      for (const t of LANE_TOOLS_BEFORE) expect(S._keylessFirstFullSeat(t, seat({ ua, ip })), t).toBeNull();
+      const r1 = await call('get_interconnection_queue', seat({ ua, ip }));
+      expect(isFirstFull(r1), 'no first_full_answer').toBe(false);
+      expect(quotaOf(r1).full_answers_unavailable_reason).toBe(PREVIEW_REASON('get_interconnection_queue'));
+      const r2 = await call('get_interconnection_queue', seat({ ua, ip }));
       expect(isFirstFull(r2)).toBe(false);
       await settle();
-      expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['get_grid_data']);
+      expect(kffConsumes(ip)).toEqual([]);
     });
   });
 });
@@ -138,10 +154,11 @@ describe('I) still refused: our own, monitor, crawler and QA callers', () => {
     ['a QA caller behind curl', { ua: 'curl/8.4.0 dchub-qa-readonly' }],
   ];
   cases.forEach(([label, sp], i) => {
-    it(`${label}: no first full answer, nothing charged`, async () => {
+    it(`${label}: the caller rule refuses it, no first full answer, nothing charged`, async () => {
       const ip = `198.18.61.${i + 1}`;
-      expect(S._keylessFirstFullSeat('get_grid_data', seat({ ...sp, ip }))).toBeNull();
-      const r = await call('get_grid_data', seat({ ...sp, ip }));
+      expect(laneCaller(seat({ ...sp, ip }))).toBeNull();
+      expect(S._keylessFirstFullSeat('get_interconnection_queue', seat({ ...sp, ip }))).toBeNull();
+      const r = await call('get_interconnection_queue', seat({ ...sp, ip }));
       expect(isFirstFull(r)).toBe(false);
       await settle();
       expect(kffConsumes(ip)).toEqual([]);
@@ -149,7 +166,7 @@ describe('I) still refused: our own, monitor, crawler and QA callers', () => {
   });
 });
 
-describe('J) "sweep-check-1114" got the preview because its name is tagged as our own, not because of the budget', () => {
+describe('J) "sweep-check-1114" is tagged as our own; with the empty lane nobody on its IP gets a first full answer', () => {
   const UA = (nm) => `Mozilla/5.0 (Macintosh) ${nm}/1.0`;
   it('the resolver tags it dchub-internal (clientInfo and X-MCP-Client), and cursor / grok keep their names', () => {
     expect(S._resolvePlatform({ params: { clientInfo: { name: 'sweep-check-1114' } } }, UA('sweep-check-1114'), '', null))
@@ -158,100 +175,83 @@ describe('J) "sweep-check-1114" got the preview because its name is tagged as ou
     expect(S._resolvePlatform({ params: { clientInfo: { name: 'cursor' } } }, UA('cursor'), '', null)).toBe('cursor');
     expect(S._resolvePlatform({ params: { clientInfo: { name: 'grok' } } }, UA('grok'), '', null)).toBe('grok');
   });
-  it('only the platform tag refuses it: the raw name and UA match no bot, QA or self-test rule', () => {
+  it('only the platform tag refuses it under the caller rule: the raw name and UA match no bot, QA or self-test rule', () => {
     const raw = { client_name_raw: 'sweep-check-1114', user_agent: UA('sweep-check-1114'), client_ip: '198.18.62.9' };
     expect(S.isBotOrInternalCtx(raw)).toBe(false);
     expect(S._isQaCaller(raw)).toBe(false);
     expect(S._selfTestTelemetryTag(raw)).toBe('');
-    expect(S._keylessFirstFullSeat('get_grid_data', raw)).toBe('charge');
-    expect(S._keylessFirstFullSeat('get_grid_data', { ...raw, platform: 'dchub-internal' })).toBeNull();
+    expect(laneCaller(raw)).toBe('charge');
+    expect(S._keylessFirstFullSeat('get_interconnection_queue', raw)).toBeNull();   // the lane lists no tools
   });
-  it('from one IP: sweep-check-1114 previews and charges nothing; cursor and grok then get full answers', async () => {
+  it('from one IP: sweep-check-1114, cursor and grok all get previews, and nothing is charged', async () => {
     const ip = '198.18.62.1';
-    const sw1 = await call('get_grid_intelligence', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip }));
-    const sw2 = await call('get_grid_data', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip }));
-    expect(isFirstFull(sw1)).toBe(false);
-    expect(isFirstFull(sw2)).toBe(false);
+    const rs = [
+      await call('get_grid_intelligence', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip })),
+      await call('get_interconnection_queue', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip })),
+      await call('get_grid_intelligence', seat({ name: 'cursor', ua: UA('cursor'), ip })),
+      await call('get_interconnection_queue', seat({ name: 'grok', ua: UA('grok'), ip })),
+    ];
+    for (const r of rs) expect(isFirstFull(r)).toBe(false);
     await settle();
-    expect(kffConsumes(ip), 'the preview spent nothing').toEqual([]);
-    expect(isFirstFull(await call('get_grid_intelligence', seat({ name: 'cursor', ua: UA('cursor'), ip })))).toBe(true);
-    expect(isFirstFull(await call('get_grid_data', seat({ name: 'grok', ua: UA('grok'), ip })))).toBe(true);
+    expect(kffConsumes(ip)).toEqual([]);
   });
 });
 
-describe('K) the quota stamp says what the lane does', () => {
+describe('K) the quota stamp: no first-full line on a paid-full-only tool, lane on or off', () => {
   for (const tool of ['get_grid_intelligence', 'get_interconnection_queue']) {
-    it(`${tool}: the first answer says it was today's one; the next preview says it was used and when it resets`, async () => {
+    it(`${tool}: both calls are previews and the stamp says preview on every non-paid seat, with no email promise`, async () => {
       const ip = `198.18.63.${tool.length}`;
-      const r1 = await call(tool, seat({ name: 'cursor', ua: 'cursor/1.0', ip }));
-      expect(isFirstFull(r1)).toBe(true);
-      const q1 = quotaOf(r1);
-      expect(q1).toMatchObject({ tier: 'anonymous', full_answers_cap_today: 1, full_answers_remaining_today: 0 });
-      expect(q1.full_answers_unavailable_reason).toBeUndefined();
-      expect(q1.full_answers_basis).toMatch(/^1 full `[a-z_]+` answer per caller network \(IP\) and per session, per UTC day, without a key; resets next 00:00 UTC\. A key with a bound email gets full answers\.$/);
-      const r2 = await call(tool, seat({ name: 'cursor', ua: 'cursor/1.0', ip }));
-      expect(isFirstFull(r2)).toBe(false);
-      const q2 = quotaOf(r2);
-      expect(q2.full_answers_remaining_today).toBe(0);
-      expect(q2.full_answers_unavailable_reason).toBe('USED: today’s full `' + tool + '` answer without a key on this '
-        + 'network (IP) or in this session was used, so this call is the preview. The next one is after 00:00 UTC. A key with a bound '
-        + 'email gets full answers.');
-      for (const q of [q1, q2]) {
-        expect(JSON.stringify(q)).not.toMatch(/NOT APPLICABLE|no daily full-answer budget/);
+      for (let i = 0; i < 2; i++) {
+        const r = await call(tool, seat({ name: 'cursor', ua: 'cursor/1.0', ip }));
+        expect(isFirstFull(r)).toBe(false);
+        const q = quotaOf(r);
+        expect(q).toMatchObject({ tier: 'anonymous', full_answers_cap_today: null, full_answers_remaining_today: null });
+        expect(q.full_answers_basis).toBeUndefined();
+        expect(q.full_answers_unavailable_reason).toBe(PREVIEW_REASON(tool));
+        expect(JSON.stringify(q)).not.toMatch(/USED: |first full|bound email gets full/);
         expect(JSON.stringify(q)).not.toMatch(PLAN_OR_PRICE);
       }
     });
   }
-  it('lane off: the stamp is today\'s line, byte for byte', async () => {
+  it('lane off: the same preview stamp', async () => {
     process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
     const q = quotaOf(await call('get_grid_intelligence', seat({ name: 'cursor', ua: 'cursor/1.0', ip: '198.18.63.101' })));
     expect(q.full_answers_cap_today).toBeNull();
     expect(q.full_answers_remaining_today).toBeNull();
     expect(q.full_answers_basis).toBeUndefined();
-    expect(q.full_answers_unavailable_reason).toBe(OLD_REASON('get_grid_intelligence'));
+    expect(q.full_answers_unavailable_reason).toBe(PREVIEW_REASON('get_grid_intelligence'));
   });
-  it('CAP=0: today\'s line', async () => {
+  it('CAP=0: the same preview stamp', async () => {
     process.env.DCHUB_KEYLESS_FIRST_FULL_CAP = '0';
     const q = quotaOf(await call('get_interconnection_queue', seat({ name: 'cursor', ua: 'cursor/1.0', ip: '198.18.63.102' })));
-    expect(q.full_answers_unavailable_reason).toBe(OLD_REASON('get_interconnection_queue'));
+    expect(q.full_answers_unavailable_reason).toBe(PREVIEW_REASON('get_interconnection_queue'));
   });
-  it('a caller the lane refuses (our own self-tag) keeps today\'s line', async () => {
+  it('a caller the lane refuses (our own self-tag): the same preview stamp', async () => {
     const q = quotaOf(await call('get_grid_intelligence',
       seat({ name: 'sweep-check-1114', ua: 'Mozilla/5.0 (Macintosh) sweep-check-1114/1.0', ip: '198.18.63.103' })));
-    expect(q.full_answers_unavailable_reason).toBe(OLD_REASON('get_grid_intelligence'));
+    expect(q.full_answers_unavailable_reason).toBe(PREVIEW_REASON('get_grid_intelligence'));
   });
 });
 
-describe('L) the session bucket: rotating egress inside one session does not re-qualify', () => {
+describe('L) rotating egress inside one session: no bucket is charged on either IP or the session', () => {
   const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0.0.0 Safari/537.36';
   const sessId = (sid) => F.KEYLESS_FIRST_FULL_ID_PREFIX + 'sk-' + createHash('sha256').update(sid).digest('hex');
-  it('same session, second call from another IP: the preview, and only the first call is charged', async () => {
+  it('same session, two IPs, energy and grid: previews only, no kff consume on the session or either IP', async () => {
     const s1 = seat({ name: 'grok', ua: UA, ip: '198.18.64.1' });
-    const r1 = await call('get_energy_prices', s1);
-    expect(isFirstFull(r1)).toBe(true);
-    const r2 = await call('get_energy_prices', { ...seat({ name: 'grok', ua: UA, ip: '198.18.64.2' }), session_id: s1.session_id });
-    expect(isFirstFull(r2), 'the session bucket is spent').toBe(false);
+    for (const t of ['get_energy_prices', 'get_grid_intelligence']) {
+      expect(isFirstFull(await call(t, s1))).toBe(false);
+      expect(isFirstFull(await call(t, { ...seat({ name: 'grok', ua: UA, ip: '198.18.64.2' }), session_id: s1.session_id }))).toBe(false);
+    }
     await settle();
-    expect(writes.consume.filter((w) => w.identity === sessId(s1.session_id)).map((w) => w.tool)).toEqual(['get_energy_prices']);
-    expect(kffConsumes('198.18.64.2'), 'the refused call charged its IP nothing').toEqual([]);
+    expect(writes.consume.filter((w) => w.identity === sessId(s1.session_id))).toEqual([]);
+    expect(kffConsumes('198.18.64.1')).toEqual([]);
+    expect(kffConsumes('198.18.64.2')).toEqual([]);
   });
-  it('the used line names the session too, on the stamp of the refused call', async () => {
-    const s1 = seat({ name: 'grok', ua: UA, ip: '198.18.64.11' });
-    expect(isFirstFull(await call('get_grid_intelligence', s1))).toBe(true);
-    const q = quotaOf(await call('get_grid_intelligence', { ...seat({ name: 'grok', ua: UA, ip: '198.18.64.12' }), session_id: s1.session_id }));
-    expect(q.full_answers_remaining_today).toBe(0);
-    expect(q.full_answers_unavailable_reason).toMatch(/^USED: .* or in this session was used/);
-  });
-  it('a new session from a new IP still gets its first full answer (the budget is per caller, not global)', async () => {
-    expect(isFirstFull(await call('get_energy_prices', seat({ name: 'grok', ua: UA, ip: '198.18.64.21' })))).toBe(true);
-    expect(isFirstFull(await call('get_energy_prices', seat({ name: 'grok', ua: UA, ip: '198.18.64.22' })))).toBe(true);
-  });
-  it('no session id: the IP bucket alone decides, as before', async () => {
+  it('no session id: the IP bucket is not charged either', async () => {
     const ip = '198.18.64.31';
-    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: '' }))).toBe(true);
-    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: 'no-session' }))).toBe(false);
+    expect(isFirstFull(await call('get_interconnection_queue', { ...seat({ name: 'grok', ua: UA, ip }), session_id: '' }))).toBe(false);
     await settle();
-    expect(writes.consume.filter((w) => w.identity === sessId('no-session'))).toEqual([]);
+    expect(kffConsumes(ip)).toEqual([]);
   });
 });
 

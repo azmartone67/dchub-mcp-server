@@ -153,7 +153,9 @@ describe('lib/free-tighten', () => {
   it('on at 0: the first-full and trial lanes give no seat', () => {
     const c = { client_ip: '203.0.113.9', session_id: 's1', platform: 'claude-code' };
     const base = { DCHUB_KEYLESS_FULL_TRIAL: '1' };
-    expect(keylessFirstFullSeat('get_grid_intelligence', c, { env: base })).not.toBeNull();
+    // #1700 (owner 2026-11-23): get_grid_intelligence is paid-only and the first-full lane is empty, so it
+    // gives no seat even with the dial off. The trial-lane pair below is the control for the dial.
+    expect(keylessFirstFullSeat('get_grid_intelligence', c, { env: base })).toBeNull();
     expect(keylessFullTrialSeat('get_facility', c, { env: base })).not.toBeNull();
     const tight = { ...base, DCHUB_FREE_TIGHTEN: '1' };
     expect(keylessFirstFullSeat('get_grid_intelligence', c, { env: tight })).toBeNull();
