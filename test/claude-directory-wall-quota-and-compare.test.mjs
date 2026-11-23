@@ -68,7 +68,11 @@ describe('/mcp/claude keyless analyze_site wall: no constant "0 left this month"
     const sc = r.msg.result.structuredContent;
     expect(sc._wall).toBe(true);
     expect(sc.remaining_this_month).toBe(0);
-    expect(sc.resets_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
+    // QA 2026-11-23: this loopback caller is one the daily site lane does not seat. Its wall used to put the month start in
+    // resets_at while quota.resets_at said "next 00:00 UTC"; now resets_at is the next UTC midnight and the month start
+    // has its own field (test/keyless-site-wall-matches-description-1123.test.mjs).
+    expect(sc.resets_at).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+    expect(sc.monthly_reports_reset_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
   }, 60_000);
 });
 
