@@ -1,7 +1,7 @@
 // quota-one-statement-1120.test.mjs — owner decisions of 2026-11-20 on the quota report:
 // "A1, C(a), D leave unstated". The /pricing daily line is the single source of truth.
 //
-//   C(a)  the free-key line carries "(market intel needs an email)": a key with no bound
+//   C(a)  the free-key line carries "(market intel needs an email; the ten paid tools stay previews)": a key with no bound
 //         email gets the preview on exactly those three tools (lib/free-decision-taste.mjs
 //         FREE_PREVIEW_ONLY_TOOLS). The qualifier's tool names are pinned to that list here.
 //   A1    analyze_site's line states the enforced daily site lane (lib/keyless-full-trial.mjs) and the
@@ -21,7 +21,7 @@ beforeAll(async () => {
   KFT = await import('../lib/keyless-full-trial.mjs');
 }, 60_000);
 
-const Q = '(market intel needs an email)';
+const Q = '(market intel needs an email; the ten paid tools stay previews)';
 const WORD_TO_TOOL = { grid: 'get_grid_intelligence', queue: 'get_interconnection_queue', 'market intel': 'get_market_intel' };
 
 describe('C(a): one free-key line with the email qualifier', () => {

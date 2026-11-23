@@ -64,8 +64,8 @@ describe('B1 free-key copy follows the published shape', () => {
     expect(TC._freeKeyIsDaily(DAILY)).toBe(true);
     expect(TC._freeTierRuleText(DAILY)).toBe(B1_SENTENCE);
     // Owner 2026-11-20 (C(a)): the free-key line carries the email qualifier.
-    expect(TC._freeKeyOfferText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email)');
-    expect(TC._freeKeyAllowanceText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email), 50/day with an email');
+    expect(TC._freeKeyOfferText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email; the ten paid tools stay previews)');
+    expect(TC._freeKeyAllowanceText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email; the ten paid tools stay previews), 50/day with an email');
     for (const t of [TC._freeKeyAllowanceText(DAILY), TC._unboundKeyLadderText(DAILY), B1_SENTENCE]) {
       expect(t).not.toMatch(/calls to try|calls total|n\/a|undefined|NaN|—/);
     }
