@@ -560,6 +560,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs
 test/plan-proof-1116-e2e.test.mjs
 test/plan-proof-1116.test.mjs
