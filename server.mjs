@@ -242,7 +242,8 @@ import { CLAIM_TOOL as _CLAIM_TOOL, CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STA
 // anti-inflation contract (as_of is read out of the data or reported
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
-import { resolveFacilityRef as _resolveFacilityRef } from './lib/facility-ref.mjs';
+import { answerQualityMarks as _aqMarks, markHeldRows as _aqMarkHeldRows, answerQualityMarksOn as _aqMarksOn } from './lib/answer-quality.mjs';
+import { resolveFacilityRef as _resolveFacilityRef, notFoundSuggestions as _facilityNotFoundSuggestions } from './lib/facility-ref.mjs';
 import { setWithheldLabelGate as _setWithheldLabelGate } from './lib/attribution.mjs';
 import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating, COMPOSITE_LICENSE, COMPOSITE_LICENSE_TOOLS } from './lib/attribution.mjs';
 import { meteredTrialNote as _meteredTrialNote, limitedAnswerCopy as _limitedAnswerCopy } from './lib/metered-note.mjs';
@@ -27955,6 +27956,7 @@ function _sourceLineCb(name, fn) {
   // human line (lib/lean-response.mjs); it skips the directory / Claude / core profiles and ChatGPT.
   return async (args, extra) => {
     const c = getCtx() || {};
+    const _aqT0 = Date.now();   // item 6 (lib/answer-quality.mjs): the call's wall time starts here
     _deviceMatchEnter(c, name);   // wall identity v2 device match: inert unless both flags are on
     await _handoffResolveEnter(c, name);   // DCHUB_AGENT_HANDOFF_RESOLVE (default OFF): a handoff-linked keyless caller
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
@@ -28088,6 +28090,9 @@ function _sourceLineCb(name, fn) {
       // mcp#1564 follow-up: the held rows leave last, marked with the next_ask this result served.
       if (c && c._wallPaidLineArm) _WPL.markHeldTrackRows(c, name, c._wallPaidLineArm);   // the A/B arm on the track row
       if (c && c._wallOneDoorArm) _WOD.markHeldTrackRows(c, name, c._wallOneDoorArm);   // the one-door arm on the track row
+      // Brain 2026-11-23 item 6: the answer-quality marks (params._aq) on this call's held rows, read off the final
+      // answer. Kill switch DCHUB_ANSWER_QUALITY_MARKS=0.
+      if (_aqMarksOn()) _aqMarkHeldRows(c, name, _aqMarks(name, _final, { startedAt: _aqT0 }));
       _flushTrackRows(c, name, _final);
     }
   };
@@ -35807,6 +35812,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _hit = await _resolveFacilityRef(fid, (q) => callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true }));
       if (_hit) fid = _hit.slug;
       const main = await callAPI(`/api/v1/facilities/${fid}`, { include_nearby: a.include_nearby, include_power: a.include_power });
+      // Brain 2026-11-23 item 5: a slug that is not on file gets the 3 closest slugs (lib/facility-ref.mjs).
+      if (main && main._error_mitigation && main._error_mitigation.error_code === 'upstream_not_found' && fid) {
+        const sug = await _facilityNotFoundSuggestions(fid, (q) => callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true }));
+        if (sug.length) {
+          main.suggestions = sug.map((x) => x.slug);
+          main.did_you_mean = sug;
+          main._error_mitigation = { ...main._error_mitigation, deterministic_hint: `No facility has the id or slug "${String(fid).slice(0, 120)}". `
+            + `The closest slugs on file: ${main.suggestions.join(', ')}. Call get_facility with one of them, or search_facilities to look further.` };
+        }
+      }
       // The plural facility handler doesn't join on-site fiber carriers; the singular
       // /api/v1/facility/<slug> endpoint does — merge them so the promised carrier list lands.
       try {
