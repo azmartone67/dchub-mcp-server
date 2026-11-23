@@ -74,7 +74,7 @@ registry:
       - name: "get_air_permit_context"
         description: "Use this when the user asks about air permits, EPA nonattainment, or on-site gas turbine / generator permitting near a data center site, for example \"air permits for gas turbines near Midland, TX\"…"
       - name: "get_backup_status"
-        description: "Use this when the user asks how current DC Hub's data center and power data feeds are: one row per feed (deals, facilities, news, substations, fiber_routes, transactions, construction_permits,…"
+        description: "Use this when the user asks whether DC Hub's database is backed up or its data feeds are current."
       - name: "get_changes"
         description: "Use this when the user asks what changed in data center markets, facilities or deals since a date."
       - name: "get_climate_intel"

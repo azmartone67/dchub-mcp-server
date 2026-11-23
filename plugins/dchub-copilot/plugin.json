@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "dchub",
-  "version": "2.12.62",
+  "version": "2.12.63",
   "description": "DC Hub: the orchestration layer for data center and energy intelligence. One server for data center and energy intelligence (facilities, colocation, power and grid, interconnection queues, electricity and gas prices, fiber, site selection). Call execute_plan first. Remote MCP plus three workflow skills.",
   "author": {
     "name": "DC Hub",

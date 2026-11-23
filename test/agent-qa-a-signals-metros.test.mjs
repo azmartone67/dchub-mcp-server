@@ -4,7 +4,9 @@
 //   2b  the "call N of M" meter counts THIS tool's answers on the bucket charged, and says which
 //   2c  no answer carries the load-named queued_load_total_gw (lib/queue-kind-fields.mjs)
 //   3   the full market briefing is open to every caller for the top 20 metros (lib/top-metros.mjs);
-//       broker rates stay withheld; kill switch DCHUB_TOP_METROS_FREE=0
+//       broker rates stay withheld; kill switch DCHUB_TOP_METROS_FREE=0. get_market_context left the
+//       open set 2026-11-23 (its backend never withholds the DCPI sub-scores from this server's key):
+//       keyless top-20 is the depth tease, pinned in test/market-context-top-metro-tease-1123.test.mjs
 //
 // Real registered handlers, backend stubbed through globalThis.fetch (same harness as
 // test/keyed-budget-per-key-826.test.mjs). No network.
@@ -89,26 +91,20 @@ describe('3: the top 20 metros (lib/top-metros.mjs)', () => {
     expect(topMetroSlug('ashburn')).toBe('northern-virginia');
     expect(topMetroSlug('hillsboro')).toBe('portland');
     expect(topMetroSlug('boise')).toBeNull();
-    expect(topMetroFreeCall('get_market_context', { market: 'dallas' })).toBe('dallas');
+    expect(topMetroFreeCall('get_market_context', { market: 'dallas' })).toBeNull();   // left the set 2026-11-23
+    expect(topMetroFreeCall('get_market_intel', { market: 'dallas' })).toBe('dallas');
     expect(topMetroFreeCall('get_market_dcpi_rank', { market_slug: 'phoenix' })).toBe('phoenix');
     expect(topMetroFreeCall('get_grid_intelligence', { market: 'dallas' })).toBeNull();
-    expect(topMetroFreeCall('get_market_context', { market: 'dallas' }, { DCHUB_TOP_METROS_FREE: '0' })).toBeNull();
+    expect(topMetroFreeCall('get_market_intel', { market: 'dallas' }, { DCHUB_TOP_METROS_FREE: '0' })).toBeNull();
   });
 
-  it('keyless get_market_context for Dallas: the full pack, grid and risk included, every section dated, labelled full', async () => {
+  it('keyless get_market_context for Dallas: the depth tease, no sub-scores (owner 2026-11-23)', async () => {
     const r = await call('get_market_context', { market: 'dallas' });
     const j = body(r);
-    expect(j.tier).toBe('full');
-    expect(j.sections.map((s) => s.id)).toEqual(['hero', 'grid', 'pipeline', 'risk']);
-    for (const s of j.sections) expect(s.as_of, s.id).toBeTruthy();
-    expect(j.sections.find((s) => s.id === 'risk').as_of_basis).toMatch(/briefing build date/);
-    expect(j).not.toHaveProperty('_free_preview');
-    expect(j).not.toHaveProperty('locked_sections');
-    expect(j.access).toBe('full');
-    expect(j.access_basis).not.toMatch(/\bPro\b|Developer|\$\d/);       // no plan name, no price
-    const prov = (r.structuredContent || {}).provenance || {};
-    expect(prov.completeness).not.toBe('partial_preview');
-    expect(JSON.stringify(r)).not.toMatch(/PARTIAL preview/);
+    expect(j.tier).toBe('free');
+    expect(j.sections.map((s) => s.id)).toEqual(['hero']);
+    expect(j.locked_sections).toEqual(['grid', 'risk']);
+    expect(JSON.stringify(r)).not.toMatch(/excess-power|constraint \d+\/100/);
   });
 
   it('a market outside the 20 is still the free preview (the control)', async () => {
@@ -120,8 +116,9 @@ describe('3: the top 20 metros (lib/top-metros.mjs)', () => {
   it('kill switch DCHUB_TOP_METROS_FREE=0 restores the preview for Dallas', async () => {
     const restore = env('DCHUB_TOP_METROS_FREE', '0');
     try {
-      const j = body(await call('get_market_context', { market: 'dallas' }));
-      expect(j.tier).toBe('free');
+      // get_market_context is no longer on the open path, so the switch is read on a tool that is
+      const d = body(await call('get_market_dcpi_rank', { market_slug: 'dallas' }));
+      expect(d.constraint_score).toBeNull();
     } finally { restore(); }
   });
 

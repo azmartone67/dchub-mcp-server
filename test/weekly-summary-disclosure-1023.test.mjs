@@ -40,7 +40,13 @@ describe('the consent token goes only with the disclosure', () => {
     expect(claim).toMatch(/if \(a\.email\) \{[\s\S]*body\.consent_purpose = WEEKLY_SUMMARY_PURPOSE;[\s\S]*\}/);
     expect(claim).toContain('_emailBenefitText()');
   });
+  it('the wall-to-key native email ask sends it only with the disclosure in the message the human sees', () => {
+    const el = between('function _wallToKeyElicit(', '\n}\n');
+    expect(el).toMatch(/elicitInput\(\{ message: _W2K\.ELICIT_MESSAGE \+ ' \(' \+ EMAIL_PURPOSE_TEXT \+ '\.\)'/);
+    expect(el).toMatch(/consent_purpose: WEEKLY_SUMMARY_PURPOSE/);
+  });
   it('the token is sent nowhere else', () => {
-    expect((src.match(/consent_purpose[: =]+WEEKLY_SUMMARY_PURPOSE/g) || []).length).toBe(2);
+    // bind_email, claim_free_key, and the wall-to-key native email ask (pinned above).
+    expect((src.match(/consent_purpose[: =]+WEEKLY_SUMMARY_PURPOSE/g) || []).length).toBe(3);
   });
 });
