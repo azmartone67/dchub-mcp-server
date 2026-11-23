@@ -16296,6 +16296,9 @@ export function _tierGateOpensForSeat(tool, seat) {
   const gt = _gateTierFor(seat.tier, tool);
   const g = applyTierGate(tool, {}, gt, !!seat.keyed, false,
     _isUnambiguousProOrAbove(seat.tier) ? true : undefined);
+  // DCHUB_BONUS_TASTE_CAP (2026-11-23): a KEYED_FREE_BONUS tool still opens for a free key (its full answers are
+  // capped per day, not withheld), so the keyless wall keeps naming the key as the way to the full answer.
+  if (g && g.allowed && g.bonus) return true;
   if (g && g.allowed && !g.trial_taste && !g.paid_taste && !g.masked && !g.capped) return true;
   return _packOpensTool(tool)
     && !(gt === 'paid' || gt === 'enterprise')

@@ -107,6 +107,8 @@ describe('free-key bonus tools spend the per-key taste budget', () => {
     expect(overCap(got[1])).toBe(false);
     expect(got[0].sc.counties && got[0].sc.counties.length).toBe(12);
     expect(overCap(got[2])).toBe(true);
+    // A key with no bound email is told the free step: bind_email lifts the per-tool daily limit.
+    expect(got[2].text).toMatch(/`bind_email`[^\n]*email[^\n]*full answers/);
   });
 
   it('B) an email-bound key gets 10, then the preview', async () => {
@@ -115,6 +117,7 @@ describe('free-key bonus tools spend the per-key taste budget', () => {
     for (let i = 0; i < 11; i++) got.push(await call(k));
     expect(got.slice(0, 10).some(overCap)).toBe(false);
     expect(overCap(got[10])).toBe(true);
+    expect(got[10].text).not.toMatch(/call `bind_email` with your human/);   // already bound: no bind step
   });
 
   it('CONTROL) DCHUB_BONUS_TASTE_CAP=0 restores the uncapped bonus', async () => {
