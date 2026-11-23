@@ -411,6 +411,7 @@ test/licence-coherence.test.mjs
 test/licence-page-url-1122.test.mjs
 test/license-per-layer-envelope.test.mjs
 test/light-list-instructions-v2.test.mjs
+test/light-on-source-paths-1122.test.mjs
 test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
@@ -593,6 +594,7 @@ test/planner-548-market-lead-first.test.mjs
 test/planner-559-named-markets-on-grid-plans.test.mjs
 test/planner-561-site-hunt.test.mjs
 test/planner-dallas-capacity-near-cut.test.mjs
+test/planner-dcpi-one-market-1122.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs

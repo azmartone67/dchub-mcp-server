@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
+import { DCPI_ONE_MARKET_ASK_RE as _DCPI_ONE_MARKET_ASK_RE, dcpiClassifyFixOn as _dcpiClassifyFixOn, DCPI_ONE_MARKET_SCORE as _DCPI_ONE_MARKET_SCORE } from './lib/dcpi-one-market.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
 import { WINDSURF_PERSIST_FILE } from './lib/windsurf-config-where.mjs';
 import { AGENT_DEMAND_TOOL, AGENT_DEMAND_PATH, AGENT_DEMAND_DESCRIPTION, agentDemandEnabled, agentDemandPayload } from './lib/agent-demand.mjs';
@@ -178,7 +179,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
-import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
+import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
 import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
@@ -5045,7 +5046,7 @@ export function _pathPack(req) {
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
   if (p === LIGHT_PATH) return LIGHT_PACK;
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
-  if (p === '/mcp') {
+  if (_lightEligiblePath(p)) {   // bare /mcp; the client arrival paths too with DCHUB_LIGHT_ON_SOURCE_PATHS (off)
     const _id = _lightIdentityFromReq(req);
     if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
       return (_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT;
@@ -26809,6 +26810,9 @@ export function _planQuery(intent, context) {
     // class's bare "market" credit by more than the 1-point ambiguity margin, so
     // no runner-up ranking step is appended behind it).
     if (s.cls.id === 'market_outlook') {
+      // DCHUB_PLANNER_DCPI_CLASSIFY_FIX (off): "the DCPI / Data Center Power Index for <market>" is a one-market
+      // ask (lib/dcpi-one-market.mjs); the rules below still bind the market or zero a ranking / comparison.
+      try { if (_dcpiClassifyFixOn() && _DCPI_ONE_MARKET_ASK_RE.test(text)) s.score = Math.max(s.score, _DCPI_ONE_MARKET_SCORE); } catch (_e) { /* routing must never throw */ }
       if (d.comparePair || _OUTLOOK_MULTI_RE.test(text)) s.score = 0;
       // A place the index knows, bound or not (Columbus, GA is still about
       // Columbus): the class owns it, and says what it could not bind.
