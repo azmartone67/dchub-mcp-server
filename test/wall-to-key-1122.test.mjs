@@ -27,6 +27,9 @@ import { LIGHT_TOOLS_LIST_MAX_BYTES } from '../lib/light-profile.mjs';
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SHORT = 'https://dchub.cloud/u/abcdef';
 let H, O, SB, fence, why = '';
+const RESTORE_KEY = 'dch_live_w2kRestoredKey0123456789';
+const RESTORE = { on: false };
+const HARNESS_PLANTED_KEY = 'dch_live_PLANTEDlivekey0123456789';
 const events = [];
 const routes = () => (p, _req, body) => {
   if (p === '/api/v1/mcp/funnel-event') { if (body && body.event === 'quota_wall_hit') events.push(body); return { ok: true }; }
@@ -34,6 +37,10 @@ const routes = () => (p, _req, body) => {
   if (p === '/api/v1/mcp/anon-usage') return { count: 0 };
   if (p === '/api/v1/relay/short') return { ok: true, url: SHORT };
   if (p === '/api/v1/relay/teaser') return { ok: true };
+  if (p === '/api/v1/mcp/session-key' && RESTORE.on) return { api_key: RESTORE_KEY };
+  if (p === '/api/v1/keys/validate' && body && body.api_key === RESTORE_KEY) {
+    return { valid: true, tier: 'identified', developer_id: 'dev_w2k_test', email: null, tier_detail: { users_plan: null } };
+  }
   return undefined;
 };
 const CLIENT_PORTS = new Set();
@@ -98,10 +105,10 @@ function rpc(h, p, body, headers = {}) {
     req.end(data);
   });
 }
-async function call(h, name, args, { ip, ua = 'cursor/1.0', p = '/mcp' } = {}) {
+async function call(h, name, args, { ip, ua = 'cursor/1.0', p = '/mcp', headers = {} } = {}) {
   const e0 = events.length;
   const r = await rpc(h, p, { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name, arguments: args } },
-    { 'x-dc-client-ip': ip, 'user-agent': ua });
+    { 'x-dc-client-ip': ip, 'user-agent': ua, ...headers });
   await new Promise((res) => setTimeout(res, 150));
   return { result: r.msg && r.msg.result, rows: events.slice(e0) };
 }
@@ -213,6 +220,34 @@ describe('wall to key: treatment arm', () => {
   }, 60_000);
 });
 
+describe('wall to key 3.3: the key handed back is masked, never raw (Grok 11-22 item 4c)', () => {
+  it('a restored dch_live_ key: every tool answer names it masked and never carries the full key', async () => {
+    setEnv(ALL);
+    RESTORE.on = true;
+    try {
+      let issued = 0;
+      for (const [name, args] of CASES) {
+        const ip = ipIn(W.ARM_TREATMENT);
+        const { result } = await call(H, name, args, { ip, headers: { 'mcp-session-id': 'w2k-restore-' + name } });
+        expect(result, name).toBeTruthy();
+        const raw = JSON.stringify(result);
+        expect(raw, name).not.toContain(RESTORE_KEY);
+        // The harness backend plants its own dch_live_ key in the DATA body (a pass-through probe other suites own; the
+        // default /mcp profile echoes it on origin/main too). Only that exact planted value is set aside; any other full
+        // key, the restored one above included, fails.
+        expect(raw.split(HARNESS_PLANTED_KEY).join(''), name).not.toMatch(W.RAW_KEY_RE);
+        if (result.structuredContent && result.structuredContent.api_key_issued) {
+          issued++;
+          expect(result.structuredContent.api_key_issued.api_key_masked).toBe('dch_live_…6789');
+          expect(raw).toContain('recover_my_key');
+        }
+      }
+      // Not vacuous: the restore really happened and 3.3 really fired on at least one answer.
+      expect(issued).toBeGreaterThan(0);
+    } finally { RESTORE.on = false; }
+  });
+});
+
 describe('wall to key 3.5: key tools on the light list', () => {
   const list = (h, p, ua) => rpc(h, p, { jsonrpc: '2.0', id: rid++, method: 'tools/list', params: {} }, { 'user-agent': ua });
   it('flag on: /mcp for a coding CLI and /mcp/light list get_api_key and recover_my_key; flag off: unchanged', async () => {
@@ -259,8 +294,12 @@ describe('lib/wall-to-key.mjs units', () => {
     expect(W.shouldIssue({ ...c, session_id: 's-3', api_key: 'dch_trial_x' })).toBe(false);
     expect(W.shouldIssue({ ...c, session_id: 'no-session' })).toBe(false);
     const r = W.withKeyIssued({ content: [{ type: 'text', text: '{}' }], structuredContent: { a: 1 } },
-      W.keyIssuedBlock('dch_live_abc', 'https://dchub.cloud/mcp?apiKey=dch_live_abc'));
-    expect(r.structuredContent.api_key_issued).toEqual({ api_key: 'dch_live_abc', connect_url: 'https://dchub.cloud/mcp?apiKey=dch_live_abc', note: W.SAVE_LINE });
+      W.keyIssuedBlock(RESTORE_KEY));
+    expect(r.structuredContent.api_key_issued).toEqual({ api_key_masked: 'dch_live_…6789', retrieve: W.RETRIEVE,
+      retrieve_note: W.RETRIEVE_LINE, note: W.SAVE_LINE });
+    expect(JSON.stringify(r)).not.toContain(RESTORE_KEY);
+    expect(JSON.stringify(r)).not.toMatch(W.RAW_KEY_RE);
+    expect(W.keyIssuedBlock('dch_live_ab')).toBe(null);   // too short to mask safely: no block at all
     expect(r.content.at(-1).text).toContain(W.SAVE_LINE);
   });
   it('3.4: one ask per session, needs the capability and a user call, 7 quiet days after a decline', () => {

@@ -6098,7 +6098,7 @@ export function _wallToKeyStep(result, name, c = getCtx()) {
     if (a === _W2K.ARM_TREATMENT && _W2K.subOn('NEXT_CALL_KEY') && _W2K.shouldIssue(c)) {
       _W2K.markIssued(c);
       c._wallToKeyArm = a;
-      out = _W2K.withKeyIssued(out, _W2K.keyIssuedBlock(c.api_key, _connectUrl(c.api_key, 'mcp-wall')));
+      out = _W2K.withKeyIssued(out, _W2K.keyIssuedBlock(c.api_key));
       console.log(`[w2k] key_issued sid=${_logId(c.session_id)} tool=${name}`);
     }
     if (!_gatedAnswer(out, name, c)) return out;
