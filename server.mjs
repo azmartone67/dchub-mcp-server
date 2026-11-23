@@ -348,6 +348,7 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
+import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
@@ -5417,9 +5418,9 @@ export function _quotaWallEventFor(c, name, status) {
   try {
     if (!_quotaWallEventOn()) return null;
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
-    return _W2K.withArmEvent(_WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+    return _EAB.withArmEvent(_W2K.withArmEvent(_WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
                                  isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm),
-                             c && c._wallOneDoorArm), c && c._wallToKeyArm);
+                             c && c._wallOneDoorArm), c && c._wallToKeyArm), c && c._emailAskAbArm);
   } catch (_) { return null; }
 }
 // Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
@@ -6234,6 +6235,7 @@ export function _emailEnteredEventFor(c, name, args, result) {
 function _recordEmailEntered(c, name, args, result) {
   try {
     const body = _emailEnteredEventFor(c, name, args, result);
+    if (body) _emailAskAbCaptured(c, name);   // F4: email_captured for an exposed identity (flag OFF: no-op)
     if (!body || !INTERNAL_KEY) return;
     fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
       method: 'POST', keepalive: true,
@@ -27887,6 +27889,9 @@ function _sourceLineCb(name, fn) {
       // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
       // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
       _final = _arefLinksStep(_final, name, c);
+      // F4 (DCHUB_EMAIL_ASK_AB, default OFF): arm B's unlock ask names the call's market or ISO. After every step, so it
+      // rewrites the line the agent actually gets, and sees any other step's email_ask (wall to key) and stands down.
+      _final = _emailAskAbStep(_final, name, args, c);
       return _final;
     } finally {
       _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
@@ -27899,6 +27904,41 @@ function _sourceLineCb(name, fn) {
       _flushTrackRows(c, name, _final);
     }
   };
+}
+// F4 email-ask A/B (lib/email-ask-ab.mjs; DCHUB_EMAIL_ASK_AB, default OFF). On an unlock-ask wall (the keyless cap wall's
+// email link, email_ask 'link' / 'link_exit'), arm B's line names the call's market or ISO; arm A is untouched. Same
+// audience as the Nov 22 tests (_mxAudience: never /mcp/chatgpt or a ChatGPT client, the directory / Claude / core
+// profiles, a clean platform, a plan step, QA, internal or gateway traffic). The arm rides the wall row
+// (_quotaWallEventFor), the exposure goes to experiment_exposure in both arms. A result that already carries another
+// step's email_ask (wall to key) is returned unchanged with no arm and no exposure. Off: the result unchanged.
+export function _emailAskAbStep(result, name, args, c = getCtx(), { post = _mxPost, now = Date.now() } = {}) {
+  try {
+    if (!_EAB.emailAskAbOn() || !c || !result || typeof result !== 'object') return result;
+    if (!_EAB.UNLOCK_ASK_KINDS.has(c._emailAsk) || !_mxAudience(c, name)) return result;
+    const identity = _MX.identityOf(c);
+    // Whether an email opens this answer, as the wall builders decide it: the soft cap reads its own preview.
+    const sc = result.structuredContent;
+    const soft = !!(sc && sc._upgrade && sc._upgrade.tier === 'anon_daily_cap');
+    const r = _EAB.applyEmailAskAb(result, { identity, args, tool: name, askKind: c._emailAsk,
+                                             emailOpens: soft ? _capEmailOpens(name, sc) : _emailOpensTool(name) });
+    if (!r.eligible) return result;
+    c._emailAskAbArm = r.arm;
+    if (_EAB.exposureDue(identity, now)) {
+      _MX.noteExposure(post, { test: _EAB.TEST, identity, tool: name, session_id: c.session_id || '',
+                               platform: c.platform || '', now });
+      c._mxExposureCall = true;
+    }
+    return r.result;
+  } catch (_) { return result; }
+}
+// F4: a successful email entry (bind_email, claim_free_key with an email, subscribe_digest). The keyless identity is
+// the one a cap wall exposed; the backend keeps the row only after that identity's exposure in the last 24 h.
+export function _emailAskAbCaptured(c, name, { post = _mxPost } = {}) {
+  try {
+    if (!_EAB.emailAskAbOn() || !c || c.loopback_step || _isQaCaller(c) || isBotOrInternalCtx(c)) return [];
+    const ids = [_MX.identityOf({ ...c, api_key: '' }), _MX.identityOf(c)];
+    return _MX.noteEmailCaptured(post, { identities: ids, tool: name, session_id: c.session_id || '' });
+  } catch (_) { return []; }
 }
 // Checkout-attribution spec 2026-11-22, section 1: the aref on every checkout-bound link. Off: the result unchanged.
 export function _arefLinksStep(result, name, c) {

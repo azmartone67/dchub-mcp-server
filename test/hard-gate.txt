@@ -216,6 +216,7 @@ test/e4-e6-identity-via.test.mjs
 test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
+test/email-ask-ab-1122.test.mjs
 test/email-ask-wording.test.mjs
 test/email-benefit-leads-1023.test.mjs
 test/email-bound-decision-full.test.mjs
