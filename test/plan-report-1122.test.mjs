@@ -11,6 +11,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as PR from '../lib/plan-report.mjs';
 import { coreScrub } from '../lib/core-profile.mjs';
+import { scrubToolResult as chatgptScrub } from '../lib/chatgpt-directory.mjs';
+import { CLAUDE_DIRECTORY } from '../lib/claude-directory.mjs';
+const { planReportProfileOn, REPORT_LINE } = PR;
 import { _planReportStep, _setPlanReportMintForTest } from '../server.mjs';
 
 const FLAG = 'DCHUB_PLAN_REPORT_LINK';
@@ -154,8 +157,37 @@ describe('server _planReportStep', () => {
     expect(i).toBeGreaterThan(k);
     expect(w).toBeGreaterThan(i);
     expect(j).toBeGreaterThan(w);
-    expect(src).toMatch(/c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| _isCleanPlatform\(\)/);
+    // Claude / ChatGPT profiles and clean platforms are skipped unless DCHUB_PLAN_REPORT_LINK_PROFILES names them.
+    expect(src).toMatch(/\(c\.profile === CLAUDE_PROFILE && !_PR\.planReportProfileOn\('claude'\)\)/);
+    expect(src).toMatch(/\(\(c\.profile === DIRECTORY_PROFILE \|\| _isCleanPlatform\(\)\) && !_PR\.planReportProfileOn\('chatgpt'\)\)/);
   });
+});
+
+describe('DCHUB_PLAN_REPORT_LINK_PROFILES (owner 2026-11-23)', () => {
+  it('names each profile on its own; empty, unknown or a near-miss opens nothing', () => {
+    const on = (v, k) => planReportProfileOn(k, { DCHUB_PLAN_REPORT_LINK_PROFILES: v });
+    expect(on('claude,chatgpt', 'claude')).toBe(true);
+    expect(on(' ChatGPT ', 'chatgpt')).toBe(true);
+    expect(on('claude', 'chatgpt')).toBe(false);
+    expect(on('', 'claude')).toBe(false);
+    expect(on('claude-x', 'claude')).toBe(false);
+    expect(planReportProfileOn('claude', {})).toBe(false);
+  });
+
+  const url = 'https://dchub.cloud/r/a/' + 'B'.repeat(24);
+  const answer = () => ({
+    content: [{ type: 'text', text: 'ERCOT: 100 MW, about 36 months to power (as of 2026-11-23).' },
+      { type: 'text', text: REPORT_LINE(url) }],
+    structuredContent: { executed: [{ tool: 'get_grid_intelligence', status: 'executed' }], report_url: url },
+  });
+  for (const [label, scrub] of [['ChatGPT', chatgptScrub], ['Claude', CLAUDE_DIRECTORY.scrubToolResult]]) {
+    it(`the ${label} directory scrub keeps the report line and report_url`, () => {
+      const out = scrub(answer(), 'execute_plan');
+      const text = (out.content || []).map((b) => b.text || '').join('\n');
+      expect(text).toContain(url);
+      expect(JSON.stringify(out.structuredContent || {})).toContain(url);
+    });
+  }
 });
 
 describe('core profile keeps only this server\'s report_url', () => {

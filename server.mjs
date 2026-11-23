@@ -5917,7 +5917,11 @@ export async function _mintPlanReport(body, timeoutMs = _PR.PLAN_REPORT_TIMEOUT_
 export async function _planReportStep(result, name, c = getCtx()) {
   if (name !== 'execute_plan' || !_PR.planReportOn()) return result;
   return _PR.planReportStep(result, name, {
-    skip: !c || !!c.loopback_step || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || _isCleanPlatform(),
+    // Claude / ChatGPT directory profiles and ChatGPT-identified platforms only when DCHUB_PLAN_REPORT_LINK_PROFILES
+    // names them (owner 2026-11-23); the line carries no commerce words, so the directory scrubs leave it intact.
+    skip: !c || !!c.loopback_step
+      || (c.profile === CLAUDE_PROFILE && !_PR.planReportProfileOn('claude'))
+      || ((c.profile === DIRECTORY_PROFILE || _isCleanPlatform()) && !_PR.planReportProfileOn('chatgpt')),
     mint: (body) => _planReportMint(body),
     client: String((c && c.platform) || 'unknown').slice(0, 40),
     callerClass: _planCallerPaid(c) ? 'paid' : (c && c.api_key ? 'keyed' : 'keyless'),
