@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
@@ -23,6 +24,7 @@ import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
 import { SIGNIN_LINE } from '../lib/wall-identity-v2.mjs';
 import { rewriteText } from '../lib/wall-copy-v2.mjs';
 import * as W from '../lib/wall-paid-line.mjs';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ROWS = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: 'Row ' + i, market: 'dallas', capacity_mw: 100 + i, score: 50 + i }));
@@ -31,6 +33,9 @@ const ROWS = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: 'Row ' + i
 const NO_PRICE = /\$|\bper month\b|\/mo\b|\b(?:pro|developer|starter|enterprise|team|credit pack|credit-pack|credits?)\b|\b\d[\d,]*\s+(?:MCP\s+)?(?:calls?|full answers?|answers?)\b|\/day\b|\bper day\b|\ba day\b|\bfree\b/i;
 
 let H, O, SB, S, fence, why = '', anonCount = 999;
+// Owner 2026-11-23 (lib/paid-full-only.mjs): below Developer, the paid-only tools answer a preview. Until origin/main
+// carries that rule its answers on those tools differ from this branch by design; MAIN_HAS_GATE says which baseline holds.
+let MAIN_HAS_GATE = false;
 const events = [];
 const tracks = [];
 const routes = () => (p, _req, body) => {
@@ -38,6 +43,7 @@ const routes = () => (p, _req, body) => {
   if (p === '/api/v1/mcp/track') { if (body && typeof body === 'object') tracks.push(body); return { ok: true }; }
   if (p === '/api/v1/mcp/anon-usage') return { count: anonCount };
   if (p === '/api/v1/keys/validate' && body && typeof body.api_key === 'string' && body.api_key.startsWith('dch_trial_PL')) return { valid: true, tier: 'trial', email: null, tier_detail: { users_plan: null } };
+  if (p === '/api/v1/keys/validate' && body && typeof body.api_key === 'string' && body.api_key.startsWith('dch_live_PLdev')) return { valid: true, tier: 'developer', email: 'dev-pl@example.com', tier_detail: { users_plan: 'developer' } };
   if (p === '/api/v1/relay/short') return { ok: true, url: 'https://dchub.cloud/u/abcdef' };
   if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
   return { success: true, count: 12, total_count: 12, data: ROWS, results: ROWS, items: ROWS, markets: ROWS, rows: ROWS };
@@ -63,6 +69,7 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'wall-paid-line-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -157,6 +164,8 @@ function keyIn(arm) {
 const anyIp = () => `198.51.${200 + Math.floor(ipSeq / 250) % 50}.${ipSeq++ % 250 + 1}`;
 
 const TOOLS = [
+  // not a paid-only tool: its walls are origin/main's byte for byte before and after the 2026-11-23 rule
+  ['get_iso_context', { iso: 'PJM' }],
   ['get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }],
   ['get_interconnection_queue', { iso: 'PJM' }],
   ['execute_plan', { intent: 'compare PJM vs ERCOT grid headroom and interconnection queue', market: 'dallas' }],
@@ -344,29 +353,46 @@ describe('_wallPaidLineStep: the generic /mcp surface only', () => {
 const COPY_ON = { DCHUB_WALL_IDENTITY_V2: '1', DCHUB_WALL_COPY_V2: '1' };
 const COPY_OFF = { DCHUB_WALL_IDENTITY_V2: '1', DCHUB_WALL_COPY_V2: '0' };   // COPY_V2 killed (production before 15:11Z)
 
-// Owner 2026-11-23: a trial key's execute_plan is a preview with keyless steps (a full plan needs a paid key), so
-// it is no longer origin/main's answer; the byte-for-byte cases skip it and the A/B test below pins the line on it.
-const changedSince1123 = (c, name) => c.trial && name === 'execute_plan';
+// Owner 2026-11-23: below Developer a paid-only tool (all three of TOOLS but get_iso_context; every caller here is
+// keyless or a trial key) answers its preview, so until origin/main carries the rule its answer is not the baseline:
+// the flag-OFF cases then pin "no full row, nothing of the flag" instead, and the A/B compares each arm with this
+// same server's flag-OFF answer (the flag's own effect, which is what the A/B measures).
+const changedSince1123 = (_c, name) => !MAIN_HAS_GATE && isPaidFullOnly(name);
+// A full row of the stub (capacity_mw 100.., score 50..), raw or inside a JSON text block. A preview nulls or drops them.
+const FULL_ROW = /\\*"capacity_mw\\*":1\d\d\b|\\*"score\\*":5\d\b/;
+const noFullRow = (r, label) => expect(JSON.stringify(r), label + ': below Developer, no full row').not.toMatch(FULL_ROW);
 describe('flag OFF is origin/main byte for byte, on every profile; flag ON leaves /mcp/claude and /mcp/chatgpt as origin/main', () => {
   const run = async (p, c, name, args, env) => {
     setEnv(env);
     anonCount = c.cnt;
     const w = who(c);
     const here = await call(H, p, name, args, w);
-    const main = await call(O, p, name, args, w);
-    const a = norm(here.result), b = norm(main.result);
-    expect(a === b, firstDiff(a, b)).toBe(true);
+    if (changedSince1123(c, name)) noFullRow(here.result, `${p} ${name}`);
+    else {
+      const main = await call(O, p, name, args, w);
+      const a = norm(here.result), b = norm(main.result);
+      expect(a === b, firstDiff(a, b)).toBe(true);
+    }
     expect(JSON.stringify(here.result)).not.toContain('v=paid-line');
     for (const r of here.rows) expect(r).not.toHaveProperty(W.EVENT_FIELD);
     for (const t of here.tracks) expect(t.params || {}).not.toHaveProperty(W.TRACK_FIELD);
   };
+  it('CONTROL: the no-full-row check bites (a Developer key gets the full rows; a keyless preview does not)', async () => {
+    setEnv({ ...COPY_ON });
+    anonCount = 0;
+    const dev = await call(H, '/mcp', 'get_interconnection_queue', { iso: 'PJM' }, { ip: anyIp(), key: 'dch_live_PLdev' + 'a'.repeat(20) });
+    expect(JSON.stringify(dev.result)).toMatch(FULL_ROW);
+    const kl = await call(H, '/mcp', 'get_interconnection_queue', { iso: 'PJM' }, { ip: anyIp() });
+    expect(JSON.stringify(kl.result)).not.toMatch(FULL_ROW);
+    expect(JSON.stringify(kl.result), 'the keyless answer is a preview with rows, not an error').toContain('Row 0');
+  }, 120_000);
   const CASES = [];
   for (const p of ['/mcp', '/mcp/claude', '/mcp/chatgpt']) for (const t of TOOLS) CASES.push([p, ...t]);
   for (const [flag, env] of [['unset, COPY_V2 on', { ...COPY_ON }], ['0, COPY_V2 on', { ...COPY_ON, DCHUB_WALL_PAID_LINE: '0' }],
     ['unset, COPY_V2 off', { ...COPY_OFF }]]) {
     it.each(CASES)(`flag ${flag}: %s %s`, async (p, name, args) => {
       if (!O) { console.warn(`[wall-paid-line] origin/main comparison not run: ${why}`); return; }
-      for (const [, c] of CALLERS) if (!changedSince1123(c, name)) await run(p, c, name, args, env);
+      for (const [, c] of CALLERS) await run(p, c, name, args, env);
     }, 240_000);
   }
   const ON = [];
@@ -375,14 +401,17 @@ describe('flag OFF is origin/main byte for byte, on every profile; flag ON leave
     if (!O) { console.warn(`[wall-paid-line] origin/main comparison not run: ${why}`); return; }
     for (const env of [{ ...COPY_ON, DCHUB_WALL_PAID_LINE: '1' }, { ...COPY_OFF, DCHUB_WALL_PAID_LINE: '1' }]) {
       for (const [, c] of CALLERS) {
-        if (changedSince1123(c, name)) continue;
         setEnv(env);
         anonCount = c.cnt;
         const w = who(c, W.ARM_PAID_LINE);
         const here = await call(H, p, name, args, w);
-        const main = await call(O, p, name, args, w);
+        // the baseline: origin/main, or (paid-only tool, origin/main without the 2026-11-23 rule) this server, flag off
+        if (changedSince1123(c, name)) setEnv({ ...env, DCHUB_WALL_PAID_LINE: '0' });
+        // (a fresh caller in the same arm: a second call by the same caller on one server is not a first call)
+        const main = changedSince1123(c, name) ? await call(H, p, name, args, who(c, W.ARM_PAID_LINE)) : await call(O, p, name, args, w);
         const a = norm(here.result), b = norm(main.result);
         expect(a === b, firstDiff(a, b)).toBe(true);
+        expect(JSON.stringify(here.result)).not.toContain('v=paid-line');
         for (const r of here.rows) expect(r).not.toHaveProperty(W.EVENT_FIELD);
       }
     }
@@ -396,11 +425,15 @@ describe('flag ON, /mcp: the A/B', () => {
   const walledSeen = new Set();
   afterAll(() => {
     // The branch above must not swallow the test: most cases are walls (a check over no wall proves nothing).
-    // 28 = 32 before 2026-11-23 minus the 4 trial-key execute_plan cases (2 copies x 2 arms) moved to their own test.
-    if (O) expect(walledSeen.size, 'walled cases actually exercised').toBeGreaterThanOrEqual(28);
+    // 32 before 2026-11-23; the trial-key execute_plan cases are back (baseline: this server, flag off) and
+    // get_iso_context was added, so at least the same 32.
+    if (O) expect(walledSeen.size, 'walled cases actually exercised').toBeGreaterThanOrEqual(32);
+    console.log('[wall-paid-line] walled cases exercised:', walledSeen.size);
   });
   const CASES = [];
-  for (const [label, c] of CALLERS) for (const t of TOOLS) if (!changedSince1123(c, t[0])) CASES.push([label + ' / ' + t[0], c, ...t]);
+  for (const [label, c] of CALLERS) for (const t of TOOLS) CASES.push([label + ' / ' + t[0], c, ...t]);
+  // the baseline server for a case: origin/main, or this server with the flag off (see changedSince1123)
+  const baseOf = (c, name) => (changedSince1123(c, name) ? H : O);
   it('trial key / execute_plan (owner 2026-11-23, paid-only full plan): the paid_line arm still gets the line once, URL intact', async () => {
     const c = CALLERS.find(([, x]) => x.trial)[1];
     const [, args] = TOOLS.find((t) => t[0] === 'execute_plan');
@@ -417,8 +450,8 @@ describe('flag ON, /mcp: the A/B', () => {
       setEnv({ ...env, DCHUB_WALL_PAID_LINE: '1' });
       anonCount = c.cnt;
       const here = await call(H, '/mcp', name, args, w);
-      setEnv(env);   // origin/main has no such flag; its answer is the baseline
-      const main = await call(O, '/mcp', name, args, w);
+      setEnv(env);   // origin/main has no such flag; its answer (or this server's, flag off) is the baseline
+      const main = await call(baseOf(c, name), '/mcp', name, args, baseOf(c, name) === H ? who(c, W.ARM_PAID_LINE) : w);
       const t = texts(here.result);
       if (!isWall(main)) {   // not a wall (e.g. the stub's grid error at preview count 0): nothing added, no arm
         expect(norm(here.result)).toBe(norm(main.result));
@@ -443,7 +476,7 @@ describe('flag ON, /mcp: the A/B', () => {
       anonCount = c.cnt;
       const here = await call(H, '/mcp', name, args, w);
       setEnv(env);
-      const main = await call(O, '/mcp', name, args, w);
+      const main = await call(baseOf(c, name), '/mcp', name, args, baseOf(c, name) === H ? who(c, W.ARM_CONTROL) : w);
       const a = norm(here.result), b = norm(main.result);
       expect(a === b, firstDiff(a, b)).toBe(true);
       expect(here.tracks.length).toBeGreaterThan(0);

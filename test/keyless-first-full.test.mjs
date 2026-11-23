@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
+import { PAID_FULL_ONLY_TOOLS } from '../lib/paid-full-only.mjs';
 import { assignArm, ARM_CONTROL } from '../lib/continuation.mjs';
 import { DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 
@@ -58,8 +59,9 @@ const ARGS = {
   search_facilities: { state: 'TX' },
   get_pipeline: { country: 'US' },
 };
-// Owner 2026-11-23: get_grid_data and execute_plan left the lane (their full answers need a paid key);
-// section M pins that they are out. The three below are the lane.
+// Owner 2026-11-23 (lib/paid-full-only.mjs): every tool the lane listed gives a full answer only to a paid key, so the
+// lane lists no tools (KEYLESS_FIRST_FULL_TOOLS = []); the flag and the code stay. DIRECT are the three it served last:
+// B now pins that the lane, on, changes nothing on them (byte for byte the lane-off preview, nothing charged).
 const DIRECT = ['get_grid_intelligence', 'get_interconnection_queue', 'get_energy_prices'];
 
 const writes = { track: [], consume: [], peek: [], loopback: [], backend: [], funnel: [] };
@@ -193,47 +195,40 @@ describe('A) DCHUB_KEYLESS_FIRST_FULL=0: today\'s preview, nothing charged or ta
   });
 });
 
-describe('B) on: the first call per tool per IP per day is full, the second is today\'s preview', () => {
+describe('B) on, with the lane empty: every call is the lane-off preview byte for byte, nothing charged or tagged', () => {
+  it('the lane lists no tools', () => { expect([...F.KEYLESS_FIRST_FULL_TOOLS]).toEqual([]); });
   for (const tool of DIRECT) {
-    it(`${tool}: call 1 full and said so, call 2 = the off-path preview byte for byte`, async () => {
+    it(`${tool}: call 1 and call 2 = the off-path preview byte for byte`, async () => {
       resetWrites();
       process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
       const sOff = seat();
       const off = norm(await call(tool, sOff), sOff);
       delete process.env.DCHUB_KEYLESS_FIRST_FULL;
       const ip = `198.18.40.${DIRECT.indexOf(tool) + 10}`;
-      const r1 = await call(tool, seat({ client_ip: ip }));
-      expect(r1.isError).not.toBe(true);
-      expect(isPreview(r1), 'call 1 is not a preview').toBe(false);
-      const blk = head(r1).first_full_answer;
-      expect(blk).toMatchObject({ used: 1, limit: 1, resets: '00:00 UTC' });
-      expect(blk.note).not.toMatch(/\b(Developer|Pro|Starter|Enterprise|Founding)\b|\$\s?\d/);
-      const s2 = seat({ client_ip: ip });
-      const r2 = await call(tool, s2);
-      expect(norm(r2, s2), 'call 2 is exactly the preview a caller gets with the lane off').toBe(off);
+      for (let i = 0; i < 2; i++) {
+        const s1 = seat({ client_ip: ip });
+        const r = await call(tool, s1);
+        expect(head(r)?.first_full_answer).toBeUndefined();
+        expect(norm(r, s1), `call ${i + 1} is exactly the preview a caller gets with the lane off`).toBe(off);
+      }
       await settle();
-      expect(kffConsumes(ip).map((w) => w.tool)).toEqual([tool]);
-      const rows = kffTracks().filter((w) => w.tool === tool);
-      expect(rows.length).toBe(1);
-      expect(rows[0]).toMatchObject({ status: F.KEYLESS_FIRST_FULL_STATUS, keyless_first_full_answer: true });
+      expect(kffConsumes(ip)).toEqual([]);
+      expect(kffTracks()).toEqual([]);
     });
   }
-  it('the grid read carries the figures the preview withheld', async () => {
+  it('the grid read stays a preview: the figures it withholds stay withheld', async () => {
     const r = await call('get_grid_intelligence', seat({ client_ip: '198.18.41.1' }));
     const h = head(r);
-    expect(h.demand_mw).toBe(93825);
-    expect(h.peak_mw).toBe(102346);
-    expect(Array.isArray(h.demand_24h) && h.demand_24h.length).toBe(8);
-    expect(isPreview(r)).toBe(false);
+    expect(isPreview(r)).toBe(true);
+    expect(h.peak_mw ?? null).not.toBe(102346);
+    expect(JSON.stringify(h)).not.toContain('"capacity_auction_price_usd_mw_day":333.44');
   });
-  it('a different IP gets its own first answer; CAP=2 serves two', async () => {
-    expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: '198.18.42.1' })))).toBe(false);
-    expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: '198.18.42.2' })))).toBe(false);
+  it('CAP=2 serves nothing either', async () => {
     process.env.DCHUB_KEYLESS_FIRST_FULL_CAP = '2';
     const ip = '198.18.42.3';
-    expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: ip })))).toBe(false);
-    expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: ip })))).toBe(false);
-    expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: ip })))).toBe(true);
+    for (let i = 0; i < 3; i++) expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: ip })))).toBe(true);
+    await settle();
+    expect(kffConsumes(ip)).toEqual([]);
   });
 });
 
@@ -275,9 +270,9 @@ describe('D) who is not in it', () => {
     process.env.DCHUB_KEYLESS_FIRST_FULL_CAP = '0';
     expect(isPreview(await call('get_grid_intelligence', seat({ client_ip: '198.18.44.60' })))).toBe(true);
   });
-  it('the seat helper: off, unknown tool, key, chatgpt', () => {
+  it('the seat helper: no tool takes the lane, every paid-only tool included; off, key, chatgpt', () => {
     const c = { client_ip: '198.18.44.70', user_agent: 'cursor/1.0' };
-    expect(S._keylessFirstFullSeat('get_grid_intelligence', c)).toBe('charge');
+    for (const t of [...DIRECT, ...PAID_FULL_ONLY_TOOLS]) expect(S._keylessFirstFullSeat(t, c), t).toBeNull();
     expect(S._keylessFirstFullSeat('get_market_intel', c)).toBeNull();
     // owner 2026-11-23: out of the lane
     expect(S._keylessFirstFullSeat('get_grid_data', c)).toBeNull();
@@ -293,10 +288,12 @@ describe('E) a plan\'s steps: one charge, the step token', () => {
     const c = { client_ip: '198.18.45.1', user_agent: 'cursor/1.0', loopback_step: true, plan_first_full: true };
     // owner 2026-11-23: get_refined_queue is paid-full-only, so no plan step takes the lane for it
     expect(S._keylessFirstFullSeat('get_refined_queue', c)).toBeNull();
-    expect(S._keylessFirstFullSeat('get_grid_intelligence', c)).toBe('step');
+    // owner 2026-11-23: nor for any paid-full-only tool; a step a free key can read in full still takes it
+    for (const t of PAID_FULL_ONLY_TOOLS) expect(S._keylessFirstFullSeat(t, c), t).toBeNull();
+    expect(S._keylessFirstFullSeat('search_facilities', c)).toBe('step');
     expect(S._keylessFirstFullSeat('analyze_site', c)).toBeNull();
-    expect(S._keylessFirstFullSeat('get_grid_intelligence', { ...c, plan_first_full: false })).toBeNull();
-    expect(S._keylessFirstFullSeat('get_grid_intelligence', { ...c, api_key: 'k' })).toBeNull();
+    expect(S._keylessFirstFullSeat('search_facilities', { ...c, plan_first_full: false })).toBeNull();
+    expect(S._keylessFirstFullSeat('search_facilities', { ...c, api_key: 'k' })).toBeNull();
   });
   it('the token is single-use, in-process and expires', () => {
     const t = F.mintPlanFirstFullToken();
@@ -307,10 +304,10 @@ describe('E) a plan\'s steps: one charge, the step token', () => {
     const old = F.mintPlanFirstFullToken(Date.now() - 10 * 60_000);
     expect(F.consumePlanFirstFullToken(old)).toBe(false);
   });
-  it('a promoted step is not charged and not tagged', async () => {
+  it('a promoted step is not charged and not tagged (search_facilities; grid is paid-full-only since 2026-11-23)', async () => {
     resetWrites();
     const s = seat({ client_ip: '198.18.45.2', loopback_step: true, plan_first_full: true });
-    const r = await call('get_grid_intelligence', s);
+    const r = await call('search_facilities', s);
     expect(isPreview(r)).toBe(false);
     expect(head(r).first_full_answer).toBeUndefined();   // the plan's answer carries the block
     expect(S._execStepPreview(head(r), s), 'the plan does not label the step a preview').toBe(false);
@@ -383,10 +380,12 @@ describe('F) the compact first plan answer', () => {
 });
 
 describe('G) the relay line says "free-tier limit" only when a limit was hit', () => {
-  it('a depth preview is a preview, and says what an email gets, with no plan name', () => {
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): an email opens no full grid answer, so the grid preview's line no longer
+  // says what an email gets.
+  it('a depth preview on a paid-full-only tool is a preview, says nothing about an email, and names no plan', () => {
     const line = S._ctxALS.run(seat(), () => S._relayLead('get_grid_intelligence', {}));
-    expect(line).toMatch(/^Your AI assistant got a preview of get_grid_intelligence from DC Hub; with an email it gets \d+ full answers a day on this tool$/);
-    expect(line).not.toMatch(/limit|\b(Developer|Pro|Starter)\b|\$/);
+    expect(line).toBe('Your AI assistant got a preview of get_grid_intelligence from DC Hub');
+    expect(line).not.toMatch(/email|limit|\b(Developer|Pro|Starter)\b|\$/);
   });
   for (const st of ['anon_daily_cap', 'anon_hard_wall', 'trial_used', 'trial_cap_exceeded']) {
     it(`${st}: a real limit keeps the line and adds what an email gets`, () => {
@@ -464,20 +463,16 @@ describe('I) a first-full plan step runs at full depth (owner 2026-11-15)', () =
   for (const tool of STEP_TOOLS) {
     const path = tool === 'get_grid_intelligence' ? '/api/v1/grid/intelligence/' : '/api/v1/interconnection-queue/';
 
-    it(`${tool}: with the plan's token the step is full, the backend hears '${F.KEYLESS_FIRST_FULL_STEP_TIER}', the row logs 'free'`, async () => {
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): grid and queue are paid-full-only, so even a step holding the plan's
+    // token is a preview and the backend never hears the full-depth tier for it.
+    it(`${tool}: with the plan's token the step is still a preview, the backend hears 'anonymous', never '${F.KEYLESS_FIRST_FULL_STEP_TIER}'`, async () => {
       resetWrites();
       const s = seat({ loopback_step: true, plan_first_full: true });
       const r = await call(tool, s);
-      expect(r.isError).not.toBe(true);
-      expect(isPreview(r), 'not a preview').toBe(false);
-      expect(S._execStepPreview(head(r), s), 'the plan would not label it preview').toBe(false);
-      expect(JSON.stringify(r)).not.toMatch(/partial_preview/);
+      expect(S._execStepPreview(head(r), s) || isPreview(r), 'preview').toBe(true);
       expect(tierHeard(path).length).toBeGreaterThan(0);
-      expect(new Set(tierHeard(path))).toEqual(new Set([F.KEYLESS_FIRST_FULL_STEP_TIER]));
+      expect(new Set(tierHeard(path))).toEqual(new Set(['anonymous']));
       await settle();
-      const rows = stepRows(tool);
-      expect(rows.length).toBe(1);
-      expect(rows[0].tier, 'telemetry keeps the caller tier').toBe('free');
       expect(kffConsumes(s.client_ip), 'a step charges nothing of its own').toEqual([]);
     }, 60_000);
 
@@ -498,17 +493,18 @@ describe('I) a first-full plan step runs at full depth (owner 2026-11-15)', () =
     expect(s.kff_full_depth).toBeUndefined();
   }, 60_000);
 
+  // search_facilities: grid is paid-full-only since 2026-11-23 (owner), so no token promotes its step.
   it('an IP past the anonymous cap, and past the hard wall, still gets the full step (the plan was its full answer)', async () => {
     for (const count of [25, 1000]) {
       resetWrites();
       const s = seat({ loopback_step: true, plan_first_full: true });
       S._anonUsageCounts.set(s.client_ip, { at: Date.now(), count });
-      const r = await call('get_grid_intelligence', s);
+      const r = await call('search_facilities', s);
       expect(r.isError, `count ${count}`).not.toBe(true);
       expect(isPreview(r) || S._execStepPreview(head(r), s), `count ${count}`).toBe(false);
       const without = seat({ loopback_step: true });
       S._anonUsageCounts.set(without.client_ip, { at: Date.now(), count });
-      const w = await call('get_grid_intelligence', without);
+      const w = await call('search_facilities', without);
       expect(JSON.stringify(w), `count ${count}: without the token the cap holds`).not.toEqual(JSON.stringify(r));
       expect(isPreview(w) || S._execStepPreview(head(w), without) || w.isError === true, `count ${count}`).toBe(true);
     }
@@ -605,7 +601,7 @@ describe('K) a plan that returned no data does not consume the first full answer
 // A fresh keyless session's FIRST execute_plan is now the preview, and that wall carries the email line: the plan
 // answer asks for the email (`bind_email`) and every wall row it sends is tagged 'line'. The wall rows are read off
 // what the server POSTs to the backend (/api/v1/mcp/funnel-event quota_wall_hit), as production records them.
-describe('L) a fresh keyless session: the first execute_plan is the preview and its wall carries the email line', () => {
+describe('L) a fresh keyless session: the first execute_plan is the preview; its paid-only step walls carry no email line', () => {
   const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT' };
   afterEach(() => { loopback.emulate = false; loopback.ip = null; });
   const walls = () => writes.funnel.filter((e) => e && e.event === 'quota_wall_hit');
@@ -613,7 +609,7 @@ describe('L) a fresh keyless session: the first execute_plan is the preview and 
   const prose = (r) => (r.content || []).filter((b) => b && b.type === 'text' && !String(b.text).trimStart().startsWith('{')).map((b) => b.text).join('\n');
   const EMAIL_LINE = /ask whether they want to share their email, then call `bind_email` with it\. Only use an address they gave you\./;
 
-  it('call 1 walled, with the email line in the answer and on every wall row', async () => {
+  it('call 1 walled; no wall row and no answer line asks for an email (every walled step is paid-full-only)', async () => {
     resetWrites();
     const ip = '198.18.80.10';
     loopback.emulate = true; loopback.ip = ip;
@@ -622,15 +618,14 @@ describe('L) a fresh keyless session: the first execute_plan is the preview and 
     expect(head(r1).first_full_answer).toBeUndefined();
     const rows = walls();
     expect(rows.length, 'call 1 walled').toBeGreaterThan(0);
-    // Owner 2026-11-23: an email does not unlock a paid-full-only tool (get_refined_queue here), so its wall row
-    // carries no email ask; every other walled step still does.
-    const PAID_ONLY = new Set(['get_refined_queue', 'get_power_availability_timeline', 'get_grid_data']);
-    expect(rows.some((e) => !PAID_ONLY.has(e.tool)), 'a step that an email does unlock walled').toBe(true);
+    // Owner 2026-11-23: an email does not unlock a paid-full-only tool, and this plan's walled steps (grid, queue,
+    // refined queue) all are, so no wall row carries an email ask and the answer does not ask for one.
+    const PAID_ONLY = new Set(PAID_FULL_ONLY_TOOLS);
+    expect(rows.every((e) => PAID_ONLY.has(e.tool)), JSON.stringify(rows.map((e) => e.tool))).toBe(true);
     expect(rows.map((e) => e.email_ask), JSON.stringify(rows.map((e) => [e.tool, e.wall_status])))
-      .toEqual(rows.map((e) => (PAID_ONLY.has(e.tool) ? undefined : 'line')));
-    for (const e of rows) if (!PAID_ONLY.has(e.tool)) expect(e.offers_shown).toContain('email_unlock');
-    for (const e of rows) if (PAID_ONLY.has(e.tool)) expect(e.offers_shown || []).not.toContain('email_unlock');
-    expect(prose(r1)).toMatch(EMAIL_LINE);
+      .toEqual(rows.map(() => undefined));
+    for (const e of rows) expect(e.offers_shown || []).not.toContain('email_unlock');
+    expect(prose(r1)).not.toMatch(EMAIL_LINE);
   }, 60_000);
 
   // The live execute_plan rows (tool execute_plan) are the plan's OWN walls: an IP at the anonymous soft cap.

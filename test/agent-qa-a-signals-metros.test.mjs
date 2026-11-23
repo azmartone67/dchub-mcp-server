@@ -162,20 +162,33 @@ describe('2a: a full context pack is not labelled partial', () => {
 });
 
 describe('2b: the meter counts this tool on the charged bucket', () => {
-  it('a first grid answer reads call 1 even when other tools spent the caller budget', async () => {
+  // get_grid_intelligence left the free metered taste 2026-11-23 (lib/paid-full-only.mjs); the meter is
+  // pinned on get_fiber_intel, which still takes the capped-taste path on a free key.
+  it('a first fiber answer reads call 1 even when other tools spent the caller budget', async () => {
     const restoreA = env('DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY', '0');
     try {
       const k = 'dch_live_qa_a_meter_key_0001';
       // Other tools spend the key's all-tools caller budget today (cap 2 x mult 2 = 4).
-      for (const t of ['get_fiber_intel', 'get_energy_prices', 'get_pipeline']) await S._trialFullCallsExceeded(k, t, 2, k);
+      for (const t of ['get_grid_intelligence', 'get_energy_prices', 'get_pipeline']) await S._trialFullCallsExceeded(k, t, 2, k);
       const seat = { api_key: k, tier: 'free', platform: 'claude', client_name_raw: 'claude-code',
         client_ip: '198.51.100.71', session_id: 'sess-qa-a-meter' };
-      const r = await call('get_grid_intelligence', { iso: 'ERCOT' }, seat);
+      const r = await call('get_fiber_intel', { market: 'dallas' }, seat);
       const mt = (r.structuredContent || {})._metered_trial;
       expect(mt, 'a full metered answer').toBeDefined();
       expect(mt.call).toBe(1);
       expect(mt.counted).toBe('per API key, per UTC day, on this tool');
-      expect(S._fullCallsUsedToday(k, 'get_grid_intelligence')).toBe(1);
+      expect(S._fullCallsUsedToday(k, 'get_fiber_intel')).toBe(1);
+    } finally { restoreA(); }
+  });
+  it('a free key on get_grid_intelligence is not metered at all: no full answer to count (paid key only)', async () => {
+    const restoreA = env('DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY', '0');
+    try {
+      const k = 'dch_live_qa_a_meter_key_0002';
+      const seat = { api_key: k, tier: 'free', platform: 'claude', client_name_raw: 'claude-code',
+        client_ip: '198.51.100.73', session_id: 'sess-qa-a-meter-2' };
+      const r = await call('get_grid_intelligence', { iso: 'ERCOT' }, seat);
+      expect((r.structuredContent || {})._metered_trial).toBeUndefined();
+      expect(S._fullCallsUsedToday(k, 'get_grid_intelligence')).toBe(0);
     } finally { restoreA(); }
   });
 });

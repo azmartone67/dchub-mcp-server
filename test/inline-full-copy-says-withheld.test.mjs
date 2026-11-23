@@ -59,6 +59,9 @@ beforeAll(async () => {
               ? { rank: i, market: 'm' + i, city: 'City' + i }
               : { rank: i, market: 'm' + i, city: 'City' + i, facility_count: 10 * i, total_mw: 100 * i, score: 50 * i })) });
         }
+        if (u.pathname.includes('fiber')) {
+          return send(200, { metro: 'ashburn', total: 3, routes: [1, 2, 3].map((i) => ({ id: 'r' + i, carrier: 'C' + i, miles: 10 * i })) });
+        }
         send(404, { error: 'not found', path: u.pathname });
       });
     });
@@ -78,7 +81,7 @@ afterAll(async () => {
   net.Socket.prototype.connect = realConnect;
 });
 
-async function firstCall() {
+async function firstCall(name = 'rank_markets', args = {}) {
   const H = { 'content-type': 'application/json', accept: 'application/json, text/event-stream',
     'x-forwarded-for': '203.0.113.' + (10 + Math.floor(Math.random() * 200)) };
   const post = (headers, body) => fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -87,31 +90,32 @@ async function firstCall() {
   const sid = init.headers.get('mcp-session-id'); await init.text();
   const H2 = { ...H, 'mcp-session-id': sid };
   await (await post(H2, { jsonrpc: '2.0', method: 'notifications/initialized' })).text();
-  const res = await post(H2, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'rank_markets', arguments: {} } });
+  const res = await post(H2, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   const r = JSON.parse(decode(await res.text())).result || {};
   return { sc: r.structuredContent || {}, text: (r.content || []).map((c) => c.text || '').join('\n') };
 }
 
 describe('inline-full unlock copy says what the free answer withheld', () => {
-  it('masked answer: names score/total_mw, no "is FULL", no "full answer" promise', async () => {
+  // ★ Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets is paid-full-only, so the anonymous first call no longer
+  // takes the inline-full branch (no trial taste), and the masked-answer copy this file pinned there cannot be reached
+  // through it; the copy itself stays pinned by the pure limitedAnswerCopy cases below. On the real handler it now
+  // pins that rank_markets carries no "FULL on this session" or "more full answer" promise at all, and the legacy
+  // FULL copy (nothing withheld) is pinned on get_fiber_intel, which still takes the branch.
+  it('rank_markets (paid-full-only): not the inline-full branch, no "is FULL" and no "full answer" promise', async () => {
     plain = false;
     const { sc, text } = await firstCall();
-    expect(sc.inline_full, 'not the inline-full branch — assertions would be vacuous').toBe(true);
-    expect(text).toContain('"score":null');                        // it IS masked
-    expect(text).toMatch(/withheld at this tier/);
-    expect(text).toMatch(/score/);
-    expect(text).toMatch(/total_mw/);
+    expect(sc.inline_full).not.toBe(true);
+    expect(sc.trial_taste).not.toBe(true);
+    expect(text).not.toContain('"score":150');
     expect(text).not.toContain('is FULL on this session now');
     expect(text).not.toMatch(/more full answer/);
-    expect(sc.retry_instructions).toMatch(/\bmore answers? today on the trial\b/);
-    expect(sc.retry_instructions).toMatch(/withheld at this tier/);
-    expect(sc.retry_instructions).not.toMatch(/more full answer/);
+    expect(String(sc.retry_instructions || '')).not.toMatch(/more full answer/);
   });
-  it('control, nothing withheld: the legacy "FULL" copy is unchanged', async () => {
+  it('control, nothing withheld (get_fiber_intel): the legacy "FULL" copy is unchanged', async () => {
     plain = true;
-    const { sc, text } = await firstCall();
+    const { sc, text } = await firstCall('get_fiber_intel', { metro: 'ashburn' });
     expect(sc.inline_full).toBe(true);
-    expect(text).not.toContain('"score":null');
+    expect(text).toContain('"carrier":"C1"');
     expect(text).toContain('is FULL on this session now');
     expect(text).toMatch(/more full answer/);
     expect(sc.retry_instructions).toMatch(/more full answer/);

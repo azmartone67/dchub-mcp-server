@@ -183,7 +183,8 @@ describe('option A line on a keyless free-key wall, production transport', () =>
   });
 
   it('the other free-key walls get the same pair', async () => {
-    for (const tool of ['get_energy_prices', 'get_renewable_energy']) {
+    // get_energy_prices left this list on owner 2026-11-23 (paid-only, lib/paid-full-only.mjs): pinned below.
+    for (const tool of ['get_renewable_energy']) {
       minted.length = 0;
       const r = await wallCall(tool);
       const url = r.sc.human_url;
@@ -193,6 +194,15 @@ describe('option A line on a keyless free-key wall, production transport', () =>
       expect(r.text, tool).toContain(claimHandoffFreekeyText() + '\n\n' + human);
       expect(() => JSON.parse(r.result.content[0].text), tool).not.toThrow();
     }
+  });
+
+  it('get_energy_prices (paid-only, owner 2026-11-23): no free-key wall, no in-chat email unlock pair', async () => {
+    minted.length = 0;
+    const r = await wallCall('get_energy_prices');
+    expect(r.result, 'an answer came back').toBeTruthy();
+    expect(freekeyMinted(), 'no w-freekey relay (an email does not open it)').toBe(false);
+    expect(r.text).not.toContain(claimHandoffFreekeyText());
+    expect(humanLines(r.text).filter((l) => l.includes(R.wallEmailLineText(r.sc.human_url || '')))).toEqual([]);
   });
 
   it('end to end: bind_email with the reply mints a key with the email on this session, and the next get_water_risk is not walled', async () => {

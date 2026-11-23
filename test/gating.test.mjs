@@ -228,7 +228,9 @@ describe('applyTierGate — tier access', () => {
     process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
     try {
       expect(applyTierGate('get_market_intel', {}, 'free', true, false).trial_taste).toBe(true);
-      expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).trial_taste).toBe(true);
+      // Owner 2026-11-23: grid is paid-full-only; the kill switch no longer gives a trial its taste.
+      expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).trial_taste).toBeUndefined();
+      expect(applyTierGate('get_fiber_intel', {}, 'free', false, true).trial_taste).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
       else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;

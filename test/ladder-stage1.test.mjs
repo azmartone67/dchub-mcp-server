@@ -318,8 +318,10 @@ const PINNED = {
   get_grid_intelligence: {
     // Item 3 (owner draft 2026-10-16): a key with a bound email (ident, and the pack seat, which
     // carries one) gets capped full answers: full while fresh, the preview once spent.
-    anon: [P, P], free: [P, P], ident: [F, P],
-    pack: [F, P],
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): full answers are Developer and up only, so the
+    // bound-email lane is closed: ident and pack are the preview fresh and spent (were F,P).
+    anon: [P, P], free: [P, P], ident: [P, P],
+    pack: [P, P],
     starter: [F, P],
     developer: [F, F],
     pro: [F, F] },
@@ -430,7 +432,8 @@ describe('ladder stage 1 — the documented row total survives the rung label', 
   // The initialize instructions tell agents the full count of a trimmed list is in
   // `_<k>_total_in_pro`. Stage 1 names the real rung in a SIBLING, never instead.
   const list = { ok: true, data: Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })) };
-  for (const [tool, rung] of [['get_refined_queue', 'free'], ['get_interconnection_queue', 'developer'],
+  // get_refined_queue's rows unlocked at the free key until 2026-11-23; now Developer (lib/paid-full-only.mjs).
+  for (const [tool, rung] of [['get_refined_queue', 'developer'], ['get_interconnection_queue', 'developer'],
     ['get_dchub_recommendation', 'pro']]) {
     it(`${tool} (keyless): _data_total_in_pro kept, _data_total_unlocks_at = ${rung}`, () => {
       const out = S.trimForTrial(JSON.parse(JSON.stringify(list)), tool);

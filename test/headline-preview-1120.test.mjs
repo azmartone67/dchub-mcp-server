@@ -218,7 +218,11 @@ describe('flag on: the headline reaches the wall', () => {
     expect(b.taste.cite_as).toBe('DC Hub (dchub.cloud), collected 2026-10-07');
     expect(b.projects).toBeUndefined();
     expect(JSON.stringify(b)).not.toContain('Project 0');
-    expect(prose(r)).toContain('PJM queued generation 373.4 GW (generation interconnection queue (requested generation; not load), collected 2026-10-07)');
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the queue is paid-full-only, so its keyless wall carries no email claim
+    // block, and the "Give your user this answer first: ..." line rode that block (lib/claim-handoff.mjs
+    // ANSWER_FIRST_LEAD). The collected date still reaches the agent on the taste (above) and in the cite_as.
+    expect(prose(r)).not.toContain('Give your user this answer first: PJM queued generation');
+    expect(prose(r)).toContain('"cite_as":"DC Hub (dchub.cloud), collected 2026-10-07"');
     expect(r.bytes).toBeLessThan(ANSWER_BUDGET_DEFAULT_BYTES);
   });
   for (const [label, opts] of [['keyless', {}], ['trial key', { key: TRIAL }], ['over the soft cap', { anon: 25 }]]) {
@@ -327,17 +331,28 @@ describe('who the server hands it to (server.mjs _headlinePreviewSeat)', () => {
   });
 });
 
-describe('flag off is origin/main, byte for byte (git-ref sandbox)', () => {
+// ★ Owner 2026-11-23 (lib/paid-full-only.mjs): grid, queue and execute_plan are paid-full-only, so their keyless walls
+// no longer offer an email unlock (bind_email / "an email opens ..."), and the wall copy differs from origin/main by
+// design until this merges. What this headline flag must not move is the data the wall publishes, so the flag-off
+// comparison with origin/main is now on the published figures (taste + withheld; totals; a plan's facts), with the
+// relay/timestamp normalisation above, and each wall is pinned to carry no email-unlock promise.
+const PUBLISHED = { get_grid_intelligence: ['taste', 'withheld'], get_interconnection_queue: ['taste', 'withheld', 'totals'], execute_plan: ['facts'] };
+const EMAIL_UNLOCK = /A key with a bound email gets full|Share your email and DC Hub opens more of this answer|"unlock_tool":\s*"bind_email"/;
+describe('flag off is origin/main on the published figures; no email unlock on a paid-only wall (git-ref sandbox)', () => {
   for (const [label, tool, args] of [['grid', 'get_grid_intelligence', { region_id: 'PJM' }],
     ['queue PJM', 'get_interconnection_queue', { iso: 'PJM' }], ['queue all-ISO', 'get_interconnection_queue', {}],
     ['execute_plan', 'execute_plan', PLAN]]) {
     it(`${label}`, async () => {
+      const here = await call(H, tool, args, { sid: 'hp-cmp-' + label });
+      { const all = prose(here) + JSON.stringify(json0(here)); const m = EMAIL_UNLOCK.exec(all);
+        expect(m, m ? all.slice(Math.max(0, m.index - 300), m.index + 300) : '').toBeNull(); }
       if (!O) { console.warn(`[headline-preview] origin/main comparison not run: ${why}`); return; }
       // The same call number on both sides keeps the ids and IPs aligned.
-      const here = await call(H, tool, args, { sid: 'hp-cmp-' + label });
       n -= 1;
       const main = await call(O, tool, args, { sid: 'hp-cmp-' + label });
-      expect(norm(here)).toBe(norm(main));
+      const pick = (r) => { const b = json0(r); const o = {}; for (const k of PUBLISHED[tool]) if (k in b) o[k] = b[k]; return norm({ msg: o }); };
+      expect(Object.keys(JSON.parse(pick(here))).length, 'something published to compare').toBeGreaterThan(0);
+      expect(pick(here)).toBe(pick(main));
     }, 120_000);
   }
 });

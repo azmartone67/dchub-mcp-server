@@ -24,13 +24,19 @@ import { isFreeWithEmailTool, PAID_ONLY_TOOLS, HARD_WALL_HEADLINES,
 
 describe('isFreeWithEmailTool', () => {
   it('marks the tools a bound email unlocks', () => {
-    for (const t of ['get_interconnection_queue', 'compare_isos', 'list_transactions',
+    for (const t of ['compare_isos', 'list_transactions',
                      'hyperscaler_deals', 'get_facility', 'get_market_intel',
-                     'rank_markets', 'ai_capacity_index',
                      // ladder stage 1 (2026-09-29): no longer Pro-only — the same
                      // keyed daily allowance as get_market_intel, unlimited at Developer.
-                     'get_grid_intelligence', 'get_fiber_intel']) {
+                     'get_fiber_intel']) {
       expect(isFreeWithEmailTool(t), t).toBe(true);
+    }
+  });
+
+  // Owner 2026-11-23: these are paid-full-only (lib/paid-full-only.mjs); a bound email no longer unlocks them.
+  it('does NOT mark the paid-full-only tools a bound email used to unlock', () => {
+    for (const t of ['get_interconnection_queue', 'rank_markets', 'ai_capacity_index', 'get_grid_intelligence']) {
+      expect(isFreeWithEmailTool(t), t).toBe(false);
     }
   });
 
@@ -154,7 +160,7 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
     });
   // Owner 2026-10-08: the decision tools are previews on every non-paid seat, so the
   // gate refuses them for a trial key and the derived list drops them with no hand edit.
-  it.each(['get_grid_intelligence', 'get_market_intel'])(
+  it.each(['get_market_intel'])(
     'no longer advertises %s (preview-only on free; the kill switch restores it)', (t) => {
       expect(_trialUnlockedTools()).not.toContain(t);
       const prev = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
@@ -164,6 +170,17 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
         else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;
       }
     });
+
+  // Owner 2026-11-23: get_grid_intelligence is paid-full-only, so even the kill switch does not advertise it.
+  it('no longer advertises get_grid_intelligence, kill switch or not', () => {
+    expect(_trialUnlockedTools()).not.toContain('get_grid_intelligence');
+    const prev = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+    process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
+    try { expect(_trialUnlockedTools()).not.toContain('get_grid_intelligence'); } finally {
+      if (prev === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+      else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;
+    }
+  });
 
   it('never advertises a tool outside PAID_ONLY_TOOLS (the hint describes the GATED set)', () => {
     for (const t of _trialUnlockedTools()) expect(PAID_ONLY_TOOLS.has(t), t).toBe(true);

@@ -1,7 +1,6 @@
 // grid-lastfree.test.mjs — fix 5 (owner 2026-10-03, DCHUB_LASTFREE_ASK): a keyed free caller's
 // LAST free full get_grid_intelligence answer of the day carries one human line with the
 // key-bound pack link. The answer and the caps are unchanged. Real handler, backend stubbed.
-import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { lastFreeLine } from '../lib/grid-sell-line.mjs';
 
@@ -81,45 +80,28 @@ const env = (k, v) => { const p = process.env[k]; if (v === undefined) delete pr
 const KEY = 'dch_live_lastfree_fixture_key_0001';
 const keyed = (ip, key = KEY) => ({ api_key: key, tier: 'free', platform: 'claude', client_name_raw: 'claude-ai',
   client_ip: ip, session_id: 'sess-lastfree-' + (++n) });
-const payload = (u) => unsealPayload(u.split('/go/c/')[1].split('.')[0]).split('|');
 
 describe('keyed free caller, three calls in one UTC day', () => {
-  it('only the 2nd (last free full) answer carries the ask, with a key-bound /go/c link; the 3rd is the preview as before', async () => {
+  // ★ Owner 2026-11-23 (lib/paid-full-only.mjs): get_grid_intelligence is paid-full-only, so a free key gets no full
+  // grid brief at all and the "last included full brief" ask (server.mjs r-lastfree-ask, grid only) has no answer to
+  // ride. The old "2nd call carries the ask" case and its DCHUB_LASTFREE_ASK=0 kill-switch case pinned that path; this
+  // case pins what a free key sees now: three previews, no receipt, no ask, no pack link.
+  it('three grid calls on a free key: all previews, no metered receipt, no last-free ask, no /go/c pack link', async () => {
     const restore = env('DCHUB_PAYWALL_CONTRACT', undefined);
     try {
       const ip = '203.0.115.201';
-      const r1 = await grid(keyed(ip)), r2 = await grid(keyed(ip)), r3 = await grid(keyed(ip));
-      expect(text(r1)).not.toContain('last free full');
-      expect(r1.structuredContent._metered_trial.remaining_today).toBe(1);
-      const sc = r2.structuredContent, t = text(r2);
-      expect(sc._metered_trial.remaining_today).toBe(0);
-      expect(t).toContain('That was the last included full DC Hub grid brief on this key today.');
-      expect(sc.show_to_user).toBe(true);
-      expect(sc.user_message).toContain('More full grid briefs on the same key');
-      expect(sc.user_message).not.toMatch(/credits?|\$\d|calls?\/day/i);
-      expect(sc.for_your_human.text).toBe(sc.user_message);
-      const url = sc.for_your_human.url;
-      expect(url).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
-      const p = payload(url);
-      expect(p[0]).toBe('metered');
-      expect(p[1]).toMatch(/^pk-[0-9a-f]{64}$/);                      // credits land on the key they use
-      expect(p[3]).toBe('get_grid_intelligence');
-      expect(sc.demand_mw).not.toBe(undefined);                        // the full answer is unchanged
-      expect(r2.structuredContent.preview_is_partial).toBeFalsy();
-      expect(r3.structuredContent._metered_trial).toBeUndefined();     // the cap still bites on call 3: no full-answer receipt,
-      expect(r3.structuredContent.demand_mw ?? null).toBeNull();       // and the trimmed payload (demand is a Pro field)
-      expect(text(r3)).not.toContain('last free full');
+      const rs = [await grid(keyed(ip)), await grid(keyed(ip)), await grid(keyed(ip))];
+      for (const r of rs) {
+        const sc = r.structuredContent, t = text(r);
+        expect(sc.preview_is_partial).toBe(true);
+        expect(sc._metered_trial).toBeUndefined();
+        expect(sc.demand_mw ?? null).toBeNull();
+        expect(t).not.toContain('last included full DC Hub grid brief');
+        expect(t).not.toContain('last free full');
+        expect(String(sc.user_message || '')).not.toContain('More full grid briefs on the same key');
+        expect(JSON.stringify(sc)).not.toContain('dchub.cloud/go/c/');
+      }
     } finally { restore(); }
-  });
-  it('kill switch DCHUB_LASTFREE_ASK=0: no ask on the last free answer', async () => {
-    const off = env('DCHUB_LASTFREE_ASK', '0');
-    try {
-      const ip = '203.0.115.202';
-      const k2 = KEY + '_killswitch';        // the daily count is durable per key, so a fresh key
-      await grid(keyed(ip, k2)); const r2 = await grid(keyed(ip, k2));
-      expect(r2.structuredContent._metered_trial.remaining_today).toBe(0);
-      expect(text(r2)).not.toContain('last free full');
-    } finally { off(); }
   });
   it('a keyless seat and a paid key never get it', async () => {
     const ip = '203.0.115.203';

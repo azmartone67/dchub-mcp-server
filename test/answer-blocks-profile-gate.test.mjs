@@ -44,6 +44,18 @@ beforeAll(async () => {
       out[`${path}|${k}`] = res.raw;
     }
   }
+  // 2026-11-23 (owner): rank_markets is paid-full-only (lib/paid-full-only.mjs), so a keyless plan's ranking
+  // step is a preview and composes no ranked_answer on any profile. The profile gate is therefore also driven
+  // with a paid (stub-valid Pro) key on every path, where the ranking is full and only the profile decides.
+  for (const path of PATHS) {
+    const hdr = { ...UA, 'x-api-key': PRO_KEY };
+    const init = await H.init(path, 'generic-agent', hdr);
+    const sid = init.headers.get('mcp-session-id');
+    for (const [k, intent] of Object.entries(INTENTS)) {
+      const res = await H.call(path, 'execute_plan', { intent }, { ...hdr, ...(sid ? { 'mcp-session-id': sid } : {}) });
+      out[`${path}+key|${k}`] = res.raw;
+    }
+  }
 }, 240_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
@@ -52,7 +64,11 @@ describe('controls: the full /mcp profile still carries the blocks', () => {
     expect(out['/mcp/oauth|timing']).toMatch(/intent_answer/);
     expect(out['/mcp/oauth|ranked']).toMatch(/ranked_answer/);
   });
-  it('/mcp ranked intent -> ranked_answer', () => { expect(out['/mcp|ranked']).toMatch(/ranked_answer/); });
+  it('/mcp ranked intent with a paid key -> ranked_answer', () => { expect(out['/mcp+key|ranked']).toMatch(/ranked_answer/); });
+  it('/mcp ranked intent keyless -> no ranked_answer (the ranking step is a preview below Developer)', () => {
+    expect(out['/mcp|ranked']).toMatch(/plan_execution/);
+    expect(out['/mcp|ranked']).not.toMatch(/ranked_answer/);
+  });
   it('/mcp timing intent -> intent_answer', () => { expect(out['/mcp|timing']).toMatch(/intent_answer/); });
   it('every call actually ran a plan (no vacuous absence)', () => {
     for (const [k, raw] of Object.entries(out)) expect(raw, k).toMatch(/plan_execution/);
@@ -65,6 +81,10 @@ describe('directory profiles carry neither block, for a client that is not ChatG
       it(`${path} (${k})`, () => {
         expect(out[`${path}|${k}`]).not.toMatch(/ranked_answer/);
         expect(out[`${path}|${k}`]).not.toMatch(/intent_answer/);
+      });
+      it(`${path} (${k}) with a paid key`, () => {
+        expect(out[`${path}+key|${k}`]).not.toMatch(/ranked_answer/);
+        expect(out[`${path}+key|${k}`]).not.toMatch(/intent_answer/);
       });
     }
   }

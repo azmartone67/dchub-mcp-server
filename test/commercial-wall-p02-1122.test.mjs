@@ -169,6 +169,9 @@ const ON = () => { process.env.DCHUB_EXP_UPGRADE_BLOCK = '1'; };
 // Owner 2026-11-23: execute_plan's full answer needs a paid key, so a free (trial) key's plan is no longer
 // origin/main's: its steps run keyless and its pointer is unlock_more_data, not bind_email. That case is pinned
 // on its own below instead of byte for byte; keyless execute_plan and the other walled tools stay byte for byte.
+// The same holds for every paid-full-only tool (lib/paid-full-only.mjs): a trial key's get_grid_intelligence answer is
+// the preview, where origin/main walled it on the email bind; that case is also pinned on its own below.
+const PAID_ONLY_WALLED = new Set(['execute_plan', 'get_grid_intelligence']);
 const WALLED = [
   ['get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }],
   ['get_market_intel', { market: 'dallas' }],
@@ -470,8 +473,11 @@ describe('flag ON through /mcp: treatment vs holdout, exposure in both arms', ()
     ON();
     anonCount = 999;
     const ip = ipIn(MX.TREATMENT);
-    const { result } = await call(H, '/mcp', 'get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }, { ip });
-    expect(S._wallUnlockFor('get_grid_intelligence', result.structuredContent || {}, { tier: 'anonymous' })).toBe('email');
+    // 2026-11-23 (owner): get_grid_intelligence is paid-full-only (lib/paid-full-only.mjs): an email no longer finishes
+    // it (its unlock is the licence), so the email-finished task is pinned on get_market_intel, which an email still opens.
+    expect(S._wallUnlockFor('get_grid_intelligence', {}, { tier: 'anonymous' })).not.toBe('email');
+    const { result } = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip });
+    expect(S._wallUnlockFor('get_market_intel', result.structuredContent || {}, { tier: 'anonymous' })).toBe('email');
     expect(accessOf(result)).toBeUndefined();
     expect(JSON.stringify(result)).toMatch(/get_api_key|email/i);
   }, 60_000);
@@ -505,7 +511,7 @@ describe('flag ON through /mcp: treatment vs holdout, exposure in both arms', ()
 
 describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main with every flag ON', () => {
   const CASES = [];
-  for (const who of ['keyless', 'trial']) for (const t of WALLED) if (!(who === 'trial' && t[0] === 'execute_plan')) CASES.push([who, ...t]);
+  for (const who of ['keyless', 'trial']) for (const t of WALLED) if (!(who === 'trial' && PAID_ONLY_WALLED.has(t[0]))) CASES.push([who, ...t]);
   for (const flag of [undefined, '0']) {
     it.each(CASES)(`flags ${flag === undefined ? 'unset' : flag}: %s %s`, async (who, name, args) => {
       if (!O) { console.warn(`[commercial-wall] origin/main comparison not run: ${why}`); return; }
@@ -531,6 +537,18 @@ describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main w
     expect(tok, 'no rerun token').toBeTruthy();
     expect(Buffer.from(tok, 'base64url').toString()).toContain('"a":"mcp:anon:trial"');
   }, 120_000);
+  it('trial key, get_grid_intelligence (owner 2026-11-23): the preview, not origin/main\'s email-bind wall', async () => {
+    clearFlags();
+    const [, args] = WALLED.find((w) => w[0] === 'get_grid_intelligence');
+    const here = await call(H, '/mcp', 'get_grid_intelligence', args, { ip: nextIp(), key: trialKey() });
+    const t = norm(here.result);
+    expect(here.result && here.result.isError).toBeFalsy();
+    expect(t).toContain('\\"tool\\":\\"get_grid_intelligence\\"');
+    expect(t).not.toContain('is not email-bound yet');
+    expect(t).not.toContain('"error":"paid_only"');
+  }, 120_000);
+  // On /mcp/chatgpt a trial key on a paid-full-only tool now reads the preview where origin/main answered paid_only:
+  // keyless stays byte for byte; the trial half of those two tools is pinned to the preview, with no access block.
   it.each(WALLED)('/mcp/chatgpt every flag ON: %s is origin/main byte for byte', async (name, args) => {
     if (!O) { console.warn(`[commercial-wall] origin/main comparison not run: ${why}`); return; }
     for (const f of FLAGS) process.env[f] = '1';
@@ -539,10 +557,16 @@ describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main w
       const ip = nextIp();
       const key = who === 'trial' ? trialKey() : '';
       const here = await call(H, '/mcp/chatgpt', name, args, { ip, key, headers: { 'user-agent': 'openai-mcp/1.0' } });
-      const main = await call(O, '/mcp/chatgpt', name, args, { ip, key, headers: { 'user-agent': 'openai-mcp/1.0' } });
-      const a = norm(here.result || here.error), b = norm(main.result || main.error);
-      expect(a === b, firstDiff(a, b)).toBe(true);
+      const a = norm(here.result || here.error);
       expect(a).not.toMatch(/Access: partial|"access"|dchub\.cloud\/h\//);
+      if (who === 'trial' && PAID_ONLY_WALLED.has(name)) {
+        expect(here.result, 'a preview, not an error').toBeTruthy();
+        expect(a).toMatch(/preview|_withheld/);
+        continue;
+      }
+      const main = await call(O, '/mcp/chatgpt', name, args, { ip, key, headers: { 'user-agent': 'openai-mcp/1.0' } });
+      const b = norm(main.result || main.error);
+      expect(a === b, firstDiff(a, b)).toBe(true);
     }
   }, 180_000);
 });

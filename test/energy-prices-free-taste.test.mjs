@@ -54,9 +54,12 @@ describe('energy taste', () => {
     expect('full_unlocks_at' in env).toBe(false);
     expect(env._taste_note).not.toMatch(/\$|Developer|Pro\b/);
   });
-  it('is not in the preview-only list, so who gets the full answer is unchanged', () => {
+  // 2026-11-23 (owner): get_energy_prices is paid-full-only (lib/paid-full-only.mjs); its taste is its preview on every
+  // path (PAID_ONLY_TASTE_TOOLS), not a taste-shaped-only tool, and it stays out of the email preview-only list.
+  it('is a paid-only taste tool: out of the preview-only and taste-shaped-only lists, in PAID_ONLY_TASTE_TOOLS', () => {
     expect(T.FREE_PREVIEW_ONLY_TOOLS).not.toContain('get_energy_prices');
-    expect(T.TASTE_SHAPED_ONLY_TOOLS).toContain('get_energy_prices');
+    expect(T.TASTE_SHAPED_ONLY_TOOLS).not.toContain('get_energy_prices');
+    expect(T.PAID_ONLY_TASTE_TOOLS).toContain('get_energy_prices');
   });
   it('returns null (generic trim) when there is no rate or on an error', () => {
     expect(T.buildFreeDecisionTaste('get_energy_prices', { success: true, retail_rates: { avg_cents_kwh: null } })).toBeNull();

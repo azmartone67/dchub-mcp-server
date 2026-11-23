@@ -38,6 +38,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as T from '../lib/free-decision-taste.mjs';
+import { INSTR_CONNECT_LINE } from '../lib/neutral-connect.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -504,26 +505,21 @@ describe('paid seats are untouched', () => {
 });
 
 describe('kill switch DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 restores the previous behaviour (control)', () => {
-  it('free key grid: the capped full brief again (trial_taste), decision scalars present, counter charged', async () => {
+  // Owner 2026-11-23: get_grid_intelligence is a paid-full-only tool (lib/paid-full-only.mjs). The kill switch still
+  // restores the old taste route for get_market_intel (next case), but it no longer reopens grid to a free key.
+  it('free key grid: the kill switch does NOT reopen a paid-only tool: still the taste, no scalars, nothing charged', async () => {
     process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
     expect(S._freePreviewOnlyTool('get_grid_intelligence')).toBe(false);
-    expect(S._freeTasteTool('get_grid_intelligence')).toBe(true);
+    expect(S._freeTasteTool('get_grid_intelligence')).toBe(false);
     const consumeBefore = consumeHits.length;
     const r = await callAs({ key: KEYS.free }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-    expect(r.data.taste).toBeUndefined();
-    // the full brief, with the DCPI sub-scores withheld below Pro (owner 2026-10-31)
-    expect(r.data.constraint_score).toBeNull();
-    expect(r.data.capacity_auction_price_usd_mw_day).toBe(333.44);
-    expect(r.data._metered_trial && r.data._metered_trial.of).toBeGreaterThan(0);
-    // #826: a keyed caller is charged on its key (and the per-IP ceiling), never the bare IP bucket.
-    expect(counterKeysFor(KEYS.free, 'get_grid_intelligence').length).toBeGreaterThan(0);
-    expect(counterKeysFor(S.IP_CEILING_PREFIX + r.ip, 'get_grid_intelligence').length).toBeGreaterThan(0);
+    expect(r.data.capacity_auction_price_usd_mw_day).not.toBe(333.44);
+    expect(r.data._metered_trial).toBeUndefined();
+    expect(r.data.trial_taste).not.toBe(true);
+    expect(r.sc.preview_is_partial).toBe(true);
     expect(counterKeysFor(r.ip, 'get_grid_intelligence')).toEqual([]);
-    // the durable consume is write-behind (fire-and-forget POST, server.mjs _fullCapConsume):
-    // it lands after the response, so wait for it rather than read the stub synchronously.
-    const consumed = () => consumeHits.slice(consumeBefore).some((h) => h.tool === 'get_grid_intelligence');
-    for (let i = 0; i < 40 && !consumed(); i++) await new Promise((res) => setTimeout(res, 50));
-    expect(consumed(), 'no /full-cap/consume write within 2s').toBe(true);
+    await new Promise((res) => setTimeout(res, 200));
+    expect(consumeHits.slice(consumeBefore).some((h) => h.tool === 'get_grid_intelligence')).toBe(false);
   });
   it('free key market intel: the capped full taste again (trial_taste), rows and pricing intact', async () => {
     process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
@@ -642,12 +638,16 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
   // Note F / option A (owner 2026-11-17) supersedes the byte-for-byte B1 pin on claim_free_key's own result: the
   // field names stay, the values say what the key keeps (lib/continuity-ask.mjs). B1 itself is still the
   // tier-canon sentence (_freeTierRuleText) other surfaces quote.
-  it('claim_free_key: free_tier_rule keeps the keyless clause, then the continuity line; the decision clause has no count', async () => {
+  // Owner 2026-11-23: the keyless first-full lane lists no tools, so the rule no longer opens with the keyless clause.
+  it('claim_free_key: free_tier_rule has no keyless first-full clause, then the continuity line; the decision clause has no count', async () => {
     const r = await callAs({}, 'claim_free_key', {});
-    expect(r.sc.free_tier_rule.startsWith(B1.slice(0, B1.indexOf(' With an email')))).toBe(true);
+    expect(r.sc.free_tier_rule).not.toContain(B1.slice(0, B1.indexOf(' (')));
+    expect(r.sc.free_tier_rule).not.toMatch(/first call each UTC day|is a full answer/);
     expect(r.sc.free_tier_rule).toContain('With an email, the key keeps your saved shortlists, alerts and the changes you track');
     expect(r.sc.free_tier_rule).not.toMatch(/calls\/day|Higher limits|pricing/);
-    expect(r.sc.free_tier_decision_tools).toBe('Grid/queue/market-intel tools: previews without an email; an email opens fuller answers.');
+    // grid and queue are paid-full-only (owner 2026-11-23): the clause no longer says an email opens fuller answers
+    expect(r.sc.free_tier_decision_tools).toBe('Grid/queue/market-intel tools: previews. ' + INSTR_CONNECT_LINE);
+    expect(r.sc.free_tier_decision_tools).not.toMatch(/an email opens|full answer/i);
     expect(r.sc.free_tier_decision_tools).not.toBe(CLAUSE);
   });
   it('every repo doc that states the free-key sentence also states the clause (tool descriptions are frozen and excluded)', () => {

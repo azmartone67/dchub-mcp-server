@@ -151,8 +151,11 @@ describe('execute_plan on /mcp/claude: slimmed step results are scrubbed too', (
       const r = await H.call(path, 'execute_plan', { intent: 'rank markets for a 200 MW AI campus in PJM with fiber and water risk' });
       expect(r.msg && r.msg.result, r.raw.slice(0, 300)).toBeTruthy();
       const env = JSON.parse(r.msg.result.content[0].text);
-      // Steps really ran through the loopback, so their slimmed results are in the body.
-      expect(env.executed.filter((e) => e.status === 'executed').length, r.body.slice(0, 400)).toBeGreaterThan(0);
+      // Steps really ran through the loopback, so their slimmed results are in the body. 2026-11-23 (owner):
+      // execute_plan is paid-full-only (lib/paid-full-only.mjs), so a keyless plan's steps run as previews
+      // (gated_preview, each with its result); the keyed (Pro) plan's steps are executed in full.
+      const ran = label === 'keyless' ? ['gated_preview'] : ['executed'];
+      expect(env.executed.filter((e) => ran.includes(e.status) && e.result).length, r.body.slice(0, 400)).toBeGreaterThan(0);
       expect(hitsOf(PATTERNS, withoutPartialLink(r, CLAUDE_PLANS_NOTICE))).toEqual([]);
       expect(r.raw).not.toContain(PRO_KEY);
     }, 120_000);

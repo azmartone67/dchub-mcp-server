@@ -3,7 +3,7 @@
 // stub's #1 row is a DCPI AVOID market (the case the QA saw at the top of the old capacity-index
 // lead), and the answer must lead with the best buildable market instead.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 // Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
 // This file exercises the opt-in mint path, so it turns the switch on for itself.
@@ -26,7 +26,7 @@ const RANK_ROWS = [
   { rank: 3, market: 'Phoenix', slug: 'phoenix-az', state: 'AZ', dcpi_verdict: 'CAUTION', score: 52 }];
 const VERDICT = { 'ashburn-va': ['AVOID', 26.7], ashburn: ['AVOID', 26.7], 'columbus-oh': ['BUILD', 71.2], columbus: ['BUILD', 71.2] };
 
-let H, fence, sc, hits, chatgpt;
+let H, fence, sc, scPaid, hits, chatgpt;
 beforeAll(async () => {
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: (p) => {
@@ -47,20 +47,34 @@ beforeAll(async () => {
   chatgpt = res2.raw;
   const line = res.raw.split('\n').find((l) => l.startsWith('data:')) || res.raw;
   sc = JSON.parse(line.replace(/^data:\s*/, '')).result.structuredContent;
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets and execute_plan answer in full only at Developer and up,
+  // so the ranked answer is built for a paid key; the keyless plan above gets the rank step as a preview.
+  const initP = await H.init('/mcp', 'claude-ai', { ...UA, 'x-api-key': PRO_KEY });
+  const resP = await H.call('/mcp', 'execute_plan', { intent: 'rank markets for a 200 MW AI campus' },
+    { ...UA, 'x-api-key': PRO_KEY, 'mcp-session-id': initP.headers.get('mcp-session-id') });
+  const lineP = resP.raw.split('\n').find((l) => l.startsWith('data:')) || resP.raw;
+  scPaid = JSON.parse(lineP.replace(/^data:\s*/, '')).result.structuredContent;
 }, 120_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('execute_plan market_ranking envelope', () => {
-  it('control: a market_ranking plan ran rank_markets ai_ready and DCPI-checked markets', () => {
-    expect(sc.intent_class).toBe('market_ranking');
-    const rk = sc.executed.find((e) => e.tool === 'rank_markets' && e.status === 'executed');
-    expect(rk, JSON.stringify(sc.executed.map((e) => [e.tool, e.status]))).toBeTruthy();
+  it('control: a market_ranking plan on a paid key ran rank_markets ai_ready and DCPI-checked markets', () => {
+    expect(scPaid.intent_class).toBe('market_ranking');
+    const rk = scPaid.executed.find((e) => e.tool === 'rank_markets' && e.status === 'executed');
+    expect(rk, JSON.stringify(scPaid.executed.map((e) => [e.tool, e.status]))).toBeTruthy();
     expect(rk.args).toMatchObject({ criteria: 'ai_ready' });
-    expect(sc.executed.some((e) => e.tool === 'ai_capacity_index')).toBe(false);
+    expect(scPaid.executed.some((e) => e.tool === 'ai_capacity_index')).toBe(false);
+    expect(scPaid.executed.some((e) => e.tool === 'get_market_dcpi_rank' && e.status === 'executed')).toBe(true);
+  });
+  it('keyless (owner 2026-11-23): the rank step is a preview and no ranked_answer is built from it', () => {
+    expect(sc.intent_class).toBe('market_ranking');
+    const rk = sc.executed.find((e) => e.tool === 'rank_markets');
+    expect(rk && rk.status, JSON.stringify(sc.executed.map((e) => [e.tool, e.status]))).toBe('gated_preview');
+    expect(sc.ranked_answer).toBeUndefined();
     expect(sc.executed.some((e) => e.tool === 'get_market_dcpi_rank' && e.status === 'executed')).toBe(true);
   });
-  it('ranked_answer leads with the best buildable market, never the AVOID #1', () => {
-    const ra = sc.ranked_answer;
+  it('ranked_answer leads with the best buildable market, never the AVOID #1 (paid key)', () => {
+    const ra = scPaid.ranked_answer;
     expect(ra, 'ranked_answer present').toBeTruthy();
     expect(ra.requested_mw).toBe(200);
     expect(ra.source).toBe('rank_markets_ai_ready');
@@ -73,12 +87,12 @@ describe('execute_plan market_ranking envelope', () => {
     // Ashburn is read first (step-1 row order); the guide still lists Columbus BUILD first.
     expect(sc.answer_guide).toMatch(/RANKING FOR WHERE TO BUILD — DCPI verdicts in this run, best first: columbus-oh: BUILD \(71\.2\) · ashburn-va: AVOID/);
   });
-  it('the relay is the one link the response already carries', () => {
-    const url = sc.ranked_answer.relay && sc.ranked_answer.relay.url;
-    // Note L1 + L2 (2026-11-15): below a paid plan the one link is human_url's. M1.2 (owner 2026-11-18): that link is
-    // the tagged relay page (or the tagged /connect when no relay was minted), lib/neutral-cta.mjs RELAY_URL_FIELDS.
-    expect(url).toMatch(/^https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?via=mcp-wall&wall=[a-z_]+&src=[a-z_]+|connect\?via=mcp-wall&wall=connect&src=[a-z_]+)$/);
-    expect(url).toBe(sc.human_url);
+  // Owner 2026-11-23: below a paid plan a ranking plan builds no ranked_answer (above), so the old case "the relay is
+  // the one link the response already carries" (a below-paid ranked_answer's relay = human_url) has no path left and
+  // was removed. Its paid counterpart: the answer carries no human_url, and the relay stays empty, never invented.
+  it('a paid ranked answer carries no relay, because the response carries no link', () => {
+    expect(scPaid.human_url).toBeFalsy();
+    expect(scPaid.ranked_answer.relay).toBeNull();
   });
 });
 

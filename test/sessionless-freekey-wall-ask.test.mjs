@@ -26,8 +26,9 @@ const FREE_NO_EMAIL = 'dch_live_sessionless_freekey_noemail_01';
 const AGENT_LINE = claimHandoffFreekeyText();
 const HUMAN_LINE = /Reply with your email and I'll open the full answer and keep your saved shortlists/;   // lib/continuity-ask.mjs
 // get_grid_data left the free-key class 2026-11-23 (owner: paid key only); get_water_risk is the controls' example.
-const TOOLS = [['get_energy_prices', { state: 'VA' }],
-  ['get_water_risk', { state: 'VA' }], ['get_renewable_energy', { state: 'VA' }]];
+// Owner 2026-11-23 (lib/paid-full-only.mjs): get_energy_prices is paid-only, so an email no longer opens it and its
+// wall left this list (pinned on its own below: no email-opens-the-answer ask).
+const TOOLS = [['get_water_risk', { state: 'VA' }], ['get_renewable_energy', { state: 'VA' }]];
 
 let H, fence;
 let EXTERNAL = true;           // false: the test's own sockets look like loopback (an execute_plan step)
@@ -112,6 +113,17 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
       expect(r.text).toContain(AGENT_LINE);
       expect(r.text).toMatch(HUMAN_LINE);
       expect(r.text.split(AGENT_LINE).length - 1).toBe(1);          // one agent ask, not stacked
+    }
+  });
+
+  it('get_energy_prices (paid-only, owner 2026-11-23): the sessionless wall never says an email opens the full answer', async () => {
+    const hdr = freshIp();
+    for (const n of [1, 2]) {
+      const r = await call('get_energy_prices', { state: 'VA' }, { hdr });
+      expect(r.rows.length, `wall ${n}: the call walled`).toBe(1);
+      expect(r.rows[0].email_ask, `wall ${n}: not the email-opens-it line`).not.toBe('line');
+      expect(r.text, `wall ${n}`).not.toContain(AGENT_LINE);
+      expect(r.text, `wall ${n}`).not.toMatch(HUMAN_LINE);
     }
   });
 

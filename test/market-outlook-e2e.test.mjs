@@ -109,7 +109,10 @@ describe('execute_plan end to end (real server.mjs on loopback)', () => {
     expect(st.get_market_dcpi_rank).toBe('skipped_unresolved');
     expect(st.get_market_intel).toBe('skipped_unresolved');
     expect(H.hits.filter((h) => /columbus/.test(h.path))).toEqual([]);
-    expect(o.answer_guide).toMatch(/^UNRESOLVED — "Columbus, GA" is not a market DC Hub tracks\. The index tracks that name only as Columbus \(OH, columbus\)/);
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the timeline step is a keyless preview now, so no data step ran
+    // and the NO DATA line sits after the UNRESOLVED lead, before the Columbus, OH pointer.
+    expect(st.get_power_availability_timeline).toBe('gated_preview');
+    expect(o.answer_guide).toMatch(/^UNRESOLVED — "Columbus, GA" is not a market DC Hub tracks\. NO DATA: no step returned data in this run\.[^]*? The index tracks that name only as Columbus \(OH, columbus\)/);
   }, 120_000);
 
   it('Midland–Odessa, a market _CITY_ISO_META never had, is read as itself', async () => {

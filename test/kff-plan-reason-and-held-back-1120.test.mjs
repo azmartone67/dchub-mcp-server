@@ -171,12 +171,12 @@ describe('B) _kffPreviewReason names every refusal and when the day\'s plan answ
     expect(S._kffUsedAt(c, 'execute_plan')).toBeNull();
     expect(S._kffPreviewReason(c)).toBe('');
   });
-  it('CONTROL: the counter still charges a lane tool (the refusal above is the paid-only rule, not a dead counter)', async () => {
+  it('CONTROL: the counter still charges a tool outside the paid-only list (the first-full lane lists none since 11-23; the refusal above is the paid-only rule, not a dead counter)', async () => {
     const c = { client_ip: '198.51.100.85', user_agent: 'Mozilla/5.0' };
-    expect(await S._keylessFirstFullCharge(c, 'get_grid_intelligence', 1, { defer: true })).toBe(true);
-    expect(S._kffUsedAt(c, 'get_grid_intelligence')).toMatch(/^\d\d:\d\d UTC$/);
+    expect(await S._keylessFirstFullCharge(c, 'get_market_dcpi_rank', 1, { defer: true })).toBe(true);
+    expect(S._kffUsedAt(c, 'get_market_dcpi_rank')).toMatch(/^\d\d:\d\d UTC$/);
     expect(S._keylessFirstFullSettle(c, false)).toBe('refunded');
-    expect(S._kffUsedAt(c, 'get_grid_intelligence')).toBeNull();
+    expect(S._kffUsedAt(c, 'get_market_dcpi_rank')).toBeNull();
   });
 });
 

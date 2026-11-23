@@ -63,7 +63,16 @@ async function keyless(path, name) {
 
 describe('item 3: the keyless decision-tool claim line', () => {
   for (const name of Object.keys(ARGS)) {
-    it(`${name}: on /mcp the line is served (control)`, async () => {
+    // 2026-11-23 (owner): grid and queue are paid-full-only (lib/paid-full-only.mjs): an email opens neither, so their
+    // keyless /mcp preview carries no email-unlock claim line. get_market_intel keeps it and stays the control.
+    if (name !== 'get_market_intel') {
+      it(`${name}: on /mcp no email-unlock claim line (paid key only)`, async () => {
+        const r = await keyless('/mcp', name);
+        const t = texts(r);
+        expect(t.length, r.raw.slice(0, 600)).toBeGreaterThan(0);
+        expect(t.join('\n')).not.toMatch(new RegExp(_re(EMAIL_ASK) + '[^\\n]*`bind_email` is one call'));
+      });
+    } else it(`${name}: on /mcp the line is served (control)`, async () => {
       const r = await keyless('/mcp', name);
       // Growth freeze (owner 2026-10-19): get_market_intel joined the email allowance, so its keyless
       // line follows the same email-first wording as grid/queue (list-driven, EMAIL_FULL_DECISION_TOOLS).
