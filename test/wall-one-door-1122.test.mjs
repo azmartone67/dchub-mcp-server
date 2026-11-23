@@ -15,11 +15,13 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { unsealPayload } from '../lib/token-seal.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 import { SIGNIN_LINE } from '../lib/wall-identity-v2.mjs';
 import { PREVIEW_FOOTER } from '../lib/dchub-identity.mjs';
 import { ANSWER_FIRST_LEAD, ANSWER_FIRST_SKIP } from '../lib/claim-handoff.mjs';
@@ -31,6 +33,10 @@ import { createLastWallMemo, emailEnteredEventBody } from '../lib/email-entered.
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SHORT = 'https://dchub.cloud/u/abcdef';
 let H, O, SB, fence, why = '', anonCount = 0;
+// Owner 2026-11-23 (lib/paid-full-only.mjs): below Developer the paid-only tools answer a preview, and their walls no
+// longer say an email opens the full answer. Until origin/main carries that rule its answers on those tools are not the
+// baseline; MAIN_HAS_GATE says which holds.
+let MAIN_HAS_GATE = false;
 const events = [];
 const tracks = [];
 const routes = () => (p, _req, body) => {
@@ -67,6 +73,7 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'wall-one-door-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -260,6 +267,9 @@ describe('lib/wall-one-door.mjs: the split and telemetry', () => {
 });
 
 // ── through the real handler ──────────────────────────────────────────────────────────────────────────────────────
+// All three are paid-only tools (owner 2026-11-23); the baseline for them is origin/main once it carries that rule,
+// else this branch with the flag off from a fresh caller of the same arm (as with no origin/main at all).
+const baseFor = (name) => (O && (MAIN_HAS_GATE || !isPaidFullOnly(name)) ? O : H);
 const TOOLS = [
   ['get_interconnection_queue', { iso: 'PJM' }],
   ['get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }],
@@ -272,9 +282,15 @@ describe('server.mjs _wallOneDoorStep, through the handler', () => {
     if (!O) { console.warn(`[wall-one-door] skipped the origin/main comparison: ${why}`); return; }
     setEnv(PROD);
     for (const p of ['/mcp', '/mcp/claude', '/mcp/chatgpt']) {
-      for (const [name, args] of TOOLS) {
+      // get_iso_context is not paid-only: origin/main's bytes before and after the 2026-11-23 rule
+      for (const [name, args] of [['get_iso_context', { iso: 'PJM' }], ...TOOLS]) {
         const ip = anyIp();
         const a = norm((await call(H, p, name, args, { ip })).result);
+        if (baseFor(name) !== O) {
+          // a paid-only tool before origin/main carries the rule: the wall no longer offers the full answer for an email
+          expect(a, `${p} ${name}`).not.toMatch(/email on this page opens the full answer|bound email gets full answers/i);
+          continue;
+        }
         const b = norm((await call(O, p, name, args, { ip })).result);
         expect(a, `${p} ${name}${firstDiff(a, b)}`).toBe(b);
       }
@@ -285,14 +301,15 @@ describe('server.mjs _wallOneDoorStep, through the handler', () => {
     // The baseline: origin/main, or (no origin/main) this branch with the flag off, called from a fresh caller of the
     // same arm (a second call from one caller on one server would see that caller's own state).
     const B = O || H;
-    const bIp = (ip, arm) => (O ? ip : ipIn(arm));
+    const Bn = (name) => (B === O ? baseFor(name) : H);
+    const bIpn = (name, ip, arm) => (Bn(name) === O ? ip : ipIn(arm));
     for (const p of ['/mcp/claude', '/mcp/chatgpt']) {
       for (const [name, args] of TOOLS) {
         const ip = ipIn(W.ARM_ONE_DOOR);
         setEnv(ON);
         const a = norm((await call(H, p, name, args, { ip })).result);
         setEnv(PROD);
-        const b = norm((await call(B, p, name, args, { ip: bIp(ip, W.ARM_ONE_DOOR) })).result);
+        const b = norm((await call(Bn(name), p, name, args, { ip: bIpn(name, ip, W.ARM_ONE_DOOR) })).result);
         expect(a, `${p} ${name}${firstDiff(a, b)}`).toBe(b);
       }
     }
@@ -302,13 +319,14 @@ describe('server.mjs _wallOneDoorStep, through the handler', () => {
     // The baseline: origin/main, or (no origin/main) this branch with the flag off, called from a fresh caller of the
     // same arm (a second call from one caller on one server would see that caller's own state).
     const B = O || H;
-    const bIp = (ip, arm) => (O ? ip : ipIn(arm));
+    const Bn = (name) => (B === O ? baseFor(name) : H);
+    const bIpn = (name, ip, arm) => (Bn(name) === O ? ip : ipIn(arm));
     for (const [name, args] of TOOLS) {
       const ip = ipIn(W.ARM_CONTROL);
       setEnv(ON);
       const r = await call(H, '/mcp', name, args, { ip });
       setEnv(PROD);
-      const b = norm((await call(B, '/mcp', name, args, { ip: bIp(ip, W.ARM_CONTROL) })).result);
+      const b = norm((await call(Bn(name), '/mcp', name, args, { ip: bIpn(name, ip, W.ARM_CONTROL) })).result);
       expect(norm(r.result), `${name}${firstDiff(norm(r.result), b)}`).toBe(b);
       expect(r.rows.length, name + ' wall row').toBeGreaterThan(0);
       for (const e of r.rows) expect(e.wall_one_door, name).toBe('control');
@@ -321,14 +339,15 @@ describe('server.mjs _wallOneDoorStep, through the handler', () => {
     // The baseline: origin/main, or (no origin/main) this branch with the flag off, called from a fresh caller of the
     // same arm (a second call from one caller on one server would see that caller's own state).
     const B = O || H;
-    const bIp = (ip, arm) => (O ? ip : ipIn(arm));
+    const Bn = (name) => (B === O ? baseFor(name) : H);
+    const bIpn = (name, ip, arm) => (Bn(name) === O ? ip : ipIn(arm));
     let moved = 0, linked = 0;
     for (const [name, args] of TOOLS) {
       const ip = ipIn(W.ARM_ONE_DOOR);
       setEnv(ON);
       const r = await call(H, '/mcp', name, args, { ip });
       setEnv(PROD);
-      const main = (await call(B, '/mcp', name, args, { ip: bIp(ip, W.ARM_ONE_DOOR) })).result;
+      const main = (await call(Bn(name), '/mcp', name, args, { ip: bIpn(name, ip, W.ARM_ONE_DOOR) })).result;
       // The handler's answer is the transform of main's answer: nothing else differs.
       const want = norm(W.withOneDoor(main, SHORT));
       expect(norm(r.result), `${name}${firstDiff(norm(r.result), want)}`).toBe(want);
@@ -346,7 +365,10 @@ describe('server.mjs _wallOneDoorStep, through the handler', () => {
       for (const t of r.tracks) expect(t.params._wall_one_door, name + ' every track row of the call').toBe('one_door');
       if (r.tracks.some((t) => t.wall_link_th)) linked += 1;
     }
-    expect(moved, 'at least one acceptance tool carries an answer-first line').toBeGreaterThan(0);
+    // Owner 2026-11-23: the answer-first line rides only a decision preview whose email opens the full answer
+    // (server.mjs _claimHandoffStep, WALL_EMAIL_TELL_TOOLS = grid + queue); both are paid-only now, so no wall here
+    // carries one and the link-in-the-answer-first-line path is pinned by the transform tests above instead.
+    expect(moved, 'no paid-only wall offers the answer-first email line').toBe(0);
     expect(linked, 'a wall track row with the relay link hash carries the arm (the relay-open join)').toBeGreaterThan(0);
   }, 180_000);
 

@@ -246,13 +246,16 @@ describe('every wall carries an offer (lean ON)', () => {
   // one step proves; the offenders() check above still covers every step row that walled.
   it.each([
     ['depth steps', 'list recent data center M&A transactions and hyperscaler deals', /Steps whose held-back fields an email does not open: step \d \((?:hyperscaler_deals|list_transactions)\)/],
-    ['grid / queue steps', 'compare PJM vs ERCOT grid headroom and interconnection queue', /Steps that came back as a preview: step \d \(get_interconnection_queue\)/],
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): grid and queue are paid-only, so an email opens neither step and the
+    // plan names them under the depth line (the digest offer), never under the email ask's "came back as a preview".
+    ['grid / queue steps', 'compare PJM vs ERCOT grid headroom and interconnection queue', /Steps whose held-back fields an email does not open: [^\n]*step \d \(get_interconnection_queue\)/],
   ])('execute_plan whose %s wall: the plan answer offers, and each step row says so', async (_l, intent, line) => {
     anonCount = 0;
     const calls = await runTool('execute_plan', { intent });
     expect(calls.every((c) => c.rows.length > 0), 'every plan run walled a step').toBe(true);
     expect(offenders('execute_plan', calls)).toEqual([]);
     for (const c of calls) expect(c.prose, c.where).toMatch(line);
+    for (const c of calls) expect(c.prose, c.where).not.toMatch(/Steps that came back as a preview: [^\n]*\((?:get_interconnection_queue|get_grid_intelligence)\)/);
   }, 120_000);
 
   it('CONTROL: with the floor off (DCHUB_WALL_OFFER_FLOOR=0) walls with no offer come back', async () => {

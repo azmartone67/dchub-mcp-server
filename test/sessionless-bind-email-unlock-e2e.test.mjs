@@ -12,6 +12,9 @@
 //      removes the line and nothing else);
 //   3. the repeated call with that X-API-Key returns every row (rank_markets: all 10 markets; score and
 //      total MW stay paid, as the ask says. ai_capacity_index: all 20 markets with their scores).
+// Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets and ai_capacity_index are paid-only now. The wall no longer
+// asks for the email (an email does not open them), bind_email still mints and returns the key with its X-API-Key line,
+// and the X-API-Key retry is still the preview: the two walk-through cases below pin that instead of the old unlock.
 // Controls: a caller WITH a session gets the bind_email text without the line (the server already applied
 // the key to its session), and an execute_plan step (loopback peer) gets no line either.
 //
@@ -87,12 +90,13 @@ describe('sessionless keyless: wall -> bind_email -> X-API-Key retry -> full ans
     expect(UA).not.toMatch(/dchub-qa-readonly/);
   });
 
-  it('rank_markets: the wall asks for the email; bind_email returns the key and the X-API-Key line; the retry shows all 10 markets', async () => {
+  it('rank_markets (paid-only, owner 2026-11-23): the wall makes no email promise; bind_email still returns the key and the X-API-Key line; the retry is still the preview', async () => {
     const h = hdr();
     const wall = await call('rank_markets', {}, h);
     expect(wall.data.results.length).toBe(3);                                   // a real preview
     expect(wall.data._results_total_available).toBe(10);
-    expect(wall.text).toContain('`bind_email` with it shows all 10 markets in this ranking.');
+    expect(wall.text).not.toContain('shows all 10 markets');                    // no email promise
+    expect(wall.text).toContain('An email does not open the fields this preview held back.');
 
     const bind = await call('bind_email', { email: EMAIL }, h);
     expect(claimBodies.map((b) => b && b.email)).toEqual([EMAIL]);              // the mint carried the email
@@ -103,28 +107,24 @@ describe('sessionless keyless: wall -> bind_email -> X-API-Key retry -> full ans
     expect(bind.text.split('X-API-Key header (`X-API-Key:').length - 1).toBe(1);   // once
 
     const full = await call('rank_markets', {}, { ...h, 'x-api-key': keyFrom(bind) });
-    expect(full.data.tier).toBe('identified');
-    expect(full.data._metered_trial && full.data._metered_trial.of).toBe(10);           // the email-bound allowance, not the unbound key's 2
-    expect(full.data.results.map((r) => r.market)).toEqual(RANK_ROWS.map((r) => r.market));   // every row
-    expect(full.data._results_total_available).toBeUndefined();                 // no rows held back
-    expect(full.data.results.every((r) => r._score_withheld === true && r._total_mw_withheld === true)).toBe(true);   // fields stay paid, as asked
-    expect(full.text).not.toContain('shows all 10 markets');                    // no second ask
+    expect(full.data.results.length, 'the email-bound key still gets the preview').toBe(3);
+    expect(full.data._results_total_available).toBe(10);                       // rows still held back
+    expect(full.data.results.every((r) => r._score_withheld === true && r._total_mw_withheld === true)).toBe(true);   // fields stay paid
+    expect(full.text).not.toContain('shows all 10 markets');                    // no ask
   });
 
-  it('ai_capacity_index: the wall asks for the email; after bind_email the X-API-Key retry shows all 20 markets with scores', async () => {
+  it('ai_capacity_index (paid-only, owner 2026-11-23): the wall makes no email promise; after bind_email the X-API-Key retry is still the preview', async () => {
     const h = hdr();
     const wall = await call('ai_capacity_index', {}, h);
     expect(wall.data.markets.length).toBeLessThan(20);
-    expect(wall.text).toContain('`bind_email` with it shows all 20 markets in this index with their scores.');
+    expect(wall.text).not.toContain('shows all 20 markets');                    // no email promise
 
     const bind = await call('bind_email', { email: EMAIL }, h);
     expect(keyFrom(bind)).toBe(MINTED);
 
     const full = await call('ai_capacity_index', {}, { ...h, 'x-api-key': keyFrom(bind) });
-    expect(full.data.markets.length).toBe(20);
-    expect(full.data._metered_trial && full.data._metered_trial.of).toBe(10);           // the email-bound allowance, not the unbound key's 2
-    expect(full.data.markets.every((m) => typeof m.score === 'number' && m._score_withheld === undefined)).toBe(true);
-    expect(full.data._markets_total_available).toBeUndefined();
+    expect(full.data.markets.length, 'the email-bound key still gets the preview').toBeLessThan(20);
+    expect(full.data.markets.some((m) => typeof m.score === 'number' && m._score_withheld === undefined), 'no full scored row').toBe(false);
     expect(full.text).not.toContain('shows all 20 markets');
   });
 

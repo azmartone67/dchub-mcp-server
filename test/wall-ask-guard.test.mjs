@@ -252,6 +252,7 @@ describe('guard: every walled tool ends a keyless first wall with an ask, or a n
 // free-key mask is the keyless mask), so the digest line is true there. get_refined_queue is opened by
 // any key, and its keyless wall carries the bind_email ask, not the digest line.
 import { DIGEST_ASK_LEAD } from '../lib/depth-digest-ask.mjs';
+import { PAID_FULL_ONLY_TOOLS } from '../lib/paid-full-only.mjs';
 const ARG_SAMPLES = { isos: 'PJM,ERCOT', iso: 'PJM', state: 'VA', market: 'dallas', market_slug: 'dallas',
   query: 'dallas', id: 'equinix-dc1-ashburn', facility_id: 'equinix-dc1-ashburn', target_mw: 50, horizon_months: 18,
   intent: 'power headroom in Dallas', name: 'guard-list', shortlist_name: 'guard-list',
@@ -369,15 +370,20 @@ describe('guard (real handler): the digest line is never sent where an email ope
     expect(capFalse, 'the keyless cap line promises the full answer, but an email-bound key gets no more').toEqual([]);
     expect(tierFalse, 'tools/list says an email opens the tool (tier_required email), but an email-bound key gets no more').toEqual([]);
     // Not vacuous: the cap line was read on depth tools, and still promises the full answer where the
-    // email does open the tool (get_refined_queue: any key opens it).
+    // email does open the tool (get_retirement_headroom; get_refined_queue was the anchor until owner 2026-11-23
+    // made it paid-only, lib/paid-full-only.mjs).
     expect(capChecked.length).toBeGreaterThan(0);
-    expect(capFullKept).toContain('get_refined_queue');
-    // Not vacuous: the pass reached both kinds of wall (the depth walls named above, and the queue
-    // survivors a free key opens).
+    expect(capFullKept).toContain('get_retirement_headroom');
+    // Not vacuous: the pass reached both kinds of wall (the depth walls named above, and a tool an email opens).
     expect(digestTrue).toEqual(expect.arrayContaining(['compare_isos', 'hyperscaler_deals', 'get_tax_incentives', 'get_facility']));
-    expect(emailOpens).toContain('get_refined_queue');
-    // Any key opens get_refined_queue, an unbound free key included: a free-key wall, never a depth wall.
+    expect(emailOpens).toContain('get_retirement_headroom');
+    // Owner 2026-11-23: an email opens none of the paid-only tools, so their walls are depth walls (the digest line)
+    // and none is in emailOpens.
+    for (const t of PAID_FULL_ONLY_TOOLS) expect(emailOpens, t).not.toContain(t);
+    expect(digestTrue).toEqual(expect.arrayContaining(['get_refined_queue', 'get_grid_data', 'get_energy_prices',
+      'rank_markets', 'ai_capacity_index', 'get_power_availability_timeline']));
+    // No key opens get_refined_queue any more, an unbound free key included (it opened it before 2026-11-23).
     const anonQ = await call('get_refined_queue', { iso: 'PJM' }, null);
-    expect(gainedOver((await call('get_refined_queue', { iso: 'PJM' }, UNBOUND_KEY)).sc, anonQ.sc).length).toBeGreaterThan(0);
+    expect(gainedOver((await call('get_refined_queue', { iso: 'PJM' }, UNBOUND_KEY)).sc, anonQ.sc)).toEqual([]);
   }, 240_000);
 });

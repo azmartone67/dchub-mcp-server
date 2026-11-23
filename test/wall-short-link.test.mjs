@@ -205,22 +205,23 @@ describe('over the real app (stub backend, no network)', () => {
     expect(Object.keys(b0)[0]).toBe('human_url');
     expect(b0.human_url).toBe(sc.human_url);
     expect(res.content[0].text).not.toMatch(PLAN_PROSE);
-    // Owner 2026-11-02 (Muse's check): grid gives the free figure, then asks for the email; its next step is that ask.
-    expect(b0.next_ask && b0.next_ask.tool, 'block 0 next_ask is the email ask, not the walled tool').toBe('bind_email');
+    // Owner 2026-11-02 (Muse's check) made grid's next step the email ask (bind_email) after the free figure. Owner
+    // 2026-11-23 (lib/paid-full-only.mjs): grid is paid-only, an email no longer opens it, so the wall makes no email
+    // ask and its next step is the other tool, as with answer-first off (the control above).
+    expect(b0.next_ask && b0.next_ask.tool, 'block 0 next_ask is not an email ask').toBe('rank_markets');
     expect(JSON.stringify(res)).not.toMatch(/\/upgrade\/h\/|buy=1/);
     expect(res.content.some((b) => b.type === 'text' && b.text.includes('For your human') && b.text.includes(sc.human_url))).toBe(true);
-    expect(sc.next_ask && sc.next_ask.tool).toBe('bind_email');
-    expect(sc.next_ask.question).toBe(EMAIL_NEXT_QUESTION);
+    expect(sc.next_ask && sc.next_ask.tool).toBe('rank_markets');
+    expect(sc.next_ask.question).not.toBe(EMAIL_NEXT_QUESTION);
     expect(sc.next_call && sc.next_call.tool, 'next_call is set').toBeTruthy();
     expect(sc.next_call.tool, 'next_call does not loop to the walled tool').not.toBe('get_grid_intelligence');
-    expect(sc.next_call.tool, 'next_call is the email ask, not the wall\'s unlock tool').toBe('bind_email');
-    // Grok #117521 (11-02): the lean step keeps _upgrade.next_tool, which still said unlock_more_data.
+    expect(sc.next_call.tool, 'next_call is not an email ask').toBe('rank_markets');
+    // Grok #117521 (11-02): the lean step keeps _upgrade.next_tool; it must not ask for an email either.
     const up = sc._upgrade || b0._upgrade;
-    expect(up && up.next_tool, '_upgrade.next_tool agrees with next_call').toBe('bind_email');
-    expect(b0._upgrade ? b0._upgrade.next_tool : 'bind_email', 'block 0 _upgrade agrees too').toBe('bind_email');
+    if (up) expect(up.next_tool, '_upgrade.next_tool is not the email ask').not.toBe('bind_email');
     const prose = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    expect(prose.indexOf('Give your user this answer first: '), 'the free figure comes first in the prose').toBeGreaterThan(-1);
-    expect(prose.indexOf('Give your user this answer first: ')).toBeLessThan(prose.indexOf('`bind_email`'));
+    expect(prose, 'no answer-first email ask').not.toContain('Give your user this answer first: ');
+    expect(prose, 'no bind_email ask').not.toContain('`bind_email`');
     // every copy agrees: one distinct relay link in the whole reply
     if (sc.for_your_human && sc.for_your_human.url) expect(sc.for_your_human.url).toBe(sc.human_url);
     if (typeof sc.user_message === 'string') expect(sc.user_message).toContain(sc.human_url);

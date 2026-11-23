@@ -54,6 +54,11 @@ beforeAll(async () => {
             results: [1, 2, 3].map((i) => ({ rank: i, market: 'm' + i, city: 'City' + i,
               facility_count: 10 * i, operator_count: i, total_mw: 100 * i, score: 50 * i })) });
         }
+        // ★ 2026-11-23: rank_markets is paid-full-only (lib/paid-full-only.mjs) and no longer takes the anonymous
+        // inline-full branch; get_fiber_intel still does, so the branch is driven through it.
+        if (u.pathname.includes('fiber')) {
+          return send(200, { metro: 'ashburn', total: 3, routes: [1, 2, 3].map((i) => ({ id: 'r' + i, carrier: 'C' + i, miles: 10 * i })) });
+        }
         send(404, { error: 'not found', path: u.pathname });
       });
     });
@@ -73,7 +78,7 @@ afterAll(async () => {
   net.Socket.prototype.connect = realConnect;
 });
 
-async function firstCall() {
+async function firstCall(name = 'get_fiber_intel', args = { metro: 'ashburn' }) {
   const H = { 'content-type': 'application/json', accept: 'application/json, text/event-stream',
     'x-forwarded-for': '203.0.113.' + (10 + Math.floor(Math.random() * 200)) };
   const post = (headers, body) => fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -82,7 +87,7 @@ async function firstCall() {
   const sid = init.headers.get('mcp-session-id'); await init.text();
   const H2 = { ...H, 'mcp-session-id': sid };
   await (await post(H2, { jsonrpc: '2.0', method: 'notifications/initialized' })).text();
-  const res = await post(H2, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'rank_markets', arguments: {} } });
+  const res = await post(H2, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   const r = JSON.parse(decode(await res.text())).result || {};
   return { r, sc: r.structuredContent || {}, text: (r.content || []).map((c) => c.text || '') };
 }
@@ -91,12 +96,19 @@ describe('anonymous inline-full answer carries its rows in structuredContent', (
   it('is the inline-full branch, and the rows are in BOTH channels', async () => {
     const { sc, text } = await firstCall();
     expect(sc.inline_full, 'not the inline-full branch — the assertions below would be vacuous').toBe(true);
-    expect(text[0]).toContain('"market":"m1"');
-    expect(Array.isArray(sc.results)).toBe(true);
-    expect(sc.results.map((x) => x.market)).toEqual(['m1', 'm2', 'm3']);
+    expect(text[0]).toContain('"carrier":"C1"');
+    expect(Array.isArray(sc.routes)).toBe(true);
+    expect(sc.routes.map((x) => x.id)).toEqual(['r1', 'r2', 'r3']);
     // envelope keys survive beside the data
     expect(sc.trial_taste).toBe(true);
     expect(typeof sc.auto_trial_key).toBe('string');
+  });
+  it('rank_markets (paid-full-only since 2026-11-23) is not the inline-full branch: no trial taste, no rows in full', async () => {
+    const { sc, text } = await firstCall('rank_markets', {});
+    expect(sc.inline_full).not.toBe(true);
+    expect(sc.trial_taste).not.toBe(true);
+    expect(text.join('\n')).not.toContain('"score":150');
+    expect(text.join('\n')).not.toContain('"total_mw":300');
   });
   it('made no foreign connection', () => { expect(foreign).toEqual([]); });
 });

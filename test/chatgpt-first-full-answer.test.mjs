@@ -11,6 +11,10 @@
 //   C) CONTROLS: flag off -> preview on call 1; flag on but /mcp (not the directory profile) or a
 //      ChatGPT call with no openai/session -> preview.
 //
+// 2026-11-23 (owner): get_grid_intelligence and get_interconnection_queue are paid-full-only
+// (lib/paid-full-only.mjs): the lane no longer serves them, so A) pins their call 1 as the flag-off preview, and
+// the lane's mechanics (B, C) are pinned on get_market_intel, the one tool it still serves.
+//
 // Harness copied from test/email-bound-decision-full.test.mjs (real handler, loopback stub backend).
 // Real /mcp handler over loopback HTTP, a 127.0.0.1 stub backend, off-loopback connects refused.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -252,8 +256,26 @@ const isFull = (r, tool) => FULL_FRAGS[tool].every((f) => JSON.stringify(r.data)
 let convN = 0;
 const freshConv = () => 'conv-cgfirst-' + (convN++) + '-' + Math.random().toString(36).slice(2);
 
+const LANE_TOOLS = TOOLS.filter((t) => t === 'get_market_intel');
+const PAID_ONLY = TOOLS.filter((t) => t !== 'get_market_intel');
 describe('A) flag on: the first answer per conversation is full, the next is the unchanged preview', () => {
-  for (const tool of TOOLS) {
+  for (const tool of PAID_ONLY) {
+    it(`${tool} (paid key only since 2026-11-23): call 1 is already the flag-off preview, no meter`, async () => {
+      await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
+        const conv = freshConv();
+        const ip = `198.51.100.${ipN++}`;
+        const r1 = await cgCall({ conv, ip }, tool, ARGS[tool]);
+        expect(isFull(r1, tool), 'call 1 is the preview\n' + r1.text.slice(0, 600)).toBe(false);
+        expect(r1.data._metered_trial, 'no first-answer meter').toBeUndefined();
+        const off = await withEnv('DCHUB_CHATGPT_FIRST_FULL', '0', () => cgCall({ conv: freshConv() }, tool, ARGS[tool]));
+        expect(Object.keys(r1.data).sort()).toEqual(Object.keys(off.data).sort());
+        // control: a Developer key gets the full answer on the same surface
+        const dev = await cgCall({ conv: freshConv(), key: KEYS.dev }, tool, ARGS[tool]);
+        expect(isFull(dev, tool), 'a Developer key is served full\n' + dev.text.slice(0, 600)).toBe(true);
+      });
+    });
+  }
+  for (const tool of LANE_TOOLS) {
     it(`${tool}: call 1 full and clean, call 2 the preview`, async () => {
       await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
         const conv = freshConv();
@@ -280,10 +302,10 @@ describe('B) per conversation, with a per-IP ceiling', () => {
   it('a second conversation from the same IP gets its own first answer', async () => {
     await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
       const ip = `198.51.100.${ipN++}`;
-      const a = await cgCall({ conv: freshConv(), ip }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      const b = await cgCall({ conv: freshConv(), ip }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(isFull(a, 'get_grid_intelligence')).toBe(true);
-      expect(isFull(b, 'get_grid_intelligence')).toBe(true);
+      const a = await cgCall({ conv: freshConv(), ip }, 'get_market_intel', ARGS.get_market_intel);
+      const b = await cgCall({ conv: freshConv(), ip }, 'get_market_intel', ARGS.get_market_intel);
+      expect(isFull(a, 'get_market_intel')).toBe(true);
+      expect(isFull(b, 'get_market_intel')).toBe(true);
     });
   });
   it('forging a new conversation per call stops at the per-IP ceiling', async () => {
@@ -293,8 +315,8 @@ describe('B) per conversation, with a per-IP ceiling', () => {
       expect(cap).toBeGreaterThan(0);
       let full = 0;
       for (let n = 0; n < cap + 2; n++) {
-        const r = await cgCall({ conv: freshConv(), ip }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-        if (isFull(r, 'get_grid_intelligence')) full++;
+        const r = await cgCall({ conv: freshConv(), ip }, 'get_market_intel', ARGS.get_market_intel);
+        if (isFull(r, 'get_market_intel')) full++;
       }
       expect(full).toBe(cap);
     });
@@ -304,26 +326,26 @@ describe('B) per conversation, with a per-IP ceiling', () => {
 describe('C) controls', () => {
   it('flag off (the default): call 1 on /mcp/chatgpt is the preview', async () => {
     await withEnv('DCHUB_CHATGPT_FIRST_FULL', undefined, async () => {
-      const r = await cgCall({ conv: freshConv() }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(isFull(r, 'get_grid_intelligence')).toBe(false);
+      const r = await cgCall({ conv: freshConv() }, 'get_market_intel', ARGS.get_market_intel);
+      expect(isFull(r, 'get_market_intel')).toBe(false);
     });
   });
   it('flag on, but /mcp (not the directory profile): preview', async () => {
     await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
-      const r = await cgCall({ path: '/mcp', conv: freshConv() }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(isFull(r, 'get_grid_intelligence')).toBe(false);
+      const r = await cgCall({ path: '/mcp', conv: freshConv() }, 'get_market_intel', ARGS.get_market_intel);
+      expect(isFull(r, 'get_market_intel')).toBe(false);
     });
   });
   it('flag on, but no openai/session on the call: preview', async () => {
     await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
-      const r = await cgCall({}, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(isFull(r, 'get_grid_intelligence')).toBe(false);
+      const r = await cgCall({}, 'get_market_intel', ARGS.get_market_intel);
+      expect(isFull(r, 'get_market_intel')).toBe(false);
     });
   });
   it('flag on, but a keyed caller (free key, no email): its own 10-08 preview, no first-answer meter', async () => {
     await withEnv('DCHUB_CHATGPT_FIRST_FULL', '1', async () => {
-      const r = await cgCall({ conv: freshConv(), key: KEYS.free }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(isFull(r, 'get_grid_intelligence'), r.text.slice(0, 600)).toBe(false);
+      const r = await cgCall({ conv: freshConv(), key: KEYS.free }, 'get_market_intel', ARGS.get_market_intel);
+      expect(isFull(r, 'get_market_intel'), r.text.slice(0, 600)).toBe(false);
       expect(r.data._metered_trial?.allowance).not.toBe('chatgpt_first_answer');
     });
   });

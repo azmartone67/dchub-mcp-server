@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
@@ -175,7 +176,15 @@ describe('DCHUB_WALL_RELAY_URL=0 is origin/main, byte for byte', () => {
         here = await call(H, p, name, args, `198.51.91.${ipN}`);
         main = await call(O, p, name, args, `198.51.91.${ipN++}`);
       } finally { delete process.env.DCHUB_WALL_RELAY_URL; delete process.env.DCHUB_KEY_PATH_NEXT; }
-      expect(same(norm(here), norm(main))).toBe(true);
+      // Owner 2026-11-23 (lib/paid-full-only.mjs): both CALLS give a full answer only to Developer and up, so until
+      // that change is on origin/main their keyless answers differ from main's on purpose. Against a main that has
+      // it, the answers are byte-identical again; against one that does not, the switch-off answer still carries no
+      // tagged wall relay link (main's carries none either), and the relay requests below must still match main's.
+      if (fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'))) expect(same(norm(here), norm(main))).toBe(true);
+      else {
+        expect(JSON.stringify(main).match(WALL_RELAY) || []).toEqual([]);
+        expect(JSON.stringify(here).match(WALL_RELAY) || []).toEqual([]);
+      }
       expect(JSON.stringify(hitsH.map((b) => b && b.relay_url)).replace(TOK, 'RELAY'))
         .toBe(JSON.stringify(hitsO.map((b) => b && b.relay_url)).replace(TOK, 'RELAY'));
     }, 120_000);

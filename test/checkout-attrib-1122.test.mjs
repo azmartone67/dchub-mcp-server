@@ -109,10 +109,13 @@ describe('server steps', () => {
       expect(c._offerFloor).toBe('clean');   // origin/main: the clean-platform exemption, before the profile check
     }
   });
+  // 2026-11-23 (owner): rank_markets is paid-full-only (lib/paid-full-only.mjs), so an email opens nothing on its wall
+  // and the floor offers the digest there. The email ask is pinned on get_water_risk, whose wall an email still opens.
+  const floorEmail = (r, c) => S._runInCtxForTest(c, () => S._wallOfferFloorStep(r, 'get_water_risk', c));
   it('s6/T10 flag on: a ChatGPT-family wall on /mcp is allowed and carries the email ask', () => on(() => {
     for (const o of [{}, { platform: 'chatgpt' }]) {
-      const c = ctx(o);
-      const out = floor(wall(), c);
+      const c = ctx({ _pendingWallHits: [{ name: 'get_water_risk', status: 'anon_hard_wall', sent: false }], ...o });
+      const out = floorEmail(wall(), c);
       expect(c._offerFloor).toBe('allowed');
       expect(textOf(out)).toContain(FLOOR_EMAIL_LEAD);
       expect(textOf(out)).toContain('bind_email');

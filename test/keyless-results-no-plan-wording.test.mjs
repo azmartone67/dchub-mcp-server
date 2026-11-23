@@ -413,13 +413,16 @@ describe('keyed callers: dchub_services and the execute_plan front-desk footers 
     expect(offenders({ content: [{ type: 'text', text: fd[0] }] })).toEqual([]);
     expect(JSON.stringify(KEYED_PLAN.site)).not.toMatch(FD_PRICING_LINK);
   });
-  it('execute_plan, keyed, real handler: the second call plans the unpaid repeat line, and it is clean', () => {
-    expect(KEYED_PLAN.repeat_first_ctx.plan, 'first call: no class, no line').toBeUndefined();
-    const planned = KEYED_PLAN.repeat_ctx.plan;
-    expect(planned && planned.cls, 'precondition: the second keyed call plans the repeat line').toBe('repeat');
-    expect(planned.service).toBe('full_depth');
-    expect(offenders({ content: [{ type: 'text', text: planned.line }] })).toEqual([]);
-    for (const r of [KEYED_PLAN.repeat, KEYED_PLAN.repeat_first]) expect(JSON.stringify(r)).not.toMatch(FD_PRICING_LINK);
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): execute_plan's full answer needs a paid key, so an email-tier key's plan
+  // is the preview and never reaches the executor's front-desk planning: neither call plans a line now. The repeat
+  // class itself stays pinned through the real planner in the next case.
+  it('execute_plan, keyed (email tier), real handler: the plan is the preview, plans no front-desk line, and is clean', () => {
+    expect(KEYED_PLAN.repeat_first_ctx.plan, 'first call: no line').toBeUndefined();
+    expect(KEYED_PLAN.repeat_ctx.plan, 'second call: no line either (the plan is a preview below a paid key)').toBeUndefined();
+    for (const r of [KEYED_PLAN.repeat, KEYED_PLAN.repeat_first]) {
+      expect(JSON.stringify(r)).not.toMatch(FD_PRICING_LINK);
+      expect(offenders(r, SCAN_OPTS)).toEqual([]);
+    }
   });
   it('every footer class, keyed and paid-keyed, through the real planner and step: present and clean', async () => {
     const intents = { site: SITE_INTENT, capacity: 'lease colocation space in Dallas', comparison: 'compare Dallas vs Phoenix',

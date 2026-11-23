@@ -9,11 +9,11 @@
 // caller, so it could not see this. This file's stub answers the way production does: the keyless payload unless the
 // call carries a key or is this server's internal read.
 //
-//   A) the direct first full answer is full (demand_24h, gen_mix, peak) and says so; call 2 is the preview.
-//   B) a first-full plan's get_grid_data step (plan token) reads the full payload too.
-//   C) its data equals what an email-bound free key gets from the same backend.
-//   D) safety net: if the payload is still the stub, the answer never says "full", is not tagged, and the seat is
-//      given back (the next call can still be the first full answer).
+// 2026-11-23 (owner): get_grid_data left the keyless first-full lane; its full answer needs a paid key. So:
+//   A) a keyless call with the lane on is the keyless view: no block, nothing charged, the series withheld.
+//   B) a plan step holding the plan flag reads the keyless view too (get_grid_data is no plan-step lane tool).
+//   C) an email-bound free key gets no series either (it left KEYED_FREE_BONUS).
+//   D) resultHeldBack, the stub detector the lane still uses for its three tools.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import * as F from '../lib/keyless-first-full.mjs';
@@ -106,86 +106,45 @@ const kffTracks = () => writes.track.filter((w) => w.status === F.KEYLESS_FIRST_
 const settle = () => new Promise((r) => setTimeout(r, 25));
 const reset = () => { backend.reads.length = 0; writes.track.length = 0; writes.consume.length = 0; };
 
-describe('A) the direct first full answer is full', () => {
-  it('call 1: the full payload, and the block that says so; call 2: the preview, no block', async () => {
+describe('A) a keyless call is the keyless view (owner 2026-11-23)', () => {
+  it('lane on: no block, the keyless read, the series withheld, nothing charged or tagged', async () => {
     reset();
     const ip = '198.18.119.1';
     const r1 = await call(seat({ client_ip: ip }));
     const h1 = head(r1);
-    expect(h1.first_full_answer).toMatchObject({ used: 1, limit: 1 });
-    expect(h1.gated, 'the first full answer is not the keyless stub').not.toBe(true);
-    expect(Array.isArray(h1.demand_24h) && h1.demand_24h.length).toBe(6);
-    expect(h1.peak_mw).toBe(61234);
-    expect(h1.gen_mix).toEqual({ NG: 0.41, WND: 0.3 });
-    expect(JSON.stringify(r1)).not.toContain(G);
-    expect(backend.reads[0].full).toBe(true);
-    const r2 = await call(seat({ client_ip: ip }));
-    const h2 = head(r2);
-    expect(h2.first_full_answer).toBeUndefined();
-    expect(r2.structuredContent?.first_full_answer).toBeUndefined();
-    expect(h2.demand_24h).toBe(G);
-    expect(backend.reads[1].full, 'the preview still reads the keyless view').toBe(false);
-    await settle();
-    expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['get_grid_data']);
-    expect(kffTracks().filter((w) => w.tool === 'get_grid_data').length).toBe(1);
-  }, 60_000);
-
-  it('the lane off: the keyless view, as before', async () => {
-    reset();
-    process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
-    const r = await call(seat({ client_ip: '198.18.119.2' }));
-    expect(head(r).first_full_answer).toBeUndefined();
-    expect(backend.reads.map((x) => x.full)).toEqual([false]);
-  }, 60_000);
-});
-
-describe('B) a first-full plan step reads the full payload', () => {
-  it('with the plan token: full; without it: the keyless view', async () => {
-    reset();
-    const full = head(await call(seat({ loopback_step: true, plan_first_full: true, session_id: null })));
-    expect(Array.isArray(full.demand_24h)).toBe(true);
-    expect(full.gated).not.toBe(true);
-    const prev = head(await call(seat({ loopback_step: true, session_id: null })));
-    expect(prev.demand_24h).toBe(G);
-    expect(backend.reads.map((x) => x.full)).toEqual([true, false]);
-  }, 60_000);
-
-  it('a step in the email_depth arm (M2.2) reads the full payload too: it takes the email-bound key\'s depth', async () => {
-    reset();
-    const h = head(await call(seat({ loopback_step: true, plan_first_full: true, kff_arm: 'email_depth', session_id: null })));
-    expect(Array.isArray(h.demand_24h)).toBe(true);
-    expect(backend.reads.map((x) => x.full)).toEqual([true]);
-  }, 60_000);
-});
-
-describe('C) never above the email-bound free key', () => {
-  it('the first answer\'s data = the email-bound key\'s', async () => {
-    const keyed = head(await call(seat({ api_key: `dch_live_kffgd_parity_${n}`, tier: 'free', email: 'kff@example.com' })));
-    const first = head(await call(seat({ client_ip: '198.18.119.3' })));
-    expect(first.first_full_answer).toBeDefined();
-    expect(dataOf(first)).toEqual(dataOf(keyed));
-  }, 60_000);
-});
-
-describe('D) a payload that is still the stub never says "full"', () => {
-  it('no block, no funnel tag, nothing durable; the seat is given back', async () => {
-    reset();
-    backend.stubAlways = true;
-    const ip = '198.18.119.4';
-    const r1 = await call(seat({ client_ip: ip }));
-    expect(head(r1).gated).toBe(true);
-    expect(head(r1).first_full_answer).toBeUndefined();
+    expect(h1.first_full_answer).toBeUndefined();
     expect(r1.structuredContent?.first_full_answer).toBeUndefined();
-    expect(JSON.stringify(r1)).not.toMatch(/today[’']s full `get_grid_data` answer/);
+    expect(Array.isArray(h1.demand_24h) && h1.demand_24h.length).toBeFalsy();
+    expect(JSON.stringify(r1)).not.toContain('61234');
+    expect(backend.reads.map((x) => x.full)).toEqual([false]);
     await settle();
     expect(kffConsumes(ip)).toEqual([]);
     expect(kffTracks()).toEqual([]);
-    backend.stubAlways = false;
-    const r2 = await call(seat({ client_ip: ip }));
-    expect(head(r2).first_full_answer, 'the seat came back').toMatchObject({ used: 1 });
-    expect(Array.isArray(head(r2).demand_24h)).toBe(true);
   }, 60_000);
+});
 
+describe('B) a plan step holding the plan flag reads the keyless view', () => {
+  it('plan_first_full (with or without the M2.2 arm): the keyless read, no series', async () => {
+    reset();
+    for (const over of [{}, { kff_arm: 'email_depth' }]) {
+      const h = head(await call(seat({ loopback_step: true, plan_first_full: true, session_id: null, ...over })));
+      expect(Array.isArray(h && h.demand_24h) && h.demand_24h.length, JSON.stringify(over)).toBeFalsy();
+    }
+    expect(backend.reads.map((x) => x.full)).toEqual([false, false]);
+  }, 60_000);
+});
+
+describe('C) an email-bound free key gets the preview too', () => {
+  it('no 24h series, no peak, no generation mix', async () => {
+    const r = await call(seat({ api_key: `dch_live_kffgd_parity_${n}`, tier: 'free', email: 'kff@example.com' }));
+    const t = JSON.stringify(r);
+    expect(t).not.toContain('61234');
+    expect(t).not.toContain('"WND":0.3');
+    expect(t).not.toContain('50300');
+  }, 60_000);
+});
+
+describe('D) the stub detector', () => {
   it('resultHeldBack reads block 0 and structuredContent, and nothing else', () => {
     const txt = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
     expect(F.resultHeldBack(txt({ gated: true }))).toBe(true);

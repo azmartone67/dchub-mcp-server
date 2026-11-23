@@ -156,6 +156,12 @@ const prose = (r) => (res(r).content || []).map((b) => (b && b.text) || '').join
 // What differs between two runs of one call by design: relay tokens, timestamps, ids, timings.
 const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/https:\/\/dchub\.cloud\/(upgrade\/h\/[A-Za-z0-9_.-]+|u\/[A-Za-z0-9]+)(?:\?[^"\s\\]*)?/g, 'RELAY')
+  // The r-arms split (server.mjs composeHumanCta, continuationArmFor) draws the human line's arm per session: the
+  // treatment names what is held back ("the full DC Hub answer has `projects` for this query — open RELAY to see it and
+  // unlock."), the control is the generic line. Two calls are two sessions, so the arm is not this flag's difference.
+  // Owner 2026-11-23: grid and queue walls are depth walls now and carry that line where the email unlock line was.
+  .replace(/the full DC Hub answer has [^"\\]*? (?:— open RELAY to see it and unlock\.)/g, 'ARM_LINE')
+  .replace(/open RELAY — see what your agent found and how to unlock it\./g, 'ARM_LINE')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
   // The spoken cite's time of day (Grok 2026-11-23 item 1, lib/cite-day.mjs: "as of YYYY-MM-DD", never a time) is not
   // this flag's: only the "THH:MMZ" suffix after "as of" is dropped, so the day itself still compares.
@@ -221,7 +227,11 @@ describe('flag on: the headline reaches the wall', () => {
     expect(b.taste.cite_as).toBe('DC Hub (dchub.cloud), collected 2026-10-07');
     expect(b.projects).toBeUndefined();
     expect(JSON.stringify(b)).not.toContain('Project 0');
-    expect(prose(r)).toContain('PJM queued generation 373.4 GW (generation interconnection queue (requested generation; not load), collected 2026-10-07)');
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the queue is paid-full-only, so its keyless wall carries no email claim
+    // block, and the "Give your user this answer first: ..." line rode that block (lib/claim-handoff.mjs
+    // ANSWER_FIRST_LEAD). The collected date still reaches the agent on the taste (above) and in the cite_as.
+    expect(prose(r)).not.toContain('Give your user this answer first: PJM queued generation');
+    expect(prose(r)).toContain('"cite_as":"DC Hub (dchub.cloud), collected 2026-10-07"');
     expect(r.bytes).toBeLessThan(ANSWER_BUDGET_DEFAULT_BYTES);
   });
   for (const [label, opts] of [['keyless', {}], ['trial key', { key: TRIAL }], ['over the soft cap', { anon: 25 }]]) {
@@ -294,13 +304,13 @@ describe('flag on leaves alone what already had its headline, and the surfaces i
   it('grid: the taste already carried demand + share with their hours and source', async () => {
     const [on, off, ask] = await same('get_grid_intelligence', { region_id: 'PJM' });
     expect(on).toBe(off);
-    expect(ask).toBe(true);   // keyless wall: #1604's email_ask
+    expect(ask).toBe(false);   // owner 2026-11-23: grid is paid-only, so the keyless wall carries no email unlock ask
     expect(on).toContain('"demand_mw"');
   });
   it('queue, report-dated ISO (ERCOT): already dated', async () => {
     const [on, off, ask] = await same('get_interconnection_queue', { iso: 'ERCOT' });
     expect(on).toBe(off);
-    expect(ask).toBe(true);
+    expect(ask).toBe(false);   // owner 2026-11-23: queue is paid-only, no email unlock ask
     expect(on).toContain('2026-09-30');
   });
   // The last field: whether #1604's email_ask lands there (a ChatGPT surface and a paid key: never; a free key's wall: yes).
@@ -330,17 +340,28 @@ describe('who the server hands it to (server.mjs _headlinePreviewSeat)', () => {
   });
 });
 
-describe('flag off is origin/main, byte for byte (git-ref sandbox)', () => {
+// ★ Owner 2026-11-23 (lib/paid-full-only.mjs): grid, queue and execute_plan are paid-full-only, so their keyless walls
+// no longer offer an email unlock (bind_email / "an email opens ..."), and the wall copy differs from origin/main by
+// design until this merges. What this headline flag must not move is the data the wall publishes, so the flag-off
+// comparison with origin/main is now on the published figures (taste + withheld; totals; a plan's facts), with the
+// relay/timestamp normalisation above, and each wall is pinned to carry no email-unlock promise.
+const PUBLISHED = { get_grid_intelligence: ['taste', 'withheld'], get_interconnection_queue: ['taste', 'withheld', 'totals'], execute_plan: ['facts'] };
+const EMAIL_UNLOCK = /A key with a bound email gets full|Share your email and DC Hub opens more of this answer|"unlock_tool":\s*"bind_email"/;
+describe('flag off is origin/main on the published figures; no email unlock on a paid-only wall (git-ref sandbox)', () => {
   for (const [label, tool, args] of [['grid', 'get_grid_intelligence', { region_id: 'PJM' }],
     ['queue PJM', 'get_interconnection_queue', { iso: 'PJM' }], ['queue all-ISO', 'get_interconnection_queue', {}],
     ['execute_plan', 'execute_plan', PLAN]]) {
     it(`${label}`, async () => {
+      const here = await call(H, tool, args, { sid: 'hp-cmp-' + label });
+      { const all = prose(here) + JSON.stringify(json0(here)); const m = EMAIL_UNLOCK.exec(all);
+        expect(m, m ? all.slice(Math.max(0, m.index - 300), m.index + 300) : '').toBeNull(); }
       if (!O) { console.warn(`[headline-preview] origin/main comparison not run: ${why}`); return; }
       // The same call number on both sides keeps the ids and IPs aligned.
-      const here = await call(H, tool, args, { sid: 'hp-cmp-' + label });
       n -= 1;
       const main = await call(O, tool, args, { sid: 'hp-cmp-' + label });
-      expect(norm(here)).toBe(norm(main));
+      const pick = (r) => { const b = json0(r); const o = {}; for (const k of PUBLISHED[tool]) if (k in b) o[k] = b[k]; return norm({ msg: o }); };
+      expect(Object.keys(JSON.parse(pick(here))).length, 'something published to compare').toBeGreaterThan(0);
+      expect(pick(here)).toBe(pick(main));
     }, 120_000);
   }
 });

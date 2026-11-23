@@ -18,13 +18,12 @@
 //     daily allowance is made of).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-// 2026-11-16 (owner, Grok Note K): the rule leads with the keyless first full answer and no longer
-// sells the free key, so it reads the same under either free-key shape (the free-key copy below still
-// follows the shape). Byte for byte dchub-backend ai_surface_canon PINNED['free_tier_rule'].
-const B1_SENTENCE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-  + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-  // 2026-11-21: byte for byte the backend pin after Note F option A (no email allowance, no pricing pointer).
-  + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
+// 2026-11-16 (owner, Grok Note K): the rule no longer sells the free key, so it reads the same under either
+// free-key shape (the free-key copy below still follows the shape). 2026-11-23 (owner): the keyless first full
+// answer lane serves no tool (lib/paid-full-only.mjs), so its "No key needed: the first call each UTC day ..."
+// clause is gone and the rule starts at the key clause. The backend pin (dchub-backend ai_surface_canon
+// PINNED['free_tier_rule']) still carries that clause and needs the matching change.
+const B1_SENTENCE = 'A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
   + 'More detail is available at dchub.cloud/connect.';
 const LIFETIME = {
   calls_per_day: { identified: 50 },
@@ -65,8 +64,8 @@ describe('B1 free-key copy follows the published shape', () => {
     expect(TC._freeKeyIsDaily(DAILY)).toBe(true);
     expect(TC._freeTierRuleText(DAILY)).toBe(B1_SENTENCE);
     // Owner 2026-11-20 (C(a)): the free-key line carries the email qualifier.
-    expect(TC._freeKeyOfferText(DAILY)).toBe('previews plus 2 full answers per tool per day (grid, queue and market intel need an email)');
-    expect(TC._freeKeyAllowanceText(DAILY)).toBe('previews plus 2 full answers per tool per day (grid, queue and market intel need an email), 50/day with an email');
+    expect(TC._freeKeyOfferText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email; the ten paid tools stay previews)');
+    expect(TC._freeKeyAllowanceText(DAILY)).toBe('previews plus 2 full answers per tool per day (market intel needs an email; the ten paid tools stay previews), 50/day with an email');
     for (const t of [TC._freeKeyAllowanceText(DAILY), TC._unboundKeyLadderText(DAILY), B1_SENTENCE]) {
       expect(t).not.toMatch(/calls to try|calls total|n\/a|undefined|NaN|—/);
     }
