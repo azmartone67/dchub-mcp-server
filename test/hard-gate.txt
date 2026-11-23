@@ -602,6 +602,8 @@ test/planner-547-siting-oldest-input.test.mjs
 test/planner-548-market-lead-first.test.mjs
 test/planner-559-named-markets-on-grid-plans.test.mjs
 test/planner-561-site-hunt.test.mjs
+test/planner-562-answer-quality.test.mjs
+test/planner-562-e2e.test.mjs
 test/planner-dallas-capacity-near-cut.test.mjs
 test/planner-dcpi-one-market-1122.test.mjs
 test/planner-eval.test.mjs
