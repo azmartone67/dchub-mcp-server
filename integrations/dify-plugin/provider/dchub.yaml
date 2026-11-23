@@ -1,0 +1,30 @@
+identity:
+  author: "dchub"
+  name: "dchub"
+  label:
+    en_US: "DC Hub"
+  description:
+    en_US: "Data center and energy intelligence: Data Center Power Index (DCPI), grid conditions, interconnection queues, fiber, facilities and site context, with dated citations."
+  icon: "icon.png"
+  tags:
+    - business
+    - search
+credentials_for_provider:
+  dchub_api_key:
+    type: secret-input
+    required: false
+    label:
+      en_US: DC Hub API key (optional)
+    placeholder:
+      en_US: Leave empty to use DC Hub without a key
+    help:
+      en_US: Optional. Without a key some figures return at preview depth and the answer says so. A key returns fuller answers.
+    url: https://dchub.cloud/connect
+tools:
+  - tools/ask_dchub.yaml
+  - tools/dcpi_verdict.yaml
+  - tools/interconnection_queue.yaml
+  - tools/grid_conditions.yaml
+extra:
+  python:
+    source: provider/dchub.py
