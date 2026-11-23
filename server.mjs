@@ -19053,7 +19053,10 @@ function _buildQuotaHint(toolName) {
         c.api_key, IDENTIFIED_DAILY_FULL_CAP);
       q.full_answers_basis = 'email-bound key: ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + toolName
         + '` answers per UTC day, counted on this key';
-    } else if (_freePreviewOnlyTool(toolName) && !_isPaidDepthTier(c && c.tier)) {
+    } else if ((_freePreviewOnlyTool(toolName) || _isPaidFullOnly(toolName)) && !_isPaidDepthTier(c && c.tier)) {
+      // Owner 2026-11-23 (lib/paid-full-only.mjs): a paid-full-only tool is a preview on every non-paid seat too.
+      // ai_capacity_index and rank_markets are also ALWAYS_PARTIAL_PREVIEW, so without this they fell to the
+      // budget branch below and a free key read `2 of 2 full answers left` on every preview: a frozen meter.
       // Owner 2026-10-08: no budget exists for a preview-only decision tool on a
       // non-paid seat, so no meter is shown — a meter that can never be spent is
       // the frozen-meter defect the block below was written against.

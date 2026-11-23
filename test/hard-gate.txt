@@ -535,6 +535,7 @@ test/pack-buys-depth.test.mjs
 test/pack-canon-all-tools.test.mjs
 test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
+test/paid-full-only-meter-1123.test.mjs
 test/paid-lift-in-session.test.mjs
 test/paid-only-plan-and-grid-data-1123.test.mjs
 test/paid-only-six-more-tools-1123.test.mjs
