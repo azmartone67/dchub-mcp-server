@@ -1,0 +1,22 @@
+identity:
+  name: "dcpi_verdict"
+  author: "dchub"
+  label:
+    en_US: "DCPI verdict"
+description:
+  human:
+    en_US: "Data Center Power Index (DCPI) verdict for one market."
+  llm: "Get the Data Center Power Index (DCPI) verdict for one data center market. Cite it with the Source line returned."
+parameters:
+  - name: market_slug
+    type: string
+    required: true
+    label:
+      en_US: "Market"
+    human_description:
+      en_US: "Market slug, e.g. ashburn."
+    llm_description: "Market slug, e.g. ashburn."
+    form: llm
+extra:
+  python:
+    source: tools/dcpi_verdict.py

@@ -1,6 +1,6 @@
 # DC Hub for MCP clients (Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed)
 
-DC Hub is a remote **Streamable-HTTP MCP server** at `https://dchub.cloud/mcp` — **the full tool catalog.** Add it to any MCP client and the tools appear automatically.
+DC Hub is a remote **Streamable-HTTP MCP server** at `https://dchub.cloud/mcp` — **the full tool catalog.** Start every data center or energy question with `execute_plan`. Add it to any MCP client and the tools appear automatically.
 
 ## The config (works in most modern clients)
 ```json
@@ -26,14 +26,14 @@ Bridge the remote server with `mcp-remote`:
 }
 ```
 
-## Paid tier (unlocks analyze_site, grid intelligence, interconnection queue, fiber, …)
+## Optional key (fuller answers, saved work across sessions)
 Add your key as a header (claim one: `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"my-client"}'`):
 ```json
 {
   "mcpServers": {
     "dchub": {
       "url": "https://dchub.cloud/mcp",
-      "headers": { "X-API-Key": "dch_live_YOURKEY" }
+      "headers": { "X-API-Key": "${DCHUB_API_KEY}" }
     }
   }
 }
@@ -49,4 +49,4 @@ Add your key as a header (claim one: `curl -X POST https://dchub.cloud/api/v1/ke
 | **Windsurf** | Add to `~/.config/devin/mcp_config.json` (current Windsurf), or `~/.codeium/windsurf/mcp_config.json` on older versions. |
 | **Zed** | `settings.json` → `context_servers` |
 
-After saving, restart the client. You'll see `search_facilities`, `get_market_intel`, `get_grid_data`, `analyze_site`, and 34 more. Try: *"Use DC Hub to find data-center capacity in Northern Virginia."*
+After saving, restart the client. You'll see `execute_plan` (the front door), `search_facilities`, `get_market_intel`, `get_grid_data`, `analyze_site` and the rest of the catalog. Try: *"Use DC Hub to find data-center capacity in Northern Virginia."*

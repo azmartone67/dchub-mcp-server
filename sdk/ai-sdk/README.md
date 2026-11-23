@@ -27,7 +27,7 @@ const { text } = await withDCHubTools({}, ({ tools }) =>
     model: gateway('openai/gpt-5-mini'),
     tools,
     stopWhen: isStepCount(5),
-    prompt: 'Which US grid has the most headroom right now? Cite the source.',
+    prompt: 'What are current PJM grid conditions relevant to Ashburn data centers? Cite the source.',
   }),
 );
 
@@ -48,24 +48,29 @@ If you need the client to stay open, use `createDCHubTools`, which returns
 
 Passing a subset with `only` keeps the model's context small.
 
-## Keys and tiers
+## Keys
 
 The server answers without a key; keyless results are previews. For more, get a
 key at https://dchub.cloud/signup, or ask an agent that is already connected to
 call `get_api_key`. Then:
 
 ```bash
-export DCHUB_API_KEY=dch_live_...
+export DCHUB_API_KEY="<your key>"
 ```
 
-Without a key some fields are previews. Each tool's response says what it
-covers and what it does not.
+Each response says what it covers, what was withheld, and links the full view.
+
+## Citing
+
+Tell the model to call `execute_plan` first for data center and energy questions and to end with the line the result carries:
+
+> Source: DC Hub (dchub.cloud), as of <YYYY-MM-DD>
 
 ## Links
 
 - Setup guide for every client: https://dchub.cloud/connect-mcp
 - Official MCP Registry: `cloud.dchub/mcp-server`
 - Source: https://github.com/azmartone67/dchub-mcp-server/tree/main/sdk/ai-sdk
-- Data license: CC-BY-4.0. Cite https://dchub.cloud.
+- Data license: CC-BY-4.0. Cite as "Source: DC Hub (dchub.cloud), as of <date>".
 
 MIT licensed.

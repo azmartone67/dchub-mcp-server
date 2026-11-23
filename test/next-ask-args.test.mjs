@@ -302,7 +302,10 @@ describe('next_ask args on /mcp', () => {
     // shown (mcp#1564 follow-up): the served call's own row names the next_ask it carried
     const first = tracked.find((t) => t.tool === 'get_grid_data' && t.session_id === s.sid);
     const p0 = typeof first.params === 'string' ? JSON.parse(first.params) : first.params;
-    expect(p0).toEqual({ iso: 'PJM', _next_ask_to: 'get_interconnection_queue' });
+    // Brain 2026-11-23 item 6: the row also carries the answer-quality marks (lib/answer-quality.mjs), checked on its own.
+    const { _aq: aq0, ...p0rest } = p0;
+    expect(p0rest).toEqual({ iso: 'PJM', _next_ask_to: 'get_interconnection_queue' });
+    expect(Number.isInteger(aq0 && aq0.wall_ms)).toBe(true);
     expect(params._next_ask_to).toBe('get_energy_prices');
   }, 60_000);
 
