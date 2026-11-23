@@ -109,13 +109,13 @@ class ExecutePlanInput(BaseModel):
     intent: str = Field(
         description=(
             "The user's question, passed through unchanged, for example "
-            "'compare Dallas vs Phoenix for a 100 MW AI campus'."
+            "'compare Ashburn vs Columbus for a 100 MW AI campus'."
         )
     )
     market: str | None = Field(
         default=None, description="Metro slug or name to pin the analysis to, e.g. 'ashburn'."
     )
-    iso: str | None = Field(default=None, description="ISO/RTO code, e.g. 'PJM' or 'ERCOT'.")
+    iso: str | None = Field(default=None, description="ISO/RTO code, e.g. 'PJM' or 'CAISO'.")
     state: str | None = Field(default=None, description="US state code, e.g. 'VA'.")
     capacity_mw: float | None = Field(default=None, description="Target capacity in MW.")
     lat: float | None = Field(default=None, description="Latitude of a specific site.")
@@ -158,7 +158,7 @@ class SearchFacilitiesInput(BaseModel):
 
     query: str | None = Field(
         default=None,
-        description="Free text over facility name, operator and location, e.g. 'Ashburn'.",
+        description="Plain text over facility name, operator and location, e.g. 'Ashburn'.",
     )
     country: str | None = Field(
         default=None, description="ISO 3166-1 alpha-2 country code, e.g. 'US', 'GB', 'SG'."
@@ -192,7 +192,7 @@ class DCHubSearchFacilities(DCHubBaseTool):
     description: str = (
         "Use this when the user asks which data centers exist or who operates in a "
         "city, state or country. Filters: country, state, city, operator, MW range "
-        "or free text. Returns name, operator, location, market and status, with MW "
+        "or plain text. Returns name, operator, location, market and status, with MW "
         "where disclosed. No match returns empty data: broaden the filters."
     )
     args_schema: type[BaseModel] = SearchFacilitiesInput
@@ -269,7 +269,7 @@ class DCHubGridData(DCHubBaseTool):
 
     Invocation with args:
         ```python
-        tool.invoke({"iso": "ERCOT"})
+        tool.invoke({"iso": "PJM"})
         ```
     """
 
@@ -303,7 +303,7 @@ class SourceCapacityInput(BaseModel):
         ),
     )
     location: str | None = Field(
-        default=None, description="Free text matched to region, country, state and metro."
+        default=None, description="Plain text matched to region, country, state and metro."
     )
     market: str | None = Field(default=None, description="Market name, e.g. 'Dallas'.")
     state: str | None = Field(default=None, description="Two-letter US state, e.g. 'TX'.")

@@ -25,7 +25,7 @@ A key keeps saved shortlists, alerts and get_changes (tracked changes) working a
 Get an API key at <https://dchub.cloud/signup> (or call `claim_free_key`, which returns an API key), then:
 
 ```bash
-export DCHUB_API_KEY="dch_live_..."
+export DCHUB_API_KEY="<your key>"
 ```
 
 A preview result says which fields were withheld (a `_withheld` suffix) and ends with a
@@ -38,13 +38,13 @@ invent the withheld numbers.
 from langchain_dchub import DCHubGridData
 
 tool = DCHubGridData()
-print(tool.invoke({"iso": "ERCOT"}))
+print(tool.invoke({"iso": "PJM"}))
 ```
 
 | Class | Tool name | What it answers |
 |---|---|---|
 | `DCHubExecutePlan` | `dchub_execute_plan` | A multi-part question (markets, power, queues, fiber, incentives, risk) planned and answered in one call |
-| `DCHubSearchFacilities` | `dchub_search_facilities` | Which data centers exist, and who operates them, by country, state, city, operator, MW or free text |
+| `DCHubSearchFacilities` | `dchub_search_facilities` | Which data centers exist, and who operates them, by country, state, city, operator, MW or plain text |
 | `DCHubMarketIntel` | `dchub_get_market_intel` | One market: facility count, tracked MW, status mix, top providers, lease pricing and its basis |
 | `DCHubGridData` | `dchub_get_grid_data` | Live grid demand, 24-hour curve and fuel mix for US ISOs, utility BAs and many non-US grids |
 | `DCHubSourceCapacity` | `dchub_source_capacity` | Capacity to buy or lease (powered land, powered shell, turnkey, colocation) by size and location |
@@ -86,10 +86,13 @@ from langchain_dchub import DCHubToolkit
 agent = create_agent(
     model="claude-sonnet-4-6",  # pip install "langchain[anthropic]"
     tools=DCHubToolkit().get_tools(),
-    system_prompt="Answer with DC Hub data. Cite DC Hub (dchub.cloud) and the as_of date.",
+    system_prompt=(
+        "For data center and energy questions, call dchub_execute_plan first with the user's question. "
+        "Keep each as-of date and end with: Source: DC Hub (dchub.cloud), as of <date>."
+    ),
 )
 result = agent.invoke(
-    {"messages": [{"role": "user", "content": "How much grid headroom does ERCOT have right now?"}]}
+    {"messages": [{"role": "user", "content": "What are current PJM grid conditions relevant to Ashburn data centers?"}]}
 )
 print(result["messages"][-1].content)
 ```
@@ -107,7 +110,9 @@ Any chat model with tool calling works; swap the `model` string for your provide
 
 ## Citing
 
-Attribute figures to DC Hub (dchub.cloud) with the `as_of` date the result carries.
+Attribute figures to DC Hub with the date the result carries, in this form:
+
+> Source: DC Hub (dchub.cloud), as of <YYYY-MM-DD>
 
 ## Development
 
