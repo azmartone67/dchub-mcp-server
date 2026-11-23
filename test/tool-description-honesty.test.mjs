@@ -51,6 +51,7 @@ let S, PORT, httpServer, stub, STUB_PORT, TOOLS;
 // What the stubbed /gas-to-grid endpoint returns next. Each test sets it.
 let g2gPayload = {};
 let pricingPayload = {};
+let freshnessPayload = {};
 
 beforeAll(async () => {
   stub = http.createServer((req, res) => {
@@ -58,6 +59,7 @@ beforeAll(async () => {
     res.writeHead(200, { 'content-type': 'application/json' });
     if (url.includes('/gas-to-grid')) return res.end(JSON.stringify(g2gPayload));
     if (url.includes('/gas-pricing')) return res.end(JSON.stringify(pricingPayload));
+    if (url.includes('/api/health/data-freshness')) return res.end(JSON.stringify(freshnessPayload));
     return res.end('{}');            // telemetry, key validation, anything else
   });
   await new Promise((r) => stub.listen(0, '127.0.0.1', r));
@@ -217,24 +219,62 @@ describe('get_gas_economics forwards gas_to_grid_status', () => {
 
 // ── the two descriptions that outlived their endpoint ───────────────────────
 describe('get_backup_status describes the endpoint it actually reads', () => {
+  // 2026-11-23: /api/health/data-freshness now serves a `backup` block (the
+  // latest Cloudflare R2 pg_dump and the latest restore test) beside the feed
+  // rows, so the description names both. Agents read the feed-only wording as
+  // "no backup data here". The fields the 2026-09-01 description invented are
+  // still not served and stay forbidden, as are DR / uptime claims.
   const GONE = [
-    [/database backup status/i,        'database backup state'],
-    [/heartbeat score/i,               'agentic heartbeat score'],
-    [/call volume/i,                   'MCP call volume'],
-    [/recompute cadence/i,             'DCPI recompute cadence'],
-    [/\b49 sources\b/i,                'a hardcoded source count'],
+    [/heartbeat score/i,                         'agentic heartbeat score'],
+    [/call volume/i,                             'MCP call volume'],
+    [/recompute cadence/i,                       'DCPI recompute cadence'],
+    [/\b49 sources\b/i,                         'a hardcoded source count'],
+    [/disaster[- ]recovery|\bDR\b|\bRPO\b|\bRTO\b/, 'disaster-recovery telemetry'],
+    [/uptime|availability (?:sla|percent)/i,     'platform uptime'],
+    [/point[- ]in[- ]time|\bPITR\b|replica/i,    'point-in-time recovery or replicas'],
   ];
   for (const [re, what] of GONE) {
-    it(`no longer claims ${what}`, () => {
-      expect(descOf('get_backup_status'), `still promises ${what}, which /api/health/data-freshness does not serve`)
+    it(`does not claim ${what}`, () => {
+      expect(descOf('get_backup_status'), `promises ${what}, which /api/health/data-freshness does not serve`)
         .not.toMatch(re);
     });
   }
-  it('still says something useful (anti-vacuous control)', () => {
+  it('names the R2 backup and the restore test the endpoint serves', () => {
+    const d = descOf('get_backup_status');
+    expect(d).toMatch(/Cloudflare R2/);
+    expect(d).toMatch(/pg_dump/);
+    expect(d).toMatch(/last_backup_at/);
+    expect(d).toMatch(/restore_test/);
+    expect(d).toMatch(/passed or failed/);
+  });
+  it('still says something useful about feeds (anti-vacuous control)', () => {
     const d = descOf('get_backup_status');
     expect(d).toMatch(/freshness/i);
+    expect(d).toMatch(/refresh_interval/);
     expect(d).toMatch(/get_changes/);              // still routes the neighbouring question
     expect(d.length).toBeGreaterThan(200);         // not emptied to pass the rules above
+  });
+  // The pairing invariant: every backup field the description names must reach
+  // the caller. The handler is a passthrough today; this fails if it ever
+  // starts trimming the payload to the feed rows.
+  it('the backup fields the description NAMES are fields the tool RETURNS', async () => {
+    freshnessPayload = {
+      backup: {
+        last_backup_at: '2026-11-22T09:43:26Z', age_hours: 21.8, size_mb: 4239.9, health: 'healthy',
+        object_key: 'neon_backup_20261122_093506.sql.gz', storage: 'Cloudflare R2',
+        restore_test: { at: '2026-11-16T11:41:35Z', object_key: 'neon_backup_20261116_094430.sql.gz', result: 'passed', stale: false },
+      },
+      feeds: [], summary: { total_feeds: 0 },
+    };
+    const out = await callTool('get_backup_status', {});
+    const d = descOf('get_backup_status');
+    for (const f of ['last_backup_at', 'age_hours', 'size_mb', 'health', 'object_key', 'storage']) {
+      expect(d, `control: description names ${f}`).toContain(f);
+      expect(out.backup && out.backup[f], `backup.${f} reaches the caller`).toBeDefined();
+    }
+    expect(out.backup.restore_test.result).toBe('passed');
+    expect(out.backup.restore_test.at).toBeDefined();
+    expect(out.backup.restore_test.object_key).toBeDefined();
   });
 });
 
