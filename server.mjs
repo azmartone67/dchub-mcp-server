@@ -178,6 +178,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
+import * as _PR from './lib/plan-report.mjs';
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
@@ -5882,6 +5883,31 @@ const _CWR = _CW.createRuntime({
 });
 export const _setCommercialWallSeamsForTest = (seams) => _CWR.setSeams(seams);
 export const _commercialWallStep = (result, name, args, c = getCtx()) => _CWR.commercialWallStep(result, name, args, c);
+// Plan report link (lib/plan-report.mjs, flag DCHUB_PLAN_REPORT_LINK, default OFF): the /r/a/<id> page of a finished
+// execute_plan answer. Not /mcp/chatgpt or /mcp/claude (frozen reviewed copy), a clean platform or a loopback step.
+let _planReportMint = (body) => _mintPlanReport(body);
+export const _setPlanReportMintForTest = (fn) => { _planReportMint = fn || ((body) => _mintPlanReport(body)); };
+export async function _mintPlanReport(body, timeoutMs = _PR.PLAN_REPORT_TIMEOUT_MS) {
+  if (!API_BASE || !INTERNAL_KEY) return null;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(new URL('/api/v1/plan-report/mint', API_BASE).toString(), { method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY }, body: JSON.stringify(body) });
+    if (!r || r.status !== 200) return null;
+    return await r.json();
+  } catch (_) { return null; } finally { clearTimeout(t); }
+}
+export async function _planReportStep(result, name, c = getCtx()) {
+  if (name !== 'execute_plan' || !_PR.planReportOn()) return result;
+  return _PR.planReportStep(result, name, {
+    skip: !c || !!c.loopback_step || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || _isCleanPlatform(),
+    mint: (body) => _planReportMint(body),
+    client: String((c && c.platform) || 'unknown').slice(0, 40),
+    callerClass: _planCallerPaid(c) ? 'paid' : (c && c.api_key ? 'keyed' : 'keyless'),
+    isQa: _isQaCaller(c) || isBotOrInternalCtx(c),
+  });
+}
 export const _setHandoffResolveLookupForTest = (fn) => _CWR.setLookup(fn);
 export const _handoffResolveEnter = (c, name) => _CWR.handoffResolveEnter(c, name);
 export const _accessStatusTool = (c = getCtx(), o) => _CWR.accessStatusTool(c, o);
@@ -27804,6 +27830,9 @@ function _sourceLineCb(name, fn) {
       _final = await _commercialWallStep(_final, name, args, c);
       // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
       // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
+      // Plan report link (DCHUB_PLAN_REPORT_LINK, default OFF): report_url + one closing line, minted from the
+      // answer exactly as this caller received it (lib/plan-report.mjs). After every rewrite above, before the aref.
+      _final = await _planReportStep(_final, name, c);
       _final = _arefLinksStep(_final, name, c);
       return _final;
     } finally {
