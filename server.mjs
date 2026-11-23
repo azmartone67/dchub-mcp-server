@@ -29437,8 +29437,6 @@ function trackedTool(srv, name, description, schema, handler) {
           // wall → quit" to "see it works → upgrade".
           const _alwaysPreview = KEYED_FREE_BONUS.has(name)
                                   || ALWAYS_PARTIAL_PREVIEW.has(name)
-                                  // the paid-only tools (owner 2026-11-23, lib/paid-full-only.mjs): a preview on every call.
-                                  || _PAID_FULL_GATED_LIST.includes(name)
                                   // r-site-headline: analyze_site returns its REAL headline on
                                   // EVERY free call (keyed or anon), not once-per-session — the
                                   // "trigger habit" goal for the killer site query. The headline
@@ -29466,7 +29464,9 @@ function trackedTool(srv, name, description, schema, handler) {
           // the first post-purchase call: test/paid-lift-in-session.test.mjs went
           // red with the lifted tool still masked. These consult trial-check and
           // then force the preview, so the lift is still seen.
-          const _fwePreview = !_alwaysPreview && isFreeWithEmailTool(name);
+          // The paid-only tools (owner 2026-11-23, lib/paid-full-only.mjs) take this branch too: a preview on every
+          // call, but trial-check is still consulted, so a purchase made mid-session (tier_upgrade) lifts them.
+          const _fwePreview = !_alwaysPreview && (isFreeWithEmailTool(name) || _PAID_FULL_GATED_LIST.includes(name));
           // r-mpp-advertise (2026-06-21): soft-advertise the $0.50 MPP pay-per-call
           // option in the deep-tool preview's structuredContent. {} for non-MPP tools
           // or when MPP is off, so humans see no change.
@@ -29515,6 +29515,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
                 const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedProK, _emailFullSeat(c));
                 if (_gateK.allowed) {
+                  try { c._gate_tier_seen = _gateTier; } catch (_) { /* the bound tier, for _timelineFullSeat */ }
                   const _resK = await handler(args);
                   // r-bind-midcall-mask: `masked` is the gate letting a free/identified
                   // KEY through on the promise that the answer is projected to the free
@@ -29558,6 +29559,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedPro2);
                 if (_gate2.allowed) {
+                  try { c._gate_tier_seen = _gateTier; } catch (_) { /* the lifted tier, for _timelineFullSeat */ }
                   // r-location-tier: this branch lifts _gateTier but not c.tier, so
                   // the location gate would read the pre-purchase tier. Carry the
                   // purchase on the result instead.
