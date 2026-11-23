@@ -227,6 +227,7 @@ test/email-benefit-leads-1023.test.mjs
 test/email-bound-decision-full.test.mjs
 test/email-entered.test.mjs
 test/email-hint-after-taste.test.mjs
+test/email-nudge-once-1123.test.mjs
 test/email-tools-data-use.test.mjs
 test/ember-monthly-global-power.test.mjs
 test/end-of-burst-hook.test.mjs
@@ -395,6 +396,7 @@ test/keyless-results-no-plan-wording.test.mjs
 test/keyless-return-ask.test.mjs
 test/keyless-site-full-daily.test.mjs
 test/keyless-site-full-not-a-wall.test.mjs
+test/keyless-site-wall-matches-description-1123.test.mjs
 test/keyless-wall-anon-cap-daily-reset.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
