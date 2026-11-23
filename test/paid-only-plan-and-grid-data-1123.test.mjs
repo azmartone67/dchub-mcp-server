@@ -160,8 +160,11 @@ const isFullAnswer = (r) => fullMarksIn(r).length > 0;
 const firstFull = (r) => /first_full_answer/.test(JSON.stringify(r));
 
 describe('the lanes themselves no longer list the paid-only tools', () => {
-  it('lib/paid-full-only.mjs names the four', () => {
-    expect([...PAID_FULL_ONLY_TOOLS].sort()).toEqual(['execute_plan', 'get_grid_data', 'get_power_availability_timeline', 'get_refined_queue']);
+  it('lib/paid-full-only.mjs names all ten', () => {
+    expect([...PAID_FULL_ONLY_TOOLS].sort()).toEqual([
+      'ai_capacity_index', 'execute_plan', 'get_energy_prices', 'get_grid_data', 'get_grid_intelligence',
+      'get_interconnection_queue', 'get_market_context', 'get_power_availability_timeline', 'get_refined_queue', 'rank_markets',
+    ]);
   });
   it('the gate lists the three direct tools as paid-only, and none is free-full by design', () => {
     for (const t of ['get_grid_data', 'get_refined_queue', 'get_power_availability_timeline']) {
@@ -176,10 +179,10 @@ describe('the lanes themselves no longer list the paid-only tools', () => {
       expect(F.planStepSeat(t, { loopback_step: true, plan_first_full: true }), t).toBe(null);
     }
   });
-  it('first full answer of the day: get_grid_data and execute_plan are out, the other three stay', () => {
+  it('first full answer of the day: the lane lists no tools at all', () => {
     expect(F.KEYLESS_FIRST_FULL_TOOLS).not.toContain('get_grid_data');
     expect(F.KEYLESS_FIRST_FULL_TOOLS).not.toContain('execute_plan');
-    expect([...F.KEYLESS_FIRST_FULL_TOOLS].sort()).toEqual(['get_energy_prices', 'get_grid_intelligence', 'get_interconnection_queue']);
+    expect([...F.KEYLESS_FIRST_FULL_TOOLS]).toEqual([]);
   });
   it('a keyless seat on either tool is refused by both keyless lanes', () => {
     process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
