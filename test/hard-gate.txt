@@ -562,6 +562,7 @@ test/plan-proof-1116.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
+test/plan-report-1122.test.mjs
 test/plan-rerun.test.mjs
 test/plan-short-power-asks.test.mjs
 test/plan-step-session-id.test.mjs
