@@ -15533,6 +15533,18 @@ const _PROTECTED_KEYS = new Set([
 ]);
 // get_power_availability_timeline below a paid key: queue_context.iso_reported[] gw / mw and its basis sentence
 // (the figures routes/power_availability_timeline.py locks below Developer). Pure; any other shape passes through.
+// Who reads the timeline's iso_reported figures (owner 2026-11-23): the seat the gate served in full — a paid or
+// enterprise gate tier (team / metered / a session-bound purchase fold there), a paid depth tier (Starter and up), or
+// a call paid per use (a pack credit, MPP, x402: c._paid_rail). Everyone else reads the preview.
+export function _timelineFullSeat(c) {
+  try {
+    if (!c || typeof c !== 'object') return false;
+    if (c._paid_rail === true) return true;
+    const g = String(c._gate_tier_seen || '');
+    if (g === 'paid' || g === 'enterprise') return true;
+    return _isPaidDepthTier(String(c.tier || ''));
+  } catch (_) { return false; }
+}
 export function _withholdTimelineIsoReported(d) {
   const qc = d && typeof d === 'object' ? d.queue_context : null;
   if (!qc || typeof qc !== 'object' || !Array.isArray(qc.iso_reported)) return d;
@@ -29026,6 +29038,9 @@ function trackedTool(srv, name, description, schema, handler) {
         if (READ_ORDERED_TOOLS.has(name) && !_canRead) { try { c._visible_order = true; } catch (_) { /* ctx is best-effort */ } }
       }
       let gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
+      // Owner 2026-11-23 (lib/paid-full-only.mjs): the gate tier this call was decided at, read by a handler that trims
+      // its own preview (get_power_availability_timeline), so it follows the gate (team / metered fold to 'paid').
+      try { c._gate_tier_seen = _gateTier; } catch (_) { /* ctx is best-effort */ }
       // ChatGPT first full answer (DCHUB_CHATGPT_FIRST_FULL, off by default). Charged here, before
       // the gate is promoted, so a spent allowance leaves the 10-08 preview path byte-identical.
       if (!gate.trial_taste && !_isPaidDepthTier(_gateTier) && _chatgptFirstFullCall(name, c)
@@ -29068,6 +29083,7 @@ function trackedTool(srv, name, description, schema, handler) {
         try { _ci = await _getCredits(c); } catch (_) {}
         if (_ci.credits >= _cost) {
           status = 'credits_full';
+          try { c._paid_rail = true; } catch (_) { /* ctx is best-effort */ }
           const _cr = await handler(gate.params || args);
           _burnCredits(c, name, _cost);
           // r-location-tier: a credit-paid call is a pack buyer's call — exact location.
@@ -29261,6 +29277,7 @@ function trackedTool(srv, name, description, schema, handler) {
           } else {
             status = MPP_FUNNEL_STATUS.PAID;
           }
+          try { c._paid_rail = true; } catch (_) { /* ctx is best-effort */ }
           const _mppR = await handler(gate.params || args);
           const _mppFull = withCitation(_mppR, name);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
@@ -29325,6 +29342,7 @@ function trackedTool(srv, name, description, schema, handler) {
         } catch (e) { _x402err = (e && e.message) || 'verify_error'; }
         if (_x402ok) {
           status = 'x402_paid';
+          try { c._paid_rail = true; } catch (_) { /* ctx is best-effort */ }
           const _xRes = await handler(gate.params || args);
           const _xFull = withCitation(_xRes, name);
           try { _xFull._meta = { ...(_xFull._meta || {}), 'org.x402/receipt': _x402receipt }; } catch (_) { /* additive */ }
@@ -36972,7 +36990,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // tease locks (routes/power_availability_timeline.py _TIMELINE_LOCKED). The generic trial trim nulls the *_mw
       // fields but not iso_reported's bare gw / mw, nor the basis sentence that quotes the figure.
       let _c = {}; try { _c = getCtx() || {}; } catch (_) { _c = {}; }
-      if (!(_c.api_key && _isPaidDepthTier(_c.tier))) d = _withholdTimelineIsoReported(d);
+      if (!_timelineFullSeat(_c)) d = _withholdTimelineIsoReported(d);
       return { content: [{ type: 'text', text: JSON.stringify(d) }] };
     });
 

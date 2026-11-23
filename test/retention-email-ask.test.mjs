@@ -537,14 +537,16 @@ describe('wall email line (option A, agent half)', () => {
   // mint answering as production does. Keyless and a free key with no email; both tools.
   const HUMAN = '→ **For your human:**';
   const humanLines = (t) => t.split('\n').filter((l) => l.includes(HUMAN) || /^\s*(\*\*)?Tell the user:/.test(l));
-  const wallCall = async (tool, key, extra) => {
+  const wallCall = async (tool, key, extra, args = { iso: 'MISO' }) => {
     S._resetReturnNudgeState();
-    return (await session('/mcp', 'Claude Code', key, { 'user-agent': 'Claude-User', ...extra })).call(tool, { iso: 'MISO' });
+    return (await session('/mcp', 'Claude Code', key, { 'user-agent': 'Claude-User', ...extra })).call(tool, args);
   };
   beforeAll(() => { mintShort = true; });
   afterAll(() => { mintShort = false; });
 
-  it('a free, email-less caller on a real grid / queue wall: the one human line is the email unlock, on the /u/ link', async () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): an email opens neither grid nor queue, so their walls keep their own one
+  // human line with no email unlock; the email line itself is pinned on the keyless free-key wall of get_water_risk.
+  it('a free, email-less caller on a real grid / queue wall: one human line, on the /u/ link, and it is not the email unlock', async () => {
     // Code-default transport (walls and previews isError). The prod transport (both 0, block 0 split
     // to pure JSON) is test/wall-email-line-prod-transport.test.mjs: DCHUB_PREVIEW_ISERROR is read at load.
     for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
@@ -553,13 +555,21 @@ describe('wall email line (option A, agent half)', () => {
         const r = await wallCall(tool, key);
         const url = r.sc.human_url;
         expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
-        expect(humanLines(r.text), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+        expect(humanLines(r.text).length, at).toBe(1);
+        expect(r.text, at).not.toContain(R.wallEmailLineText(url));
+        expect(r.text, at).not.toMatch(/held back part of this answer|Reply with your email/);
         expect(tellCount(r.text), at).toBe(0);                       // no Tell-the-user line was added
-        expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
-        expect(r.sc.user_message, at).toBe(R.wallEmailLineText(url));
+        expect(r.sc.human_message, at).not.toBe(R.wallEmailLineText(url));
         expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
       }
     }
+  });
+  it('CONTROL: a keyless caller on a real get_water_risk wall: the one human line is the email unlock, on the /u/ link', async () => {
+    const r = await wallCall('get_water_risk', undefined, undefined, { state: 'VA' });
+    const url = r.sc.human_url;
+    expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+    expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+    expect(r.sc.human_message).toBe(R.wallEmailLineText(url));
   });
 
   it('the line is the continuity wording; the kill switch restores the owner-approved 10-25 line, verbatim', () => {
@@ -586,21 +596,31 @@ describe('wall email line (option A, agent half)', () => {
     } finally { delete process.env.DCHUB_WALL_EMAIL_TELL; }
   });
 
-  it('step guards: no session, identified, capacity, keyless cap, foreign link, no human line', () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): the step writes nothing on grid / queue any more (an email opens
+  // neither), so its guards are pinned on the keyless free-key wall of get_water_risk, the path it still serves.
+  it('step guards: paid-only tools, no session, identified, capacity, keyless cap, foreign link, no human line', () => {
     const URL = 'https://dchub.cloud/upgrade/h/abc.0123456789abcdef0123456789abcdef';
-    const wall = (extra = {}, line = HUMAN + ' this answer hid x; open ' + URL + ' to see.') => {
-      const sc = { ok: true, tool: 'get_grid_intelligence', free_preview_only: true, preview_is_partial: true,
+    const wall = (extra = {}, line = HUMAN + ' this answer hid x; open ' + URL + ' to see.', tool = 'get_water_risk') => {
+      const sc = { ok: true, tool, preview_is_partial: true,
                    withheld: ['constraint_score'], _upgrade: { tier: 'free' }, human_url: URL, human_message: 'x', ...extra };
       return { content: [{ type: 'text', text: JSON.stringify(sc) }, ...(line ? [{ type: 'text', text: line }] : [])], structuredContent: sc };
     };
-    const base = { api_key: 'dch_live_wall_line_0001', session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b',
+    const base = { session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b',
                    tier: 'free', platform: 'claude', client_ua: 'Claude-User' };
-    const run = (c, res) => S._ctxALS.run({ ...base, ...c }, () => S._wallEmailLineStep(res, 'get_grid_intelligence'));
-    expect(run({}, wall()).content[1].text).toBe(HUMAN + ' ' + R.wallEmailLineText(URL));   // the positive control
+    const run = (c, res, tool = 'get_water_risk') => S._ctxALS.run({ ...base, ...c }, () => S._wallEmailLineStep(res, tool));
+    for (const t of ['get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices']) {
+      const w = wall({}, undefined, t);
+      expect(run({}, w, t), t).toBe(w);                                   // paid-only: untouched
+    }
+    // the free-key wall's in-chat form puts the bind_email agent line above the human line, so the line is found, not indexed
+    const humanOf = (r) => r.content.flatMap((b) => b.text.split('\n')).find((t) => t.startsWith(HUMAN) || t.startsWith('Tell the user: "'));
+    expect(humanOf(run({}, wall()))).toBe(HUMAN + ' ' + R.wallEmailLineText(URL));   // the positive control
     const tell = run({}, wall({}, 'Tell the user: "open ' + URL + '"'));
-    expect(tell.content[1].text).toBe('Tell the user: "' + R.wallEmailLineText(URL) + '"');  // the paywall contract's form
+    expect(humanOf(tell)).toBe('Tell the user: "' + R.wallEmailLineText(URL) + '"');  // the paywall contract's form
     const same = (c, res) => expect(run(c, res)).toBe(res);
-    same({ session_id: '' }, wall());
+    // no session: the free-key wall's sessionless in-chat form has its own switch (2026-11-11); with it off, untouched
+    process.env.DCHUB_SESSIONLESS_EMAIL_ASK = '0';
+    try { same({ session_id: '' }, wall()); } finally { delete process.env.DCHUB_SESSIONLESS_EMAIL_ASK; }
     same({ tier: 'identified' }, wall());
     same({ email: 'a@b.co' }, wall());
     same({}, wall({ _upgrade: { remaining_today: 0 } }));                 // capacity: checkout stays first
@@ -610,7 +630,8 @@ describe('wall email line (option A, agent half)', () => {
     const repeat = wall({ human_message: 'hit the paid data boundary. ' + URL, user_message: 'x' }, null);
     const rep = run({}, repeat);                                          // r-relay-cap repeat: no line is added,
     expect(rep.content).toBe(repeat.content);                             // the text is untouched,
-    expect(rep.structuredContent.human_message).toBe(R.wallEmailLineText(URL));   // the linked copy follows
+    // the linked copy follows (no human line to sit above, so the free-key wall's page form, not the in-chat one)
+    expect(rep.structuredContent.human_message).toBe(R.wallEmailFreekeyLineText(URL));
     expect(rep.structuredContent.user_message).toBe('x');                 // an unlinked copy is left alone
     same({}, wall({}, HUMAN + ' a line with another link https://dchub.cloud/plans'));
   });

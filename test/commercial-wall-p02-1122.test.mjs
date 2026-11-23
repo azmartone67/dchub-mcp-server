@@ -15,12 +15,13 @@
 //   * get_access_status: absent with the flag off, callable and never listed with it on, no price;
 //   * a handoff-linked keyless identity is served at the buyer's tier with DCHUB_AGENT_HANDOFF_RESOLVE=1, key scrubbed.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import fs from 'node:fs';
 import net from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
 import * as CW from '../lib/commercial-wall.mjs';
 import * as MX from '../lib/monetization-experiments.mjs';
@@ -94,6 +95,9 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'commercial-wall-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): until origin/main carries the paid-only rule, its keyless grid wall
+    // differs from this branch by design (no email unlock here); MAIN_HAS_GATE says which baseline holds.
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -172,6 +176,7 @@ const ON = () => { process.env.DCHUB_EXP_UPGRADE_BLOCK = '1'; };
 // The same holds for every paid-full-only tool (lib/paid-full-only.mjs): a trial key's get_grid_intelligence answer is
 // the preview, where origin/main walled it on the email bind; that case is also pinned on its own below.
 const PAID_ONLY_WALLED = new Set(['execute_plan', 'get_grid_intelligence']);
+let MAIN_HAS_GATE = false;
 const WALLED = [
   ['get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }],
   ['get_market_intel', { market: 'dallas' }],
@@ -520,6 +525,20 @@ describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main w
       const ip = nextIp();
       const key = who === 'trial' ? trialKey() : '';
       const here = await call(H, '/mcp', name, args, { ip, key });
+      if (!MAIN_HAS_GATE && name === 'get_grid_intelligence') {
+        // Before origin/main carries the rule: the keyless grid wall is the preview, with no email unlock (an email
+        // opens nothing on a paid-only tool), and a paid key on the same call gets the full answer (the control).
+        const a = norm(here.result);
+        expect(a.length).toBeGreaterThan(50);
+        // a wall (the harness's IP is past the anonymous cap here) or the preview, never the full answer
+        expect(a).toMatch(/anon_hard_wall|preview_is_partial|_withheld/);
+        // its email offer is the depth one (the key line may still offer a key for an email; it promises no unlock)
+        expect(a).toContain('an email does not open the fields held back here');
+        expect(a).not.toMatch(/opens more of this answer|email (?:opens|unlocks) the full|full (?:answer|brief) [^"]{0,40}with (?:their|an|your) email/i);
+        const paid = norm((await call(H, '/mcp', name, args, { ip: nextIp(), key: PRO_KEY })).result);
+        expect(paid).not.toMatch(/preview_is_partial|anon_hard_wall|an email does not open the fields/);
+        return;
+      }
       const main = await call(O, '/mcp', name, args, { ip, key });
       const a = norm(here.result), b = norm(main.result);
       expect(a.length).toBeGreaterThan(50);

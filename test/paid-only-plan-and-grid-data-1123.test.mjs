@@ -98,6 +98,7 @@ async function runStep(init) {
   return json({ jsonrpc: '2.0', id: body.id, result });
 }
 
+let PACK_CREDITS = 0;   // the pack seat: a free key whose credit balance is set per case
 beforeAll(async () => {
   for (const k of ENV_KEYS) prevEnv[k] = process.env[k];
   process.env.DCHUB_INTERNAL_KEY = SECRET;
@@ -110,7 +111,7 @@ beforeAll(async () => {
     const p = new URL(url).pathname;
     const h = (init && init.headers) || {};
     if (p === '/api/v1/mcp/full-cap/consume' || p === '/api/v1/mcp/full-cap/peek') return json({ ok: false });
-    if (p.startsWith('/api/v1/mcp/credits/balance')) return json({ credits: 0, had_pack: false });
+    if (p.startsWith('/api/v1/mcp/credits/balance')) return json({ credits: PACK_CREDITS, had_pack: PACK_CREDITS > 0 });
     if (p === '/api/v1/mcp/should-mint-claim') return json({ should_mint: false });
     if (p === '/api/v1/mcp/lp-free-runs') return json({ ok: true, allowed: true, used: 1, limit: 1, remaining: 0, charge_ref: 'r1' });
     if (p.startsWith('/api/v1/grid/intelligence/') || p.startsWith('/api/v1/grid/latest/')) {
@@ -277,6 +278,27 @@ describe('get_power_availability_timeline', () => {
     const r = await call('get_power_availability_timeline', keyed(PAID_KEY), ARGS);
     expect(r.isError).not.toBe(true);
     expect(marks(r).sort()).toEqual([...TL_MARKS].sort());
+  });
+  // Review 2026-11-23: a pack credit buys the full call (credits_full), so the handler's own withhold must not
+  // null iso_reported for it.
+  it('a free key holding pack credits: the full answer, iso_reported included', async () => {
+    const key = FREE_KEYS[0];
+    PACK_CREDITS = 5;
+    try {
+      const r = await call('get_power_availability_timeline', keyed(key), ARGS);
+      expect(r.isError).not.toBe(true);
+      expect(marks(r).sort()).toEqual([...TL_MARKS].sort());
+    } finally { PACK_CREDITS = 0; }
+    // (the no-credit control is the free-class cases above; the credit lookup is cached per identity, so this key is not re-read)
+  });
+  it('who reads iso_reported follows the gate: paid / enterprise gate tier, paid depth tier, a paid rail', () => {
+    const f = S._timelineFullSeat;
+    expect(f({ _gate_tier_seen: 'paid', tier: 'team' })).toBe(true);      // team / metered fold to 'paid' at the gate
+    expect(f({ _gate_tier_seen: 'enterprise', tier: 'research_seed' })).toBe(true);
+    expect(f({ tier: 'developer' })).toBe(true);                           // a session-bound purchase: no api_key
+    expect(f({ _paid_rail: true, tier: 'free', api_key: 'dch_live_x' })).toBe(true);
+    for (const c of [{}, null, { tier: 'free' }, { tier: 'identified', api_key: 'k' }, { _gate_tier_seen: 'trial', tier: 'trial' },
+      { _gate_tier_seen: 'free', tier: 'free' }]) expect(f(c), JSON.stringify(c)).toBe(false);
   });
 });
 

@@ -163,12 +163,15 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
     expect(r.text).not.toContain(AGENT_LINE);
   });
 
-  it('CONTROL: a sessionless grid / queue wall keeps its own ask and gets no second one', async () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): grid is paid-only, so its sessionless wall asks for no email unlock at
+  // all: the floor's key line (an email-for-key ask, tagged key_line), and nothing from this step.
+  it('CONTROL: a sessionless grid / queue wall carries no email unlock: the key line only', async () => {
     const r = await call('get_grid_intelligence', { iso: 'MISO' }, { hdr: freshIp() });
-    expect(r.rows.map((e) => e.email_ask)).toEqual(['line']);            // the decision hand-off's ask, as on main
-    expect(r.text.split(EMAIL_ASK).length - 1).toBe(1);
+    expect(r.rows.map((e) => e.email_ask)).toEqual(['key_line']);
+    expect(r.text.split(EMAIL_ASK).length - 1).toBe(0);
+    expect(r.text).toContain('Add your email to get your DC Hub key');
     expect(r.text).not.toContain(AGENT_LINE);
-    expect(r.text).not.toMatch(HUMAN_LINE);                                // its human line keeps the page wording
+    expect(r.text).not.toMatch(HUMAN_LINE);
   });
 
   it('CONTROL: with a session the first wall asks once, as before', async () => {

@@ -111,15 +111,25 @@ afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 beforeEach(() => { identifyOk = true; claimOk = true; delete process.env.DCHUB_EMAIL_ENTERED_EVENT; });
 
 describe('B. email_entered over the real app', () => {
-  it('a keyless grid wall, then bind_email in that session: one email_entered naming the wall and its ask', async () => {
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): an email opens nothing on get_grid_intelligence, so its keyless wall
+  // carries no email-unlock line ('line'); the email_entered path is pinned on get_water_risk, whose wall an email opens.
+  it('a keyless grid wall carries no email-unlock ask (paid-only tool)', async () => {
     const hdr = await session();
     const w = await call(hdr, 'get_grid_intelligence', { iso: 'PJM' });
     const hit = w.events.find((e) => e.event === 'quota_wall_hit');
-    expect(hit).toMatchObject({ tool: 'get_grid_intelligence', email_ask: 'line' });
+    expect(hit).toMatchObject({ tool: 'get_grid_intelligence' });
+    expect(hit.email_ask).not.toBe('line');
+  });
+  it('a keyless water-risk wall, then bind_email in that session: one email_entered naming the wall and its ask', async () => {
+    const hdr = await session();
+    const w = await call(hdr, 'get_water_risk', { state: 'VA' });
+    const hit = w.events.find((e) => e.event === 'quota_wall_hit');
+    expect(hit).toMatchObject({ tool: 'get_water_risk' });
+    expect(hit.email_ask).toBe('line');
     const b = await call(hdr, 'bind_email', { email: 'h@x.io' });
     expect(entered(b)).toHaveLength(1);
-    expect(entered(b)[0]).toMatchObject({ event: 'email_entered', path: 'bind_email', tool: 'get_grid_intelligence',
-                                          wall_status: hit.wall_status, email_ask: 'line', match: 'session', api_key: MINTED });
+    expect(entered(b)[0]).toMatchObject({ event: 'email_entered', path: 'bind_email', tool: 'get_water_risk',
+                                          wall_status: hit.wall_status, email_ask: hit.email_ask, match: 'session', api_key: MINTED });
     expect(JSON.stringify(entered(b)[0])).not.toContain('h@x.io');
   });
 

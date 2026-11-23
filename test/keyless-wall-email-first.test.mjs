@@ -398,12 +398,22 @@ describe('C. quota_wall_hit', () => {
   // Option E fix (2026-10-26): the event leaves after the outer response steps, so an ask they add
   // is on it. Live before this, every wall read email_ask none: the grid/queue email line is written
   // by _wallEmailLineStep, which runs after the handler that used to send the event.
-  it('option E: a grid / queue wall reports the email line its outer step wrote (line), once', async () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): _wallEmailLineStep writes no line on grid / queue any more (an email
+  // opens neither), so the outer-step mechanism is pinned on get_water_risk, whose free-key wall still gets the line;
+  // grid / queue walls report the floor's digest offer instead, once.
+  it('option E: a wall reports the email line its outer step wrote (line), once (get_water_risk)', async () => {
+    const r = await call('get_water_risk', { state: 'VA' });
+    expect(r.status).toEqual(['trial_used']);
+    expect(r.events.length).toBe(1);
+    expect(r.events[0]).toMatchObject({ event: 'quota_wall_hit', tool: 'get_water_risk', wall_status: 'trial_used', email_ask: 'line' });
+  });
+  it('option E: a grid / queue wall reports the digest offer, never the email line (paid-only since 11-23), once', async () => {
     for (const t of ['get_grid_intelligence', 'get_interconnection_queue']) {
       const r = await call(t, { iso: 'PJM' });
       expect(r.status).toEqual(['trial_used']);
       expect(r.events.length).toBe(1);
-      expect(r.events[0]).toMatchObject({ event: 'quota_wall_hit', tool: t, wall_status: 'trial_used', email_ask: 'line' });
+      expect(r.events[0]).toMatchObject({ event: 'quota_wall_hit', tool: t, wall_status: 'trial_used', email_ask: 'digest_line' });
+      expect(r.events[0].offers_shown || []).not.toContain('email_unlock');
     }
   });
 

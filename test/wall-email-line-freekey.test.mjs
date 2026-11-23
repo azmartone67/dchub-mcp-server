@@ -274,7 +274,9 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     }
   });
 
-  it('DCHUB_WALL_EMAIL_TELL_FREEKEY=0: the free-key wall keeps its earlier line; grid / queue keep the email line', async () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): grid / queue carry no email line at all now (an email opens neither), so
+  // the switch's other half pins that grid keeps its own one human line, with or without the switch.
+  it('DCHUB_WALL_EMAIL_TELL_FREEKEY=0: the free-key wall keeps its earlier line; grid keeps its own line, never the email line', async () => {
     await withEnv('DCHUB_WALL_EMAIL_TELL_FREEKEY', '0', async () => {
       const r = await wallCall('get_water_risk');
       const lines = humanLines(r.text);
@@ -283,7 +285,9 @@ describe('option A line on a keyless free-key wall, production transport', () =>
       expect(lines[0]).not.toMatch(/free DC Hub key/);
       expect(r.text).not.toMatch(/held back part of this answer/);
       const g = await wallCall('get_grid_intelligence');
-      expect(humanLines(g.text)).toEqual([HUMAN + ' ' + R.wallEmailLineText(g.sc.human_url)]);
+      expect(humanLines(g.text).length).toBe(1);
+      expect(g.text).not.toContain(R.wallEmailLineText(g.sc.human_url));
+      expect(g.text).not.toMatch(/held back part of this answer|Reply with your email/);
     });
   });
 

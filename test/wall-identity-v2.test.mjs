@@ -224,10 +224,20 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
       }
       // where the wall asks for an email, the ask is the V2 copy with this call's market, and the structured call names it
       const t = texts(result).join('\n');
-      if (t.includes(EMAIL_ASK_LEAD)) {
+      const prose = texts(result).filter((x) => !/^\s*[{[]/.test(x)).join('\n');
+      if (prose.includes(EMAIL_ASK_LEAD) || (t.includes(EMAIL_ASK_LEAD) && result.structuredContent.email_ask)) {
         expect(t).toContain(emailAskLine(market));
         expect(result.structuredContent.email_ask).toMatchObject({ tool: 'get_api_key' });
         expect(result.structuredContent.email_ask.arguments.market).toBe(market || undefined);
+      } else if (t.includes(EMAIL_ASK_LEAD)) {
+        // 2026-11-23 (owner, lib/paid-full-only.mjs): an execute_plan whose walled steps are all paid-only asks for no
+        // email unlock, so the wall adds no email_ask; the V2 copy is the plan's own key entry (next_tools), which is
+        // the structured get_api_key call with this call's market.
+        const keyEntry = (result.structuredContent.next_tools || []).find((e) => e && e.tool === 'get_api_key');
+        expect(keyEntry, 'the V2 copy rides a structured get_api_key entry').toBeTruthy();
+        expect(keyEntry.say).toBe(emailAskLine(market));
+        expect((keyEntry.args || {}).market).toBe(market || undefined);
+        for (const e of rows) expect(e.offers_shown || [], `${e.tool}`).not.toContain('email_unlock');
       }
     }, 120_000);
   }
