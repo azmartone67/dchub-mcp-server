@@ -116,14 +116,14 @@ describe('H) an agent behind a plain HTTP client gets the first full answer', ()
   UAS.forEach((ua, i) => {
     it(`${ua}: call 1 is the full answer and is charged; call 2 is the preview`, async () => {
       const ip = `198.18.60.${i + 1}`;
-      expect(S._keylessFirstFullSeat('get_grid_data', seat({ ua, ip }))).toBe('charge');
-      const r1 = await call('get_grid_data', seat({ ua, ip }));
+      expect(S._keylessFirstFullSeat('get_interconnection_queue', seat({ ua, ip }))).toBe('charge');
+      const r1 = await call('get_interconnection_queue', seat({ ua, ip }));
       expect(r1.isError).not.toBe(true);
       expect(isFirstFull(r1), 'call 1 carries first_full_answer').toBe(true);
-      const r2 = await call('get_grid_data', seat({ ua, ip }));
+      const r2 = await call('get_interconnection_queue', seat({ ua, ip }));
       expect(isFirstFull(r2)).toBe(false);
       await settle();
-      expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['get_grid_data']);
+      expect(kffConsumes(ip).map((w) => w.tool)).toEqual(['get_interconnection_queue']);
     });
   });
 });
@@ -140,8 +140,8 @@ describe('I) still refused: our own, monitor, crawler and QA callers', () => {
   cases.forEach(([label, sp], i) => {
     it(`${label}: no first full answer, nothing charged`, async () => {
       const ip = `198.18.61.${i + 1}`;
-      expect(S._keylessFirstFullSeat('get_grid_data', seat({ ...sp, ip }))).toBeNull();
-      const r = await call('get_grid_data', seat({ ...sp, ip }));
+      expect(S._keylessFirstFullSeat('get_interconnection_queue', seat({ ...sp, ip }))).toBeNull();
+      const r = await call('get_interconnection_queue', seat({ ...sp, ip }));
       expect(isFirstFull(r)).toBe(false);
       await settle();
       expect(kffConsumes(ip)).toEqual([]);
@@ -163,19 +163,19 @@ describe('J) "sweep-check-1114" got the preview because its name is tagged as ou
     expect(S.isBotOrInternalCtx(raw)).toBe(false);
     expect(S._isQaCaller(raw)).toBe(false);
     expect(S._selfTestTelemetryTag(raw)).toBe('');
-    expect(S._keylessFirstFullSeat('get_grid_data', raw)).toBe('charge');
-    expect(S._keylessFirstFullSeat('get_grid_data', { ...raw, platform: 'dchub-internal' })).toBeNull();
+    expect(S._keylessFirstFullSeat('get_interconnection_queue', raw)).toBe('charge');
+    expect(S._keylessFirstFullSeat('get_interconnection_queue', { ...raw, platform: 'dchub-internal' })).toBeNull();
   });
   it('from one IP: sweep-check-1114 previews and charges nothing; cursor and grok then get full answers', async () => {
     const ip = '198.18.62.1';
     const sw1 = await call('get_grid_intelligence', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip }));
-    const sw2 = await call('get_grid_data', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip }));
+    const sw2 = await call('get_interconnection_queue', seat({ name: 'sweep-check-1114', ua: UA('sweep-check-1114'), ip }));
     expect(isFirstFull(sw1)).toBe(false);
     expect(isFirstFull(sw2)).toBe(false);
     await settle();
     expect(kffConsumes(ip), 'the preview spent nothing').toEqual([]);
     expect(isFirstFull(await call('get_grid_intelligence', seat({ name: 'cursor', ua: UA('cursor'), ip })))).toBe(true);
-    expect(isFirstFull(await call('get_grid_data', seat({ name: 'grok', ua: UA('grok'), ip })))).toBe(true);
+    expect(isFirstFull(await call('get_interconnection_queue', seat({ name: 'grok', ua: UA('grok'), ip })))).toBe(true);
   });
 });
 
@@ -248,8 +248,8 @@ describe('L) the session bucket: rotating egress inside one session does not re-
   });
   it('no session id: the IP bucket alone decides, as before', async () => {
     const ip = '198.18.64.31';
-    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: '' }))).toBe(true);
-    expect(isFirstFull(await call('get_grid_data', { ...seat({ name: 'grok', ua: UA, ip }), session_id: 'no-session' }))).toBe(false);
+    expect(isFirstFull(await call('get_interconnection_queue', { ...seat({ name: 'grok', ua: UA, ip }), session_id: '' }))).toBe(true);
+    expect(isFirstFull(await call('get_interconnection_queue', { ...seat({ name: 'grok', ua: UA, ip }), session_id: 'no-session' }))).toBe(false);
     await settle();
     expect(writes.consume.filter((w) => w.identity === sessId('no-session'))).toEqual([]);
   });

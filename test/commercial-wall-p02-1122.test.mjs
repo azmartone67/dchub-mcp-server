@@ -166,6 +166,9 @@ function keyIn(arm) {
 }
 const ON = () => { process.env.DCHUB_EXP_UPGRADE_BLOCK = '1'; };
 
+// Owner 2026-11-23: execute_plan's full answer needs a paid key, so a free (trial) key's plan is no longer
+// origin/main's: its steps run keyless and its pointer is unlock_more_data, not bind_email. That case is pinned
+// on its own below instead of byte for byte; keyless execute_plan and the other walled tools stay byte for byte.
 const WALLED = [
   ['get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }],
   ['get_market_intel', { market: 'dallas' }],
@@ -502,7 +505,7 @@ describe('flag ON through /mcp: treatment vs holdout, exposure in both arms', ()
 
 describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main with every flag ON', () => {
   const CASES = [];
-  for (const who of ['keyless', 'trial']) for (const t of WALLED) CASES.push([who, ...t]);
+  for (const who of ['keyless', 'trial']) for (const t of WALLED) if (!(who === 'trial' && t[0] === 'execute_plan')) CASES.push([who, ...t]);
   for (const flag of [undefined, '0']) {
     it.each(CASES)(`flags ${flag === undefined ? 'unset' : flag}: %s %s`, async (who, name, args) => {
       if (!O) { console.warn(`[commercial-wall] origin/main comparison not run: ${why}`); return; }
@@ -517,6 +520,17 @@ describe('flags OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main w
       expect(a === b, firstDiff(a, b)).toBe(true);
     }, 120_000);
   }
+  it('trial key, execute_plan (owner 2026-11-23): a preview whose steps ran keyless and which points at the paid path', async () => {
+    clearFlags();
+    const [, args] = WALLED.find((w) => w[0] === 'execute_plan');
+    const here = await call(H, '/mcp', 'execute_plan', args, { ip: nextIp(), key: trialKey() });
+    const t = norm(here.result);
+    expect(t).toContain('\\"next_tool\\":\\"unlock_more_data\\"');
+    expect(t).not.toContain('\\"next_tool\\":\\"bind_email\\"');
+    const tok = (t.match(/RERUN\.([A-Za-z0-9_-]+)/) || [])[1];
+    expect(tok, 'no rerun token').toBeTruthy();
+    expect(Buffer.from(tok, 'base64url').toString()).toContain('"a":"mcp:anon:trial"');
+  }, 120_000);
   it.each(WALLED)('/mcp/chatgpt every flag ON: %s is origin/main byte for byte', async (name, args) => {
     if (!O) { console.warn(`[commercial-wall] origin/main comparison not run: ${why}`); return; }
     for (const f of FLAGS) process.env[f] = '1';

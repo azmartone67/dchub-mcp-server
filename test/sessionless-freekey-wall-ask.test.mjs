@@ -25,7 +25,8 @@ process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
 const FREE_NO_EMAIL = 'dch_live_sessionless_freekey_noemail_01';
 const AGENT_LINE = claimHandoffFreekeyText();
 const HUMAN_LINE = /Reply with your email and I'll open the full answer and keep your saved shortlists/;   // lib/continuity-ask.mjs
-const TOOLS = [['get_grid_data', { iso: 'PJM' }], ['get_energy_prices', { state: 'VA' }],
+// get_grid_data left the free-key class 2026-11-23 (owner: paid key only); get_water_risk is the controls' example.
+const TOOLS = [['get_energy_prices', { state: 'VA' }],
   ['get_water_risk', { state: 'VA' }], ['get_renewable_energy', { state: 'VA' }]];
 
 let H, fence;
@@ -117,7 +118,7 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
   it('CONTROL: kill switch DCHUB_SESSIONLESS_EMAIL_ASK=0 (and the offer floor off) restores the wall without an ask', async () => {
     process.env.DCHUB_SESSIONLESS_EMAIL_ASK = '0';
     process.env.DCHUB_WALL_OFFER_FLOOR = '0';   // the offer floor (item 2) is its own layer
-    const r = await call('get_grid_data', { iso: 'PJM' }, { hdr: freshIp() });
+    const r = await call('get_water_risk', { state: 'VA' }, { hdr: freshIp() });
     expect(r.rows.map((e) => e.email_ask)).toEqual([undefined]);
     expect(r.text).not.toContain(AGENT_LINE);
     expect(r.text).not.toMatch(HUMAN_LINE);
@@ -125,26 +126,26 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
 
   it('CONTROL: an execute_plan step (loopback peer) asks nothing here', async () => {
     EXTERNAL = false;
-    const r = await call('get_grid_data', { iso: 'PJM' }, { hdr: freshIp() });
+    const r = await call('get_water_risk', { state: 'VA' }, { hdr: freshIp() });
     expect(r.rows.map((e) => e.email_ask)).toEqual([undefined]);
     expect(r.text).not.toContain(AGENT_LINE);
   });
 
   it('CONTROL: Grok asks nothing (contract G3: one human URL, fixed copy)', async () => {
-    const r = await call('get_grid_data', { iso: 'PJM' }, { hdr: { ...freshIp(), 'x-mcp-platform': 'grok' } });
+    const r = await call('get_water_risk', { state: 'VA' }, { hdr: { ...freshIp(), 'x-mcp-platform': 'grok' } });
     expect(r.rows.filter((e) => e.email_ask === 'line')).toEqual([]);
     expect(r.text).not.toContain(AGENT_LINE);
     expect(r.text).not.toMatch(HUMAN_LINE);
   });
 
   it.each([['/mcp/claude'], ['/mcp/core'], ['/mcp/chatgpt']])('CONTROL: %s asks nothing', async (path) => {
-    const r = await call('get_grid_data', { iso: 'PJM' }, { path, hdr: freshIp() });
+    const r = await call('get_water_risk', { state: 'VA' }, { path, hdr: freshIp() });
     expect(r.rows.filter((e) => e.email_ask === 'line')).toEqual([]);
     expect(r.text).not.toContain(AGENT_LINE);
   });
 
   it('CONTROL: a keyed free caller without an email keeps its structured bind_email ask (bind_field)', async () => {
-    const r = await call('get_grid_data', { iso: 'PJM' }, { hdr: { ...freshIp(), 'x-api-key': FREE_NO_EMAIL } });
+    const r = await call('get_water_risk', { state: 'VA' }, { hdr: { ...freshIp(), 'x-api-key': FREE_NO_EMAIL } });
     expect(r.rows.map((e) => e.email_ask)).not.toContain(undefined);
     expect(r.rows.map((e) => e.email_ask)).not.toContain('line');
     expect(r.text).not.toContain(AGENT_LINE);
@@ -164,7 +165,7 @@ describe('sessionless keyless free-key walls carry the email ask', () => {
     const sid = init.headers.get('mcp-session-id');
     expect(sid).toBeTruthy();
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, { ...hdr, 'mcp-session-id': sid });
-    const r = await call('get_grid_data', { iso: 'PJM' }, { hdr, sid });
+    const r = await call('get_water_risk', { state: 'VA' }, { hdr, sid });
     expect(r.rows.map((e) => [e.session_id, e.email_ask])).toEqual([[sid, 'line']]);
     expect(r.text).toContain(AGENT_LINE);
   });

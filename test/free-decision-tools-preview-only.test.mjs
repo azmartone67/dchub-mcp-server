@@ -608,8 +608,8 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
 
 describe('copy canon: every emission of the free-tier rule carries the decision-tools clause', () => {
   const CLAUSE = T.FREE_DECISION_CLAUSE;
-  const B1 = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-    + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+  const B1 = 'No key needed: the first call each UTC day to each core energy tool ('
+    + 'get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; '
     + 'after that, previews. With an email: 50 calls/day (up to 10 full answers per tool per day). '
     + 'Higher limits: dchub.cloud/pricing.';
   it('the clause names the three tools and the rung', () => {

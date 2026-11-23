@@ -15,6 +15,8 @@
 //      walled_steps and never called full; a step served in full is identical to the direct call
 //      and is not named a preview;
 //   6) the published siting clause stops naming execute_plan while the switch is on.
+// SUPERSEDED 2026-11-23 (owner: execute_plan's full answer is paid-only): sections 1-5 now pin the inverse, a free
+// key's plan is the preview and its steps run keyless, whatever DCHUB_PLAN_STEPS_CALLER_KEY says.
 // Hard-gate qualified: loopback only, no disk writes.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
@@ -171,42 +173,44 @@ const step = (r, tool) => (r.data.executed || []).find((e) => e.tool === tool);
 const PLAN_OR_PRICE = /\b(Developer|Pro|Starter|Enterprise|Founding)\b|\$\s?\d|\/mo\b|[Pp]er month|stripe\.com/;
 const OLD_LINE = /gets the same execute_plan preview as no key/;
 
-describe('1) a no-email free key: every step runs under its own key', () => {
-  it('each step read carries the caller\'s X-API-Key; the envelope says so', async () => {
+// Owner 2026-11-23 supersedes the 2026-11-11 rule above: a full execute_plan needs a PAID key, and a free plan must
+// not assemble a full answer from its steps. So for every free-class key (no email, email-bound, counter down) the
+// steps run KEYLESS again, no monthly full run is metered, and the pointer is the paid path (unlock_more_data).
+const PREVIEW_UPG = { tier: 'identified', next_tool: 'unlock_more_data' };
+const planRunsMetered = () => [...runs.keys()].filter((id) => id.endsWith('|execute_plan'));
+
+describe('1) a no-email free key: the plan is the preview, its steps run keyless', () => {
+  it('no step read carries the caller\'s key; the envelope points at the paid path', async () => {
     const r = await plan(NOEMAIL);
     expect(Array.isArray(r.data.executed), r.text.slice(0, 600)).toBe(true);
     expect(r.hits.length, 'the plan ran steps').toBeGreaterThan(0);
-    expect(r.hits.filter((h) => h.key !== NOEMAIL), JSON.stringify(r.hits)).toEqual([]);
-    expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email', steps_ran_under: 'your_key' });
-    expect(r.data._upgrade.message).not.toMatch(OLD_LINE);
+    expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
+    expect(r.data._upgrade).toMatchObject(PREVIEW_UPG);
+    expect(r.data._upgrade.steps_ran_under).toBeUndefined();
     expect(r.data._upgrade.message).not.toMatch(PLAN_OR_PRICE);
-    expect(r.data.totals.tier_note).toMatch(/under your key/);
+    expect(r.data.totals.tier_note).toMatch(/steps ran keyless/);
   });
 });
 
-describe('2) an email key whose monthly plan is spent, or whose counter fails', () => {
-  it('spent: the monthly run is still metered, and the run after it keeps the key on every step', async () => {
+describe('2) an email key, and one whose counter fails: no monthly full plan, steps keyless', () => {
+  it('email-bound: no run is metered, and both plans are the keyless-step preview', async () => {
     const key = freshBound();
-    const r1 = await plan(key);
-    expect(r1.data.free_full_runs, r1.text.slice(0, 600)).toMatchObject({ used: 1, limit: 1, remaining: 0 });
-    expect(r1.data.free_full_runs.note, 'no preview promised for the next plan').not.toMatch(/returns the preview/);
-    expect(r1.hits.filter((h) => h.key !== key)).toEqual([]);
-    const r2 = await plan(key);
-    expect(r2.data.free_full_runs).toBeUndefined();
-    expect(r2.hits.length).toBeGreaterThan(0);
-    expect(r2.hits.filter((h) => h.key !== key), JSON.stringify(r2.hits)).toEqual([]);
-    expect(r2.data._upgrade).toMatchObject({ next_tool: 'unlock_more_data', steps_ran_under: 'your_key',
-      free_full_runs: { used: 1, limit: 1, remaining: 0 } });
-    expect(r2.data._upgrade.message).not.toMatch(/^Preview:/);
-    expect(r2.data._upgrade.message).not.toMatch(PLAN_OR_PRICE);
+    for (const n of [1, 2]) {
+      const r = await plan(key);
+      expect(r.data.free_full_runs, 'call ' + n).toBeUndefined();
+      expect(r.hits.length).toBeGreaterThan(0);
+      expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
+      expect(r.data._upgrade).toMatchObject(PREVIEW_UPG);
+      expect(r.data.totals.tier_note).toMatch(/steps ran keyless/);
+    }
+    expect(planRunsMetered().filter((id) => id.startsWith(key)), 'no monthly execute_plan run was consumed').toEqual([]);
   });
-  it('counter fails (500): fail closed on the monthly run, but the steps still carry the key', async () => {
+  it('counter fails (500): the same preview, steps keyless', async () => {
     const r = await plan(FAILCTR);
     expect(r.data.free_full_runs).toBeUndefined();
     expect(r.hits.length).toBeGreaterThan(0);
-    expect(r.hits.filter((h) => h.key !== FAILCTR), JSON.stringify(r.hits)).toEqual([]);
-    expect(r.data._upgrade).toMatchObject({ steps_ran_under: 'your_key' });
-    expect(r.data._upgrade.free_full_runs).toBeUndefined();
+    expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
+    expect(r.data._upgrade).toMatchObject(PREVIEW_UPG);
   });
 });
 
@@ -219,52 +223,28 @@ describe('3) a keyless caller is unchanged', () => {
   });
 });
 
-describe('4) CONTROL: DCHUB_PLAN_STEPS_CALLER_KEY=0 restores the keyless steps', () => {
-  it('no-email key: steps keyless, the old preview line, tier_note says keyless', async () => {
-    await withEnv('DCHUB_PLAN_STEPS_CALLER_KEY', '0', async () => {
-      const r = await plan(NOEMAIL);
-      expect(r.hits.length).toBeGreaterThan(0);
-      expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
-      expect(r.data._upgrade.message).toMatch(OLD_LINE);
-      expect(r.data._upgrade.steps_ran_under).toBeUndefined();
-      expect(r.data.totals.tier_note).toMatch(/keyless/);
-    });
-  });
-  it('spent email key: steps keyless again', async () => {
-    const key = freshBound();
-    await plan(key);   // spends the month's run (steps keyed, as before)
-    await withEnv('DCHUB_PLAN_STEPS_CALLER_KEY', 'off', async () => {
-      const r = await plan(key);
-      expect(r.hits.length).toBeGreaterThan(0);
-      expect(r.hits.filter((h) => h.key === key), JSON.stringify(r.hits)).toEqual([]);
+describe('4) DCHUB_PLAN_STEPS_CALLER_KEY no longer opens a free key\'s steps (either value)', () => {
+  it.each(['0', '1'])('=%s: no-email and email keys: steps keyless, the preview pointer', async (v) => {
+    await withEnv('DCHUB_PLAN_STEPS_CALLER_KEY', v, async () => {
+      for (const key of [NOEMAIL, freshBound()]) {
+        const r = await plan(key);
+        expect(r.hits.length).toBeGreaterThan(0);
+        expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
+        expect(r.data._upgrade).toMatchObject(PREVIEW_UPG);
+      }
     });
   });
 });
 
-describe('5) full vs walled steps inside the plan', () => {
-  it('the walled step keeps its wall and human_url and is named; the full step equals the direct call', async () => {
+describe('5) inside the free plan, the paid-only step is the preview too', () => {
+  it('get_refined_queue is walled with its relay link and never the key\'s full rows', async () => {
     const r = await plan(NOEMAIL);
-    const walled = step(r, 'get_interconnection_queue');
-    const full = step(r, 'get_refined_queue');
-    expect(walled && full, JSON.stringify((r.data.executed || []).map((e) => e.tool))).toBeTruthy();
-    // The queue wall is this key's own direct answer: a preview with its relay link.
-    expect(walled.result.human_url, JSON.stringify(walled.result).slice(0, 400)).toMatch(/^https:\/\/dchub\.cloud\//);
-    expect(walled.result.preview_is_partial || walled.result.trial_preview || walled.result._upgrade).toBeTruthy();
-    const direct = await callAs(NOEMAIL, 'get_interconnection_queue', walled.args);
-    expect(direct.data.human_url, 'the direct call walls the same key too').toMatch(/^https:\/\/dchub\.cloud\//);
-    // The envelope names it as the preview it is, and never calls it full.
-    const named = (r.data._upgrade.walled_steps || []).map((w) => w.tool);
-    expect(named).toContain('get_interconnection_queue');
-    expect(r.data._upgrade.message).toContain('step ' + walled.step + ' (get_interconnection_queue)');
-    expect(r.data._upgrade.message).not.toMatch(/\bfull\b[^.]*get_interconnection_queue|get_interconnection_queue[^.]*\bin full\b/);
-    // The full step is not named a preview, and is exactly what the key gets directly.
-    expect(named).not.toContain('get_refined_queue');
-    expect(r.data._upgrade.message).not.toContain('get_refined_queue');
-    expect(full.result.projects).toEqual(GENERIC.projects);
-    expect(full.result.human_url).toBeUndefined();
-    const d2 = await callAs(NOEMAIL, 'get_refined_queue', full.args);
-    expect(d2.data.projects).toEqual(full.result.projects);
-    expect(d2.data.total_mw).toBe(full.result.total_mw);
+    const rq = step(r, 'get_refined_queue');
+    expect(rq, JSON.stringify((r.data.executed || []).map((e) => e.tool))).toBeTruthy();
+    expect(rq.result.human_url, JSON.stringify(rq.result).slice(0, 400)).toMatch(/^https:\/\/dchub\.cloud\//);
+    expect(rq.result.preview_is_partial || rq.result.trial_preview || rq.result._upgrade).toBeTruthy();
+    const direct = await callAs(NOEMAIL, 'get_refined_queue', rq.args);
+    expect(direct.data.human_url, 'the direct call is the preview for this key too').toMatch(/^https:\/\/dchub\.cloud\//);
   });
 });
 
@@ -283,12 +263,12 @@ describe('6) helpers and the published clause', () => {
     expect(none.message).not.toMatch(/preview/i);
     expect(none).toMatchObject({ next_tool: 'unlock_more_data', free_full_runs: { remaining: 0 } });
   });
-  it('the siting clause drops execute_plan while the switch is on; =0 restores the old clause', () => {
+  it('the siting clause never names execute_plan (owner 2026-11-23: no free full plan), whatever the switch', () => {
     const on = S._sitingFreeClause({});
     expect(on).toBe(L.sitingFreeClause(L.SITING_FREE_PLANS_PER_MONTH, { planCallerKey: true }));
     expect(on).not.toContain('execute_plan');
     expect(on).toContain(L.SITING_FREE_PLANS_PER_MONTH + ' full site_selection_canvas a month');
-    expect(S._sitingFreeClause({ DCHUB_PLAN_STEPS_CALLER_KEY: '0' })).toContain('site_selection_canvas and execute_plan each a month');
+    expect(S._sitingFreeClause({ DCHUB_PLAN_STEPS_CALLER_KEY: '0' })).not.toContain('execute_plan');
     // Owner decision 2026-11-15: the handshake carries the two free offers, not the siting clause; the clause
     // still rides on claim_free_key / bind_email (free_tier_siting_tools).
     expect(S._INSTRUCTIONS_LEAN).not.toContain(on);
@@ -298,3 +278,4 @@ describe('6) helpers and the published clause', () => {
     expect(foreign).toEqual([]);
   });
 });
+

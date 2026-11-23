@@ -72,8 +72,8 @@ const SURFACES = [
 // is the rule, not an anonymous 50/day claim.
 // ★2026-11-21 (owner decisions 6/7): the backend pin moved on 2026-11-17 (Note F, option A) and states no limits, so
 // the rule no longer carries a calls/day figure; the docs quote it as it now reads.
-const FREE_TIER_RULE = 'No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-  + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+const FREE_TIER_RULE = 'No key needed: the first call each UTC day to each core energy tool ('
+  + 'get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; '
   + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.';
 const OLD_EMAIL_CLAUSE = 'With an email: 50 calls/day (up to 10 full answers per tool per day).';
 // ★2026-11-16 (Note F, Grok item 11): the discovery files quote it without the pin's closing

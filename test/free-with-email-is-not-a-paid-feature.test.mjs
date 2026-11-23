@@ -138,7 +138,8 @@ describe('HARD_WALL_HEADLINES is coupled to the copy', () => {
 describe('unlocked_tools is derived from the gate, not kept as a second list', () => {
   // The three the hand list got wrong: PAID_ONLY_TOOLS members in none of the
   // sets that can pass the free/identified gate, so a trial key never opens them.
-  it.each(['get_pipeline', 'get_interconnection_queue', 'list_transactions'])(
+  // get_grid_data joined 2026-11-23 (owner): its full answer needs a paid key.
+  it.each(['get_pipeline', 'get_interconnection_queue', 'list_transactions', 'get_grid_data'])(
     'no longer advertises %s, which the gate refuses', (t) => {
       expect(_trialUnlockedTools()).not.toContain(t);
       expect(_trialUnlockedHint()).not.toContain(t);
@@ -146,7 +147,7 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
 
   // The ones a trial key really does open — via ALWAYS_PARTIAL_PREVIEW's capped
   // full taste or KEYED_FREE_BONUS. Dropping these would be the opposite bug.
-  it.each(['get_fiber_intel', 'get_grid_data'])(
+  it.each(['get_fiber_intel', 'get_water_risk'])(
     'still advertises %s, which the gate allows', (t) => {
       expect(_trialUnlockedTools()).toContain(t);
       expect(_trialUnlockedHint()).toContain(t);
@@ -171,7 +172,7 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
   it('annotates only the capped-full-taste tools with the daily cap', () => {
     const hint = _trialUnlockedHint();
     expect(hint).toMatch(/get_fiber_intel \(full, \d+\/day\)/);
-    // get_grid_data passes the gate outright (KEYED_FREE_BONUS), not as a taste.
-    expect(hint).not.toMatch(/get_grid_data \(full, \d+\/day\)/);
+    // get_water_risk passes the gate outright (KEYED_FREE_BONUS), not as a taste.
+    expect(hint).not.toMatch(/get_water_risk \(full, \d+\/day\)/);
   });
 });

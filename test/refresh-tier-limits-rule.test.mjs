@@ -149,8 +149,8 @@ describe('the committed snapshot carries the rule', () => {
     expect(FREE_TIER.identified_calls_per_day).toBe(50);
     expect(_rungNum('free')).toBeNull();
     expect(_rungNum('anonymous')).toBeNull();
-    expect(_freeTierRuleText()).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-      + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+    expect(_freeTierRuleText()).toBe('No key needed: the first call each UTC day to each core energy tool ('
+      + 'get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; '
       // 2026-11-21: the backend pin after Note F option A, byte for byte (no email allowance, no pricing pointer).
       + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
       + 'More detail is available at dchub.cloud/connect.');

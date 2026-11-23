@@ -344,6 +344,9 @@ describe('_wallPaidLineStep: the generic /mcp surface only', () => {
 const COPY_ON = { DCHUB_WALL_IDENTITY_V2: '1', DCHUB_WALL_COPY_V2: '1' };
 const COPY_OFF = { DCHUB_WALL_IDENTITY_V2: '1', DCHUB_WALL_COPY_V2: '0' };   // COPY_V2 killed (production before 15:11Z)
 
+// Owner 2026-11-23: a trial key's execute_plan is a preview with keyless steps (a full plan needs a paid key), so
+// it is no longer origin/main's answer; the byte-for-byte cases skip it and the A/B test below pins the line on it.
+const changedSince1123 = (c, name) => c.trial && name === 'execute_plan';
 describe('flag OFF is origin/main byte for byte, on every profile; flag ON leaves /mcp/claude and /mcp/chatgpt as origin/main', () => {
   const run = async (p, c, name, args, env) => {
     setEnv(env);
@@ -363,7 +366,7 @@ describe('flag OFF is origin/main byte for byte, on every profile; flag ON leave
     ['unset, COPY_V2 off', { ...COPY_OFF }]]) {
     it.each(CASES)(`flag ${flag}: %s %s`, async (p, name, args) => {
       if (!O) { console.warn(`[wall-paid-line] origin/main comparison not run: ${why}`); return; }
-      for (const [, c] of CALLERS) await run(p, c, name, args, env);
+      for (const [, c] of CALLERS) if (!changedSince1123(c, name)) await run(p, c, name, args, env);
     }, 240_000);
   }
   const ON = [];
@@ -372,6 +375,7 @@ describe('flag OFF is origin/main byte for byte, on every profile; flag ON leave
     if (!O) { console.warn(`[wall-paid-line] origin/main comparison not run: ${why}`); return; }
     for (const env of [{ ...COPY_ON, DCHUB_WALL_PAID_LINE: '1' }, { ...COPY_OFF, DCHUB_WALL_PAID_LINE: '1' }]) {
       for (const [, c] of CALLERS) {
+        if (changedSince1123(c, name)) continue;
         setEnv(env);
         anonCount = c.cnt;
         const w = who(c, W.ARM_PAID_LINE);
@@ -392,10 +396,20 @@ describe('flag ON, /mcp: the A/B', () => {
   const walledSeen = new Set();
   afterAll(() => {
     // The branch above must not swallow the test: most cases are walls (a check over no wall proves nothing).
-    if (O) expect(walledSeen.size, 'walled cases actually exercised').toBeGreaterThanOrEqual(30);
+    // 28 = 32 before 2026-11-23 minus the 4 trial-key execute_plan cases (2 copies x 2 arms) moved to their own test.
+    if (O) expect(walledSeen.size, 'walled cases actually exercised').toBeGreaterThanOrEqual(28);
   });
   const CASES = [];
-  for (const [label, c] of CALLERS) for (const t of TOOLS) CASES.push([label + ' / ' + t[0], c, ...t]);
+  for (const [label, c] of CALLERS) for (const t of TOOLS) if (!changedSince1123(c, t[0])) CASES.push([label + ' / ' + t[0], c, ...t]);
+  it('trial key / execute_plan (owner 2026-11-23, paid-only full plan): the paid_line arm still gets the line once, URL intact', async () => {
+    const c = CALLERS.find(([, x]) => x.trial)[1];
+    const [, args] = TOOLS.find((t) => t[0] === 'execute_plan');
+    setEnv({ ...COPY_ON, DCHUB_WALL_PAID_LINE: '1' });
+    anonCount = c.cnt;
+    const here = await call(H, '/mcp', 'execute_plan', args, who(c, W.ARM_PAID_LINE));
+    expect(count(here.result, W.PAID_LINE)).toBe(1);
+    for (const tr of here.tracks) expect(tr.params[W.TRACK_FIELD]).toBe('paid_line');
+  }, 240_000);
   for (const [copy, env] of [['COPY_V2 on', COPY_ON], ['COPY_V2 off', COPY_OFF]]) {
     it.each(CASES)(`${copy}: paid_line arm, %s: origin/main plus exactly the line, URL intact, arm recorded`, async (_l, c, name, args) => {
       if (!O) { console.warn(`[wall-paid-line] origin/main comparison not run: ${why}`); return; }

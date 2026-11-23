@@ -257,21 +257,17 @@ describe('execute_plan("Is Phoenix a good place to build?") leads with the DCPI 
     const at = json.indexOf(EMAIL_ASK);
     expect(at === -1 || at > json.indexOf('"dcpi_verdict"')).toBe(true);
   });
-  it('keyless, the first full answer of the day (compact): the answer IS the verdict sentence, then as_of, then the verdict', async () => {
+  // 2026-11-23 (owner): a keyless execute_plan is never a full answer, with the first-full lane on or off; it still
+  // leads with the verdict sentence (block 0) and keeps dcpi_verdict as the plan JSON's first data key.
+  it('keyless with the first-full lane on: no first full answer, and the verdict still leads', async () => {
     delete process.env.DCHUB_KEYLESS_FIRST_FULL;
     try {
-      // in a session: over this harness's loopback socket a sessionless call reads as a plan step
       const r = await callAs(null, 'execute_plan', ASK, 'claude-code');
-      // block 0 is the plain-language lead (lib/plan-lead-text.mjs); the plan JSON is block 1
       expect((r.result.content || [])[0].text).toMatch(/Phoenix[^.]*CAUTION/);
       const d = JSON.parse((r.result.content || [])[1].text);
-      expect(d.first_full_answer).toMatchObject({ used: 1, limit: 1 });
-      // the paid boundary's link (DCPI sub-scores are Pro-only, as for an email key) follows the answer;
-      // the fact header (in a session) is the one key ahead of the answer
-      expect(Object.keys(d).filter((k) => k !== 'human_url' && k !== 'fact_header').slice(0, 3)).toEqual(['answer', 'as_of', 'dcpi_verdict']);
-      expect(Object.keys(d).slice(0, 3)).toEqual(['fact_header', 'answer', 'as_of']);
-      expect(d.answer).toBe(d.dcpi_verdict.text);
-      expect(d.answer).toMatch(/^Data Center Power Index \(DCPI\): Phoenix: CAUTION, composite 43\.5\/100\./);
+      expect(d.first_full_answer).toBeUndefined();
+      expect(r.result.structuredContent && r.result.structuredContent.first_full_answer).toBeUndefined();
+      expect(d.dcpi_verdict && d.dcpi_verdict.text).toMatch(/^Data Center Power Index \(DCPI\): Phoenix: CAUTION, composite 43\.5\/100\./);
     } finally { process.env.DCHUB_KEYLESS_FIRST_FULL = '0'; }
   });
   it('a market the index does not track gets no verdict block (never a substitute)', async () => {

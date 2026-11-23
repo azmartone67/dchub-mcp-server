@@ -222,8 +222,11 @@ describe('1) a keyless plan whose steps walled asks once, and its step rows say 
     expect(para).not.toMatch(PLAN_OR_PRICE);
     expect(para).not.toMatch(/\n/);
     expect(r.walls.length, 'a step wrote a wall row').toBeGreaterThan(0);
+    expect(r.walls.some((w) => opens.includes(w.tool)), 'a step the ask names wrote a wall row').toBe(true);
     for (const w of r.walls) {
-      expect(opens, 'only steps the ask names wrote wall rows here').toContain(w.tool);
+      // Owner 2026-11-23: get_refined_queue is paid-full-only, so an email does not open it: its row may be
+      // written, but it is never credited with the email line.
+      if (!opens.includes(w.tool)) { expect(depth, w.tool).toContain(w.tool); expect(w.email_ask, JSON.stringify(w)).not.toBe('line'); continue; }
       expect(w.email_ask, JSON.stringify(w)).toBe('line');
       if (!opts.sessionless) expect(w.session_id, 'the step row keeps the caller session').toBeTruthy();
     }
@@ -244,13 +247,19 @@ describe('1b) with the lean step off, _upgrade still carries the ask in prose', 
 describe('2) a no-email key: the bind_email line it already gets is credited on the step rows', () => {
   it('the row reads line', async () => {
     const r = await plan(NOEMAIL);
-    expect(r.data._upgrade).toMatchObject({ next_tool: 'bind_email', steps_ran_under: 'your_key' });
-    expect(r.data._upgrade.walled_steps.length, 'lean keeps walled_steps').toBeGreaterThan(0);
+    // Owner 2026-11-23: a full plan needs a paid key. A no-email key's plan is the preview (steps keyless) and its
+    // pointer is the paid path; the step-level bind_email line (for the steps an email opens) still rides along.
+    expect(r.data._upgrade).toMatchObject({ tier: 'identified', next_tool: 'unlock_more_data' });
+    expect(r.data.totals.tier_note).toMatch(/steps ran keyless/);
     const para = askBlock(r);
     expect(para, r.text.slice(0, 1200)).toContain('`bind_email` {api_key, email}');
     expect(para).not.toMatch(PLAN_OR_PRICE);
+    expect(para).not.toContain('get_refined_queue');
     expect(r.walls.length).toBeGreaterThan(0);
-    for (const w of r.walls) expect(w.email_ask, JSON.stringify(w)).toBe('line');
+    for (const w of r.walls) {
+      if (w.tool === 'get_refined_queue') expect(w.email_ask, JSON.stringify(w)).not.toBe('line');
+      else expect(w.email_ask, JSON.stringify(w)).toBe('line');
+    }
   });
 });
 
@@ -319,11 +328,12 @@ describe('4b) depth steps are never named, fan-out steps once, and only named st
     expect(W.planAskParagraph(d, { keyed: true })).toBeNull();
     expect(W.planAnonEmailUpgrade(d)).toBeNull();
   });
-  it('the classifier: DCPI is depth (owner 11-02), a keyless get_grid_data free-key wall opens, grid intelligence opens', () => {
+  it('the classifier: DCPI is depth (owner 11-02), get_grid_data and get_refined_queue are paid-only (11-23), grid intelligence opens', () => {
     expect(S._planStepEmailOpens('get_market_dcpi_rank', { human_url: 'https://dchub.cloud/u/x', preview_is_partial: true }, {})).toBe(false);
     expect(S._planStepEmailOpens('get_grid_intelligence', {}, {})).toBe(true);
     expect(S._planStepEmailOpens('ai_capacity_index', {}, {})).toBe(true);
-    expect(S._planStepEmailOpens('get_grid_data', {}, {}), 'keyless get_grid_data is a free-key wall').toBe(true);
+    expect(S._planStepEmailOpens('get_grid_data', {}, {}), 'an email does not open get_grid_data (paid-only)').toBe(false);
+    expect(S._planStepEmailOpens('get_refined_queue', {}, {}), 'an email does not open get_refined_queue (paid-only)').toBe(false);
     expect(S._planStepEmailOpens('compare_isos', {}, {})).toBe(false);
   });
   it('the drain credits only the rows of named tools (the real send path)', async () => {

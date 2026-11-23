@@ -1,7 +1,8 @@
 // wall-email-line-freekey.test.mjs (2026-10-26) — option A's one human line on a keyless FREE-KEY wall
 // (relay token w-freekey) of a tool outside grid / queue. That page leads with the free email unlock
 // (dchub-backend handoff_email_capture.unlock_eligible; measured live 2026-10-26 on a get_grid_data
-// link: "Get the full answer: enter your email"). Harness copied from
+// link: "Get the full answer: enter your email"). get_grid_data left that class 2026-11-23 (owner: paid key
+// only), so get_water_risk is this file's free-key example. Harness copied from
 // wall-email-line-prod-transport.test.mjs — option A, the agent half (owner 2026-10-25), on the
 // PRODUCTION transport: DCHUB_WALL_ISERROR=0 and DCHUB_PREVIEW_ISERROR=0 (both read before the import;
 // the preview flag is read once at load). A free, email-less caller on a real get_grid_intelligence /
@@ -160,9 +161,9 @@ const lastKind = () => {
 };
 
 describe('option A line on a keyless free-key wall, production transport', () => {
-  it('get_grid_data keyless: one human line (the in-chat email unlock on the /u/ link of a w-freekey token), the bind_email agent line right above it; block 0 is JSON', async () => {
+  it('get_water_risk keyless: one human line (the in-chat email unlock on the /u/ link of a w-freekey token), the bind_email agent line right above it; block 0 is JSON', async () => {
     minted.length = 0;
-    const r = await wallCall('get_grid_data');
+    const r = await wallCall('get_water_risk');
     expect(r.sid).toBeTruthy();
     expect(r.result.isError).toBeFalsy();
     const b0 = r.result.content[0].text;
@@ -182,7 +183,7 @@ describe('option A line on a keyless free-key wall, production transport', () =>
   });
 
   it('the other free-key walls get the same pair', async () => {
-    for (const tool of ['get_water_risk', 'get_energy_prices', 'get_renewable_energy', 'get_refined_queue']) {
+    for (const tool of ['get_energy_prices', 'get_renewable_energy']) {
       minted.length = 0;
       const r = await wallCall(tool);
       const url = r.sc.human_url;
@@ -194,17 +195,17 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     }
   });
 
-  it('end to end: bind_email with the reply mints a key with the email on this session, and the next get_grid_data is not walled', async () => {
+  it('end to end: bind_email with the reply mints a key with the email on this session, and the next get_water_risk is not walled', async () => {
     claims.length = 0;
     const call = await wallSession();
-    const w = await call('get_grid_data');
+    const w = await call('get_water_risk');
     expect(w.text).toContain(claimHandoffFreekeyText());
     const b = await call('bind_email', { email: 'jane@firm.com' });
     expect(claims.length).toBe(1);
     expect(claims[0].email).toBe('jane@firm.com');
     expect(b.text).toMatch(/minted a DC Hub key with this email bound/);
     expect(b.text).toMatch(/already applied to THIS session/);
-    const r = await call('get_grid_data');
+    const r = await call('get_water_risk');
     expect(r.sc.human_url).toBeFalsy();
     expect(r.sc.preview_is_partial).toBeFalsy();
     expect(r.text).not.toMatch(/held back part of this answer/);
@@ -214,27 +215,27 @@ describe('option A line on a keyless free-key wall, production transport', () =>
   // second tool in the session carries its own line and agent line.
   it('a repeat free-key wall in the same session (no text human line to sit under): link-only wording, no agent line', async () => {
     const call = await wallSession();
-    const first = await call('get_grid_data');
+    const first = await call('get_water_risk');
     expect(first.text).toContain(claimHandoffFreekeyText());
-    const r = await call('get_grid_data');
+    const r = await call('get_water_risk');
     const url = r.sc.human_url;
     expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\//);
     expect(humanLines(r.text)).toEqual([]);                      // this tool's one line was already sent
     expect(r.text).not.toContain('bind_email');
     expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));   // never the in-chat promise alone
-    const other = await call('get_water_risk');                  // a second tool: its own ask
+    const other = await call('get_renewable_energy');                  // a second tool: its own ask
     expect(other.text).toContain(claimHandoffFreekeyText());
     expect(humanLines(other.text).length).toBe(1);
   });
 
   // Step level, on a real handler output: a response that already names `bind_email` keeps the
-  // link-only line (one email ask per response). The input is the production-transport get_grid_data
+  // link-only line (one email ask per response). The input is the production-transport get_water_risk
   // wall as served with the in-chat form off, re-run through the step with the switch on.
   it('a free-key wall that already names `bind_email` keeps the link-only line and gets no second ask', async () => {
-    const r = await withEnv('DCHUB_WALL_EMAIL_FREEKEY_CHAT', '0', () => wallCall('get_grid_data'));
+    const r = await withEnv('DCHUB_WALL_EMAIL_FREEKEY_CHAT', '0', () => wallCall('get_water_risk'));
     const url = r.sc.human_url;
     const ctx = { session_id: r.sid, platform: 'claude', auth_source: 'none', tier: 'anonymous' };
-    const run = (result) => S._ctxALS.run(ctx, () => S._wallEmailLineStep(result, 'get_grid_data'));
+    const run = (result) => S._ctxALS.run(ctx, () => S._wallEmailLineStep(result, 'get_water_risk'));
     // control: the same input without the extra mention takes the in-chat pair
     const plain = run(r.result);
     const plainText = plain.content.map((b) => b.text || '').join('\n');
@@ -248,7 +249,7 @@ describe('option A line on a keyless free-key wall, production transport', () =>
 
   it('DCHUB_WALL_EMAIL_FREEKEY_CHAT=0: mcp#1164 as it was (link-only line, no agent line)', async () => {
     await withEnv('DCHUB_WALL_EMAIL_FREEKEY_CHAT', '0', async () => {
-      const r = await wallCall('get_grid_data');
+      const r = await wallCall('get_water_risk');
       expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailFreekeyLineText(r.sc.human_url)]);
       expect(r.text).not.toContain('bind_email');
       expect(r.text).not.toMatch(/Reply with your email/);
@@ -256,7 +257,7 @@ describe('option A line on a keyless free-key wall, production transport', () =>
   });
 
   it('Grok (a new session per call, so a key minted now is not this chat\'s): link-only line, no agent line', async () => {
-    const r = await (await wallSession(undefined, 'grok'))('get_grid_data');
+    const r = await (await wallSession(undefined, 'grok'))('get_water_risk');
     if (r.sc.human_url) {
       expect(r.text).not.toMatch(/Reply with your email/);
       expect(r.text).not.toContain(claimHandoffFreekeyText());
@@ -265,7 +266,7 @@ describe('option A line on a keyless free-key wall, production transport', () =>
 
   it('DCHUB_WALL_EMAIL_TELL_FREEKEY=0: the free-key wall keeps its earlier line; grid / queue keep the email line', async () => {
     await withEnv('DCHUB_WALL_EMAIL_TELL_FREEKEY', '0', async () => {
-      const r = await wallCall('get_grid_data');
+      const r = await wallCall('get_water_risk');
       const lines = humanLines(r.text);
       expect(lines.length).toBe(1);
       expect(lines[0]).toMatch(/\bDC Hub key/);   // option A (owner 2026-11-16): "free DC Hub key" reads "DC Hub key"
@@ -278,14 +279,14 @@ describe('option A line on a keyless free-key wall, production transport', () =>
 
   it('DCHUB_WALL_EMAIL_TELL=0 (the parent switch) turns the free-key line off too', async () => {
     await withEnv('DCHUB_WALL_EMAIL_TELL', '0', async () => {
-      const r = await wallCall('get_grid_data');
+      const r = await wallCall('get_water_risk');
       expect(humanLines(r.text).length).toBe(1);
       expect(r.text).not.toMatch(/held back part of this answer/);
     });
   });
 
-  it('a free key with no email gets get_grid_data in full: no wall, no line', async () => {
-    const r = await wallCall('get_grid_data', FREE_KEY);
+  it('a free key with no email gets get_water_risk in full: no wall, no line', async () => {
+    const r = await wallCall('get_water_risk', FREE_KEY);
     expect(r.text).not.toMatch(/held back part of this answer/);
     expect(humanLines(r.text)).toEqual([]);
   });
@@ -301,6 +302,19 @@ describe('option A line on a keyless free-key wall, production transport', () =>
       expect(lastKind(), tool).toBe('');
       expect(humanLines(r.text).length, tool).toBe(1);
       expect(r.text, tool).not.toMatch(/held back part of this answer/);
+    }
+  });
+
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): a free key no longer opens these, so their keyless wall is not a
+  // free-key wall: no w-freekey token, whose page would promise the email unlocks the answer.
+  it('get_grid_data and get_refined_queue: a keyless wall is not a free-key wall; a free key gets the preview', async () => {
+    for (const tool of ['get_grid_data', 'get_refined_queue']) {
+      minted.length = 0;
+      const r = await wallCall(tool);
+      expect(freekeyMinted(), tool).toBe(false);
+      expect(r.text, tool).not.toContain(claimHandoffFreekeyText());
+      const k = await wallCall(tool, FREE_KEY);
+      expect(k.sc.preview_is_partial || /partial_preview|_withheld|"taste"/.test(k.text), tool + ' free key').toBeTruthy();
     }
   });
 

@@ -99,7 +99,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key
 
-Access: No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. To keep a key across sessions, get an API key
+Access: No key needed: the first call each UTC day to each core energy tool (get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. To keep a key across sessions, get an API key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 
@@ -160,7 +160,7 @@ A healthy server card is also published at
 
 - **No tools appear:** make sure the entry uses a `url` (remote), not a `command`. DC Hub
   is not an npm/stdio server — there is no local process to spawn.
-- **429 / rate-limited:** you have hit the access limit (No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.) Add an `X-API-Key` header
+- **429 / rate-limited:** you have hit the access limit (No key needed: the first call each UTC day to each core energy tool (get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.) Add an `X-API-Key` header
   (an API key from https://dchub.cloud/signup, with an email bound). More detail is available at dchub.cloud/connect.
 - **Transport type:** if your client supports it, prefer `streamableHttp` /
   `streamable-http`. Older clients can use plain `http`.

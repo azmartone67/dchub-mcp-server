@@ -74,7 +74,7 @@ afterAll(async () => {
   if (fence) fence.restore();
 });
 
-const ARGS = { execute_plan: { intent: 'rank markets for a 200 MW AI campus and check PJM grid headroom' }, rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' },
+const ARGS = { execute_plan: { intent: 'rank markets for a 200 MW AI campus and check PJM grid headroom' }, rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' }, get_water_risk: { state: 'VA' },
   list_transactions: { limit: 10 }, get_gas_intelligence: { region: 'TX' } };
 let ipN = 10;
 // One MCP session (initialize + initialized) where the surface has sessions, then tool calls on it, as the agent
@@ -163,11 +163,11 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
   it('a free-key wall as the second tool shows its email line; the same tool again does not', async () => {
     const call = await session();
     await call('rank_markets');
-    const g1 = await call('get_grid_data');
-    expect(g1.sc.preview_is_partial || g1.sc.trial_preview, 'get_grid_data did not wall').toBeTruthy();
+    const g1 = await call('get_water_risk');
+    expect(g1.sc.preview_is_partial || g1.sc.trial_preview, 'get_water_risk did not wall').toBeTruthy();
     expect(g1.text).toMatch(/Reply with your email/);
     expect(count(g1.text, EMAIL_ASK)).toBe(1);   // item 4 (2026-11-13): lib/unlock-line.mjs's sentence
-    const g2 = await call('get_grid_data');
+    const g2 = await call('get_water_risk');
     expect(g2.text).not.toMatch(/Reply with your email|`bind_email`/);
     expect(count(g2.text, HUMAN)).toBe(0);
   });

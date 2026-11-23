@@ -102,17 +102,17 @@ const servedNumbers = (sc) => { const e = gridEntry(sc); const o = { ...(e.resul
   return Object.keys(FIELDS).filter((k) => typeof o[k] === 'number'); };
 const picked = (f) => Object.fromEntries(Object.keys(FIELDS).map((k) => [k, f[k]]));
 
-describe('keyless first full execute_plan keeps its steps\' full-depth figures (real loopback)', () => {
-  it('call 1: the grid step\'s DCPI scores, time to power, queue wait, price and emergencies are served', async () => {
+describe('keyless execute_plan never reads its steps at full depth (owner 2026-11-23; real loopback)', () => {
+  // Owner 2026-11-23: a full execute_plan needs a paid key, so the keyless first full plan is gone. Call 1 is the
+  // preview: no step reads at the full-depth tier and none of the six figures is served.
+  it('call 1 (lane on): the preview; no step reads at full depth and no DCPI figure is served', async () => {
     heard.length = 0;
     const run = await session('198.18.90.10');
     const sc = await run();
-    expect(sc.first_full_answer).toMatchObject({ used: 1, limit: 1 });
-    expect(heard, 'the step read the DCPI row at full depth').toContain(S._callerTierFor({ kff_full_depth: true }));
-    const f = gridFigures(sc);
-    expect(picked(f)).toEqual(FIELDS);
-    expect(servedNumbers(sc)).toEqual(Object.keys(FIELDS));
-    for (const k of Object.keys(FIELDS)) expect(f[`_${k}_withheld`], k).toBeUndefined();
+    expect(sc.first_full_answer).toBeUndefined();
+    expect(heard.length).toBeGreaterThan(0);
+    expect(heard, 'no step read the DCPI row at full depth').not.toContain(S._callerTierFor({ kff_full_depth: true }));
+    expect(servedNumbers(sc)).toEqual([]);
   }, 120_000);
 
   it('call 2 in the same session: no first full answer, its steps read at the caller\'s tier, no figure served', async () => {

@@ -42,7 +42,7 @@ POST https://dchub.cloud/mcp                                  # the full 98-tool
 ```
 
 ## Access and keys
-- **Access:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional; it keeps saved work across sessions):
+- **Access:** No key needed: the first call each UTC day to each core energy tool (get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional; it keeps saved work across sessions):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
 - **Paid tools** (e.g. `analyze_site`, `compare_sites`, `get_grid_intelligence`, `get_interconnection_queue`): pass the key as **`X-API-Key`** header (REST) or in your MCP client config.
 

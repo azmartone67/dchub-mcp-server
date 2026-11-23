@@ -252,7 +252,9 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
 
 describe('flag OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main with the flag ON', () => {
   const CASES = [];
-  for (const [label, who] of CALLERS) for (const t of TOOLS) CASES.push(['/mcp', label, who, ...t]);
+  // Owner 2026-11-23: a trial key's execute_plan is a preview with keyless steps now (paid-only full plan), so it is
+  // not origin/main's; test/paid-only-plan-and-grid-data-1123 and commercial-wall-p02 pin that case.
+  for (const [label, who] of CALLERS) for (const t of TOOLS) if (!(who.trial && t[0] === 'execute_plan')) CASES.push(['/mcp', label, who, ...t]);
   for (const flag of [undefined, '0']) {
     it.each(CASES)(`flag ${flag === undefined ? 'unset' : flag}: %s %s %s`, async (p, _label, who, name, args) => {
       if (!O) { console.warn(`[wall-identity-v2] origin/main comparison not run: ${why}`); return; }

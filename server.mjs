@@ -333,7 +333,8 @@ import { platformFamily as _platformFamily } from './lib/platform-family.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
 import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader, getVerdict as _mcpGetVerdict, mcpGetDescription as _mcpGetDescription, sseDeclineFrame as _sseDeclineFrame, chunkText as _chunkText } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
-import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
+import { PAID_FULL_ONLY_GATED_TOOLS as _PAID_FULL_GATED_LIST, isPaidFullOnly as _isPaidFullOnly } from './lib/paid-full-only.mjs';
+import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn, PLAN_PAID_ONLY_TOOL,
          sitingFreeClause, sitingFreeRunNote, planStepsCallerKeyOn, planCallerKeyUpgrade } from './lib/siting-email-seat.mjs';
 import { PLAN_WALL_SINK_HEADER, planEmailAskOn as _planEmailAskOn, planAnonEmailUpgrade as _planAnonEmailUpgrade,
          planAskedTools as _planAskedTools, createPlanWallSink, planAskParagraph as _planAskParagraph,
@@ -406,7 +407,7 @@ import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForSt
   buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
 import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
-import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
+import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, PAID_ONLY_TASTE_TOOLS as _PAID_ONLY_TASTE_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
          // Item 3 (owner draft 2026-10-16): email-bound keys get capped full grid/queue answers (market intel joined 2026-10-19).
          EMAIL_FULL_DECISION_TOOLS as _EMAIL_FULL_DECISION_LIST, EMAIL_DECISION_DAILY_FULL_DEFAULT, emailFullDecisionOn, maskBrokerRatesBelowPro as _maskBrokerRatesBelowPro, maskPricingBlock as _maskPricingBlock,
@@ -10722,6 +10723,8 @@ const PAID_ONLY_TOOLS = new Set([
   'rank_markets',            // ranked market scores
   'ai_capacity_index',       // composite metric per market
   'hyperscaler_deals',       // $1B+ deal tracker — $-values
+  // Owner 2026-11-23: a full answer needs a paid key (lib/paid-full-only.mjs); free-class seats get the preview.
+  'get_refined_queue', 'get_power_availability_timeline',
 ]);
 
 // r46-conversion (2026-05-25): open the 5 highest-demand "paid" tools to
@@ -10736,7 +10739,7 @@ const PAID_ONLY_TOOLS = new Set([
 // isn't unlimited — it's a meaningful taste before the upgrade prompt.
 const KEYED_FREE_BONUS = new Set([
   'get_market_intel',     // 990 sessions/7d (the strongest demand signal)
-  'get_grid_data',        // 726 sessions/7d
+  // get_grid_data left 2026-11-23 (owner): its full answer needs a paid key, so a free key gets its preview.
   'get_water_risk',       // 651 sessions/7d
   'get_energy_prices',    // 540 sessions/7d
   'get_renewable_energy', // 425 sessions/7d
@@ -10793,7 +10796,9 @@ export function _freePreviewOnlyTool(name) {
 // Tools whose PREVIEW paths render the labelled taste but which are not preview-only:
 // get_energy_prices keeps its free full answers; only the shape of the withheld copy changes.
 export function _tasteShapedOnlyTool(name) {
-  return freeDecisionPreviewOnlyOn() && _TASTE_SHAPED_ONLY_LIST.includes(String(name || ''));
+  // get_grid_data (owner 2026-11-23, paid key only): its preview is this taste whatever the switch says.
+  return (freeDecisionPreviewOnlyOn() && _TASTE_SHAPED_ONLY_LIST.includes(String(name || '')))
+    || _PAID_ONLY_TASTE_LIST.includes(String(name || ''));
 }
 // Owner 2026-10-08 (Grok revenue plan item 2): the agent-facing copy on a DEPTH wall (grid,
 // queue, market, energy) names no plan, no price and no "after they pay" - "the fields above
@@ -10924,9 +10929,9 @@ export async function _keylessFullTrialCharge(c, tool, cap) {
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
 }
 // ── The first full answer of the day (owner 2026-11-14, lib/keyless-first-full.mjs) ───────────
-// A keyless caller's first call per UTC day to execute_plan, get_grid_intelligence,
-// get_interconnection_queue, get_grid_data and get_energy_prices is served the email-bound free key's
-// answer. 'charge' and 'observe' as the trial; 'step' = a loopback step of a plan that was its caller's
+// A keyless caller's first call per UTC day to get_grid_intelligence,
+// get_interconnection_queue and get_energy_prices is served the email-bound free key's answer
+// (execute_plan and get_grid_data left 2026-11-23: their full answer needs a paid key). 'charge' and 'observe' as the trial; 'step' = a loopback step of a plan that was its caller's
 // first full answer (covered by the plan's charge). null = today's path.
 export function _keylessFirstFullSeat(name, c, env = process.env) {
   const deps = {
@@ -10973,6 +10978,7 @@ function _keylessFirstFullSessionDayKey(c, tool) {
 export async function _keylessFirstFullCharge(c, tool, cap, opts = {}) {
   try {
     if (!(cap > 0)) return false;
+    if (_isPaidFullOnly(tool)) return false;   // owner 2026-11-23: no keyless full answer to count for these
     const buckets = [_keylessFirstFullDayKey(c, tool), _keylessFirstFullSessionDayKey(c, tool)].filter(Boolean);
     const hydrating = Promise.all(buckets.map(({ id, key }) => _hydrateOnce(key, key, id, tool, cap)));
     if (FULL_CAP_PEEK_MS > 0) await hydrating;
@@ -11314,7 +11320,8 @@ export function _normalizesToPaid(g, tool) {
 }
 
 export function isFreeWithEmailTool(name) {
-  return PAID_ONLY_TOOLS.has(name) && !PRO_ONLY_TOOLS.has(name);
+  // get_grid_data (owner 2026-11-23): no email opens it any more; its full answer needs a paid key.
+  return PAID_ONLY_TOOLS.has(name) && !PRO_ONLY_TOOLS.has(name) && !_PAID_FULL_GATED_LIST.includes(name);
 }
 
 // ── r-continuation item 4 (2026-09-03): the plan says which steps are gated ──
@@ -11408,7 +11415,7 @@ const FREE_FULL_TOOLS = new Set([
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
   'get_infra_projects',    // public EIA gas pipeline projects (public domain) + ISO transmission project lists — same free-citation class as get_power_pipeline (2026-09-23)
   'get_air_permit_context', // EPA Green Book + TCEQ turbine permits (both public domain) — same free-citation class as get_permitting_intel (2026-11-11)
-  'get_power_availability_timeline',  // composed timing view over the same public EIA-860M/LBNL facts — same free-citation class (shell 2026-07-30)
+  // get_power_availability_timeline left 2026-11-23 (owner): its full answer needs a paid key (lib/paid-full-only.mjs).
   'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
   // r-hosting-capacity (2026-07-28): utility-PUBLISHED feeder hosting capacity —
   // 278,799 records the utilities themselves publish as open GIS. Public-source
@@ -11962,7 +11969,9 @@ async function _lpFreeRun(c, tool, op, chargeRef) {
 //             tier word 'identified' is set at claim with or without an email)
 const _SITING_FREE_CLASS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
 export async function _sitingSeat(c, name, gateTier, env = process.env) {
-  if (!noEmailPreviewOn(env) || !NOEMAIL_PREVIEW_TOOLS.includes(String(name || ''))) return null;
+  if (!NOEMAIL_PREVIEW_TOOLS.includes(String(name || ''))) return null;
+  // Owner 2026-11-23: execute_plan's full answer needs a paid key, so its seat does not hang on the switch.
+  if (!noEmailPreviewOn(env) && String(name || '') !== PLAN_PAID_ONLY_TOOL) return null;
   if (!c || !c.api_key || c.profile === DIRECTORY_PROFILE) return null;
   if (!_SITING_FREE_CLASS.has(String(c.tier || '').trim().toLowerCase())) return null;
   if (gateTier !== undefined && !_SITING_FREE_CLASS.has(String(gateTier || '').trim().toLowerCase())) return null;
@@ -11999,7 +12008,7 @@ function _markAskGap(c, kind, url) {
 }
 // The siting preview's line, marked as the bind_email ask it is (a spent email seat is not asked).
 function _sitingPreviewUpgradeMarked(name, seat, fr) {
-  if (seat !== 'email') _markAskGap(getCtx() || {}, 'line');
+  if (seat !== 'email' && name !== PLAN_PAID_ONLY_TOOL) _markAskGap(getCtx() || {}, 'line');
   return _sitingPreviewUpgrade(name, seat, fr);
 }
 // The plan steps that came back walled, read off each step's own result by the relay's wall test.
@@ -12024,7 +12033,8 @@ export function _planStepEmailOpens(tool, result, c) {
 // The keyed caller's line on the keyless preview: the next step is bind_email, never
 // claim_free_key (it already holds a key). No plan name, no price.
 export function _sitingPreviewUpgrade(name, seat, fr) {
-  const spent = seat === 'email';
+  // execute_plan (owner 2026-11-23): no email opens it, so every free-class seat gets the "not open on this key" line.
+  const spent = seat === 'email' || name === PLAN_PAID_ONLY_TOOL;
   const month = SITING_MONTHLY_TOOLS.includes(name);
   const what = name === 'find_sites'
     ? 'every candidate at ~1 km'
@@ -15504,6 +15514,20 @@ const _PROTECTED_KEYS = new Set([
   // Masking one and not the other was incoherent as well as wrong.
   'excluded_total', 'markets_in_region',
 ]);
+// get_power_availability_timeline below a paid key: queue_context.iso_reported[] gw / mw and its basis sentence
+// (the figures routes/power_availability_timeline.py locks below Developer). Pure; any other shape passes through.
+export function _withholdTimelineIsoReported(d) {
+  const qc = d && typeof d === 'object' ? d.queue_context : null;
+  if (!qc || typeof qc !== 'object' || !Array.isArray(qc.iso_reported)) return d;
+  const iso_reported = qc.iso_reported.map((r) => {
+    if (!r || typeof r !== 'object') return r;
+    const { basis: _b, ...rest } = r;
+    if ('gw' in rest) rest.gw = null;
+    if ('mw' in rest) rest.mw = null;
+    return rest;
+  });
+  return { ...d, queue_context: { ...qc, iso_reported } };
+}
 function _isMetricKey(k) {
   if (_PROTECTED_KEYS.has(k)) return false;
   const lk = String(k).toLowerCase();
@@ -17710,25 +17734,22 @@ function trimForTrial(parsed, toolName, _inRate = false) {
 // (92178 MW @ …)" while demand_mw was null (this trimmer nulls every *_mw figure below Pro, and `message`
 // is a protected key, so the number leaked through the prose); its retry hints named get_grid_intelligence
 // (the backend builds one teaser for both grid tools) and its signup line said "email-only" (a free key
-// needs no email). The message now states what the payload holds, and every hint names get_grid_data and
-// claim_free_key. Runs after the mask, so it reads the state the caller actually receives.
+// needs no email). The message now states what the payload holds. Runs after the mask, so it reads the state
+// the caller actually receives.
 export function _keylessGridDataHonesty(out, toolName) {
   if (toolName !== 'get_grid_data' || !out || typeof out !== 'object' || out.gated !== true
       || typeof out.message !== 'string') return out;
   const region = String(out.region || out.rto_code || '').toUpperCase();
-  const retry = 'get_grid_data' + (region ? ' with iso=' + region : '');
   const tail = (/For fund-grade access[\s\S]*$/.exec(out.message) || [''])[0];
-  const claim = 'call claim_free_key (no email needed; adding one raises the daily limit), then retry ' + retry + '.';
+  // Owner decision 2026-11-23: get_grid_data's full answer needs a paid key, so no line here may say a key or an
+  // email opens it. The data API's sentence ("Full 24h series ... requires a free key ...") and its claim-then-retry
+  // agent_action promised exactly that; both are trimmed, and the preview's own relay (human_url) is the way on.
   if (out.demand_mw == null) {
-    out.message = 'Headline demand' + (region ? ' for ' + region : '') + ' is withheld on a keyless call. For the full answer, '
-      + claim + (tail ? ' ' + tail : '');
+    out.message = 'Headline demand' + (region ? ' for ' + region : '') + ' is withheld on a keyless call.' + (tail ? ' ' + tail : '');
   } else {
-    out.message = out.message.replace(/free dev key \([^)]*\)/,   // the backend's older wording, whatever its parenthetical
-      'DC Hub key (claim_free_key: no email needed)');
+    out.message = out.message.replace(/\s*Full 24h series[^.]*\.\s*/, ' ').trim();
   }
-  if (out.agent_action && typeof out.agent_action === 'object') {
-    out.agent_action = { ...out.agent_action, then: 'Retry ' + retry + " with header 'X-API-Key: <api_key>'" };
-  }
+  if (out.agent_action && typeof out.agent_action === 'object') delete out.agent_action;
   if (out.email_capture && typeof out.email_capture === 'object') {
     out.email_capture = { ...out.email_capture,
       ...(typeof out.email_capture.url === 'string'
@@ -22408,7 +22429,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set; get_market_dcpi_rank works at every access level. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below full access too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below full access, and below full access target_mw is held at 50; a credit pack opens them per call, as full-access depth. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set; get_market_dcpi_rank works at every access level. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // 5.29 (Grok note K, item 1, 2026-11-15): A SITING QUESTION OVER SEVERAL NAMED STATES.
@@ -22833,7 +22854,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     // 5.39 (Grok cross-domain head-to-head, 2026-11-17 night): "Where can I get 50 MW of colocation or powered capacity
@@ -22929,7 +22950,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); any DC Hub key gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -28958,9 +28979,12 @@ function trackedTool(srv, name, description, schema, handler) {
         }
         _sitingPreview = true;   // fail closed
       }
-      // execute_plan's steps are loopback calls under the caller's key, each at that tool's own
-      // allowance for the key (owner 2026-11-11). DCHUB_PLAN_STEPS_CALLER_KEY=0: run them keyless.
-      if (_sitingPreview && name === 'execute_plan' && !planStepsCallerKeyOn()) c.plan_steps_keyless = true;
+      // Owner decision 2026-11-23: execute_plan's full answer needs a paid key. Any free-class key (no email, a
+      // bound email, a trial key) gets the plan preview: its steps run keyless, at each tool's keyless depth, so the
+      // plan cannot assemble the full answer from the key's own step allowances (an email-bound key's step got the
+      // full grid read). This replaces the 2026-11-11 rule that ran a free key's steps under the key.
+      if (_sitingSeatNow && name === PLAN_PAID_ONLY_TOOL) _sitingPreview = true;
+      if (_sitingPreview && name === PLAN_PAID_ONLY_TOOL) c.plan_steps_keyless = true;
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
       // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
@@ -29352,7 +29376,9 @@ function trackedTool(srv, name, description, schema, handler) {
           if (_pp) { status = 'plan_pro_preview'; return _pp; }
         }
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
-        if ((_gateTier === 'free' || _gateTier === 'identified') && PAID_ONLY_TOOLS.has(name)) { // free-class parity: identified keys get the same always-preview as anon (r-identified)
+        // The paid-only tools (owner 2026-11-23, lib/paid-full-only.mjs): a trial key takes the same preview, not the bind_email wall.
+        if ((_gateTier === 'free' || _gateTier === 'identified' || (_gateTier === 'trial' && _PAID_FULL_GATED_LIST.includes(name)))
+            && PAID_ONLY_TOOLS.has(name)) { // free-class parity: identified keys get the same always-preview as anon (r-identified)
           // r42s (2026-05-26): for the 5 highest-demand tools, ALWAYS
           // serve a trimmed preview (don't gate to once-per-session).
           // Brain class `mcp_demand_gap_unaddressed` flagged these 5 as
@@ -29376,6 +29402,8 @@ function trackedTool(srv, name, description, schema, handler) {
           // wall → quit" to "see it works → upgrade".
           const _alwaysPreview = KEYED_FREE_BONUS.has(name)
                                   || ALWAYS_PARTIAL_PREVIEW.has(name)
+                                  // the paid-only tools (owner 2026-11-23, lib/paid-full-only.mjs): a preview on every call.
+                                  || _PAID_FULL_GATED_LIST.includes(name)
                                   // r-site-headline: analyze_site returns its REAL headline on
                                   // EVERY free call (keyed or anon), not once-per-session — the
                                   // "trigger habit" goal for the killer site query. The headline
@@ -33699,7 +33727,7 @@ export const _FACTS_REQUIRED = ['countries', 'markets', 'deals',
   'fiber_routes', 'gas_pipelines', 'power_plants_us', 'submarine_cables',
   'cable_landings', 'generating_units_global', 'live_feeds', 'grid_regions'];
 export const _FACTS_MAX_AGE_DAYS = 45;
-const _INSTR_TAIL = ' ' + CAPACITY_TEASER_LINE + ' COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. In a preview these are trimmed and the full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (time to power, power availability + interconnection queue, energy and gas prices, site selection, market ranking, "find N MW in <market>", "compare A vs B"), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="how soon can a 100 MW load get power in ERCOT")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at preview depth; with a key every step runs under YOUR key at YOUR tier — same quota, same depth, no access you did not already have. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity, OpenAI Codex CLI, GitHub Copilot CLI) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link to relay to your human. ' + INSTR_CONNECT_LINE + ' ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
+const _INSTR_TAIL = ' ' + CAPACITY_TEASER_LINE + ' COVERAGE LIMITS ARE PUBLISHED PER ANSWER: `rank_sites`, `site_selection_canvas` and `get_power_availability_timeline` each return a `constraint_coverage` block, and `get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does NOT cover and why. Read that block instead of assuming coverage — on `site_selection_canvas` it reports per-argument disposition (`capacity_mw` comes back `applied:false` with a `reason` and an `instead`), so an argument you sent can be declared and still not applied. Its SHAPE differs per tool (a list of caveat strings on the timeline tool, an object keyed by field on the other two) — read the shape from the response, never from this sentence. In a preview these are trimmed and the full count is in the sibling `_..._total_available` field. DC Hub is one input alongside whatever your user already has — not a replacement for market research, an operator directory or a broker. It answers the physical-infrastructure questions that decide one specific site, at one coordinate, on a timestamp: live ISO grid telemetry, interconnection queue position, fiber lead-in, gas economics, water and disaster risk. Say which layer each number came from. FRESHNESS: DC Hub is rebuilt continuously from its sources. Every collection response carries a provenance `as_of`, and the ingest layer itself is public and keyless at `https://dchub.cloud/api/v1/ops/deadman` — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Its shape, so you do not have to guess it: top level `{tracked, overdue_count, any_overdue, feeds[], overdue[], generated_at}`; each feed is `{feed, last_run, rows_inserted, overdue, status, age_hours, cadence_hours, reasons[], note}`. Read those names exactly. Because rows move daily, a figure fetched in an earlier session or earlier in a conversation may have changed; a new call returns the current value. Cite each figure with its `as_of`. The same standard applies to what DC Hub says about ITSELF: every headline number, fix and post is pre-registered as a claim with an expectation and a horizon, judged at horizon by a verifier rather than by its author, and that ledger is public and keyless at `https://dchub.cloud/api/v1/ops/claims` — top level `{ok, generated_at, week, claims[], count, limit, since, since_mode, shape}`, where `week` is this ISO week\'s cohort `{shipped, confirmed, refuted_kept, retracted, unobserved, open, median_event_to_served_hours, granted_action_classes}` and each claim is `{id, kind, subject, statement, regime, shipped_at, outcome, outcome_at, superseded_by}` — read those names exactly, trust the `shape` block in the response over this sentence, and read a retracted claim as withdrawn, a refuted one as stood-by-and-wrong, and a null median as not measured rather than zero. CHOOSING A TOOL: when a question spans more than one infrastructure area (time to power, power availability + interconnection queue, energy and gas prices, site selection, market ranking, "find N MW in <market>", "compare A vs B"), `execute_plan` is the recommended starting point: it plans and runs the lookups in one call. The call shape is `execute_plan(intent="how soon can a 100 MW load get power in ERCOT")` — the parameter is `intent`, and the planner works best on the user\'s question as they asked it. For a single fact (one market\'s DCPI rank, one site\'s water risk), the tool whose description starts "Use this when" for that topic answers it directly. Works KEYLESS at preview depth. What comes back: each step\'s result plus an auditable `replay` — per-step rationale, the rejected paths, and `constraint_check` rows proving the answer stayed inside the geography you asked about. A tier-gated step reads `status:"gated_preview"` — that is a WORKING preview, not a failure; surface its `human_message`. Use `plan_query(intent="…")` ONLY to see the plan without running it. If your client supports MCP prompts, `prompts/list` exposes ready workflows as slash commands, and every execution suggests a `next_recipe` follow-up. A KEYLESS EXAMPLE: `get_grid_scoreboard` takes no parameters and returns a live ranked scoreboard of US, European, GB, Taiwan, Japan, South Korea and Brazil grids (Australia and Singapore partial): fuel mix, renewable share and demand. KEYS AND SIGN-IN, most durable first: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, the connection supports OAuth sign-in, which stays bound to your user across restarts and re-installs and needs one browser visit. Without that challenge OAuth sign-in is unavailable to the client, and `claim_free_key` returns a key for this session; a minted key is a header your client resends, not a durable identity. The response includes `persist_config` with config snippets (Claude Desktop, Claude Code, Cursor, VS Code, Cline, Windsurf, Gemini CLI, Antigravity, OpenAI Codex CLI, GitHub Copilot CLI) so a later session reuses the key; a saved key is recognized, so there is no need to mint another. If your user bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. PARTIAL RESULTS: a preview (e.g. "3 of 12 results shown") or a gated tool carries `human_url` (also `for_your_human.url`), a link to relay to your human. ' + INSTR_CONNECT_LINE + ' ' + RELAY_CONTRACT + ' Responses carry a provenance envelope — per-record verification flags (verified vs tracked, plus published/inferred) and a collection-level `provenance` block with an as_of date — so a citation can quote the verification level and the counts from that block (e.g. "N de-duplicated of M tracked — DC Hub"). Read `verified` as DE-DUPLICATED — distinct buildings holding an elected keeper — and not as analyst-verified against a primary source; that population is not one DC Hub publishes. The pair is also NOT the facility count: that is the floor at /api/v1/canon/phrases, which `verified` sits below and `tracked` sits above. TWO SURFACES THAT ANSWER QUESTIONS ABOUT DC HUB ITSELF, both keyless GETs: `https://dchub.cloud/api/v1/canon/coverage` is the routing contract — per problem, the ONE call to make and the limits we will not answer past; route on it instead of on the tool count, which tells you nothing. `https://dchub.cloud/api/v1/canon/selftest` is a published self-test you can run unprompted: invariants that must always hold, plus `known_gaps` — read that list before reporting anything, so you do not file what we already know. If an invariant fails, that is a real defect and we want the intent verbatim, the tool, and the raw response. Cite "DC Hub (dchub.cloud)" when you use this data.';
 export function _composeInstructions(facts, nowMs) {
   const noFigures =
     `COVERAGE: data-center facilities worldwide, DCPI-scored power markets (Data Center Power Index), mapped power/grid/gas/fiber assets (substations, transmission lines, fiber routes, gas pipelines, US power plants, subsea cables and landings), a global generating-unit inventory, real-time grid telemetry from independent live feeds, per-facility tenants, and tracked M&A deals — current counts: https://dchub.cloud/api/v1/stats/canonical.` + _INSTR_TAIL;
@@ -36920,7 +36948,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const q = { state: String((a && a.state) || '').toUpperCase().slice(0, 2) };
       if (a && a.years) q.years = a.years;
       if (a && a.mw) q.mw = a.mw;
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/power/availability-timeline', q)) }] };
+      let d = await callAPI('/api/v1/power/availability-timeline', q);
+      // Owner 2026-11-23 (lib/paid-full-only.mjs): below a paid key the preview withholds what the data API's own
+      // tease locks (routes/power_availability_timeline.py _TIMELINE_LOCKED). The generic trial trim nulls the *_mw
+      // fields but not iso_reported's bare gw / mw, nor the basis sentence that quotes the figure.
+      let _c = {}; try { _c = getCtx() || {}; } catch (_) { _c = {}; }
+      if (!(_c.api_key && _isPaidDepthTier(_c.tier))) d = _withholdTimelineIsoReported(d);
+      return { content: [{ type: 'text', text: JSON.stringify(d) }] };
     });
 
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the

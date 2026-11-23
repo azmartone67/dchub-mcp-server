@@ -266,8 +266,8 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.sc.full_answers_per_tool_per_day_with_email).toBe(10);
     // Note F / option A (owner 2026-11-17): the field stays, its value says what the key keeps (no call count,
     // no per-day allowance, no pricing pointer). The numeric fields above are unchanged.
-    expect(r.sc.free_tier_rule).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-      + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
+    expect(r.sc.free_tier_rule).toBe('No key needed: the first call each UTC day to each core energy tool ('
+      + 'get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; '
       + 'after that, previews. With an email, the key keeps your saved shortlists, alerts and the changes you track '
       + 'for your next chat. More detail is available at dchub.cloud/connect.');
     expect(r.text).not.toMatch(/Free tier = 10 calls\/day/);

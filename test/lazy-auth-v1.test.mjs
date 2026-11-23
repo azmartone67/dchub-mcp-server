@@ -258,8 +258,10 @@ describe('the decision (pure)', () => {
   });
   it('allowance covers the keyless lanes that serve a full answer first', () => {
     expect(lazyAuthAllowance('rank_markets', {})).toBe(1);
-    expect(lazyAuthAllowance('get_grid_data', { DCHUB_KEYLESS_FIRST_FULL_CAP: '3' })).toBe(3);
-    expect(lazyAuthAllowance('get_grid_data', { DCHUB_KEYLESS_FULL_TRIAL: '1', DCHUB_KEYLESS_FULL_TRIAL_CAP: '4' })).toBe(4);
+    expect(lazyAuthAllowance('get_grid_intelligence', { DCHUB_KEYLESS_FIRST_FULL_CAP: '3' })).toBe(3);
+    expect(lazyAuthAllowance('get_facility', { DCHUB_KEYLESS_FIRST_FULL: '0', DCHUB_KEYLESS_FULL_TRIAL: '1', DCHUB_KEYLESS_FULL_TRIAL_CAP: '4' })).toBe(4);
+    // owner 2026-11-23: get_grid_data is in neither lane, so it gets the plain allowance
+    expect(lazyAuthAllowance('get_grid_data', { DCHUB_KEYLESS_FIRST_FULL_CAP: '3', DCHUB_KEYLESS_FULL_TRIAL: '1', DCHUB_KEYLESS_FULL_TRIAL_CAP: '4' })).toBe(1);
     expect(lazyAuthAllowance('rank_markets', { DCHUB_LAZY_AUTH_AFTER_N: '' })).toBe(1);   // never Number('') === 0
     expect(lazyAuthAllowance('rank_markets', { DCHUB_LAZY_AUTH_AFTER_N: '0' })).toBe(0);
   });

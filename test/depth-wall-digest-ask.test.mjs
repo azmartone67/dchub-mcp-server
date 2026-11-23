@@ -247,8 +247,8 @@ describe('_depthDigestAskStep guards, one context at a time', () => {
   // Measured live 11-08 after mcp#1316: keyless get_grid_data carried the line under a human line
   // that names "a free DC Hub key" as the plan that returns the fields. A free-key or capacity wall
   // is not a depth wall; an email does open (or raise) it.
-  it('a free-key wall (keyless get_grid_data, an email-cap unlock): nothing', () => {
-    const grid = S._runInCtxForTest({ tier: 'anonymous' }, () => S._depthDigestAskStep(wall(), 'get_grid_data'));
+  it('a free-key wall (keyless get_water_risk, an email-cap unlock): nothing', () => {
+    const grid = S._runInCtxForTest({ tier: 'anonymous' }, () => S._depthDigestAskStep(wall(), 'get_water_risk'));
     expect(JSON.stringify(grid)).not.toContain('subscribe_digest');
     const cap = S._runInCtxForTest({ tier: 'free' }, () => S._depthDigestAskStep(
       { ...wall(), structuredContent: { preview_is_partial: true, unlock_kind: 'email_cap' } }, 'list_transactions'));

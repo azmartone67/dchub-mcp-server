@@ -93,11 +93,13 @@ describe('1) the keyless first full plan answer keeps its way back', () => {
     expect(KEEP_KEYS).toContain('next_recipe');
   });
 
-  it('call 1 (first full, compact default) and call 2 (preview) both carry get_changes {window:"1d"} for the market', async () => {
+  // Owner 2026-11-23: a full execute_plan needs a paid key, so there is no keyless first full plan; both keyless
+  // calls are previews, and both must still carry the way back.
+  it('call 1 and call 2 (both previews, compact default) carry get_changes {window:"1d"} for the market', async () => {
     const s = await session('198.18.118.1', 'codex-mcp-client', { ua: 'codex_cli_rs/0.58.0' });
     const r1 = await s.call('execute_plan', PLAN);
     const sc1 = r1.structuredContent || {};
-    expect(sc1.totals.tier_note, 'call 1 is the day\'s first full answer').toMatch(/steps ran at full depth/);
+    expect(String((sc1.totals || {}).tier_note || ''), 'no keyless first full plan').not.toMatch(/steps ran at full depth/);
     const d1 = daily(sc1);
     expect(d1, JSON.stringify(sc1.next_tools)).toBeTruthy();
     expect(d1.args).toMatchObject({ window: '1d' });
