@@ -163,7 +163,7 @@ import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePack
 import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatformLine, claimNudge as _claimNudge, previewNote as _previewNote, anonMaskNote as _anonMaskNote, lpFreeKeyClause as _lpFreeKeyClause, unlockLineV1On as _unlockLineV1On, markLockedRowFields as _markLockedRowFields, EMAIL_ASK as _UNLOCK_EMAIL_ASK } from './lib/unlock-line.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
-import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
+import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, MUSE_PATH, MUSE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
          installClaudeResponseFilter as _installClaudeFilter,
          applyClaudeArgDefaults as _applyClaudeArgDefaults,
          excludedFromRelayReadout as _excludedFromRelayReadout,
@@ -4807,6 +4807,8 @@ const MCP_SOURCE_PATHS = new Map([
   //   readout (excludedFromRelayReadout). /mcp/anthropic above is unchanged: it
   //   still serves the full /mcp under 'anthropic-directory'.
   [CLAUDE_PATH, CLAUDE_SOURCE],
+  // 2026-11-23: the same profile at /mcp/muse for Meta's Muse Connector Platform (lib/claude-directory.mjs).
+  [MUSE_PATH, MUSE_SOURCE],
   // ★ 2026-11-18 — the five client paths (lib/client-paths.mjs). Same shape as /mcp/anthropic: the full /mcp
   //   under an arrival tag. Before this they answered GET 200 (worker description) and POST 404, the
   //   /mcp/docker failure above.
@@ -4823,7 +4825,7 @@ function _normPath(req) {
 export function _pathProfile(req) {
   const p = _normPath(req);
   if (p === DIRECTORY_PATH || p === DIRECTORY_OAUTH_PATH) return DIRECTORY_PROFILE;
-  if (p === CLAUDE_PATH) return CLAUDE_PROFILE;   // r-claude-directory
+  if (p === CLAUDE_PATH || p === MUSE_PATH) return CLAUDE_PROFILE;   // r-claude-directory (+ /mcp/muse)
   return null;
 }
 
@@ -41550,6 +41552,8 @@ app.post(MCP_PATHS, async (req, res) => {
     // r-claude-directory: /mcp/claude is a directory profile too, with its own
     // allowlist and its own filter (lib/claude-directory.mjs).
     const _claudeProfile = _dirProfile === CLAUDE_PROFILE;
+    // /mcp/muse shares the profile but not /mcp/claude's own OAuth resource (lib/claude-directory.mjs MUSE_PATH).
+    const _claudeOwnPath = _claudeProfile && _normPath(req) === CLAUDE_PATH;
     if (_dirProfile) {
       // Lazy auth (owner 2026-10-20): the filter swaps a keyless preview for a 401
       // sign-in challenge, but only once the handler below has marked the request
@@ -42242,7 +42246,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // r-claude-directory: the same decision on /mcp/claude, with this path's
     // own resource_metadata (RFC 9728 §5.1) so the client's OAuth flow targets
     // https://dchub.cloud/mcp/claude, a plain message, and no funnel counter.
-    if (_claudeProfile && _workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
+    if (_claudeProfile && _claudeOwnPath && _workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
           authHeader: req.headers['authorization'],
           hasApiKeyHeader: !!req.headers['x-api-key'],
           bearerResolved: _bearerResolved,
@@ -42264,7 +42268,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // Lazy auth on /mcp/claude: decided here, where every credential channel has
     // been resolved (header, bearer, query, inline argument). Read by the response
     // filter installed at the top of this handler.
-    if (_claudeProfile) {
+    if (_claudeProfile && _claudeOwnPath) {
       req._dchubClaudeLazyAuth = _claudeLazyAuthEligible({
         method: req.body?.method,
         hasCredential: !!apiKey || !!req.headers['x-api-key'] || !!_bearer,
