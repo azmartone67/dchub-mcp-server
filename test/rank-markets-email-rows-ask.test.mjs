@@ -30,16 +30,20 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
   const ctx = (o = {}) => ({ tier: 'free', session_id: 's-rank-email', ...o });
   const on = () => { const a = setEnv('DCHUB_PAID_SELL_LINE', '1'), b = setEnv('DCHUB_RANK_EMAIL_ASK', undefined); return () => { b(); a(); }; };
 
-  it('first wall: the agent line asks for the email, the human line is the 10-04 sentence, the row is tagged', () => {
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets gives every row only to Developer and up, so a bound
+  // email no longer "shows all 10 markets": the rows ask is gone even with both switches on, and the row is untagged.
+  // The paid sell line itself (After they pay ...) still runs.
+  it('first wall: no email rows ask (paid-only since 11-23), the paid line and human sentence unchanged, no tag', () => {
     const restore = on();
     try {
       const c = ctx();
       const r = run(mk('rank_markets'), 'rank_markets', c), t = text(r), sc = r.structuredContent;
-      expect(t).toContain('`bind_email` with it shows all 10 markets in this ranking.');
-      expect(t.indexOf('bind_email')).toBeLessThan(t.indexOf('After they pay'));
+      expect(t).toContain('After they pay');
+      expect(t).not.toMatch(/bind_email/);
+      expect(t).not.toMatch(/shows all \d+ markets/);
       expect(sc.user_message).not.toMatch(/email/);                  // human sentence unchanged
       expect(t).not.toMatch(/claim_free_key/);
-      expect(c._emailAsk).toBe('line');
+      expect(c._emailAsk).toBeUndefined();
     } finally { restore(); }
   });
   it('switch off: no ask, no tag', () => {
@@ -70,7 +74,7 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
   });
   // #117703 (Grok, live 2026-11-05): production's wall carries human_url, so the lean step kept the human
   // line as its one ask and cut this one, while the wall-hit row read email_ask 'line'.
-  it('survives the lean step beside the human line, as production shapes it', () => {
+  it('the lean step keeps the human line and there is no rows ask to keep (paid-only since 11-23)', () => {
     const restore = on(); const lean = setEnv('DCHUB_LEAN_RESPONSES', undefined);
     try {
       const c = ctx();
@@ -78,18 +82,18 @@ describe('_paidSellStep: rank_markets keyless wall', () => {
       const human = text(r).split('\n').find((l) => l.includes('For your human'));
       const url = human.match(/https:\/\/dchub\.cloud\/\S+/)[0];
       const t = text(leanResponseStep({ ...r, structuredContent: { ...r.structuredContent, human_url: url, human_message: r.structuredContent.user_message } }, 'rank_markets'));
-      expect(c._emailAsk).toBe('line');
-      expect(t).toContain('`bind_email` with it shows all 10 markets in this ranking');
+      // Owner 2026-11-23: no rows ask to survive (paid-only); the lean answer keeps the human line and asks no email.
+      expect(c._emailAsk).toBeUndefined();
       expect(t).toContain(human);
-      expect(t.indexOf('bind_email')).toBeLessThan(t.indexOf('For your human'));   // "the next line" is the human's
-      expect(t.split('bind_email').length - 1).toBe(1);
+      expect(t).not.toMatch(/bind_email/);
     } finally { lean(); restore(); }
   });
 
   // The funnel counts all wall calls, not just eligible first-wall asks. Keep
   // visible copy and quota-wall telemetry in agreement for each actual seat.
   it.each([
-    ['eligible keyless first wall', {}, true],
+    // Owner 2026-11-23: no seat is asked any more (rank_markets is paid-only); was true for this one.
+    ['eligible keyless first wall', {}, false],
     ['keyed identified free context', { api_key: 'fixture-bound-key', tier: 'identified' }, false],
     ['paid keyed seat', { api_key: 'fixture-paid-key', tier: 'pro' }, false],
     ['Grok platform suppression', { platform: 'grok' }, false],

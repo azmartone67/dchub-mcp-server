@@ -118,18 +118,21 @@ async function wallSession(key) {
   const sid = init.headers.get('mcp-session-id');
   const h = { ...h0, ...(sid ? { 'mcp-session-id': sid } : {}) };
   if (sid) await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });
-  return async (tool) => {
-    const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: { iso: 'MISO' } } });
+  return async (tool, args = { iso: 'MISO' }) => {
+    const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: args } });
     const result = JSON.parse(body).result || {};
     const text = (result.content || []).map((c) => c.text || '').join('\n');
     return { sid, result, text, sc: result.structuredContent || {} };
   };
 }
-const wallCall = async (tool, key) => (await wallSession(key))(tool);
+const wallCall = async (tool, key, args) => (await wallSession(key))(tool, args);
+const WATER = { state: 'VA' };   // get_water_risk: the keyless free-key wall an email still opens (2026-11-23)
 const humanLines = (t) => t.split('\n').filter((l) => l.includes(HUMAN) || /^\s*(\*\*)?Tell the user:/.test(l));
 
 describe('option A wall line, production transport', () => {
-  it('grid / queue wall, keyless and free key with no email: one human line, the email unlock; block 0 is JSON', async () => {
+  // 2026-11-23 (owner, lib/paid-full-only.mjs): an email opens neither grid nor queue, so their walls keep one human line
+  // that is not the email unlock; the email line on this transport is pinned on get_water_risk's keyless wall.
+  it('grid / queue wall, keyless and free key with no email: one human line, not the email unlock; block 0 is JSON', async () => {
     for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
       for (const key of [undefined, FREE_KEY]) {
         const at = tool + ' ' + (key ? 'free key' : 'keyless');
@@ -141,15 +144,25 @@ describe('option A wall line, production transport', () => {
         const url = r.sc.human_url;
         expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
         expect(JSON.parse(b0).human_url, at).toBe(url);
-        expect(humanLines(r.text), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+        expect(humanLines(r.text).length, at).toBe(1);
+        expect(r.text, at).not.toMatch(/held back part of this answer|Reply with your email/);
         expect(R.countTellLines(r.text), at).toBe(0);
-        expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
+        expect(r.sc.human_message, at).not.toBe(R.wallEmailLineText(url));
         expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
       }
     }
   });
+  it('CONTROL: get_water_risk wall, keyless: one human line, the email unlock; block 0 is JSON', async () => {
+    const r = await wallCall('get_water_risk', undefined, WATER);
+    expect(r.result.isError).toBeFalsy();
+    expect(() => JSON.parse(r.result.content[0].text)).not.toThrow();
+    const url = r.sc.human_url;
+    expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+    expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+    expect(r.sc.human_message).toBe(R.wallEmailLineText(url));
+  });
 
-  it('a repeat wall in the same session (r-relay-cap) adds no line; its human_message carries the email wording', async () => {
+  it('a repeat grid / queue wall in the same session (r-relay-cap) adds no line, and no email wording (paid-only)', async () => {
     for (const key of [undefined, FREE_KEY]) {
       const call = await wallSession(key);
       const first = await call('get_interconnection_queue');
@@ -166,10 +179,24 @@ describe('option A wall line, production transport', () => {
         expect(() => JSON.parse(r.result.content[0].text), at).not.toThrow();
         const url = r.sc.human_url;
         expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
-        expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
-        expect(r.sc.for_your_human && r.sc.for_your_human.text, at).toBe(R.wallEmailLineText(url));
+        expect(r.sc.human_message, at).not.toBe(R.wallEmailLineText(url));
+        expect(r.sc.human_message, at).not.toMatch(/held back part of this answer|Reply with your email/);
       }
     }
+  });
+  it('a repeat get_water_risk wall in the same session (r-relay-cap) adds no line; its human_message carries the email wording', async () => {
+    const call = await wallSession(undefined);
+    const first = await call('get_water_risk', WATER);
+    expect(humanLines(first.text).length).toBe(1);
+    const r = await call('get_water_risk', WATER);
+    expect(humanLines(r.text)).toEqual([]);
+    expect(R.countTellLines(r.text)).toBe(0);
+    expect(() => JSON.parse(r.result.content[0].text)).not.toThrow();
+    const url = r.sc.human_url;
+    expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+    // a repeat has no human line for the in-chat form to sit under, so the linked copy is the free-key wall's page form
+    expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));
+    expect(r.sc.for_your_human && r.sc.for_your_human.text).toBe(R.wallEmailFreekeyLineText(url));
   });
 
   it('a key with an email bound gets no wall and no line', async () => {
@@ -194,7 +221,8 @@ describe('the high-intent claim path keeps the standard human line', () => {
   const CLAIMS = [CLAIM, { ...CLAIM, human_url: 'https://dchub.cloud/relay/c2lkfGdldF9pbnRlcmNvbm5lY3Rpb25fcXVldWU.0a1b2c3d' }];
   const withClaim = async (c, fn) => { claim = c; try { return await fn(); } finally { claim = null; } };
 
-  it('queue / grid wall with a claim, keyless and free key: one human line, the email unlock; block 0 is JSON', async () => {
+  // 2026-11-23 (owner): queue / grid are paid-only, so the claim wall's one standard human line is not the email unlock.
+  it('queue / grid wall with a claim, keyless and free key: one human line (not the email unlock); block 0 is JSON', async () => {
     for (const c of CLAIMS) {
       for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
         for (const key of [undefined, FREE_KEY]) {
@@ -205,12 +233,15 @@ describe('the high-intent claim path keeps the standard human line', () => {
           expect(() => JSON.parse(b0), at).not.toThrow();
           const url = r.sc.human_url;
           expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
-          expect(humanLines(r.text), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
-          expect(linkLines(r, url), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+          const lines = humanLines(r.text);
+          expect(lines.length, at).toBe(1);
+          expect(lines[0].startsWith(HUMAN + ' '), at).toBe(true);
+          expect(linkLines(r, url), at).toEqual(lines);
           expect(R.countTellLines(r.text), at).toBe(0);
           expect(r.text, at).not.toMatch(/The page shows the options → https:/);
           expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
-          expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
+          expect(r.text, at).not.toMatch(/held back part of this answer|Reply with your email/);
+          expect(r.sc.human_message, at).not.toBe(R.wallEmailLineText(url));
         }
       }
     }

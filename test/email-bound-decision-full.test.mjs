@@ -14,6 +14,11 @@
 //   CONTROL: DCHUB_EMAIL_FULL_DECISION_TOOLS=0 restores the 10-08 behaviour on both halves.
 //   D) the published clause is built from the enforced cap.
 //
+// 2026-11-23 (owner): get_grid_intelligence and get_interconnection_queue are paid-full-only
+// (lib/paid-full-only.mjs): an email opens neither any more. Every grid / queue case below is re-pinned to that
+// rule (the keyless and email-bound previews carry no email-unlock ask, no answer-first hand-off and no
+// allowance); the email-bound allowance itself is pinned on get_market_intel, the one tool it still serves.
+//
 // Real /mcp handler over loopback HTTP, a 127.0.0.1 stub backend, off-loopback connects refused.
 import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -56,6 +61,7 @@ net.Socket.prototype.connect = function connect(...args) {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SECRET = 'test-internal-key-not-a-real-secret';
 const TOOLS = ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel'];
+const PAID_ONLY = ['get_grid_intelligence', 'get_interconnection_queue'];   // lib/paid-full-only.mjs
 const ARGS = {
   get_grid_intelligence: { region_id: 'PJM' },
   get_interconnection_queue: { iso: 'PJM' },
@@ -306,6 +312,15 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       expect(r.data.taste && r.data.taste.headline, 'still the labelled taste').toBeTruthy();
       for (const f of T.FREE_DECISION_STRIPPED_FIELDS[tool]) expect(Object.prototype.hasOwnProperty.call(r.data, f), f).toBe(false);
       const prose = proseOf(r);
+      expect(prose).not.toContain('for a durable free-tier key');   // CLAIM_ALT_TAIL dropped, not duplicated
+      if (PAID_ONLY.includes(tool)) {
+        // paid key only: no line promises that an email (or a free key) gets full answers on this tool
+        expect(prose, 'no email-unlock promise\n' + prose.slice(0, 1500)).not.toContain('gets full `' + tool + '` answers');
+        expect(prose).not.toContain('claim_free_key');
+        expect(prose).not.toContain(EMAIL_ASK);
+        expect(prose).not.toMatch(PLAN_OR_PRICE);
+        return;
+      }
       // Note F / option A (owner 2026-11-17): the email-first line no longer ends "Fallback: `claim_free_key` with the
       // same email", so on the email-bound tools the claim line is found by its bind_email ask and names no claim tool.
       const emailTool = T.EMAIL_FULL_DECISION_TOOLS.includes(tool);
@@ -331,57 +346,41 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       }
     });
   }
-  // Answer first (owner 2026-11-02): the preview's free figure is the first prose line, before the email
-  // ask, and the ask says it can be skipped. Kill switch DCHUB_ANSWER_FIRST=0 restores the ask-first order.
-  for (const tool of ['get_grid_intelligence', 'get_interconnection_queue']) {
-    it(`${tool}: the free figure comes before the email ask, and survives lean`, async () => {
-      const r = await callAs({}, tool, ARGS[tool]);
-      const h = r.data.taste && r.data.taste.headline;
-      expect(h && typeof h.value === 'number', 'fixture has a measured headline').toBe(true);
-      const prose = proseOf(r);
-      const a = prose.indexOf(ANSWER_FIRST_LEAD), e = prose.indexOf(EMAIL_ASK);
-      expect(a, 'answer line present\n' + prose.slice(0, 1500)).toBeGreaterThanOrEqual(0);
-      expect(e, 'email ask present').toBeGreaterThan(a);
-      const answer = prose.slice(a).split('\n')[0];
-      expect(answer).toContain(h.value.toLocaleString('en-US'));
-      expect(answer, 'no link, plan, price or tool name on the answer line').not.toMatch(/https?:\/\/|bind_email|claim_free_key/);
-      expect(answer).not.toMatch(PLAN_OR_PRICE);
-      expect(prose).toContain(ANSWER_FIRST_SKIP.trim());
-      const lean = await withEnv('DCHUB_LEAN_RESPONSES', '1', async () => leanResponseStep(r.result, tool));
-      const lt = proseOf({ result: lean });
-      expect(lt.indexOf(ANSWER_FIRST_LEAD), 'answer kept by lean').toBeGreaterThanOrEqual(0);
-      expect(lt.indexOf(EMAIL_ASK), 'ask kept by lean, after the answer').toBeGreaterThan(lt.indexOf(ANSWER_FIRST_LEAD));
-    });
-    it(`${tool}: DCHUB_ANSWER_FIRST=0 restores the ask-first prose`, async () => {
-      const r = await withEnv('DCHUB_ANSWER_FIRST', '0', async () => callAs({}, tool, ARGS[tool]));
-      const prose = proseOf(r);
-      expect(prose).not.toContain(ANSWER_FIRST_LEAD);
-      expect(prose).not.toContain(ANSWER_FIRST_SKIP.trim());
-      expect(prose).toContain(EMAIL_ASK);
-    });
+  // Answer first (owner 2026-11-02) put the preview's free figure ahead of the email ask on grid and queue, the only
+  // tools it served. 2026-11-23: an email opens neither, so there is no email ask to lead and no answer-first line,
+  // whether DCHUB_ANSWER_FIRST is on or off.
+  for (const tool of PAID_ONLY) {
+    for (const sw of [undefined, '0']) {
+      it(`${tool}: no answer-first hand-off and no email ask (DCHUB_ANSWER_FIRST ${sw === undefined ? 'default' : sw})`, async () => {
+        const r = sw === undefined ? await callAs({}, tool, ARGS[tool]) : await withEnv('DCHUB_ANSWER_FIRST', sw, async () => callAs({}, tool, ARGS[tool]));
+        const h = r.data.taste && r.data.taste.headline;
+        expect(h && typeof h.value === 'number', 'fixture has a measured headline').toBe(true);
+        const prose = proseOf(r);
+        expect(prose).not.toContain(ANSWER_FIRST_LEAD);
+        expect(prose).not.toContain(ANSWER_FIRST_SKIP.trim());
+        expect(prose).not.toContain(EMAIL_ASK);
+      });
+    }
   }
   it('get_market_intel: no answer-first line (not an email-unlock tool)', async () => {
     const r = await callAs({}, 'get_market_intel', ARGS.get_market_intel);
     expect(proseOf(r)).not.toContain(ANSWER_FIRST_LEAD);
   });
-  // ★ Full-stack QA 2026-10-24: this suite passed while NO production preview carried the email ask.
-  // Production runs lib/lean-response.mjs last (one ask per response), and it kept the human_url
-  // paragraph and dropped the email ask. Run that same step here on the keyless preview.
-  for (const tool of ['get_grid_intelligence', 'get_interconnection_queue']) {
-    it(`${tool}: the email ask survives the production lean step, and the agent line points at it`, async () => {
+  // ★ Full-stack QA 2026-10-24: production runs lib/lean-response.mjs last (one ask per response). Since 2026-11-23 the
+  // grid / queue preview carries no email ask for it to keep; what it must keep is the human link.
+  for (const tool of PAID_ONLY) {
+    it(`${tool}: after the production lean step, no email-unlock ask and the human link stays`, async () => {
       const r = await callAs({}, tool, ARGS[tool]);
       // Production hands out ONE short link (lib/short-wall-link.mjs) as human_url and in the human line;
       // the harness has no shortener. Put every relay link in that shape, as production serves it.
       const SHORT = 'https://dchub.cloud/u/qa1024x';
       const prod = JSON.parse(JSON.stringify(r.result).replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9._~%?=&-]+/g, SHORT));
       expect(prod.structuredContent.human_url, 'fixture carries a human_url').toBe(SHORT);
-      // This file turns lean off at the top (line 30); production runs it, so turn it on for this call.
       const lean = await withEnv('DCHUB_LEAN_RESPONSES', '1', async () => leanResponseStep(prod, tool));
-      // Prose only: the JSON block can quote the same sentence in a field, which would make this vacuous.
       const text = proseOf({ result: lean });
-      expect(text, 'email ask kept after lean\n' + text.slice(0, 1500)).toContain(EMAIL_ASK);
-      expect(text, 'no pay-first agent line beside the email ask').not.toContain('After they pay, call');
-      if (tool === 'get_grid_intelligence') expect(text).toContain('unlock the full brief with their email');
+      expect(text).not.toContain(EMAIL_ASK);
+      expect(text).not.toContain('unlock the full brief with their email');
+      expect(text).not.toContain('gets full `' + tool + '` answers');
       expect(lean.structuredContent.human_url, 'the human link stays for the agent to read').toBe(SHORT);
     });
   }
@@ -394,7 +393,27 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
 });
 
 describe('B) email-bound key: full grid / queue answers up to the cap, then a capped preview with one link', () => {
-  for (const tool of T.EMAIL_FULL_DECISION_TOOLS) {
+  for (const tool of PAID_ONLY) {
+    it(`${tool} (paid key only): an email-bound key reads the taste from answer 1, no allowance meter, no cap signal`, async () => {
+      const key = freshBoundKey();
+      const frags = tool === 'get_grid_intelligence' ? GRID_FULL_FRAGS : QUEUE_FULL_FRAGS;
+      for (let n = 1; n <= 3; n++) {
+        const r = await callAs({ key }, tool, ARGS[tool]);
+        expect(r.data.taste && r.data.taste.headline, `answer ${n} is the labelled taste\n` + r.text.slice(0, 800)).toBeTruthy();
+        for (const f of T.FREE_DECISION_STRIPPED_FIELDS[tool]) expect(Object.prototype.hasOwnProperty.call(r.data, f), `answer ${n} withholds ` + f).toBe(false);
+        const raw = dataOutsideEnvelope(r.data);
+        for (const f of frags.filter((x) => x.startsWith('"'))) expect(raw, `answer ${n} is not full: ${f}`).not.toContain(f);
+        expect(r.data._metered_trial, `answer ${n}: no allowance meter`).toBeUndefined();
+        expect(r.text).not.toContain('used; they reset at 00:00 UTC');
+      }
+      await new Promise((res) => setTimeout(res, 50));
+      expect(signalHits.filter((h) => h.api_key === key && h.message_shown === 'email_decision_cap')).toEqual([]);
+      // control: a Developer key is served the full answer
+      const dev = await callAs({ key: KEYS.dev }, tool, ARGS[tool]);
+      for (const f of frags) expect(JSON.stringify(dev.data), 'developer full: ' + f).toContain(f);
+    });
+  }
+  for (const tool of T.EMAIL_FULL_DECISION_TOOLS.filter((t) => !PAID_ONLY.includes(t))) {
     it(`${tool}: answers 1-10 full and metered, answer 11 the taste with exactly one human link`, async () => {
       const key = freshBoundKey();
       const frags = tool === 'get_grid_intelligence' ? GRID_FULL_FRAGS : tool === 'get_market_intel' ? MARKET_FULL_FRAGS : QUEUE_FULL_FRAGS;
@@ -436,7 +455,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     await withEnv('MPP_ENABLED', '1', () => withEnv('MPP_SIDECAR_URL', 'http://127.0.0.1:9', async () => {
       const key = freshBoundKey();
       for (let n = 1; n <= 10; n++) {
-        const r = await callAs({ key }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
+        const r = await callAs({ key }, 'get_market_intel', ARGS.get_market_intel);
         expect(r.data._metered_trial && r.data._metered_trial.call, 'full answer ' + n).toBe(n);
         expect(r.data.agent_payment, 'answer ' + n + ': no agent_payment').toBeUndefined();
         expect(r.sc.agent_payment, 'answer ' + n + ': no agent_payment (structured)').toBeUndefined();
@@ -445,8 +464,8 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
   });
   it('the allowance is counted on the KEY: a second bound key on the same IP still gets its own 10', async () => {
     const a = freshBoundKey(), b = freshBoundKey();
-    for (let n = 0; n < 10; n++) await callAs({ key: a }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-    const rb = await callAs({ key: b }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
+    for (let n = 0; n < 10; n++) await callAs({ key: a }, 'get_market_intel', ARGS.get_market_intel);
+    const rb = await callAs({ key: b }, 'get_market_intel', ARGS.get_market_intel);
     expect(rb.data._metered_trial).toMatchObject({ call: 1, of: 10 });
   });
   it('get_market_intel: an email-bound key gets the full answer with broker rates nulled (H1 stays Pro-only)', async () => {
@@ -473,13 +492,14 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     expect(r.data.taste && r.data.taste.headline).toBeTruthy();
     expect(JSON.stringify(r.data)).not.toContain('"asking_rate":160');
   });
-  it('a key with no email stays preview-only and is told the bind_email step (free tier key and an identified row without an email)', async () => {
+  // 2026-11-23: a bound email no longer opens get_grid_intelligence, so a key with no email is not told that binding
+  // one gets full answers there: it stays preview-only either way.
+  it('a key with no email stays preview-only on grid and is not told an email opens it (free tier key and an identified row without an email)', async () => {
     for (const key of [KEYS.free, 'dch_live_identnoemail0000000001']) {
       const r = await callAs({ key }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
       expect(r.data.taste && r.data.taste.headline, key).toBeTruthy();
       expect(dataOutsideEnvelope(r.data)).not.toContain('"constraint_score"');
-      expect(r.text).toContain('call `bind_email` with your human');
-      expect(r.text).toContain('full `get_grid_intelligence` answers');
+      expect(r.text, key).not.toContain('full `get_grid_intelligence` answers');
       expect(r.text).not.toMatch(/answers a day/);
     }
   });
@@ -495,19 +515,23 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     const c = { api_key: 'dch_live_x', email: 'a@example.com', tier: 'identified' };
     const spentByQuota = { preview_is_partial: true, quota: { full_answers_remaining_today: 0 }, _upgrade: {} };
     const spentByCopy = { preview_is_partial: true, _upgrade: { message: 'This key\u2019s 3 full `get_grid_intelligence` answers for today are used' } };
-    for (const sc of [spentByQuota, spentByCopy]) {
-      expect(S._wallKindFor(sc, c, 'get_grid_intelligence')).toBe('');
-      expect(S._wallKindFor(sc, c, 'get_interconnection_queue')).toBe('');
+    // 2026-11-23: the allowance is get_market_intel's alone (grid and queue are paid-full-only and have none).
+    const spentByCopyMi = { preview_is_partial: true, _upgrade: { message: 'This key\u2019s 3 full `get_market_intel` answers for today are used' } };
+    for (const sc of [spentByQuota, spentByCopyMi]) {
+      expect(S._wallKindFor(sc, c, 'get_market_intel')).toBe('');
       // CONTROL: the same spent signals on a tool outside the allowance still read as capacity
       expect(S._wallKindFor(sc, c, 'get_fiber_intel')).toBe('w-capacity');
     }
+    expect(S._wallKindFor(spentByCopy, c, 'get_fiber_intel')).toBe('w-capacity');
   });
   it('the gate opens only for the request path that passes emailBound (hints and lists keep the 10-08 answer)', () => {
-    expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', true, false, undefined, true)).toMatchObject({ allowed: true, trial_taste: true, email_full: true });
-    expect(S.applyTierGate('get_interconnection_queue', {}, 'free', true, false, undefined, true)).toMatchObject({ allowed: true, email_full: true });
+    // 2026-11-23: grid and queue are paid-full-only, so even the emailBound path opens no email_full lane on them.
+    expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', true, false, undefined, true).email_full).toBeUndefined();
+    expect(S.applyTierGate('get_interconnection_queue', {}, 'free', true, false, undefined, true).email_full).toBeUndefined();
     expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', true, false).email_full).toBeUndefined();
     expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', false, false, undefined, true).email_full).toBeUndefined();   // no key
     expect(S.applyTierGate('get_market_intel', {}, 'identified', true, false, undefined, true)).toMatchObject({ allowed: true, email_full: true });
+    expect(S.applyTierGate('get_market_intel', {}, 'identified', true, false).email_full).toBeUndefined();
     expect(S._trialUnlockedTools()).not.toContain('get_grid_intelligence');
   });
 });
@@ -517,7 +541,9 @@ describe('D) the published clause is built from the enforced cap', () => {
   // per-day count and no plan; the published lib clause (T.FREE_DECISION_CLAUSE) keeps its 10-16 wording.
   it('no count, no plan name, and the switch-off clause names no plan either', async () => {
     expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews with no email; an email adds 10 full answers/day each.');
-    expect(S._freeDecisionClause()).toBe('Grid/queue/market-intel tools: previews without an email; an email opens fuller answers.');
+    // 2026-11-23: "an email opens fuller answers" spoke for all three tools; grid and queue are paid-full-only now.
+    expect(S._freeDecisionClause()).toBe('Grid/queue/market-intel tools: previews. More detail is available at dchub.cloud/connect.');
+    expect(S._freeDecisionClause()).not.toMatch(/email opens/);
     expect(S._freeDecisionClause()).not.toMatch(PLAN_OR_PRICE);
     expect(S._freeDecisionClause()).not.toMatch(/\bfree\b|\/day|a day\b/i);
     await withEnv('DCHUB_EMAIL_FULL_DECISION_TOOLS', '0', async () => {

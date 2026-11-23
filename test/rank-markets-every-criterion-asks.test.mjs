@@ -74,7 +74,11 @@ describe('rankMarketsSellLine labels (pure)', () => {
 });
 
 let ip = 1;
-describe('rank_markets wall, keyless, in session (cursor): the first wall asks on every criterion and region', () => {
+// Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets gives every row only to Developer and up, so a bound email
+// shows no more markets and the rows email ask is gone. What this half still pins: on every criterion x region the
+// wall's sell line renders (no label gap returns null), one wall row is written for the session, and no seat is told
+// an email opens the ranking.
+describe('rank_markets wall, keyless, in session (cursor): every criterion and region gets the sell line, no email unlock ask', () => {
   it.each(CRITERIA.flatMap((c) => REGIONS.map((r) => [c, r])))('%s / %s', async (criteria, region) => {
     const hdr0 = { 'user-agent': 'node', 'x-dc-client-ip': `198.51.100.${ip++ % 250 + 1}` };
     const sid = (await H.init('/mcp', 'cursor', hdr0)).headers.get('mcp-session-id');
@@ -85,7 +89,12 @@ describe('rank_markets wall, keyless, in session (cursor): the first wall asks o
     for (let i = 0; i < 100 && events.length === before; i++) await new Promise((res) => setTimeout(res, 20));
     const rows = events.slice(before).filter((e) => e.tool === 'rank_markets');
     const text = ((r.msg && r.msg.result && r.msg.result.content) || []).map((c) => c.text || '').join('\n');
-    expect(rows.map((e) => [e.session_id, e.email_ask])).toEqual([[sid, 'line']]);
-    expect(text).toMatch(/`bind_email` with it shows all \d+ markets in this ranking/);
+    // The wall's agent ask is now the free-key line (lib/wall-key-line.mjs: an email for a key, never an unlock), so
+    // the row reads key_line and offers no email_unlock.
+    expect(rows.map((e) => [e.session_id, e.email_ask])).toEqual([[sid, 'key_line']]);
+    expect(rows[0].offers_shown || []).not.toContain('email_unlock');
+    expect(text).toMatch(/This DC Hub .+ ranking of .+ markets shows \d+ of 10/);
+    expect(text).toContain('Add your email to get your DC Hub key');
+    expect(text).not.toMatch(/shows all \d+ markets in this ranking/);
   });
 });

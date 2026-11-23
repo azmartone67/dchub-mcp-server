@@ -20,7 +20,9 @@ pip install -U langchain-dchub
 
 A key is optional.
 
-No key is needed to start; some figures return at preview depth until the caller is identified. An optional key (or OAuth sign-in) returns fuller answers and keeps saved shortlists, alerts and tracked changes across sessions. Get one at <https://dchub.cloud/connect>, then:
+A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.
+
+Get an API key at <https://dchub.cloud/signup> (or call `claim_free_key`, which returns an API key), then:
 
 ```bash
 export DCHUB_API_KEY="<your key>"

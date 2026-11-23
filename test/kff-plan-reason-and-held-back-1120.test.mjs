@@ -161,22 +161,22 @@ describe('B) _kffPreviewReason names every refusal and when the day\'s plan answ
   it('an outside keyless caller with its answer unspent has no reason (it is served)', () => {
     expect(S._kffPreviewReason({ client_ip: '198.51.100.83', user_agent: 'Mozilla/5.0' })).toBe('');
   });
-  it('after the charge, the reason says the clock time it was used', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-11-21T00:12:30Z'));
+  // Owner 2026-11-23: a full execute_plan needs a paid key, so the day's keyless plan answer is never charged and no
+  // "was used at HH:MM" reason can appear.
+  it('execute_plan cannot be charged (paid-only), so no clock-time reason appears', async () => {
     const c = { client_ip: '198.51.100.84', user_agent: 'Mozilla/5.0' };
-    expect(await S._keylessFirstFullCharge(c, 'execute_plan', 1)).toBe(true);
-    vi.setSystemTime(new Date('2026-11-21T00:36:40Z'));
-    expect(S._kffUsedAt(c, 'execute_plan')).toBe('00:12 UTC');
-    expect(S._kffPreviewReason(c)).toBe('today\u2019s full plan answer without a key was used at 00:12 UTC on this network (IP) or in this session; the next is after 00:00 UTC');
-  });
-  it('a refunded charge forgets its time', async () => {
-    const c = { client_ip: '198.51.100.85', user_agent: 'Mozilla/5.0' };
-    expect(await S._keylessFirstFullCharge(c, 'execute_plan', 1, { defer: true })).toBe(true);
-    expect(S._kffUsedAt(c, 'execute_plan')).toMatch(/^\d\d:\d\d UTC$/);
-    expect(S._keylessFirstFullSettle(c, false)).toBe('refunded');
+    expect(await S._keylessFirstFullCharge(c, 'execute_plan', 1)).toBe(false);
+    expect(await S._keylessFirstFullCharge(c, 'execute_plan', 1, { defer: true })).toBe(false);
+    expect(c._kffPending).toBeUndefined();
     expect(S._kffUsedAt(c, 'execute_plan')).toBeNull();
     expect(S._kffPreviewReason(c)).toBe('');
+  });
+  it('CONTROL: the counter still charges a tool outside the paid-only list (the first-full lane lists none since 11-23; the refusal above is the paid-only rule, not a dead counter)', async () => {
+    const c = { client_ip: '198.51.100.85', user_agent: 'Mozilla/5.0' };
+    expect(await S._keylessFirstFullCharge(c, 'get_market_dcpi_rank', 1, { defer: true })).toBe(true);
+    expect(S._kffUsedAt(c, 'get_market_dcpi_rank')).toMatch(/^\d\d:\d\d UTC$/);
+    expect(S._keylessFirstFullSettle(c, false)).toBe('refunded');
+    expect(S._kffUsedAt(c, 'get_market_dcpi_rank')).toBeNull();
   });
 });
 
@@ -189,36 +189,32 @@ describe('C) execute_plan detail:"full" end to end', () => {
     expect(tierNote(r)).toBe('no key — steps returned preview depth (this caller\u2019s User-Agent marks it as a DC Hub or automated client, which is not served the first full plan answer)');
   }, 90_000);
 
-  it('C2: an outside keyless caller: call 1 is full depth, call 2 says when the day\'s answer was used', async () => {
+  it('C2: an outside keyless caller: no call is a full plan (owner 2026-11-23), and no "was used" reason', async () => {
     const ip = '198.18.120.11';
     loopback.emulate = true; loopback.ip = ip;
-    const r1 = await plan(seat({ client_ip: ip, session_id: null }));
-    expect(head(r1).first_full_answer, JSON.stringify(executed(r1).map((e) => [e.tool, e.status, e.depth]))).toMatchObject({ used: 1, limit: 1 });
-    expect(tierNote(r1)).toBe('no key — steps ran at full depth');
-    await settle();
-    const r2 = await plan(seat({ client_ip: ip, session_id: null }));
-    expect(head(r2).first_full_answer).toBeUndefined();
-    expect(tierNote(r2)).toMatch(/^no key — today’s full plan answer without a key was used at \d\d:\d\d UTC on this network \(IP\) or in this session; the next is after 00:00 UTC; steps returned preview depth$/);
+    for (const n of [1, 2]) {
+      const r = await plan(seat({ client_ip: ip, session_id: null }));
+      expect(head(r).first_full_answer, 'call ' + n).toBeUndefined();
+      expect(tierNote(r), 'call ' + n).toBe('no key — steps returned preview depth');
+      await settle();
+    }
   }, 90_000);
 
-  it('C3: a first-full plan whose every step is the data API\'s keyless stub is not counted, and says so', async () => {
+  it('C3: no keyless plan is counted, stub or not: no durable charge and no first-full funnel tag', async () => {
     const ip = '198.18.120.12';
-    loopback.emulate = true; loopback.ip = ip; mode.stub = true;
+    loopback.emulate = true; loopback.ip = ip;
     writes.track.length = 0; writes.consume.length = 0;
-    const s1 = seat({ client_ip: ip, session_id: null });
-    const r1 = await plan(s1);
-    const ran = executed(r1).filter((e) => e.status === 'executed');
-    expect(ran.length, JSON.stringify(executed(r1).map((e) => [e.tool, e.status, e.depth]))).toBeGreaterThan(0);
-    expect(head(r1).first_full_answer).toBeUndefined();
-    expect(tierNote(r1)).toBe('no key — every step came back at preview depth, so this plan was not counted as today\u2019s full plan answer' + PREVIEW_TAIL);
-    expect(s1._kffPending, 'the deferred charge was settled').toBeUndefined();
-    await settle();
+    for (const stub of [true, false]) {
+      mode.stub = stub;
+      const s1 = seat({ client_ip: ip, session_id: null });
+      const r = await plan(s1);
+      expect(executed(r).some((e) => e.status === 'executed' || e.status === 'gated_preview'), JSON.stringify(executed(r).map((e) => [e.tool, e.status, e.depth]))).toBe(true);
+      expect(head(r).first_full_answer).toBeUndefined();
+      expect(s1._kffPending).toBeUndefined();
+      await settle();
+    }
+    mode.stub = false;
     expect(writes.consume.filter((w) => w.identity === kffId(ip)), 'no durable charge').toEqual([]);
     expect(writes.track.filter((w) => w.tool === 'execute_plan' && w.status === F.KEYLESS_FIRST_FULL_STATUS), 'no first-full funnel tag').toEqual([]);
-    // The seat was given back: the same IP's next plan, whose steps answer, is the day's full answer.
-    mode.stub = false;
-    const r2 = await plan(seat({ client_ip: ip, session_id: null }));
-    expect(head(r2).first_full_answer).toMatchObject({ used: 1, limit: 1 });
-    expect(tierNote(r2)).toBe('no key — steps ran at full depth');
   }, 90_000);
 });

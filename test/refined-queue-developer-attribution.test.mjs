@@ -55,7 +55,10 @@ describe('get_refined_queue end to end (real handler, stubbed backend)', () => {
   }, 60_000);
   afterAll(() => { globalThis.fetch = realFetch;
     if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal; });
-  const seat = () => ({ tier: 'anonymous', platform: 'cursor', client_name_raw: 'cursor', client_ip: '198.51.100.77', session_id: 'sess-refined-dev-1' });
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): get_refined_queue answers in full only at Developer and up; below that
+  // the handler walls before the backend read (the trim is pinned above). The end-to-end seat is a Developer key.
+  const seat = () => ({ tier: 'developer', api_key: 'dch_live_refined_dev_seat01', platform: 'cursor', client_name_raw: 'cursor', client_ip: '198.51.100.77', session_id: 'sess-refined-dev-1' });
+  const anonSeat = () => ({ tier: 'anonymous', platform: 'cursor', client_name_raw: 'cursor', client_ip: '198.51.100.78', session_id: 'sess-refined-dev-2' });
 
   it('the input schema accepts developer and passes it to the backend as a query arg', async () => {
     const parsed = await T.inputSchema.safeParseAsync({ min_mw: 1, iso: 'ERCOT', developer: 'tenaska' });
@@ -66,7 +69,7 @@ describe('get_refined_queue end to end (real handler, stubbed backend)', () => {
     expect(seen[seen.length - 1].searchParams.get('developer')).toBe('tenaska');
   });
 
-  it('a keyless call returns the full attribution through the real handler and wrapper', async () => {
+  it('a Developer call returns the full attribution through the real handler and wrapper', async () => {
     const parsed = await T.inputSchema.safeParseAsync({ min_mw: 1, iso: 'ERCOT' });
     const r = await S._ctxALS.run(seat(), () => T.handler(parsed.data, { signal: new AbortController().signal }));
     const sc = r.structuredContent;
@@ -79,5 +82,13 @@ describe('get_refined_queue end to end (real handler, stubbed backend)', () => {
     const text = r.content.map((b) => b.text || '').join('\n');
     expect(text).toContain('Prusak, M.');
     expect(text).not.toMatch(/_fields_total_in_pro/);
+  });
+  it('a keyless call is walled before the backend read and carries no rows (paid-only since 11-23)', async () => {
+    const before = seen.length;
+    const parsed = await T.inputSchema.safeParseAsync({ min_mw: 1, iso: 'ERCOT' });
+    const r = await S._ctxALS.run(anonSeat(), () => T.handler(parsed.data, { signal: new AbortController().signal }));
+    expect(seen.length).toBe(before);
+    expect(r.structuredContent.results).toBeUndefined();
+    expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\//);
   });
 });

@@ -383,8 +383,17 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
     });
   }
 
-  it('get_grid_intelligence: an email-bound free key reads its full brief with the DCPI aggregates withheld', async () => {
-    expectGridIntelDcpiWithheld(await callTool(K_EMAIL, 'get_grid_intelligence', { iso: 'ERCOT' }), 'email get_grid_intelligence');
+  // 2026-11-23 (owner): get_grid_intelligence is paid-full-only (lib/paid-full-only.mjs): an email-bound free key reads
+  // the same labelled preview as a keyless caller, so the four DCPI aggregates are absent with their markers.
+  it('get_grid_intelligence: an email-bound free key reads the preview, the four DCPI aggregates withheld', async () => {
+    const out = await callTool(K_EMAIL, 'get_grid_intelligence', { iso: 'ERCOT' });
+    expect(out.lead && out.lead.iso, 'email ERCOT: no payload').toBe('ERCOT');
+    for (const f of Object.keys(PREVIEW_FIELDS)) {
+      expect(Object.prototype.hasOwnProperty.call(out.lead, f), `email ERCOT.${f} must be absent`).toBe(false);
+      expect(out.lead[`_${f}_withheld`], `email ERCOT._${f}_withheld`).toBe(true);
+    }
+    expect(out.lead.demand_mw === 50000 && Array.isArray(out.lead.demand_24h), 'not the full brief').toBe(false);
+    expectNoNeedles(out, 'get_grid_intelligence email-bound');
   });
 
   it('compare_isos and get_grid_intelligence: pro is unchanged', async () => {

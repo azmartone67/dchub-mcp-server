@@ -113,14 +113,16 @@ describe('item 2: one rule decides the demand headline and the metrics', () => {
   };
   // Grok daily 2026-11-19 item 4 (owner 2026-11-20): a keyless answer keeps the public headline demand on
   // every call. The 2026-10-22 rule still holds in its other half: the headline and the metric row agree.
-  it.each([['AESO', AESO_DEMAND], ['XYZBA', BA_DEMAND]])('%s, keyless: a gated answer shows demand in the headline and the metric row alike', async (iso, demand) => {
+  it.each([['AESO', AESO_DEMAND], ['XYZBA', BA_DEMAND]])('%s, keyless: a gated answer shows demand as the taste headline and withholds the metric rows', async (iso, demand) => {
     const r = await call('get_grid_data', { iso }, SEATS.anonymous());
     expect(isGated(r), `${iso}: the keyless answer is expected to be a gated preview`).toBe(true);
     const sc = r.structuredContent || JSON.parse(r.content[0].text.slice(0, r.content[0].text.lastIndexOf('}') + 1));
-    expect(sc.demand_mw).toBe(demand);
-    if (sc.metrics && sc.metrics.demand_mw) expect(sc.metrics.demand_mw.value).toBe(demand);
-    // every other stored metric keeps what exists and when (unit, timestamp); only the value goes
-    expect(sc.metrics.fuel_gas_mw).toEqual({ timestamp: T, unit: 'MW', value: null });
+    // Owner 2026-11-23: get_grid_data's full answer is paid-only; below Developer the answer is the taste
+    // preview, whose one headline is the demand reading. The metric rows are withheld (listed, not shown).
+    expect(sc.taste.headline.name).toBe('demand_mw');
+    expect(sc.taste.headline.value).toBe(demand);
+    expect(sc.metrics).toBeUndefined();
+    expect(serialized(r)).not.toContain('fuel_gas_mw":{');
   });
   it.each(['anonymous', 'free', 'pro'])('%s: the headline and the metric row never disagree', async (who) => {
     for (const iso of ['AESO', 'XYZBA']) {

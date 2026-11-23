@@ -1,9 +1,9 @@
 // keyless-full-trial-http.test.mjs — the keyless full-answer trial over the real HTTP surfaces.
 // test/keyless-full-trial.test.mjs pins the behaviour per caller seat; this pins the paths, where
 // the profile, the QA header and the response filters are decided:
-//   * /mcp, /mcp/claude: a keyless get_grid_data is the full answer with the flag on, the preview
-//     with it off;
-//   * /mcp/core: grid_power include=telemetry delegates get_grid_data and is charged; with X-DCHub-QA: 1 it is not;
+//   * /mcp, /mcp/claude: a keyless get_facility is the free key's answer with the flag on, the preview
+//     with it off; get_grid_data (out of the trial since 2026-11-23, owner) stays the preview either way;
+//   * /mcp/core: grid_power include=telemetry delegates get_grid_data and is not charged (out of the trial);
 //   * /mcp with X-DCHub-QA: 1 or UA dchub-qa-readonly: the preview, nothing charged;
 //   * /mcp/chatgpt (frozen during the OpenAI review): byte-identical with the flag on and off, for
 //     all three tools, and nothing charged.
@@ -108,7 +108,8 @@ async function rpc(path, name, args, { ip = null, headers = {} } = {}) {
 }
 const kft = () => consumes.filter((w) => String(w.identity || '').startsWith('kft:'));
 const settle = () => new Promise((r) => setTimeout(r, 50));
-const FULL = '"min_mw":74723';   // a still-gated field: keyless keeps demand_mw (owner 2026-11-20)
+const FULL = '"min_mw":74723';
+const served = (r) => r.result.isError !== true && !(r.result.structuredContent && r.result.structuredContent.trial_preview);   // a still-gated field: keyless keeps demand_mw (owner 2026-11-20)
 function norm(r, addr) {
   return JSON.stringify(r.result).split(addr).join('IP')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'TS')
@@ -117,27 +118,32 @@ function norm(r, addr) {
 
 describe('the paths in the trial', () => {
   for (const path of ['/mcp', '/mcp/claude']) {
-    it(`${path}: keyless get_grid_data is full with the flag on, the preview with it off`, async () => {
-      const off = await rpc(path, 'get_grid_data', ARGS.get_grid_data);
-      expect(off.text, 'flag off: the preview').not.toContain(FULL);
+    it(`${path}: keyless get_facility is the free key's answer with the flag on, the preview with it off`, async () => {
+      const off = await rpc(path, 'get_facility', ARGS.get_facility);
+      expect(served(off), 'flag off: the preview').toBe(false);
+      process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
+      const before = kft().length;
+      const on = await rpc(path, 'get_facility', ARGS.get_facility);
+      expect(served(on), 'flag on: the free key answer').toBe(true);
+      expect(kft().length).toBe(before + 1);
+      await settle();
+      expect(tracks.some((t) => t.tool === 'get_facility' && t.status === 'keyless_full_trial' && t.keyless_full_trial === true)).toBe(true);
+    });
+    it(`${path}: keyless get_grid_data stays the preview with the flag on (owner 2026-11-23), nothing charged`, async () => {
       process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
       const before = kft().length;
       const on = await rpc(path, 'get_grid_data', ARGS.get_grid_data);
-      expect(on.text, 'flag on: the free key answer').toContain(FULL);
-      expect(kft().length).toBe(before + 1);
-      await settle();
-      expect(tracks.some((t) => t.tool === 'get_grid_data' && t.status === 'keyless_full_trial' && t.keyless_full_trial === true)).toBe(true);
+      expect(on.text.length).toBeGreaterThan(50);
+      expect(on.text).not.toContain(FULL);
+      expect(kft().length).toBe(before);
     });
   }
-  it('/mcp/core: grid_power charges the trial; with X-DCHub-QA: 1 it charges nothing', async () => {
+  it('/mcp/core: grid_power no longer charges the trial (get_grid_data left it 2026-11-23)', async () => {
     process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
-    let before = kft().length;
-    await rpc('/mcp/core', 'grid_power', { iso: 'PJM', include: ['telemetry'] });
-    const charged = kft().slice(before).filter((w) => w.tool === 'get_grid_data');
-    expect(charged.length, 'the delegated get_grid_data was a trial answer').toBe(1);
-    before = kft().length;
-    await rpc('/mcp/core', 'grid_power', { iso: 'PJM', include: ['telemetry'] }, { headers: { 'x-dchub-qa': '1' } });
+    const before = kft().length;
+    const r = await rpc('/mcp/core', 'grid_power', { iso: 'PJM', include: ['telemetry'] });
     expect(kft().slice(before)).toEqual([]);
+    expect(r.text).not.toContain(FULL);
   });
 });
 
@@ -147,8 +153,8 @@ describe('QA callers on /mcp', () => {
       process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
       const before = kft().length;
       const nt = tracks.length;
-      const r = await rpc('/mcp', 'get_grid_data', ARGS.get_grid_data, { headers });
-      expect(r.text).not.toContain(FULL);
+      const r = await rpc('/mcp', 'get_facility', ARGS.get_facility, { headers });
+      expect(served(r)).toBe(false);
       await settle();
       expect(kft().length).toBe(before);
       expect(tracks.slice(nt).filter((t) => t.status === 'keyless_full_trial')).toEqual([]);
@@ -156,9 +162,9 @@ describe('QA callers on /mcp', () => {
   }
   it('no header turns on the QA override (it is a test-only ctx field)', async () => {
     process.env.DCHUB_KEYLESS_FULL_TRIAL = '1';
-    const r = await rpc('/mcp', 'get_grid_data', ARGS.get_grid_data, {
+    const r = await rpc('/mcp', 'get_facility', ARGS.get_facility, {
       headers: { 'x-dchub-qa': '1', 'keyless-full-trial-qa-override': 'true', 'x-keyless-full-trial-qa-override': 'true' } });
-    expect(r.text).not.toContain(FULL);
+    expect(served(r)).toBe(false);
   });
 });
 

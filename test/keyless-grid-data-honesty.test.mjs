@@ -55,25 +55,23 @@ async function keylessGridData(iso = 'PJM') {
 }
 
 describe('keyless get_grid_data, end to end', () => {
-  it('the message matches the payload: the public EIA-930 headline demand is kept, the curve stays gated', async () => {
+  // Owner 2026-11-23: a full get_grid_data answer needs a paid key. A keyless call is the taste preview:
+  // the public EIA-930 headline demand is its one figure, the 24h curve and the mix are withheld.
+  it('the preview keeps the public headline demand and withholds the curve', async () => {
     const r = await keylessGridData();
     const sc = r.structuredContent;
-    // Grok 2026-11-19 item 4 (owner 2026-11-20): every keyless call keeps demand_mw, not just the trial ones.
-    expect(sc.demand_mw).toBe(92178);
-    expect(sc.message).not.toMatch(/withheld on a keyless call/);
+    expect(sc.taste.headline.value).toBe(92178);
+    expect(sc.preview_is_partial).toBe(true);
     expect(Array.isArray(sc.demand_24h)).toBe(false);
+    expect(JSON.stringify(sc)).not.toMatch(/withheld on a keyless call/);
   });
-  it('every next step names get_grid_data and claim_free_key, not get_grid_intelligence, and no email requirement', async () => {
+  it('the preview carries none of the backend teaser\'s free-key promises', async () => {
     const sc = (await keylessGridData()).structuredContent;
-    expect(sc.message).toContain('get_api_key');
-    // With demand shown the backend's sentence stands; the retry names the tool in agent_action.
-    expect(sc.agent_action.then).toContain('get_grid_data with iso=PJM');
-    expect(sc.message).not.toMatch(/email[- ]only|dev key/i);
-    if (sc.agent_action) { expect(sc.agent_action.then || '').toContain('get_grid_data'); expect(sc.agent_action.then || '').not.toContain('grid/intelligence'); }
-    if (sc.email_capture) {
-      expect(sc.email_capture.url).toContain('tool=get_grid_data');
-      expect(JSON.stringify(sc.email_capture)).not.toMatch(/get_grid_intelligence|10 calls\/day/);
-    }
+    const t = JSON.stringify(sc);
+    expect(t).not.toMatch(/email[- ]only|dev key|10 calls\/day/i);
+    expect(t).not.toContain('grid/intelligence/PJM');
+    expect(sc.agent_action).toBeUndefined();
+    expect(sc.email_capture).toBeUndefined();
   });
 });
 

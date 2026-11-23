@@ -105,7 +105,10 @@ describe('llms-install.md carries no plan-price table', () => {
     // 2026-11-16 (Note F, Grok item 11): less the pin's closing "Higher limits" pointer.
     const { _freeTierRuleForGate } = await import('../lib/tier-canon.mjs');
     const rule = _freeTierRuleForGate();
-    expect(rule).toMatch(/^No key needed: /);   // 2026-11-16 (owner, Grok Note K)
+    // 2026-11-16 (owner, Grok Note K) the rule led with "No key needed: the first call each UTC day ..."; owner
+    // 2026-11-23 (lib/paid-full-only.mjs) emptied that lane, so the clause is gone and the rule says what a key is for.
+    expect(rule).not.toMatch(/^No key needed: |first call each UTC day/);
+    expect(rule).toMatch(/^A key keeps saved shortlists/);
     expect(rule).not.toMatch(/higher limits/i);
     expect(doc).toContain(rule);
     expect(doc).toContain('https://dchub.cloud/pricing');

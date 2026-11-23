@@ -73,14 +73,16 @@ beforeAll(async () => { fence = fenceNetwork(); H = await startHarness({}); }, 6
 afterAll(async () => { delete process.env.DCHUB_ANSWER_MARKERS; if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('M3 over the real app (stub backend, no network)', () => {
-  it('keyless grid: _answer figure, _email_ask after_answer, first in params', async () => {
+  // 2026-11-23 (owner): get_grid_intelligence is paid-full-only (lib/paid-full-only.mjs). An email no longer opens
+  // it, so its keyless wall carries no answer-first email hand-off: the marker reads a partial preview, no ask.
+  it('keyless grid: _answer partial, no _email_ask, the marker first in params', async () => {
     const { result, rows } = await rowFor('get_grid_intelligence', { iso: 'ERCOT' });
     expect(result.structuredContent.human_url, 'control: the stub walls grid').toBeTruthy();
     expect(rows.length).toBe(1);
     const p = rows[0].body.params;
-    expect(p._answer).toBe('figure');
-    expect(p._email_ask).toBe('after_answer');
-    expect(Object.keys(p).slice(0, 2)).toEqual(['_answer', '_email_ask']);
+    expect(p._answer).toBe('partial');
+    expect(p._email_ask).toBeUndefined();
+    expect(Object.keys(p)[0]).toBe('_answer');
     expect(p.iso).toBe('ERCOT');
   });
   // The stub backend returns no market rows, so its rank_markets preview is 'partial' (rows: M1 + live).
