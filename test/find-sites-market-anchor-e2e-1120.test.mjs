@@ -103,7 +103,7 @@ describe('execute_plan 250 MW near Chicago (planner 5.55, anchored 5.58)', () =>
       mode = 'near';
       const r = await H.call('/mcp', 'execute_plan', { intent: 'Find land for a 250 MW data center near Chicago' }, headers);
       const o = sc(r);
-      expect(o.planner_version).toBe('5.61');
+      expect(o.planner_version).toBe('5.62');
       expect(o.executed.some((e) => e.tool === 'find_sites' && (e.status === 'executed' || e.status === 'gated_preview'))).toBe(true);
       expect(o.intent_answer.siting_caveat).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index/);
       expect(planLeadText(o)).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index \(Chicago, Elk Grove Village; PJM\), so they rank last/);

@@ -183,7 +183,7 @@ export function fenceNetwork() {
   return { foreign, restore: () => { net.Socket.prototype.connect = realConnect; } };
 }
 
-// opts.extraRoutes(pathname, req, body) → object to send, or undefined.
+// opts.extraRoutes(pathname, req, body) → object to send ({raw: '...'} sends those exact bytes), or undefined.
 // opts.env: env vars set before server.mjs is imported (module-level consts),
 //   or (stubBase) => env when a value needs the fake backend's URL.
 // opts.serverUrl: file URL of a different server.mjs to import (see createGitRefSandbox).
@@ -201,6 +201,8 @@ export async function startHarness(opts = {}) {
     const send = (code, obj) => { res.statusCode = code; res.end(JSON.stringify(obj)); };
     if (opts.extraRoutes) {
       const r = await opts.extraRoutes(p, req, body, u);
+      // r.raw: the exact body bytes (an empty body, a non-JSON body), sent as is.
+      if (r !== undefined && typeof r.raw === 'string') { res.statusCode = r.status || 200; return res.end(r.raw); }
       if (r !== undefined) return send(r.status || 200, r.body !== undefined ? r.body : r);
     }
     if (p === '/api/v1/mcp/trial-check') return send(200, { trial_used: false, prior_calls: 0 });

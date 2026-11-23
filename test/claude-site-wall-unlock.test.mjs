@@ -16,6 +16,8 @@ import {
   CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE, scrubClaudeToolResult, claudeSiteUnlock, claudeSiteUnlockTools,
 } from '../lib/claude-directory.mjs';
 import { scrubToolResult as scrubChatgptToolResult } from '../lib/chatgpt-directory.mjs';
+import { gatedPreviewHumanMessage } from '../lib/gated-preview.mjs';
+import { SITE_WALL_COPY_VERSION } from '../lib/wall-user-line.mjs';
 import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf } from './helpers/claude-directory-harness.mjs';
 
 const PATTERNS = claudeProbePatterns(CLAUDE_REMOVED);
@@ -48,7 +50,10 @@ describe('/mcp/claude keyless analyze_site wall carries the free unlock link', (
     expect(sc.site_teaser && sc.site_teaser.verdict).toBe('BUILD');   // the teaser is still there
     expect(sc.human_url).toMatch(LINK);
     expect(sc.unlock).toEqual({ url: sc.human_url, by: 'email', card_required: false });
-    expect(sc.human_message).toBe(`The full site report needs only an email (no card): ${sc.human_url}`);
+    // QA v2.12.63 (2026-11-23): the v15 copy /mcp's gated_preview serves for the same wall.
+    expect(sc.human_message).toBe(gatedPreviewHumanMessage(sc.human_url));
+    expect(sc.copy_version).toBe(SITE_WALL_COPY_VERSION);
+    expect(SITE_WALL_COPY_VERSION).toBe('v15');
     const t = texts(r);
     expect(t.at(-1)).toBe(CLAUDE_PLANS_NOTICE);                        // the notice stays last
     expect(t.at(-2)).toContain(`[Unlock the full site report](${sc.human_url})`);

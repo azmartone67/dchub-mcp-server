@@ -136,7 +136,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages,
-         isGated as _directoryIsGated, PARTIAL_LINK_META_KEY as _PARTIAL_LINK_META_KEY } from './lib/chatgpt-directory.mjs';
+         isGated as _directoryIsGated, PARTIAL_LINK_META_KEY as _PARTIAL_LINK_META_KEY,
+         directoryToolsList as _chatgptToolsList } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
@@ -164,7 +165,7 @@ import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatfor
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, MUSE_PATH, MUSE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
-         installClaudeResponseFilter as _installClaudeFilter,
+         installClaudeResponseFilter as _installClaudeFilter, claudeToolsList as _claudeToolsList,
          applyClaudeArgDefaults as _applyClaudeArgDefaults,
          excludedFromRelayReadout as _excludedFromRelayReadout,
          claudePromptListing as _claudePromptListing, claudePromptText as _claudePromptText,
@@ -256,6 +257,7 @@ import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, LAST_SESSION
 import { changesParams as _dhChangesParams, changesFallbackParams as _dhChangesFallback, attachDailyNext as _dhAttachDailyNext, dailyResourceText as _dhDailyResourceText, DAILY_RESOURCE_URI, dailyClaimAgentText as _dhClaimAgentText, dailyClaimAsk as _dhClaimAsk, withClaimFollowing as _dhWithClaimFollowing, normMarketSlug as _dhSlug, holdDailyInputs as _dhHoldDailyInputs } from './lib/daily-habit.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY,
          nextAskShownLogOn as _nextAskShownLogOn, holdTrackRow as _holdTrackRow, flushTrackRows as _flushTrackRows } from './lib/agent-outreach.mjs';
+import { withCiteFirst as _withCiteFirst } from './lib/cite-first.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks, WALL_LINK_STATUSES as _WALL_LINK_STATUSES } from './lib/wall-link-track.mjs';
@@ -406,6 +408,9 @@ import { siteScreenSteps as _siteScreenSteps } from './lib/site-screen-facts.mjs
 import { nearestTransmission as _nearestTransmission, NEAREST_LINE_RADIUS_KM as _NEAREST_LINE_RADIUS_KM } from './lib/site-point-depth.mjs';
 // 5.56 (Grok daily 2026-11-20, items 2-4): a named facility, a pipeline status ask, and both sides of a capacity ask.
 import { namedFacility as _namedFacility, buildNamedFacilityAnswer as _buildNamedFacilityAnswer } from './lib/named-facility.mjs';
+import { buildFacilitySearchAnswer as _buildFacilitySearchAnswer } from './lib/facility-search-answer.mjs';
+import { facilitiesAsk as _facilitiesAsk, facilityJoinArgs as _facilityJoinArgs, FACILITY_JOIN_SKIP as _FACILITY_JOIN_SKIP,
+  SITE_CONTEXT_CLASSES as _SITE_CONTEXT_CLASSES, FIBER_TOOLS as _FJ_FIBER_TOOLS, DEFAULT_MAX_STEPS as _FJ_DEFAULT_MAX_STEPS } from './lib/facility-join.mjs';
 import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForState, capacityAsksOperational as _capacityAsksOperational, buildPipelineStatusAnswer as _buildPipelineStatusAnswer,
   buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
 import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
@@ -8695,17 +8700,61 @@ async function callAPI(path, params = {}, opts = {}) {
     headers['Content-Type'] = 'application/json';
     fetchOpts.body = JSON.stringify(opts.body || {});
   }
+  const _t0 = Date.now();
   try {
     const resp = await fetch(url.toString(), fetchOpts);
     const text = await resp.text();
     // r-listings (2026-09-11): opt-in only. See _withStatusEnvelope.
     if (opts && opts.withStatus) return _withStatusEnvelope(resp.status, text);
     if (!resp.ok) return _upstreamError(resp.status, text);
+    // QA v2.12.63 (2026-11-23): an empty 2xx body parsed to {raw: ''} and the tool answered as if the
+    // backend had found nothing. It is a failed read: say so, and say it can be retried.
+    // GET reads only: a write (POST) is never told to retry itself, and a 204 is an answer.
+    if (!fetchOpts.method && resp.status !== 204 && !String(text || '').trim()) return _upstreamRetryable('empty_body', path, Date.now() - _t0, c);
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   } catch (err) {
     if (opts && opts.withStatus) return _withStatusTransportError(err);
+    // QA v2.12.63: a read that hit its own deadline came back {error: '<abort message>'}, which no
+    // failure test reads (no "API <status>", no mitigation block), so the tool served an empty answer.
+    if (!fetchOpts.method && _isTimeoutError(err)) return _upstreamRetryable('timeout', path, Date.now() - _t0, c);
     return { error: err.message };
   }
+}
+
+// An AbortSignal.timeout() abort: TimeoutError on Node 18+, AbortError where the signal was aborted by hand.
+export function _isTimeoutError(err) {
+  const n = err && (err.name || (err.cause && err.cause.name));
+  return n === 'TimeoutError' || n === 'AbortError';
+}
+// QA v2.12.63 (2026-11-23, P3): analyze_site and find_sites came back EMPTY after ~15 s on 2 of ~20 calls
+// and answered on a retry. A backend read that timed out or returned an empty body now logs one
+// structured line ([upstream-retryable] {tool, path, reason, elapsed_ms}) and returns a failure envelope:
+// _error_mitigation makes it a failure (_isFailureEnvelope, so the tool result is isError), and
+// retryable / retry_after_s say the same call may simply be sent again. No timeout is changed.
+export const UPSTREAM_RETRY_AFTER_S = 5;
+export function _upstreamRetryable(reason, path, elapsedMs, c = {}) {
+  const code = reason === 'timeout' ? 'upstream_timeout' : 'upstream_empty_response';
+  try {
+    console.log('[upstream-retryable] ' + JSON.stringify({ tool: (c && c._askTool) || null,
+      path: String(path || '').split('?')[0].slice(0, 120), reason, elapsed_ms: elapsedMs }));
+  } catch (_) { /* a log line is never worth a response */ }
+  return {
+    error: code,
+    retryable: true,
+    retry_after_s: UPSTREAM_RETRY_AFTER_S,
+    detail: reason === 'timeout'
+      ? 'The data service did not answer in time. This is transient: retry the same call.'
+      : 'The data service returned an empty response. This is transient: retry the same call.',
+    error_version: 1,
+    _error_mitigation: {
+      error_code: code,
+      severity: 'transient_backoff',
+      retryable: true,
+      retry_after_s: UPSTREAM_RETRY_AFTER_S,
+      deterministic_hint: 'Retry the same call after ' + UPSTREAM_RETRY_AFTER_S + ' seconds. Do not report the result as empty: '
+        + 'nothing was read. If it fails again, report the data as temporarily unavailable rather than substituting an estimate.',
+    },
+  };
 }
 
 // r-listings (2026-09-11): the Capacity Source tools need the HTTP status AND
@@ -20248,6 +20297,59 @@ async function _toolsListCached(platform, descOverrides) {
   return e.refreshing;   // rejection → caller falls back to the ephemeral SDK path
 }
 
+// The wire tools/list the cached fast path writes for one path, before any response filter. Shared by
+// that path and _servedToolCounts below, so a published count is read off the same projection.
+export function _projectCachedList(cachedList, { dirProfile = null, coreProfile = false, pack = null } = {}) {
+  // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
+  const _slim = (dirProfile || coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
+  // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
+  const _listFor = dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(cachedList) : cachedList;
+  // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
+  const _keyName = (dirProfile || coreProfile) ? ((x) => x) : _listResultKeyToolAs;
+  return pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+}
+
+// ── Served tool counts per path (QA v2.12.63, 2026-11-23, item c) ─────────────────────────────────────
+// GET /mcp/claude said "tools": 98 while its tools/list returned 69: every GET under /mcp published the
+// full catalog's count (the zone worker answers those GETs from its MCP_FALLBACK_TOOLS). The count a path
+// publishes is now the length of what that path's tools/list returns, computed from the same warm cache
+// and the same projections: _projectCachedList, then the profile's own response-filter projection
+// (claude / chatgpt directoryToolsList), or the core profile's own server. A request with no client
+// identity is assumed, which is what a GET is (a known light-list client may be shown fewer on /mcp).
+// Synchronous and read-only: a cold cache returns null (no count), it never builds a list. Memoised per
+// cache build. Served on /health as tools_by_path (the zone worker reads it) and on the origin's GET.
+const _servedCountsMemo = { at: -1, counts: null };
+export function _servedToolCountFor(path, cachedList) {
+  const req = { path, headers: {}, query: {}, body: null };
+  const dir = _pathProfile(req);
+  if (_pathIsCore(req)) return CORE_TOOL_NAMES.length;
+  const wire = _projectCachedList(cachedList, { dirProfile: dir, coreProfile: false, pack: _pathPack(req) });
+  if (dir === CLAUDE_PROFILE) return _claudeToolsList(wire).tools.length;
+  if (dir === DIRECTORY_PROFILE) return _chatgptToolsList(wire).tools.length;
+  return (wire && Array.isArray(wire.tools)) ? wire.tools.length : null;
+}
+export function _servedToolCounts(cachedList) {
+  try {
+    let at = null;
+    if (!cachedList) {
+      const e = _TOOLSLIST_CACHE.get('__generic__');
+      if (!e || !e.result) return null;
+      if (_servedCountsMemo.at === e.at && _servedCountsMemo.counts) return _servedCountsMemo.counts;
+      cachedList = e.result; at = e.at;
+    }
+    if (!Array.isArray(cachedList.tools) || !cachedList.tools.length) return null;
+    const counts = {};
+    for (const p of new Set(MCP_PATHS)) {
+      try {
+        const n = _servedToolCountFor(p, cachedList);
+        if (Number.isInteger(n) && n > 0) counts[p] = n;
+      } catch (_) { /* a path whose count cannot be read publishes none */ }
+    }
+    if (at !== null) { _servedCountsMemo.at = at; _servedCountsMemo.counts = counts; }
+    return counts;
+  } catch (_) { return null; }
+}
+
 // Minimal streamable-HTTP response writer for CACHED single-request replies.
 // Mirrors the SDK's stateless behavior exactly (SSE: `event: message` + one
 // data frame, then close; headers per webStandardStreamableHttp.js) but is
@@ -22189,6 +22291,17 @@ export function _planUnmatchedPlace(text, d) {
 // (submarket) reads its state and is cut after the call, because a town is not a pipeline market.
 // mcp#1458 adds market/state to the get_pipeline schema; on a server without it Zod strips both and
 // the step reads the country, as before. Pure; {} when there is nothing to hold it to.
+// 5.62: rows a search_facilities result holds (facilities / data / results), for the one-time town -> metro widen.
+export function _facilityRowCount(r) {
+  try {
+    let o = r;
+    if (typeof o === 'string') o = JSON.parse(o);
+    if (!o || typeof o !== 'object') return null;
+    for (const k of ['facilities', 'data', 'results']) if (Array.isArray(o[k])) return o[k].length;
+    return null;
+  } catch (_e) { return null; }
+}
+
 export function _planPipelinePlace(d, sm, st) {
   try {
     const o = d && d.__outlook;
@@ -23584,9 +23697,16 @@ export const _PLAN_CLASSES = [
       // executor ranks the rows by that name, so get_facility reads the best name match, not the first row.
       const fn = d.__facName;
       const metro = d.__facMetro ? d.__facMetro : {};
-      const searchArgs = fn ? { query: fn.name, ...(metro.state ? { state: metro.state } : {}) } : { ...metro };
+      // 5.62 (Grok answer-quality note 2026-11-23, P4): a town the corridor table names ("Ashburn") is searched as that
+      // town (city= + state), not the metro query ("Northern Virginia"); a town with no row widens once to the metro.
+      const town = !fn ? _planSubmarket(d) : null;
+      const townSt = d.state || metro.state || d.stateFromPlace || null;
+      const searchArgs = fn ? { query: fn.name, ...(metro.state ? { state: metro.state } : {}) }
+        : (town && townSt ? { city: town.city, state: townSt } : { ...metro });
+      const widenTo = town && townSt && metro && metro.query ? { ...metro } : null;
       return [
       { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, ...(fn ? { named_facility: fn.name } : {}),
+        ...(widenTo ? { widen_to: widenTo } : {}),
         why: 'Filter the full global facility dataset by location / capacity / operator / status — each row carries a slug.',
         // 5.32: a named metro is searched as the metro (query + its state), not left unscoped or widened to the state.
         args_hint: { ...searchArgs, ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
@@ -25237,7 +25357,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.61';   // 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.62';   // 5.62 (Grok answer-quality note 2026-11-23): a corridor-table centroid ("Loudoun County") is the named place, not a user site, so a moratorium or permitting-constraints ask there routes to permitting and a site hunt there runs the land flow; the permitting answer leads with the jurisdiction the question named (or says none is on file, dated); a facility search is held to the named town (city=, widened once to the metro when it has no row) and its answer leads with the facilities, counted in the place and dated by row as_of; a question that asks for facilities reads search_facilities in the same wave (lib/facility-join.mjs), and a site plan naming a place reads it for context when it fits the step budget. 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -27178,9 +27298,12 @@ export function _planQuery(intent, context) {
       // 5.61 (owner head-to-head 2026-11-22, lib/site-hunt.mjs): "find a Miami site for 50 MW ... check zoning, moratorium"
       // asks for a site; the moratorium is one check on it. The plan keeps the class the site search would have had (the
       // land flow: find_sites at the named place), and the moratorium read joins it (appended after routing).
-      const siteHunt = !d.coords && !addrScreen && _siteHuntAsk(text, d);
+      // 5.62 (Grok answer-quality note 2026-11-23, P5): a corridor-table centroid ("Loudoun County" -> 39.09,-77.64) binds
+      // arguments only (the 5.12 promise); it is not a site the user named. Only a user point suppresses the class.
+      const userPt = !!d.coords && !(d.placeScope && d.placeScope.basis === 'corridor_table');
+      const siteHunt = !userPt && !addrScreen && _siteHuntAsk(text, d);
       if (siteHunt) { const k0 = _permittingAsk(text); if (k0) d.__siteHuntPermit = k0; }
-      const kind = (d.coords || addrScreen || siteHunt) ? null : _permittingAsk(text);
+      const kind = (userPt || addrScreen || siteHunt) ? null : _permittingAsk(text);
       let b = null; for (const s of scored) if (s !== pz && (!b || s.score > b.score)) b = s;
       const held = !!b && b.score > 0 && ['air_permits', 'incentives_tax', 'colocation', 'pricing_out_of_scope', 'named_campus', 'generation_mix', 'gas_price'].includes(b.cls.id);
       const open = !b || b.score <= 0 || ['facility_search', 'dc_capacity', 'market_outlook', 'market_ranking', 'site_analysis', 'deals_ma'].includes(b.cls.id);
@@ -27548,6 +27671,35 @@ export function _planQuery(intent, context) {
         seq.push({ step: seq.length + 1, tool: 'get_permitting_intel', depends_on: [], estimated_calls: 1,
           why: `Published zoning restrictions on data centers${where}. Independent; runs in parallel.`,
           args_hint: stOk ? { class: 'zoning', state: st } : { class: 'zoning' } });
+      }
+    }
+  } catch (_e) { /* routing must never throw */ }
+  // 5.62 (Grok answer-quality note 2026-11-23, P7; lib/facility-join.mjs): a question that asks for facilities gets a
+  // facility read, held to the place it named, in the same wave (no dependency). A site plan that names a place gets
+  // one as context when it fits the default step budget. When the plan is already at the budget, the facility read
+  // takes the place of a second fiber step; it never displaces the only power or DCPI step.
+  try {
+    const cls = top && top.cls ? top.cls.id : null;
+    const asked = _facilitiesAsk(text);
+    // The unasked site-context read (Grok item 2, "site intent fallback") is off by default: it adds a step to every
+    // siting plan. DCHUB_PLAN_FACILITY_CONTEXT=1 turns it on.
+    const context = !asked && _SITE_CONTEXT_CLASSES.has(cls) && process.env.DCHUB_PLAN_FACILITY_CONTEXT === '1';
+    if (cls && !_FACILITY_JOIN_SKIP.has(cls) && (asked || context) && !seq.some((x) => x && x.tool === 'search_facilities')) {
+      const fa = _facilityJoinArgs(d, _planSubmarket(d));
+      if (fa) {
+        let room = seq.length < _FJ_DEFAULT_MAX_STEPS;
+        if (!room && asked) {
+          const fib = seq.map((x, i) => (x && _FJ_FIBER_TOOLS.has(x.tool) ? i : -1)).filter((i) => i >= 0);
+          if (fib.length >= 2) { seq.splice(fib[1], 1); room = true; }
+        }
+        if (room || asked) {
+          seq.push({ step: seq.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, facility_join: true,
+            why: asked
+              ? `The facilities the question asked for, held to ${fa.city || fa.query}${fa.state ? `, ${fa.state}` : ''}: each row with its operator and its own date. Independent; runs in parallel.`
+              : 'nearby facilities for context',
+            args_hint: fa });
+          seq.forEach((x, i) => { if (x) x.step = i + 1; });
+        }
       }
     }
   } catch (_e) { /* routing must never throw */ }
@@ -28088,6 +28240,11 @@ function _sourceLineCb(name, fn) {
       // F4 (DCHUB_EMAIL_ASK_AB, default OFF): arm B's unlock ask names the call's market or ISO. After every step, so it
       // rewrites the line the agent actually gets, and sees any other step's email_ask (wall to key) and stands down.
       _final = _emailAskAbStep(_final, name, args, c);
+      // Brain 2026-11-23 item 4 (lib/cite-first.mjs): one dated citation on every answer: cite_as, the Source line
+      // first (inside content[0]'s first 300 chars) and last, one date. Not on the directory / Claude / core
+      // profiles (their reviewed copy), a clean platform or a loopback plan step. DCHUB_CITE_FIRST=1 (default OFF).
+      _final = _withCiteFirst(_final, name, args, { skip: !!(c && c.loopback_step) || _isCleanPlatform()
+        || !!(c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) });
       // #1594 (QA 2026-11-23): the get_api_key email nudge once per MCP session (no session: client name + IP /24 for
       // 30 minutes). LAST, so it sees the sentence wherever an earlier step put it. Copy only (lib/email-nudge-once.mjs).
       _final = _emailNudgeOnceStep(_final, c);
@@ -33339,23 +33496,27 @@ export function _singleAskWall(name) {
 }
 // QA-only diagnostic (2026-10-24 full-stack QA): a keyless grid/queue preview on production carried no
 // claim/email line although the harness does, and the step's early returns are silent. A call that
-// carries the QA marker (X-DCHub-QA: 1 or UA dchub-qa-readonly) gets the skip point and the inputs it
-// read in structuredContent._claim_handoff_debug; every other caller gets the result unchanged.
+// carries the QA marker (X-DCHub-QA: 1 or UA dchub-qa-readonly) logs the skip point and the inputs it
+// read as one structured [claim-handoff-skip] line. QA v2.12.63 (2026-11-23): it used to ride in
+// structuredContent._claim_handoff_debug, which reached the client; the result is now returned unchanged
+// for every caller, and the diagnostic lives in the log only.
+export function _claimHandoffSkipRecord(result, at, name, err, c = {}) {
+  const sc = (result && result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+    ? result.structuredContent : null;
+  return {
+    at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
+    daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
+    clean_platform: _isCleanPlatform(), had_structured: !!sc, blocks: Array.isArray(result && result.content) ? result.content.length : null, tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
+    ...(err ? { error: String((err && err.message) || err).slice(0, 200) } : {}),
+  };
+}
 function _handoffSkip(result, at, name, err) {
   try {
     const c = getCtx() || {};
     if (!_isQaCaller(c) || !result || typeof result !== 'object') return result;
-    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
-      ? result.structuredContent : null;
-    // A result with no structuredContent yet (production's keyless grid preview reaches this step
-    // that way; the harness's does not) gets one carrying only the diagnostic.
-    return { ...result, structuredContent: { ...(sc || {}), _claim_handoff_debug: {
-      at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
-      daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
-      clean_platform: _isCleanPlatform(), had_structured: !!sc, blocks: Array.isArray(result.content) ? result.content.length : null, tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
-      error: err ? String((err && err.message) || err).slice(0, 200) : undefined,
-    } } };
-  } catch (_) { return result; }
+    console.log('[claim-handoff-skip] ' + JSON.stringify(_claimHandoffSkipRecord(result, at, name, err, c)));
+  } catch (_) { /* a diagnostic is never worth a response */ }
+  return result;
 }
 export function _claimHandoffStep(result, name) {
   try {
@@ -35105,16 +35266,33 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             const budget = s.routing === 'capacity_procurement'
               ? Math.max(_CAPACITY_STEP_MIN_MS, _execStepBudget(Date.now() - t0, DEADLINE_MS))
               : _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool));
-            return _execLoopbackCall(s.tool, args, c, budget).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent),
-              subScope: _execSubmarketOut(s.tool, out, _sig, args) }));
+            return _execLoopbackCall(s.tool, args, c, budget).then(async (out0) => {
+              // 5.62 (P4): a facility search held to the named town that returns no row widens once to the metro query
+              // (step.widen_to) and says so (entry.scope_widened; replay.scope_widened when the plan had none).
+              let out = out0, used = args, widened = null;
+              try {
+                if (s.widen_to && out0 && out0.ok && _facilityRowCount(out0.full || out0.result) === 0) {
+                  const wa = { ...s.widen_to };
+                  const o2 = await _execLoopbackCall(s.tool, wa, c, _execStepBudget(Date.now() - t0, DEADLINE_MS, _execStepCapMs(s.tool)));
+                  if (o2 && o2.ok) {
+                    out = o2; used = wa;
+                    widened = { widened_from: String(args.city || args.query || ''), to: String(wa.query || wa.city || wa.state || ''),
+                      reason: `no facility row on record for ${args.city || args.query} itself; the search was widened to ${wa.query || wa.state}` };
+                  }
+                }
+              } catch (_e) { out = out0; used = args; widened = null; }
+              return { s, args: used, out, geo, widened, scope: _execScopeOut(s.tool, out, _sig, a && a.intent),
+                subScope: _execSubmarketOut(s.tool, out, _sig, used) };
+            });
           }));
-          for (const { s, args, out, geo, scope, subScope } of results) {
+          for (const { s, args, out, geo, scope, subScope, widened } of results) {
             calls += 1;
             const entry = { step: s.step, tool: s.tool, args,
                             ...(s.pair_side ? { pair_side: s.pair_side } : {}),
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
                             ...(scope ? { state_scope: scope } : {}),
                             ...(subScope ? { submarket_scope: subScope } : {}),
+                            ...(widened ? { scope_widened: widened } : {}),
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
@@ -35261,6 +35439,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       try { if (sc.geography_scope) _planSuppressNullGridSteps(executed, fullByEntry); } catch (_e) { /* additive */ }
       try { _planNearMarketCut(executed, fullByEntry, _sig); } catch (_e) { /* additive */ }
       const replay = _planReplay(sc, _sig);
+      // 5.62 (P4): a facility step that widened from the named town says so in the plan's replay.
+      try {
+        const wz = executed.find((e) => e && e.scope_widened);
+        if (wz && replay && typeof replay === 'object' && !replay.scope_widened) {
+          replay.scope_widened = { widened_from: wz.scope_widened.widened_from, to: wz.scope_widened.to, reason: wz.scope_widened.reason };
+        }
+      } catch (_e) { /* never throws */ }
       // Grok live proof 2026-11-16 item 8: a stable id for the plan (lib/plan-replay-id.mjs).
       try { const _pid = _planIdOf({ intent: a && a.intent, context: a && a.context, intentClass: sc.intent_class, plannerVersion: replay.planner_version }); if (_pid) replay.plan_id = _pid; } catch (_e) { /* optional */ }
       try {
@@ -35487,6 +35672,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             facility: _sig && _sig.__facName ? _sig.__facName : null }, executed, fullByEntry)
           || _buildPipelineStatusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             status: _sig && !(_sig.__facName) ? _sig.__pipelineStatus : null }, executed, fullByEntry)
+          // 5.62 (Grok answer-quality note 2026-11-23, P4): a facility search leads with its facilities, scoped and dated.
+          || (_sig && (_sig.__facName || _sig.__pipelineStatus) ? null
+            : _buildFacilitySearchAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry))
           || _buildCapacitySidesAnswer({ intent: sc.intent, intent_class: sc.intent_class,
             state: _sig ? (_sig.state || _sig.stateFromPlace || null) : null }, executed, fullByEntry)
           || _buildGasPriceAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
@@ -37093,7 +37281,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
   // international operating + planned/UC asset set the US-federal feeds don't cover.
-  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
+  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units worldwide, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
     { country: S.describe('Country/area name to filter, e.g. Germany, India, Brazil, Japan'),
       fuel: S.describe('Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal'),
       status: S.describe('Status substring filter, e.g. operating, construction, pre-construction, announced'),
@@ -38665,7 +38853,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs, or a US EIA balancing-authority code.',
           valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
           example: 'get_grid_intelligence region_id="PJM"',
-          instead: 'For non-US power infrastructure use get_global_power (plant/unit inventory, 170+ countries). There is no live grid telemetry outside the US.',
+          instead: 'For non-US power infrastructure use get_global_power (worldwide plant/unit inventory). There is no live grid telemetry outside the US.',
           _error_mitigation: {
             error_code: 'region_not_covered',
             severity: 'parameter_adjustment',
@@ -41200,6 +41388,8 @@ app.get('/health', (req, res) => {
     server: 'DC Hub MCP',
     version: SERVER_VERSION,
     tools: CANONICAL_TOOL_COUNT,   // canonical count from mcp-server.json (matches live tools/list); CI-guarded by sync-tools-manifest
+    // QA v2.12.63 item c: what each path's tools/list returns (the zone worker's GET /mcp/<path> reads it).
+    ...(() => { const t = _servedToolCounts(); return t ? { tools_by_path: t } : {}; })(),
     sessions: sessions.size,
     // ★2026-09-03: sessionSrv is the EXPENSIVE map (sessionId -> McpServer,
     // ~3.4MB of tool definitions each) and it was only ever reported into the
@@ -42839,13 +43029,7 @@ app.post(MCP_PATHS, async (req, res) => {
         try {
           const _cachedList = await _toolsListCached(platform, _descOverrides);
           if (_cachedList) {
-            // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
-            const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
-            // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
-            const _listFor = _dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(_cachedList) : _cachedList;
-            // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
-            const _keyName = (_dirProfile || _coreProfile) ? ((x) => x) : _listResultKeyToolAs;
-            return _writeRpcResult(req, res, body.id, _pack ? _slim(_keyName(_packFilter(_listFor, _pack))) : _slim(_keyName(_listFor)));
+            return _writeRpcResult(req, res, body.id, _projectCachedList(_cachedList, { dirProfile: _dirProfile, coreProfile: _coreProfile, pack: _pack }));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {
@@ -43096,7 +43280,7 @@ app.get(MCP_PATHS, async (req, res) => {
   }
   // 'describe': HEAD, or a GET that did not ask for an event stream. Express sends HEAD without the body.
   return res.status(200).set('Cache-Control', 'no-store').set('Allow', 'GET, POST, DELETE, OPTIONS')
-    .json(_mcpGetDescription({ path, version: SERVER_VERSION }));
+    .json(_mcpGetDescription({ path, version: SERVER_VERSION, tools: (_servedToolCounts() || {})[path] }));
 });
 
 // ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle

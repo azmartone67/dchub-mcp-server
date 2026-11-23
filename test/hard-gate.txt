@@ -108,6 +108,7 @@ test/chatgpt-toolset-frozen.test.mjs
 test/checkout-attrib-1122.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
+test/cite-as-every-tool.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/cite-day-phoenix-1123.test.mjs
@@ -606,6 +607,8 @@ test/planner-547-siting-oldest-input.test.mjs
 test/planner-548-market-lead-first.test.mjs
 test/planner-559-named-markets-on-grid-plans.test.mjs
 test/planner-561-site-hunt.test.mjs
+test/planner-562-answer-quality.test.mjs
+test/planner-562-e2e.test.mjs
 test/planner-dallas-capacity-near-cut.test.mjs
 test/planner-dcpi-one-market-1122.test.mjs
 test/planner-eval.test.mjs
@@ -641,6 +644,7 @@ test/public-descriptions-no-internal-directives.test.mjs
 test/public-doors-banned-floors.test.mjs
 test/qa-1007-relay-sid-chatgpt-keyed-walls.test.mjs
 test/qa-marker-forward.test.mjs
+test/qa-p3-cleanups-1123.test.mjs
 test/qa-probe-markers.test.mjs
 test/qa-sweep-1114-fixes.test.mjs
 test/queue-collected-date.test.mjs
@@ -804,6 +808,7 @@ test/unlock-research-request.test.mjs
 test/unlock-tool-text-price-free.test.mjs
 test/unverified-listing-marker.test.mjs
 test/upgrade-names-what-you-missed.test.mjs
+test/upstream-empty-retryable-1123.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
 test/utf8-charset.test.mjs

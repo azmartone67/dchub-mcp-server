@@ -345,22 +345,34 @@ describe('what it must not do', () => {
     try { expect(S._singleAskWall('get_grid_intelligence')).toBe(false); } finally { delete process.env.DCHUB_GRID_SELL_LINE; }
   });
 
-  it('QA-only diagnostic: a QA-marked call is told where the step skipped; any other caller gets the result unchanged', async () => {
+  it('QA-only diagnostic: a QA-marked call LOGS where the step skipped; no caller ever sees _claim_handoff_debug', async () => {
+    // QA v2.12.63 (2026-11-23): the diagnostic used to ride in structuredContent._claim_handoff_debug and
+    // reached the client. It is a log line now, and the result is returned unchanged for every caller.
     const res = () => ({ content: [{ type: 'text', text: '{}' }, { type: 'text', text: 'A free preview.' }], structuredContent: { ok: true } });
     const base = { session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor', _wallStatus: 'depth_teased', auth_source: 'none' };
-    const qa = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
-    const d = qa.structuredContent._claim_handoff_debug;
-    expect(d, 'QA caller gets the skip point').toBeTruthy();
+    const logged = [];
+    const orig = console.log;
+    console.log = (...a) => { logged.push(a.join(' ')); };
+    let qa, bare, plain, bare2;
+    try {
+      qa = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
+      bare = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
+      plain = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
+      bare2 = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
+    } finally { console.log = orig; }
+    expect(qa.structuredContent, 'the QA caller gets the result unchanged').toEqual({ ok: true });
+    expect(JSON.stringify(qa)).not.toContain('_claim_handoff_debug');
+    expect(bare.structuredContent, 'no structuredContent is invented for the diagnostic').toBeUndefined();
+    expect(plain.structuredContent).toEqual({ ok: true });
+    expect(bare2.structuredContent).toBeUndefined();
+    const lines = logged.filter((l) => l.startsWith('[claim-handoff-skip] '));
+    expect(lines, 'one log line per QA-marked skip, none for a real caller').toHaveLength(2);
+    const d = JSON.parse(lines[0].slice('[claim-handoff-skip] '.length));
     expect(d.at).toBe('s5');                       // depth_teased is not a claim-handoff status
     expect(d.status).toBe('depth_teased');
     expect(d.tool).toBe('get_grid_intelligence');
-    const plain = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
-    expect(plain.structuredContent, 'a real caller never sees the diagnostic').toEqual({ ok: true });
-    // a result with no structuredContent still reports (production's grid preview reaches the step that way)
-    const bare = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
-    expect(bare.structuredContent._claim_handoff_debug.had_structured).toBe(false);
-    const bare2 = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
-    expect(bare2.structuredContent, 'and a real caller still gets none').toBeUndefined();
+    expect(d.had_structured).toBe(true);
+    expect(JSON.parse(lines[1].slice('[claim-handoff-skip] '.length)).had_structured).toBe(false);
   });
 
   it('the step skips a single-ask or decision PREVIEW wall, but answers a LIMIT on every tool', async () => {
