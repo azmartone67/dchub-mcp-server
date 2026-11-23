@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "2.12.62",
+  "version": "2.12.63",
   "description": "DC Hub: the orchestration layer for data center and energy intelligence. Call execute_plan first. Includes the Data Center Power Index (DCPI). Remote MCP at https://dchub.cloud/mcp; DCHUB_API_KEY is optional.",
   "author": {
     "name": "Jonathan Martone",
