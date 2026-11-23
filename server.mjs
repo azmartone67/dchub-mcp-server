@@ -277,7 +277,7 @@ import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerW
          keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
 import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
 import * as _WD from './lib/wall-device-match.mjs';
-import { nudgeOnce as _nudgeOnce, nudgeIdentity as _nudgeIdentity, createNudgeMemo as _createNudgeMemo } from './lib/email-nudge-once.mjs';
+import { nudgeOnceShared as _nudgeOnceShared, nudgeIdentity as _nudgeIdentity, createNudgeMemo as _createNudgeMemo, NUDGE_BUCKET as _NUDGE_BUCKET } from './lib/email-nudge-once.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
          emailEntered as _emailEntered, emailEnteredEventBody as _emailEnteredEventBody } from './lib/email-entered.mjs';
 import { RELAY_ASK_MESSAGE, researchRequestOn as _researchRequestOn, createSessionWallLog as _createSessionWallLog,
@@ -28254,7 +28254,7 @@ function _sourceLineCb(name, fn) {
         || !!(c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) });
       // #1594 (QA 2026-11-23): the get_api_key email nudge once per MCP session (no session: client name + IP /24 for
       // 30 minutes). LAST, so it sees the sentence wherever an earlier step put it. Copy only (lib/email-nudge-once.mjs).
-      _final = _emailNudgeOnceStep(_final, c);
+      _final = await _emailNudgeOnceStep(_final, c);
       return _final;
     } finally {
       _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
@@ -28274,12 +28274,28 @@ function _sourceLineCb(name, fn) {
 // #1594: one get_api_key email nudge per MCP session. Never /mcp/chatgpt or a ChatGPT client (frozen), never a loopback
 // plan step (the plan's own answer is the one the agent reads). Kill switch DCHUB_EMAIL_NUDGE_ONCE=0.
 const _emailNudgeMemo = _createNudgeMemo();
-export function _emailNudgeOnceStep(result, c = getCtx()) {
+// The replicas share one count (lib/email-nudge-once.mjs nudgeOnceShared): the durable daily counter, awaited with a
+// short bound. Any failure answers null and the replica's own memo decides, as before.
+export const _NUDGE_CONSUME_TIMEOUT_MS = 800;
+export async function _emailNudgeConsume(key) {
+  try {
+    const r = await fetch(new URL('/api/v1/mcp/full-cap/consume', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ identity: key, tool: _NUDGE_BUCKET, cap: 1 }),
+      signal: AbortSignal.timeout(_NUDGE_CONSUME_TIMEOUT_MS),
+    });
+    if (!r || !r.ok) return null;
+    const j = await r.json();
+    return j && j.ok !== false && Number.isInteger(j.n) ? j.n : null;
+  } catch (_) { return null; }
+}
+export async function _emailNudgeOnceStep(result, c = getCtx(), consume = _emailNudgeConsume) {
   try {
     if (!c || c.loopback_step || c.profile === DIRECTORY_PROFILE || /chatgpt|openai/i.test(String(c.platform || ''))) return result;
     const id = _nudgeIdentity(c, { ipPrefix: _WD.ipPrefix, clientNameOf: _WD.clientNameOf,
       realSession: (s) => (_isRealSession(s) ? String(s) : '') });
-    return _nudgeOnce(result, id, _emailNudgeMemo);
+    return await _nudgeOnceShared(result, id, _emailNudgeMemo, consume);
   } catch (_) { return result; }
 }
 // F4 email-ask A/B (lib/email-ask-ab.mjs; DCHUB_EMAIL_ASK_AB, default OFF). On an unlock-ask wall (the keyless cap wall's
