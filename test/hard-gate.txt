@@ -108,6 +108,7 @@ test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
+test/cite-day-phoenix-1123.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-client-snippet-lasting-key.test.mjs
 test/claim-email-has-key-paste-line.test.mjs
@@ -188,6 +189,7 @@ test/data-sources-odbl-117627.test.mjs
 test/dchub-identity.test.mjs
 test/dcpi-confidence-public.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
+test/dcpi-market-alias-1123.test.mjs
 test/dcpi-markets-refresh.test.mjs
 test/dcpi-rank-human-line-own-block.test.mjs
 test/dcpi-rank-paid-bullets.test.mjs
@@ -559,6 +561,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs
 test/plan-proof-1116-e2e.test.mjs
 test/plan-proof-1116.test.mjs
@@ -827,6 +830,7 @@ test/wall-offer-floor-v2.test.mjs
 test/wall-offers.test.mjs
 test/wall-one-door-1122.test.mjs
 test/wall-one-route.test.mjs
+test/wall-pack-first-1122.test.mjs
 test/wall-paid-line-1121.test.mjs
 test/wall-relay-value-first-1121.test.mjs
 test/wall-short-link.test.mjs
