@@ -1,0 +1,22 @@
+identity:
+  name: "interconnection_queue"
+  author: "dchub"
+  label:
+    en_US: "Interconnection queue"
+description:
+  human:
+    en_US: "Interconnection queue depth and projects for an ISO/RTO."
+  llm: "Get interconnection queue depth and projects for an ISO/RTO, with as-of dates."
+parameters:
+  - name: iso
+    type: string
+    required: true
+    label:
+      en_US: "ISO/RTO"
+    human_description:
+      en_US: "ISO/RTO code, e.g. PJM."
+    llm_description: "ISO/RTO code, e.g. PJM."
+    form: llm
+extra:
+  python:
+    source: tools/interconnection_queue.py

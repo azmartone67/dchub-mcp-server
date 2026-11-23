@@ -1,0 +1,31 @@
+identity:
+  name: "grid_conditions"
+  author: "dchub"
+  label:
+    en_US: "Grid conditions"
+description:
+  human:
+    en_US: "Current grid conditions (demand, supply mix, headroom) for an ISO or market."
+  llm: "Get current grid conditions for an ISO/RTO or data center market, with as-of dates."
+parameters:
+  - name: iso
+    type: string
+    required: false
+    label:
+      en_US: "ISO/RTO"
+    human_description:
+      en_US: "ISO/RTO code, e.g. PJM."
+    llm_description: "ISO/RTO code, e.g. PJM."
+    form: llm
+  - name: market
+    type: string
+    required: false
+    label:
+      en_US: "Market"
+    human_description:
+      en_US: "Market slug, e.g. ashburn."
+    llm_description: "Market slug, e.g. ashburn."
+    form: llm
+extra:
+  python:
+    source: tools/grid_conditions.py

@@ -1,0 +1,58 @@
+identity:
+  name: "ask_dchub"
+  author: "dchub"
+  label:
+    en_US: "Ask DC Hub"
+description:
+  human:
+    en_US: "Answer any data center or energy question in one call: where a data center can get power, interconnection queues, Data Center Power Index (DCPI), fiber, facilities and site context."
+  llm: "Use this first for any question about data center power, grid conditions, interconnection queues, energy prices, fiber, facilities, sites or markets. Pass the user's question unchanged as intent. Keep each as-of date in the answer and end with the Source line it returns."
+parameters:
+  - name: intent
+    type: string
+    required: true
+    label:
+      en_US: "Question"
+    human_description:
+      en_US: "The user's question, unchanged."
+    llm_description: "The user's question, unchanged."
+    form: llm
+  - name: market
+    type: string
+    required: false
+    label:
+      en_US: "Market"
+    human_description:
+      en_US: "Market slug if known, e.g. ashburn or columbus."
+    llm_description: "Market slug if known, e.g. ashburn or columbus."
+    form: llm
+  - name: iso
+    type: string
+    required: false
+    label:
+      en_US: "ISO/RTO"
+    human_description:
+      en_US: "ISO/RTO code if known, e.g. PJM."
+    llm_description: "ISO/RTO code if known, e.g. PJM."
+    form: llm
+  - name: state
+    type: string
+    required: false
+    label:
+      en_US: "State"
+    human_description:
+      en_US: "Two-letter US state if known, e.g. VA."
+    llm_description: "Two-letter US state if known, e.g. VA."
+    form: llm
+  - name: capacity_mw
+    type: number
+    required: false
+    label:
+      en_US: "Capacity (MW)"
+    human_description:
+      en_US: "Target load in MW, e.g. 100."
+    llm_description: "Target load in MW, e.g. 100."
+    form: llm
+extra:
+  python:
+    source: tools/ask_dchub.py
