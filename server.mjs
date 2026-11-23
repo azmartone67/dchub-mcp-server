@@ -28966,8 +28966,9 @@ function trackedTool(srv, name, description, schema, handler) {
       }
       // ── Top-20 metros free (owner decision 2026-10-20; DCHUB_TOP_METROS_FREE=0 kills it) ──
       // "make the full market briefing (grid, risk, time-to-power) free for the top 20 metros":
-      // get_market_context / get_market_intel / get_market_dcpi_rank on a market in
-      // lib/top-metros.mjs return the full answer to every caller, keyless included, before any
+      // get_market_intel / get_market_dcpi_rank on a market in lib/top-metros.mjs return the full
+      // answer to every caller, keyless included (get_market_context left the set 2026-11-23: its
+      // backend never withholds the DCPI sub-scores from this server's key, so it takes the tease), before any
       // wall, preview, trim, tease, taste, cap or credit charge below. Broker lease rates stay withheld (licensed). The numeric
       // DCPI gate in _stampEntityCb skips the same calls. A paid-depth caller already gets the
       // full answer and keeps its own path (broker rates included where its plan has them).

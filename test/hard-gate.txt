@@ -434,6 +434,7 @@ test/lp-pro-only.test.mjs
 test/lp-wall-paywall-signal.test.mjs
 test/m12-wall-relay-url.test.mjs
 test/manifest-description-heals.test.mjs
+test/market-context-top-metro-tease-1123.test.mjs
 test/market-intel-fallback-provisional.test.mjs
 test/market-intel-json-first-block.test.mjs
 test/market-outlook-e2e.test.mjs
