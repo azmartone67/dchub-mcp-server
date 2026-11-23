@@ -157,6 +157,9 @@ const prose = (r) => (res(r).content || []).map((b) => (b && b.text) || '').join
 const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/https:\/\/dchub\.cloud\/(upgrade\/h\/[A-Za-z0-9_.-]+|u\/[A-Za-z0-9]+)(?:\?[^"\s\\]*)?/g, 'RELAY')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
+  // The spoken cite's time of day (Grok 2026-11-23 item 1, lib/cite-day.mjs: "as of YYYY-MM-DD", never a time) is not
+  // this flag's: only the "THH:MMZ" suffix after "as of" is dropped, so the day itself still compares.
+  .replace(/(as of \d{4}-\d\d-\d\d)T\d\d:\d\dZ/g, '$1')
   // A planner version bump is not this flag's: the branch and origin/main differ there by design until it merges.
   .replace(/(\\?"planner_version\\?":\\?")[0-9.]+/g, '$1V')
   .replace(/pr1\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/g, 'RERUN')
