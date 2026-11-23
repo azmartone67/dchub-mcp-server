@@ -31,7 +31,7 @@ class TestExecutePlanUnit(_Base):
 
     @property
     def tool_invoke_params_example(self) -> dict[str, Any]:
-        return {"intent": "compare Dallas vs Phoenix for a 100 MW AI campus"}
+        return {"intent": "compare Ashburn vs Columbus for a 100 MW AI campus"}
 
 
 class TestSearchFacilitiesUnit(_Base):
