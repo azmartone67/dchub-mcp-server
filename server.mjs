@@ -40527,8 +40527,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
 const app = express();
 // UTF-8 charset on every JSON / SSE response, the SDK transport's included (lib/utf8-charset.mjs):
 // a bare text/event-stream let clients decode an em dash as Windows-1252 mojibake. First, so it wraps every writer.
-app.use((req, _res, next) => { const lp = req.socket && req.socket.localPort; if (lp) _servedPort = lp; next(); });
 app.use(utf8CharsetMiddleware);
+// execute_plan's loopback port (_loopbackPort above): the port this request actually arrived on.
+app.use((req, _res, next) => { const lp = req.socket && req.socket.localPort; if (lp) _servedPort = lp; next(); });
 app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));
 app.use((req, res, next) => listingSrcCtx.run(_listingSrcFromRequest(req, getVia()), next));
