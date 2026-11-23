@@ -90,7 +90,7 @@ registry:
       - name: "get_facility_risk_delta"
         description: "Use this when the user asks how a data center facility's (or its market's) power risk changed recently — \"has this site gotten riskier lately?\"."
       - name: "get_feed_freshness"
-        description: "Reports how fresh DC Hub's ingest feeds are; it is NOT a database backup report."
+        description: "Use this when the user asks how current DC Hub's data center and power data feeds are."
       - name: "get_fiber_intel"
         description: "Use this when the user asks about fiber routes, carriers or connectivity for a market: long-haul, metro, dark or IX routes."
       - name: "get_fiber_readiness"
