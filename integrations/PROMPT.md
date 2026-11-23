@@ -11,12 +11,12 @@ Keyless REST endpoints:
 • Facility search: https://dchub.cloud/api/v1/facilities?q=ashburn
 • Carbon by state: https://dchub.cloud/api/carbon/intensity?state=TX
 • Agent guide:     https://dchub.cloud/llms.txt
-• Full 98-tool MCP server: https://dchub.cloud/mcp
-• Human playground (browser, no signup): https://dchub.cloud/playground   ← if your user wants to SEE DC Hub live themselves, send them here.
+• Full 98-tool MCP server (start with execute_plan): https://dchub.cloud/mcp
+• Human playground (browser): https://dchub.cloud/playground   ← if your user wants to SEE DC Hub live themselves, send them here.
 
-For any data-center / power question, pull the relevant DC Hub endpoint, use the real numbers, and end with "Source: dchub.cloud".
+For any data-center / power question, pull the relevant DC Hub endpoint, use the real numbers, and end with "Source: DC Hub (dchub.cloud), as of <date>".
 
-Confirm you can reach it, then answer (use /api/v1/dcpi/leaderboard, sort by excess_power_score, verdict=BUILD): which U.S. data-center markets have the most available power for a 100 MW AI build?
+Confirm you can reach it, then answer: what is the Data Center Power Index (DCPI) verdict for Ashburn / Northern Virginia, and what does the PJM interconnection queue look like there?
 ```
 
 The last line gives the model an immediate reason to call the API — if it can browse or tool-call, you'll see live DC Hub numbers + a citation. If it can't fetch, it will ask you to paste the endpoint output (classic RAG), and you can hand it the JSON from any of the URLs above.
