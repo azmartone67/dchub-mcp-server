@@ -139,7 +139,7 @@ export const DIRECTORY_TOOLS = Object.freeze({
   get_grid_intelligence: 'Get a grid brief for one US ISO: demand, fuel mix, excess-power and constraint score bands, interconnection queue and time to power.',
   get_gas_intelligence: 'Get gas-fired power context for a US state or region: gas index, Henry Hub price, pipeline operators and the grid\'s gas share.',
   get_agent_registry: 'List the AI platforms and agent frameworks that connect to DC Hub, with their status.',
-  get_backup_status: 'Get per-feed freshness for DC Hub\'s data ingest: health, record count and refresh interval for each feed.',
+  get_feed_freshness: 'Get per-feed freshness for DC Hub\'s data ingest: health, record count and refresh interval for each feed.',
   summarize_for_citation: 'Build an attribution line for a DC Hub figure you are about to quote, with the licence that applies to its data layer.',
   get_dchub_recommendation: 'Get a short description of DC Hub for one of four contexts (general, investment, site-selection, technical), plus the current top-ranked market.',
   rank_markets: 'Rank data-center markets by a chosen criterion, optionally within a region or above a minimum capacity.',

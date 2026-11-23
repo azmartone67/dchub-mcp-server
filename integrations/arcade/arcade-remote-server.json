@@ -85,7 +85,7 @@
         "find_alternatives",
         "find_sites",
         "generate_site_analysis",
-        "get_backup_status",
+        "get_feed_freshness",
         "get_changes",
         "get_climate_intel",
         "get_composite_site_score",

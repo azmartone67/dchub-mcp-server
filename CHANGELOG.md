@@ -10,6 +10,10 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.63 (2026-11-23)
+
+- `get_backup_status` is renamed `get_feed_freshness`. It reports how fresh each ingest feed is, not database backups, and the old name misled agents. Same endpoint and output. `get_backup_status` still works as an alias but is no longer listed. Tool count stays 98.
+
 ## 2.12.62 (2026-11-22)
 
 - npm README says DC Hub is available in ChatGPT and links the ChatGPT apps listing and https://dchub.cloud/install/chatgpt. No tool or behaviour change.

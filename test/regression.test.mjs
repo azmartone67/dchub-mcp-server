@@ -59,7 +59,7 @@ const ALL_TOOLS = [
   'set_market_alert', 'export_dataset', 'analyze_site', 'compare_sites',
   'get_infrastructure', 'get_fiber_intel', 'get_energy_prices', 'get_renewable_energy',
   'get_tax_incentives', 'get_water_risk', 'get_grid_intelligence', 'get_agent_registry',
-  'get_backup_status', 'get_dchub_recommendation', 'rank_markets', 'find_alternatives',
+  'get_feed_freshness', 'get_dchub_recommendation', 'rank_markets', 'find_alternatives',
   'score_facility', 'ai_capacity_index', 'hyperscaler_deals', 'site_selection_canvas',
   'grid_transition_radar', 'deal_autopsy',
 ];
@@ -445,8 +445,8 @@ describe.runIf(LIVE)('MCP regression suite', () => {
       expect(platforms.length).toBeGreaterThan(0);
     }, 20000);
 
-    it('get_backup_status returns health indicators', async () => {
-      const r = await callTool('get_backup_status', {});
+    it('get_feed_freshness returns health indicators', async () => {
+      const r = await callTool('get_feed_freshness', {});
       if (isGated(r)) return;
       const hasHealth = r?.feeds || r?.summary || r?.success != null ||
                         r?.data_freshness || r?.heartbeat_score != null || r?.status;

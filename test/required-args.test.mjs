@@ -265,7 +265,7 @@ describe('the change is bounded', () => {
   // answer with no arguments at all (measured: 50 of 82 return data for `{}`).
   it('tools that answer with no arguments require nothing', () => {
     for (const n of ['get_grid_scoreboard', 'get_intelligence_index', 'get_agent_registry',
-                     'get_backup_status', 'rank_markets', 'hyperscaler_deals', 'get_news',
+                     'get_feed_freshness', 'rank_markets', 'hyperscaler_deals', 'get_news',
                      'why_dchub', 'get_tax_incentives', 'list_saved_sites', 'discover_tools']) {
       expect(requiredOf(n), `${n} should require nothing`).toEqual([]);
     }

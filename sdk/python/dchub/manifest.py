@@ -25,7 +25,9 @@ TOOL_MANIFEST = {
     "find_alternatives": {"method": "GET", "path": "/api/v1/mcp/tools/find_alternatives", "mcp_only": False},
     "generate_site_analysis": {"method": "GET", "path": "/api/v1/site-report", "mcp_only": False},
     "get_agent_registry": {"method": "GET", "path": "/api/v1/ai-platforms/status", "mcp_only": False},
+    # 2026-11-23: renamed get_feed_freshness on the MCP server; the old name is kept here so SDK callers keep working.
     "get_backup_status": {"method": "GET", "path": "/api/health/data-freshness", "mcp_only": False},
+    "get_feed_freshness": {"method": "GET", "path": "/api/health/data-freshness", "mcp_only": False},
     "get_changes": {"method": "GET", "path": "/api/v1/changes/since", "mcp_only": False},
     "get_dchub_recommendation": {"method": "GET", "path": "/api/agents/recommend", "mcp_only": False},
     "get_energy_prices": {"method": "GET", "path": "/api/v1/energy/summary", "mcp_only": False},

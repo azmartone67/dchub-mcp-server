@@ -58,6 +58,7 @@ beforeAll(async () => {
     res.writeHead(200, { 'content-type': 'application/json' });
     if (url.includes('/gas-to-grid')) return res.end(JSON.stringify(g2gPayload));
     if (url.includes('/gas-pricing')) return res.end(JSON.stringify(pricingPayload));
+    if (url.includes('/api/health/data-freshness')) return res.end(JSON.stringify({ summary: { overall_health: 'stub-feed-freshness-marker' } }));
     return res.end('{}');            // telemetry, key validation, anything else
   });
   await new Promise((r) => stub.listen(0, '127.0.0.1', r));
@@ -216,7 +217,7 @@ describe('get_gas_economics forwards gas_to_grid_status', () => {
 });
 
 // ── the two descriptions that outlived their endpoint ───────────────────────
-describe('get_backup_status describes the endpoint it actually reads', () => {
+describe('get_feed_freshness (formerly get_backup_status) describes the endpoint it actually reads', () => {
   const GONE = [
     [/database backup status/i,        'database backup state'],
     [/heartbeat score/i,               'agentic heartbeat score'],
@@ -226,15 +227,37 @@ describe('get_backup_status describes the endpoint it actually reads', () => {
   ];
   for (const [re, what] of GONE) {
     it(`no longer claims ${what}`, () => {
-      expect(descOf('get_backup_status'), `still promises ${what}, which /api/health/data-freshness does not serve`)
+      expect(descOf('get_feed_freshness'), `still promises ${what}, which /api/health/data-freshness does not serve`)
         .not.toMatch(re);
     });
   }
   it('still says something useful (anti-vacuous control)', () => {
-    const d = descOf('get_backup_status');
+    const d = descOf('get_feed_freshness');
     expect(d).toMatch(/freshness/i);
     expect(d).toMatch(/get_changes/);              // still routes the neighbouring question
     expect(d.length).toBeGreaterThan(200);         // not emptied to pass the rules above
+  });
+});
+
+// ── 2026-11-23: renamed get_backup_status -> get_feed_freshness ─────────────
+// Agents read "backup status" literally and concluded DC Hub had no database
+// backups. tools/list carries only the new name; the old one still answers,
+// through TOOL_ALIASES, from the same endpoint.
+describe('get_feed_freshness replaces get_backup_status', () => {
+  it('tools/list lists get_feed_freshness and not get_backup_status', () => {
+    const names = TOOLS.map((t) => t.name);
+    expect(names.length).toBeGreaterThan(50);   // control: the list is real
+    expect(names).toContain('get_feed_freshness');
+    expect(names).not.toContain('get_backup_status');
+  });
+  it('its description says it is not a backup report', () => {
+    expect(descOf('get_feed_freshness')).toMatch(/NOT a database backup report/);
+  });
+  it('the old name resolves through the alias to the same endpoint', async () => {
+    const viaNew = await callTool('get_feed_freshness', {});
+    const viaOld = await callTool('get_backup_status', {});
+    expect(JSON.stringify(viaNew)).toContain('stub-feed-freshness-marker');
+    expect(JSON.stringify(viaOld)).toContain('stub-feed-freshness-marker');
   });
 });
 
