@@ -160,7 +160,10 @@ const norm = (r) => JSON.stringify(r)
   .replace(/(plan|req|sess|run|rp)[-_][A-Za-z0-9]{6,}/g, '$1-ID')
   .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID');
 // The steps run in parallel, so their rows arrive in either order: compared as a sorted set.
-const rowsNorm = (rows) => rows.map((r) => norm({ tool: r.tool, status: r.status, tier: r.tier, params: r.params })).sort().join('\n');
+// Brain 2026-11-23 item 6: params._aq (the answer-quality marks, lib/answer-quality.mjs) is new beside origin/main by
+// design, so it is set aside here; every other field still has to match byte for byte.
+const _noAq = (p) => { if (!p || typeof p !== 'object' || Array.isArray(p)) return p; const { _aq, ...rest } = p; return rest; };
+const rowsNorm = (rows) => rows.map((r) => norm({ tool: r.tool, status: r.status, tier: r.tier, params: _noAq(r.params) })).sort().join('\n');
 
 // First, while both servers are fresh (a session's first call carries a one-time starter_pack on each).
 describe('off is origin/main, byte for byte (git-ref sandbox)', () => {
