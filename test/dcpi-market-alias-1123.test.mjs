@@ -99,3 +99,17 @@ describe('market is accepted as market_slug', () => {
     expect(refusedForSlug(await call('/mcp', 'predict_market_trajectory', { market: 'dallas' }))).toBe(false);
   });
 });
+
+// The reverse guess: tools whose required `market` is a metro slug, called with market_slug.
+const refusedForMarket = (r) => /at market\b|"market" is required|market is required|received undefined at market"/.test(JSON.stringify(r.json || r.raw))
+  && /(-32602|Invalid arguments|expected string|required)/.test(JSON.stringify(r.json || r.raw));
+describe('market_slug is accepted as market where market is required', () => {
+  it('baseline: get_market_context with neither argument is refused for market (the check below can fail)', async () => {
+    expect(refusedForMarket(await call('/mcp', 'get_market_context', {}))).toBe(true);
+  });
+  for (const t of ['get_market_context', 'get_gas_economics']) {
+    it(`/mcp: ${t}(market_slug) is not refused`, async () => {
+      expect(refusedForMarket(await call('/mcp', t, { market_slug: 'dallas' }))).toBe(false);
+    });
+  }
+});

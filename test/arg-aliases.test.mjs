@@ -41,6 +41,16 @@ const EXPECTED_TARGETS = {
   // 2026-11-23, reviewed: the market tools that require market_slug take `market` as the same slug.
   get_market_dcpi_rank: 'market_slug',
   predict_market_trajectory: 'market_slug',
+  // 2026-11-23, reviewed: the reverse guess, market_slug -> market, on tools whose market is a metro slug.
+  execute_plan: 'market',
+  get_gas_economics: 'market',
+  get_market_context: 'market',
+  get_pipeline: 'market',
+  get_facility_risk_delta: 'market',
+  save_site: 'market',
+  set_market_alert: 'market',
+  find_sites: 'market',
+  simulate_scenario: 'market',
 };
 
 // ★The guesses that were MEASURED to fail in production. Structure tests alone
@@ -58,6 +68,18 @@ const MEASURED_GUESSES = [
   // 2026-11-23, live: get_market_dcpi_rank(market:"dallas") -> -32602 market_slug undefined.
   ['get_market_dcpi_rank', 'market', 'market_slug'],
   ['predict_market_trajectory', 'market', 'market_slug'],
+  // 2026-11-23: market_slug is the name get_market_dcpi_rank teaches; these take it as `market`.
+  ['execute_plan', 'market_slug', 'market'],
+  ['get_gas_economics', 'market_slug', 'market'],
+  ['get_market_context', 'market_slug', 'market'],
+  ['get_pipeline', 'market_slug', 'market'],
+  ['get_facility_risk_delta', 'market_slug', 'market'],
+  ['save_site', 'market_slug', 'market'],
+  ['set_market_alert', 'market_slug', 'market'],
+  ['find_sites', 'market_slug', 'market'],
+  ['simulate_scenario', 'market_slug', 'market'],
+  ['get_fiber_intel', 'market_slug', 'market'],
+  ['get_metro_fiber', 'market_slug', 'market'],
 ];
 
 describe('ARG_ALIASES measured guesses', () => {
