@@ -1,7 +1,7 @@
 // quota-one-statement-1120.test.mjs — owner decisions of 2026-11-20 on the quota report:
 // "A1, C(a), D leave unstated". The /pricing daily line is the single source of truth.
 //
-//   C(a)  the free-key line carries "(grid, queue and market intel need an email)": a key with no bound
+//   C(a)  the free-key line carries "(market intel needs an email; the ten paid tools stay previews)": a key with no bound
 //         email gets the preview on exactly those three tools (lib/free-decision-taste.mjs
 //         FREE_PREVIEW_ONLY_TOOLS). The qualifier's tool names are pinned to that list here.
 //   A1    analyze_site's line states the enforced daily site lane (lib/keyless-full-trial.mjs) and the
@@ -10,6 +10,7 @@
 //         (/mcp/chatgpt, a bot, the lane switched off).
 //   D     the anonymous per-IP caps stay unstated: nothing here.
 import { describe, it, expect, beforeAll } from 'vitest';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 
 let S, TC, FDT, KFT;
 beforeAll(async () => {
@@ -20,14 +21,15 @@ beforeAll(async () => {
   KFT = await import('../lib/keyless-full-trial.mjs');
 }, 60_000);
 
-const Q = '(grid, queue and market intel need an email)';
+const Q = '(market intel needs an email; the ten paid tools stay previews)';
 const WORD_TO_TOOL = { grid: 'get_grid_intelligence', queue: 'get_interconnection_queue', 'market intel': 'get_market_intel' };
 
 describe('C(a): one free-key line with the email qualifier', () => {
-  it('the qualifier names exactly the preview-only tools', () => {
+  it('the qualifier names exactly the preview-only tools an email opens (owner 2026-11-23: never a paid-only one)', () => {
     expect(TC.FREE_KEY_EMAIL_TOOLS_QUALIFIER).toBe(Q);
     const named = Object.keys(WORD_TO_TOOL).filter((w) => Q.includes(w)).map((w) => WORD_TO_TOOL[w]).sort();
-    expect(named).toEqual([...FDT.FREE_PREVIEW_ONLY_TOOLS].sort());
+    expect(named).toEqual([...FDT.FREE_PREVIEW_ONLY_TOOLS].filter((t) => !isPaidFullOnly(t)).sort());
+    expect(named).toEqual(['get_market_intel']);
   });
   it('the offer, the wall allowance and the ladder all carry it, after the per-tool sentence', () => {
     for (const t of [TC._freeKeyOfferText(), TC._freeKeyAllowanceText(), TC._unboundKeyLadderText()]) {

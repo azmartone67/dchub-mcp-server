@@ -40,7 +40,7 @@ describe('free-key allowance in runtime messages', () => {
     // allowance shape (lib/tier-canon _freeKeyOfferText), daily now.
     expect(t).toBe(_freeKeyOfferText() + ', ' + FREE_TIER.identified_calls_per_day + '/day with an email');
     // Owner 2026-11-20 (C(a)): the email qualifier rides the free-key line.
-    expect(t).toBe('previews plus 2 full answers per tool per day (grid, queue and market intel need an email), 50/day with an email');
+    expect(t).toBe('previews plus 2 full answers per tool per day (market intel needs an email; the ten paid tools stay previews), 50/day with an email');
     expect(t).not.toMatch(/calls\/day/);
     expect(t).not.toMatch(/undefined|n\/a|NaN/);
   });

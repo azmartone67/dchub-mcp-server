@@ -143,40 +143,19 @@ describe('pure: what a preview plan held back', () => {
   });
 });
 
-describe('real loopback: the second keyless plan of the day says what it held back and why', () => {
-  it('call 1 is the full answer and carries no held-back block', async () => {
+describe('real loopback: keyless plans are previews and never claim a used full answer (owner 2026-11-23)', () => {
+  // Owner 2026-11-23: a full execute_plan needs a paid key, so no keyless plan is the day's full answer and none may
+  // say "today's full execute_plan answer without a key ... was used".
+  it('calls 1 and 2 (same session) and a compare plan: all previews, none claims a used full answer', async () => {
     const run = await session('198.18.92.10');
-    const r1 = await run();
-    expect(r1.structuredContent.first_full_answer).toMatchObject({ used: 1, limit: 1 });
-    expect(r1.structuredContent.first_full_answer_used).toBeUndefined();
-    expect(textOf(r1)).not.toMatch(/Held back:/);
-  }, 120_000);
-
-  it('call 2 (same session) and a compare plan: the block, in both copies, and the closing line', async () => {
-    const run = await session('198.18.92.11');
-    await run();
-    for (const args of [PLAN, { intent: 'compare ERCOT vs PJM for a 200 MW AI campus' }]) {
+    for (const args of [PLAN, PLAN, { intent: 'compare ERCOT vs PJM for a 200 MW AI campus' }]) {
       const r = await run(args);
       const sc = r.structuredContent;
       expect(sc.first_full_answer).toBeUndefined();
-      const b = sc.first_full_answer_used;
-      expect(b, 'structuredContent.first_full_answer_used').toBeTruthy();
-      expect(block0(r) && block0(r).first_full_answer_used).toEqual(b);
-      expect(b.held_back.length).toBeGreaterThan(0);
-      const grid = b.held_back.find((h) => h.tool === 'get_grid_intelligence');
-      expect(grid && grid.fields.length, 'the grid step names its withheld fields').toBeGreaterThan(0);
-      // Every step the plan returned as a preview is named.
-      const previews = (sc.executed || []).filter((e) => e.status === 'gated_preview' || e.depth === 'preview').map((e) => e.tool);
-      expect(b.held_back.map((h) => h.tool)).toEqual(previews);
-      // The closing line is the held-back sentence, not the bare "This answer is partial; ..." line.
-      const t = textOf(r);
-      expect(t).toContain(b.line);
-      expect(t).not.toMatch(/This answer is partial; the full answer is at/);
-      for (const s of [JSON.stringify(b), b.line]) {
-        expect(s).not.toMatch(BANNED_WORDING);
-        expect(s).not.toMatch(PLAN_NAME);
-        expect(s).not.toMatch(PRICE);
-      }
+      expect(sc.first_full_answer_used).toBeUndefined();
+      expect(block0(r) && block0(r).first_full_answer_used).toBeUndefined();
+      expect(textOf(r)).not.toMatch(/full `execute_plan` answer without a key/);
+      expect((sc.executed || []).some((e) => e.status === 'gated_preview' || e.depth === 'preview'), 'the plan is a preview').toBe(true);
     }
   }, 180_000);
 

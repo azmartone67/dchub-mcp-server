@@ -125,6 +125,11 @@ beforeAll(async () => {
       const tool = p.startsWith('/api/v1/mcp/tools/');   // a data tool served through the backend
       if ((p.startsWith('/api/v1/mcp/') && !tool) || p.startsWith('/api/v1/sources/')) { res.end('{}'); return; }
       dataHits += 1;
+      if (p === '/api/v1/power/availability-timeline') {   // its handler withholds iso_reported below the gate's full seat
+        res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS, results: ROWS,
+          queue_context: { iso_reported: [{ iso: 'PJM', gw: 77.7, mw: 77731, basis: 'PJM reports 77731 MW active.' }] } }));
+        return;
+      }
       res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS, results: ROWS }));
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -320,6 +325,28 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
       }
     }
   });
+
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): the paid-only tools are a preview on every free-class call, but they
+  // still consult trial-check (the _fwePreview branch), the per-call route a mid-session purchase (Fix E tier_upgrade)
+  // arrives on. Folding them into _alwaysPreview skipped it: the call after the purchase was still the preview.
+  for (const [tool, args] of [['get_interconnection_queue', { iso: 'PJM' }], ['get_power_availability_timeline', { state: 'VA' }]]) {
+    it(`a purchase made mid-session lifts ${tool}: trial-check is consulted and the next call is the full answer`, async () => {
+      const s = await openSession({});
+      const before = await s.call(tool, args);
+      expect(walled(before), before.slice(0, 200)).toBe(false);
+      expect(firstRow(before).score, 'the free-class call is no longer the masked preview: no contrast left').toBeNull();
+      const t0 = hits(trialHits, s.sid);
+      fixE.set(s.sid, 'pro');
+      const after = await s.call(tool, args);
+      expect(hits(trialHits, s.sid), 'the call after the purchase never asked trial-check').toBeGreaterThan(t0);
+      expect(walled(after), after.slice(0, 300)).toBe(false);
+      expect(firstRow(after).score, 'the purchase did not lift the paid-only tool').toBe(ROWS[0].score);
+      if (tool === 'get_power_availability_timeline') {
+        expect(before, 'the free-class timeline carried iso_reported').not.toContain('77731');
+        expect(after, 'the lifted timeline still withholds iso_reported').toContain('77731');
+      }
+    });
+  }
 
   it('session-bound Pro (Fix E) reaches a preview tool, which never calls trial-check itself', async () => {
     const s = await openSession({});

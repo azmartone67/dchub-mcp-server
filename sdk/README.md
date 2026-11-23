@@ -13,8 +13,8 @@ Both expose the same surface: `.market(slug)`, `.search(...)`, `.grid(iso)`,
 
 **Building an MCP server?** [COMPOSE.md](COMPOSE.md) registers DC Hub tools inside it (`registerDCHubTools`, `dchub_tool_definitions`) with `via` attribution.
 
-Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full-tier data; the free tier works
-without one (some fields masked). Get a key:
+Set `DCHUB_API_KEY` (sent as `X-API-Key`) for fuller data; it is optional (keyless
+calls return previews, with some fields masked). Get a key:
 ```bash
 curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"sdk"}'
 ```

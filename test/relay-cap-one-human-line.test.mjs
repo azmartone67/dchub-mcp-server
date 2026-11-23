@@ -191,6 +191,7 @@ const payLines = (t) => t.split('\n').filter((l) => !/^\s*[[{]/.test(l)
 // the point; fiber returns the stub's rows, so it carries the full-data assertions.
 const GRID = ['get_grid_intelligence', { region_id: 'ERCOT' }];
 const FIBER = ['get_fiber_intel', { region_id: 'ERCOT' }];
+const TRIAL_ACK_TOOL = FIBER;
 // 2026-09-22: compare_sites became Land & Power, which answers a key below Pro
 // with its own preview (test/lp-pro-only.test.mjs), not the Pro wall these
 // mechanisms ride on. get_dchub_recommendation is the same class of tool
@@ -248,14 +249,17 @@ describe('r-relay-cap — unbound trial (inline full off): the "call again" ACK 
   let port;
   beforeAll(async () => { port = await boot('off'); }, 60000);
 
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): a trial key no longer opens get_grid_intelligence, so its wall hands
+  // over no trial key and no ACK. The ACK mechanism is pinned on get_fiber_intel, which a trial key still opens; the
+  // grid wall's own shape is pinned in the case after this one.
   it('call 2 on the same session drops the ACK and the /upgrade/h re-relay, keeps the wall pointer; a new session gets both', async () => {
     const call = await session(port, '198.51.100.41');
-    const r1 = await call(...GRID);
+    const r1 = await call(...TRIAL_ACK_TOOL);
     expect(r1.text).toContain(ACK_MANUAL);
     expect(r1.text).toContain(TRIAL);                    // the key the ACK hands over
     expect(r1.text).toContain('dchub.cloud/upgrade/h/'); // first response: unchanged
 
-    const r2 = await call(...GRID);
+    const r2 = await call(...TRIAL_ACK_TOOL);
     expect(r2.text, 'the unlock ACK was repeated: the call-it-again loop').not.toContain(ACK_MANUAL);
     // Grok audit 2026-10-08 (one link per wall): the repeat wall's ONE pointer is the /upgrade/h
     // page (it was the wall's own /go/c pack checkout, which skipped the page). Still one line.
@@ -263,9 +267,18 @@ describe('r-relay-cap — unbound trial (inline full off): the "call again" ACK 
     expect(payLines(r2.text)[0]).toContain('dchub.cloud/upgrade/h/');
     expect(r2.text).not.toContain('dchub.cloud/go/c/');
 
-    const o1 = await (await session(port, '198.51.100.42'))(...GRID);
+    const o1 = await (await session(port, '198.51.100.42'))(...TRIAL_ACK_TOOL);
     expect(o1.text).toContain(ACK_MANUAL);
     expect(o1.text).toContain('dchub.cloud/upgrade/h/');
+  }, 60000);
+
+  it('get_grid_intelligence (paid-only since 11-23): the keyless wall hands over no trial key and no ACK, one pointer', async () => {
+    const call = await session(port, '198.51.100.43');
+    const r1 = await call(...GRID);
+    expect(r1.text).not.toContain(ACK_MANUAL);
+    expect(r1.text).not.toContain(TRIAL);
+    expect(payLines(r1.text).length).toBe(1);
+    expect(payLines(r1.text)[0]).toContain('dchub.cloud/upgrade/h/');
   }, 60000);
 
   it('made no connection outside loopback', () => {

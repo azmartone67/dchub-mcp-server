@@ -34,9 +34,11 @@ describe('1. every unlock line agrees with the FREE TIER paragraph', () => {
   // below still quote it.
   it('control: the canon paragraph is composed (snapshot present), keyless clause first, the email rung, no free-key sale', () => {
     expect(rule).toBeTruthy();
-    expect(rule.startsWith(KEYLESS_FIRST_FULL_CLAUSE)).toBe(true);
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the keyless first-full lane lists no tools, so its clause is empty
+    // and the rule no longer leads with it.
+    expect(KEYLESS_FIRST_FULL_CLAUSE).toBe('');
     // 2026-11-21 (owner decisions 6/7): the canon rule states no limits; it says what a key is for.
-    expect(rule).toBe(KEYLESS_FIRST_FULL_CLAUSE + ' A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.');
+    expect(rule).toBe('A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions.');
     expect(rule).not.toMatch(/calls\/day|per tool per day/);
     expect(rule).not.toContain('Free key:');
     expect(_freeKeyOfferText()).toBeTruthy();

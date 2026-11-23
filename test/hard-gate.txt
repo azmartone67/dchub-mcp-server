@@ -109,6 +109,7 @@ test/citation-shape-contract.test.mjs
 test/cite-as-every-tool.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
+test/cite-day-phoenix-1123.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-client-snippet-lasting-key.test.mjs
 test/claim-email-has-key-paste-line.test.mjs
@@ -531,6 +532,8 @@ test/pack-canon-all-tools.test.mjs
 test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
+test/paid-only-plan-and-grid-data-1123.test.mjs
+test/paid-only-six-more-tools-1123.test.mjs
 test/paid-sell-line.test.mjs
 test/parcel-gps-hint.test.mjs
 test/partner-inbox-tools.test.mjs
@@ -561,6 +564,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs
 test/plan-proof-1116-e2e.test.mjs
 test/plan-proof-1116.test.mjs
@@ -829,6 +833,7 @@ test/wall-offer-floor-v2.test.mjs
 test/wall-offers.test.mjs
 test/wall-one-door-1122.test.mjs
 test/wall-one-route.test.mjs
+test/wall-pack-first-1122.test.mjs
 test/wall-paid-line-1121.test.mjs
 test/wall-relay-value-first-1121.test.mjs
 test/wall-short-link.test.mjs

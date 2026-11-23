@@ -295,7 +295,10 @@ describe('each wall builder: the neutral line on /mcp, the old sentence on /mcp/
     expect(asMcp(() => S()._emailFullDecisionTool('get_market_intel'))).toBe(true);
     expect(asChatgpt(() => S()._emailFullDecisionTool('get_market_intel'))).toBe(false);
     expect(S()._ctxALS.run({ legacy_wall_copy: true }, () => S()._emailFullDecisionTool('get_market_intel'))).toBe(false);
-    expect(asChatgpt(() => S()._emailFullDecisionTool('get_grid_intelligence')), 'grid keeps its allowance there').toBe(true);
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): grid's full answer needs a paid key on every surface, so no email
+    // allowance on /mcp/chatgpt or /mcp either.
+    expect(asChatgpt(() => S()._emailFullDecisionTool('get_grid_intelligence')), 'grid is paid-full-only there too').toBe(false);
+    expect(asMcp(() => S()._emailFullDecisionTool('get_grid_intelligence')), 'and on /mcp').toBe(false);
     expect(asMcp(() => S().applyTierGate('get_market_intel', {}, 'free', true, false, undefined, true).email_full)).toBe(true);
     expect(asChatgpt(() => S().applyTierGate('get_market_intel', {}, 'free', true, false, undefined, true).email_full)).toBeUndefined();
   }));

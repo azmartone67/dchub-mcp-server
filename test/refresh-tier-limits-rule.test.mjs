@@ -149,11 +149,12 @@ describe('the committed snapshot carries the rule', () => {
     expect(FREE_TIER.identified_calls_per_day).toBe(50);
     expect(_rungNum('free')).toBeNull();
     expect(_rungNum('anonymous')).toBeNull();
-    expect(_freeTierRuleText()).toBe('No key needed: the first call each UTC day to each core energy tool (execute_plan, '
-      + 'get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; '
-      // 2026-11-21: the backend pin after Note F option A, byte for byte (no email allowance, no pricing pointer).
-      + 'after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the keyless first-full lane lists no tools, so the rule's
+    // "No key needed: the first call each UTC day ... is a full answer; after that, previews." clause is gone.
+    // The rest is the backend pin after Note F option A (2026-11-21), byte for byte.
+    expect(_freeTierRuleText()).toBe('A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. '
       + 'More detail is available at dchub.cloud/connect.');
+    expect(_freeTierRuleText()).not.toMatch(/first call each UTC day|full answer/);
     expect(existsSync(join(ROOT, 'scripts/refresh-tier-limits.mjs'))).toBe(true);
   });
 });

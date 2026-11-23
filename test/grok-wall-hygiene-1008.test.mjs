@@ -136,8 +136,13 @@ describe('item 1: a wall below Developer carries ONE dchub.cloud page link, huma
     expect(sc.provenance).toBeTruthy();
     expect(sc.for_your_human).toBeTruthy();
     expect(sc.agent_instruction).toBe(S.RELAY_CONTRACT);
+    // Owner 2026-11-23 (lib/paid-full-only.mjs): the queue's full answer needs a paid key, so the keyless wall no
+    // longer reads "needs a key, not a payment" with a bind_email fix; it is the paid-feature wall, one relay link.
+    expect(textOf(r)).toContain('## 🔒 `get_interconnection_queue` is a paid feature');
+    expect(textOf(r)).not.toContain('needs a key, not a payment');
+    expect(textOf(r)).not.toMatch(/call `bind_email` with your human's email, then call `get_interconnection_queue` again/);
+    expect(textOf(r)).toContain('your user can open ' + base(sc.human_url));
     // the pack rung's label no longer names the $10 pack beside a page that may sell Developer
-    expect(textOf(r)).toContain('**the full answer** → ' + base(sc.human_url));
     expect(textOf(r)).not.toMatch(/\$10 one-time = 1,000 API credits\*\*, credits don’t expire → https/);
   });
 
@@ -272,8 +277,10 @@ describe('item 3: the relay token is stamped with the wall kind at mint', () => 
     expect(S._wallKindFor({ error: 'anon_hard_wall' }, {}, 'get_grid_data')).toBe(S.WALL_KIND_CAPACITY);
     expect(S._wallKindFor({ _upgrade: { tier: 'anon_daily_cap' } }, {}, 'search_facilities')).toBe(S.WALL_KIND_CAPACITY);
     expect(S._wallKindFor({ credits_depleted: true }, { api_key: 'k' }, 'get_grid_data')).toBe(S.WALL_KIND_CAPACITY);
-    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_energy_prices')).toBe(S.WALL_KIND_FREEKEY);
-    expect(S._wallKindFor({ trial_preview: true }, { api_key: 'k' }, 'get_energy_prices')).toBe('');
+    // Owner 2026-11-23: get_energy_prices is paid-full-only, so a free key no longer returns it: no free-key marker.
+    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_energy_prices')).toBe('');
+    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_water_risk')).toBe(S.WALL_KIND_FREEKEY);
+    expect(S._wallKindFor({ trial_preview: true }, { api_key: 'k' }, 'get_water_risk')).toBe('');
     expect(S._wallKindFor({ trial_preview: true }, {}, 'get_interconnection_queue')).toBe('');
     expect(S._wallKindFor({ error: 'anon_hard_wall' }, {}, 'analyze_site')).toBe('');
   });
@@ -294,15 +301,18 @@ describe('item 3: the relay token is stamped with the wall kind at mint', () => 
     expect(S._relayTokenKind(r.structuredContent.human_url)).toBe('');
   });
 
-  it('a keyless get_energy_prices wall (a free key returns it) carries w-freekey', async () => {
+  // Owner 2026-11-23: a free key no longer returns get_energy_prices in full (lib/paid-full-only.mjs), so its keyless
+  // wall is no longer a free-key wall: the token carries no w-freekey marker. (The marker itself stays pinned on
+  // get_water_risk in the _wallKindFor case above.)
+  it('a keyless get_energy_prices wall (paid-full-only) carries no w-freekey marker', async () => {
     const r = await call('get_energy_prices', { iso: 'ERCOT' }, seat());
     expect(isGatedResult(r), textOf(r).slice(0, 600)).toBe(true);
     const url = r.structuredContent.human_url;
     expect(url).toMatch(RELAY);
     const f = tokenFields(url);
-    expect(f[f.length - 1]).toBe('w-freekey');
-    expect(f.length).toBeLessThanOrEqual(6);
-    // every copy of the token in the response is the stamped one
+    expect(f).not.toContain('w-freekey');
+    expect(S._relayTokenKind(url)).not.toBe('w-freekey');
+    // every copy of the token in the response is the same one
     const tokens = [...new Set(JSON.stringify(r).match(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/g))];
     expect(tokens).toEqual([base(url)]);
   });

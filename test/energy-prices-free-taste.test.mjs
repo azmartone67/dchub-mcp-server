@@ -49,14 +49,17 @@ describe('energy taste', () => {
     expect(JSON.stringify(env)).not.toMatch(/9\.9|6\.1/);
     expect(env.retail_rates).toBeUndefined();
   });
-  it('does not claim the preview-only rule (a free key keeps its full answers) and names no plan or price', () => {
-    expect(env.free_preview_only).toBe(false);
+  it('claims the preview-only rule (owner 2026-11-23: paid-only, a free key gets the preview too) and names no plan or price', () => {
+    expect(env.free_preview_only).toBe(true);
     expect('full_unlocks_at' in env).toBe(false);
     expect(env._taste_note).not.toMatch(/\$|Developer|Pro\b/);
   });
-  it('is not in the preview-only list, so who gets the full answer is unchanged', () => {
+  // 2026-11-23 (owner): get_energy_prices is paid-full-only (lib/paid-full-only.mjs); its taste is its preview on every
+  // path (PAID_ONLY_TASTE_TOOLS), not a taste-shaped-only tool, and it stays out of the email preview-only list.
+  it('is a paid-only taste tool: out of the preview-only and taste-shaped-only lists, in PAID_ONLY_TASTE_TOOLS', () => {
     expect(T.FREE_PREVIEW_ONLY_TOOLS).not.toContain('get_energy_prices');
-    expect(T.TASTE_SHAPED_ONLY_TOOLS).toContain('get_energy_prices');
+    expect(T.TASTE_SHAPED_ONLY_TOOLS).not.toContain('get_energy_prices');
+    expect(T.PAID_ONLY_TASTE_TOOLS).toContain('get_energy_prices');
   });
   it('returns null (generic trim) when there is no rate or on an error', () => {
     expect(T.buildFreeDecisionTaste('get_energy_prices', { success: true, retail_rates: { avg_cents_kwh: null } })).toBeNull();

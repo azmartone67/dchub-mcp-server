@@ -1,8 +1,8 @@
 // keyless-full-trial.test.mjs — the two-week keyless full-answer trial (owner 2026-10-28, "do 1").
 //
 // DCHUB_KEYLESS_FULL_TRIAL (default OFF): a keyless caller on /mcp, /mcp/claude or /mcp/core gets
-// the FREE KEY's answer on get_facility / get_grid_data / get_market_dcpi_rank, 2 per tool per IP
-// per UTC day, then today's preview.
+// the FREE KEY's answer on get_facility / get_market_dcpi_rank, 2 per tool per IP per UTC day, then
+// today's preview. get_grid_data left the trial 2026-11-23 (owner: its full answer needs a paid key).
 //
 // WHAT THIS PINS, through the REAL registered handlers under a real caller seat (_ctxALS), only
 // the backend stubbed (every backend write captured):
@@ -66,7 +66,9 @@ const GI = {
 const ENERGY = { success: true, avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null },
   retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } };
 
-const TOOLS3 = ['get_grid_data', 'get_facility', 'get_market_dcpi_rank'];
+const TOOLS3 = ['get_facility', 'get_market_dcpi_rank'];
+// get_facility's keyless preview is a wall with trial_preview; the trial answer is the free key's answer.
+const served = (r) => r.isError !== true && !(r.structuredContent && r.structuredContent.trial_preview);
 const ARGS = {
   get_grid_data: { iso: 'PJM' },
   get_facility: { facility_id: 'trial-dc-77' },
@@ -184,8 +186,8 @@ describe('A) flag off: every response byte-identical, nothing written', () => {
     });
   }
   it('the keyless preview it pins is a preview (the comparison above is not vacuous)', async () => {
-    const r = await call('get_grid_data', seat());
-    expect(head(r).min_mw).toBeNull();
+    const r = await call('get_facility', seat());
+    expect(served(r)).toBe(false);
     expect(r.structuredContent.trial_preview).toBe(true);
   });
 });
@@ -212,44 +214,48 @@ describe('B) flag on: the free key answer twice per tool per IP, then the previe
       expect(norm(r3, s3)).toBe(norm(preview, offSeat));
     });
   }
-  it('get_grid_data: the trial answer is full (not vacuous: the preview nulls these)', async () => {
+  it('get_grid_data is out of the trial (owner 2026-11-23): flag on, a keyless call is the preview, nothing charged', async () => {
     flagOn();
-    const r = await call('get_grid_data', seat());
+    resetWrites();
+    const r = await call('get_grid_data', seat({ client_ip: '198.18.7.99' }));
     const h = head(r);
-    expect(h.demand_mw).toBe(95021);
-    expect(h.peak_mw).toBe(95021);
-    expect(h.demand_24h).toHaveLength(8);
+    expect(h.min_mw ?? null).toBeNull();
+    expect(h.peak_mw ?? null).toBeNull();
+    expect(Array.isArray(h.demand_24h) ? h.demand_24h.length : 0).toBe(0);
+    await settle();
+    expect(kftConsumes()).toEqual([]);
+    expect(trialTracks()).toEqual([]);
   });
-  it('the budget is per tool: 2 grid answers do not spend the facility or DCPI answers', async () => {
+  it('the budget is per tool: 2 facility answers do not spend the DCPI answers', async () => {
     flagOn();
     const ip = '198.18.8.1';
-    for (let i = 0; i < 4; i++) await call('get_grid_data', seat({ client_ip: ip }));
-    expect((await call('get_facility', seat({ client_ip: ip }))).isError).not.toBe(true);
+    for (let i = 0; i < 4; i++) await call('get_facility', seat({ client_ip: ip }));
     expect(head(await call('get_market_dcpi_rank', seat({ client_ip: ip })))._upgrade).toBeUndefined();
   });
   it('the budget is per IP: another IP gets its own two', async () => {
     flagOn();
-    for (let i = 0; i < 3; i++) await call('get_grid_data', seat({ client_ip: '198.18.9.1' }));
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.9.2' }))).min_mw).toBe(74723);
+    for (let i = 0; i < 3; i++) await call('get_facility', seat({ client_ip: '198.18.9.1' }));
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.9.1' })))).toBe(false);
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.9.2' })))).toBe(true);
   });
   it('DCHUB_KEYLESS_FULL_TRIAL_CAP sets the per-tool budget (1 here; 0 = no trial)', async () => {
     flagOn({ DCHUB_KEYLESS_FULL_TRIAL_CAP: '1' });
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).min_mw).toBe(74723);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.1' }))).min_mw).toBeNull();
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.10.1' })))).toBe(true);
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.10.1' })))).toBe(false);
     process.env.DCHUB_KEYLESS_FULL_TRIAL_CAP = '0';
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.10.2' }))).min_mw).toBeNull();
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.10.2' })))).toBe(false);
   });
   it('/mcp/claude and /mcp/core seats are in the trial', async () => {
     flagOn();
     for (const profile of [CLAUDE_PROFILE, CORE_PROFILE]) {
       expect(profile, 'profile constant exported').toBeTruthy();
-      expect(head(await call('get_grid_data', seat({ profile }))).min_mw, profile).toBe(74723);
+      expect(served(await call('get_facility', seat({ profile }))), profile).toBe(true);
     }
   });
   it('an execute_plan step (loopback IP) and a seat with no IP are not in the trial', async () => {
     flagOn();
     for (const client_ip of ['127.0.0.1', '::ffff:127.0.0.1', '::1', null]) {
-      expect(head(await call('get_grid_data', seat({ client_ip }))).min_mw, String(client_ip)).toBeNull();
+      expect(served(await call('get_facility', seat({ client_ip }))), String(client_ip)).toBe(false);
     }
   });
 });
@@ -269,9 +275,9 @@ describe('C) a tool outside the trial is unaffected', () => {
     });
   }
   it('DCHUB_KEYLESS_FULL_TRIAL_TOOLS narrows the three and cannot add a tool', async () => {
-    flagOn({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: 'get_facility, get_energy_prices,get_grid_intelligence' });
-    expect(head(await call('get_grid_data', seat())).min_mw).toBeNull();
-    expect((await call('get_facility', seat())).isError).not.toBe(true);
+    flagOn({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: 'get_market_dcpi_rank, get_energy_prices,get_grid_intelligence,get_grid_data' });
+    expect(served(await call('get_facility', seat()))).toBe(false);
+    expect(head(await call('get_market_dcpi_rank', seat()))._upgrade).toBeUndefined();
     const s0 = seat({ client_ip: '198.18.21.1' });
     const on = norm(await call('get_energy_prices', s0), s0);
     delete process.env.DCHUB_KEYLESS_FULL_TRIAL;
@@ -319,11 +325,11 @@ describe('E) QA and bot callers consume nothing and are tagged nothing', () => {
   for (const [label, over] of Object.entries({ ...QA_SEATS, ...BOT_SEATS })) {
     it(`${label}: today's answer, no charge, no tag`, async () => {
       const s0 = seat(over);
-      const off = norm(await call('get_grid_data', s0), s0);
+      const off = norm(await call('get_facility', s0), s0);
       flagOn();
       resetWrites();
       const s1 = seat(over);
-      expect(norm(await call('get_grid_data', s1), s1)).toBe(off);
+      expect(norm(await call('get_facility', s1), s1)).toBe(off);
       await settle();
       expect(kftConsumes()).toEqual([]);
       expect(trialTracks()).toEqual([]);
@@ -335,20 +341,20 @@ describe('E) QA and bot callers consume nothing and are tagged nothing', () => {
       resetWrites();
       const ip = '198.18.30.' + (Object.keys(QA_SEATS).indexOf(label) + 1);
       for (let i = 0; i < 3; i++) {
-        const r = await call('get_grid_data', seat({ ...over, client_ip: ip, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
-        expect(head(r).min_mw, `call ${i + 1}: an observer is never capped, because it is never charged`).toBe(74723);
+        const r = await call('get_facility', seat({ ...over, client_ip: ip, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
+        expect(served(r), `call ${i + 1}: an observer is never capped, because it is never charged`).toBe(true);
       }
       await settle();
       expect(kftConsumes()).toEqual([]);
       expect(trialTracks()).toEqual([]);
       // and it did not spend the IP's budget for a real caller behind it
-      expect(head(await call('get_grid_data', seat({ client_ip: ip }))).min_mw).toBe(74723);
+      expect(served(await call('get_facility', seat({ client_ip: ip })))).toBe(true);
     });
   }
   it('the override does nothing for a bot that is not a QA caller', async () => {
     flagOn();
-    const r = await call('get_grid_data', seat({ user_agent: 'curl/8.4.0', [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
-    expect(head(r).min_mw).toBeNull();
+    const r = await call('get_facility', seat({ user_agent: 'curl/8.4.0', [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }));
+    expect(served(r)).toBe(false);
   });
 });
 
@@ -432,11 +438,11 @@ describe('H) the funnel tag and the durable counter', () => {
   it('a durable count of 2 from another replica means this replica serves the preview', async () => {
     flagOn();
     const ip = '198.18.42.1';
-    peekN.set(ipId(ip) + '|get_grid_data', 2);
-    expect(head(await call('get_grid_data', seat({ client_ip: ip }))).min_mw).toBeNull();
-    peekN.set(ipId('198.18.42.2') + '|get_grid_data', 1);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).min_mw).toBe(74723);
-    expect(head(await call('get_grid_data', seat({ client_ip: '198.18.42.2' }))).min_mw).toBeNull();
+    peekN.set(ipId(ip) + '|get_facility', 2);
+    expect(served(await call('get_facility', seat({ client_ip: ip })))).toBe(false);
+    peekN.set(ipId('198.18.42.2') + '|get_facility', 1);
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.42.2' })))).toBe(true);
+    expect(served(await call('get_facility', seat({ client_ip: '198.18.42.2' })))).toBe(false);
   });
 });
 
@@ -446,9 +452,11 @@ describe('I) lib/keyless-full-trial.mjs', () => {
     for (const v of ['1', 'on', 'true', 'yes', 'ON', ' Yes ']) expect(K.keylessFullTrialOn({ DCHUB_KEYLESS_FULL_TRIAL: v }), v).toBe(true);
     for (const v of [undefined, '', '0', 'off', 'false', 'no', 'enabled', '2', 'y']) expect(K.keylessFullTrialOn({ DCHUB_KEYLESS_FULL_TRIAL: v }), String(v)).toBe(false);
   });
-  it('tools: default three; a list narrows; unknown names are dropped', () => {
-    expect([...K.keylessFullTrialTools({})].sort()).toEqual(['get_facility', 'get_grid_data', 'get_market_dcpi_rank']);
-    expect([...K.keylessFullTrialTools({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: ' get_grid_data ,analyze_site' })]).toEqual(['get_grid_data']);
+  it('tools: default two; a list narrows; unknown names are dropped', () => {
+    expect([...K.keylessFullTrialTools({})].sort()).toEqual(['get_facility', 'get_market_dcpi_rank']);
+    expect([...K.keylessFullTrialTools({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: ' get_facility ,analyze_site' })]).toEqual(['get_facility']);
+    // owner 2026-11-23: the env list cannot put get_grid_data back
+    expect([...K.keylessFullTrialTools({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: 'get_grid_data' })]).toEqual([]);
     expect([...K.keylessFullTrialTools({ DCHUB_KEYLESS_FULL_TRIAL_TOOLS: 'analyze_site' })]).toEqual([]);
   });
   it('cap: default 2, clamped to 0..1000, junk = default', () => {
@@ -462,20 +470,21 @@ describe('I) lib/keyless-full-trial.mjs', () => {
     const env = { DCHUB_KEYLESS_FULL_TRIAL: '1' };
     const deps = { env, directoryProfile: 'dir', allowedProfiles: ['claude', 'core'], isQa: (c) => c.qa === true, isBot: (c) => c.bot === true };
     const c = { client_ip: '198.51.100.7' };
-    expect(K.keylessFullTrialSeat('get_grid_data', c, deps)).toBe('charge');
-    expect(K.keylessFullTrialSeat('get_grid_data', c, { ...deps, env: {} })).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', c, deps)).toBe('charge');
+    expect(K.keylessFullTrialSeat('get_facility', c, { ...deps, env: {} })).toBeNull();
     expect(K.keylessFullTrialSeat('get_energy_prices', c, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, api_key: 'k' }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, profile: 'dir' }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, profile: 'other' }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, profile: 'claude' }, deps)).toBe('charge');
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, legacy_wall_copy: true }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, qa: true }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, qa: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }, deps)).toBe('observe');
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, bot: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, qa: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: 'true' }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { ...c, isQaThrows: 1 }, { ...deps, isQa: () => { throw new Error('x'); } })).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', { client_ip: '' }, deps)).toBeNull();
-    expect(K.keylessFullTrialSeat('get_grid_data', null, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_grid_data', c, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, api_key: 'k' }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, profile: 'dir' }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, profile: 'other' }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, profile: 'claude' }, deps)).toBe('charge');
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, legacy_wall_copy: true }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, qa: true }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, qa: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }, deps)).toBe('observe');
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, bot: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: true }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, qa: true, [K.KEYLESS_FULL_TRIAL_QA_OVERRIDE]: 'true' }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { ...c, isQaThrows: 1 }, { ...deps, isQa: () => { throw new Error('x'); } })).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', { client_ip: '' }, deps)).toBeNull();
+    expect(K.keylessFullTrialSeat('get_facility', null, deps)).toBeNull();
   });
 });

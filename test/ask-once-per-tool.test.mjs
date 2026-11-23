@@ -10,6 +10,10 @@
 // Depth walls keep the digest offer, never an email ask. /mcp/claude, /mcp/chatgpt and /mcp/core stay ask-free.
 // Kill switch DCHUB_ASK_PER_TOOL=0 restores the per-session cap.
 //
+// 2026-11-23 (owner): rank_markets and get_grid_intelligence are paid-full-only (lib/paid-full-only.mjs). An email
+// no longer opens either, so rank_markets' wall carries the free-key line and the digest offer (no rows ask) and
+// the per-tool email-unlock sequence is pinned on get_water_risk, whose wall an email still opens.
+//
 // Measured on the REAL handler (mcp#1330 shipped a hand-built wall and failed live): keyless calls on /mcp with a
 // real MCP session, through the whole chain including the lean step, read as the agent receives them, plus the
 // quota_wall_hit row the C3 step sends after the chain. The fake backend is the shared production-shaped one
@@ -74,7 +78,7 @@ afterAll(async () => {
   if (fence) fence.restore();
 });
 
-const ARGS = { execute_plan: { intent: 'rank markets for a 200 MW AI campus and check PJM grid headroom' }, rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' },
+const ARGS = { execute_plan: { intent: 'rank markets for a 200 MW AI campus and check PJM grid headroom' }, rank_markets: { limit: 10 }, get_grid_intelligence: { iso: 'PJM' }, get_grid_data: { iso: 'PJM' }, get_water_risk: { state: 'VA' },
   list_transactions: { limit: 10 }, get_gas_intelligence: { region: 'TX' } };
 let ipN = 10;
 // One MCP session (initialize + initialized) where the surface has sessions, then tool calls on it, as the agent
@@ -105,18 +109,20 @@ const withEnv = async (k, v, fn) => {
 const count = (t, s) => t.split(s).length - 1;
 
 describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
-  // Item 2 (owner 2026-11-11): the memo still shortens a repeat wall (no human line, no rows clause), but every
-  // wall carries one offer: the repeat gets the offer floor's one line (lib/wall-offer-floor.mjs) and its row says so.
-  it('rank_markets wall, then get_grid_intelligence wall, then rank_markets again: full asks on the 1st and 2nd, the floor\'s one line on the 3rd', async () => {
+  // Item 2 (owner 2026-11-11): the memo still shortens a repeat wall (no human line), but every wall carries one
+  // offer: the repeat gets the offer floor's one line (lib/wall-offer-floor.mjs) and its row says so.
+  it('rank_markets wall, then get_water_risk wall, then rank_markets again: full asks on the 1st and 2nd, the floor\'s one line on the 3rd', async () => {
     const call = await session();
     const r1 = await call('rank_markets');
     expect(r1.sc.preview_is_partial || r1.sc.trial_preview, 'rank_markets did not wall').toBeTruthy();
-    expect(count(r1.text, RANK_ASK)).toBe(1);
+    expect(count(r1.text, RANK_ASK)).toBe(0);                          // paid key only: no rows ask
     expect(count(r1.text, HUMAN)).toBe(1);
-    expect(r1.ev && r1.ev.email_ask).toBe('line');
+    expect(count(r1.text, DIGEST)).toBe(1);
+    expect(r1.ev && r1.ev.email_ask).toBe('key_line');
+    expect(r1.ev.offers_shown).not.toContain('email_unlock');
 
-    const r2 = await call('get_grid_intelligence');
-    expect(r2.sc.preview_is_partial || r2.sc.trial_preview, 'get_grid_intelligence did not wall').toBeTruthy();
+    const r2 = await call('get_water_risk');
+    expect(r2.sc.preview_is_partial || r2.sc.trial_preview, 'get_water_risk did not wall').toBeTruthy();
     // The second tool's own human line, with option A's email sentence on it.
     expect(count(r2.text, HUMAN)).toBe(1);
     const line2 = r2.text.split('\n').find((l) => l.includes(HUMAN));
@@ -129,11 +135,22 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
     expect(r3.sc.preview_is_partial || r3.sc.trial_preview, 'rank_markets did not wall the second time').toBeTruthy();
     expect(r3.text).not.toContain(RANK_EMAIL_ASK_LEAD);
     expect(count(r3.text, HUMAN)).toBe(0);
-    expect(r3.text).not.toMatch(/`subscribe_digest`|Reply with your email/);
-    expect(count(r3.text, neutral(FLOOR_EMAIL_LEAD))).toBe(1);                   // one short line, not the full ask again
+    expect(r3.text).not.toMatch(/`bind_email`|Reply with your email/);
+    expect(count(r3.text, neutral(FLOOR_DIGEST_LEAD))).toBe(1);        // one short line, not the full ask again
     expect(r3.ev).toBeTruthy();
-    expect(r3.ev.email_ask).toBe('line');
-    expect(r3.ev.offers_shown).toContain('email_unlock');               // C3: the row names what was delivered
+    expect(r3.ev.email_ask).toBe('digest_line');
+    expect(r3.ev.offers_shown).toContain('digest');                    // C3: the row names what was delivered
+  });
+
+  // 2026-11-23: get_grid_intelligence is paid-full-only, so its keyless wall must not tell the human that an email
+  // opens the full answer (it opens a key, never this answer).
+  it('a keyless get_grid_intelligence wall never says an email opens its full answer', async () => {
+    const call = await session();
+    const g = await call('get_grid_intelligence');
+    expect(g.sc.preview_is_partial || g.sc.trial_preview, 'get_grid_intelligence did not wall').toBeTruthy();
+    expect(count(g.text, HUMAN)).toBe(1);
+    expect(g.text).not.toMatch(/open the full answer|unlock the full data/);
+    expect(g.ev && g.ev.offers_shown).not.toContain('email_unlock');
   });
 
   // Grok note N item 1 (2026-11-15, lib/wall-key-line.mjs): a keyless caller on a digest-only wall also reads the
@@ -142,7 +159,9 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
   // no "Reply with"; and the same tool again gets the floor's one digest line, not the key line a second time.
   it('a depth wall as the second tool gets the digest offer, never an email ask; its repeat gets the floor\'s one digest line', async () => {
     const call = await session();
-    expect(count((await call('rank_markets')).text, RANK_ASK)).toBe(1);
+    const r0 = await call('rank_markets');
+    expect(count(r0.text, RANK_ASK)).toBe(0);
+    expect(count(r0.text, HUMAN)).toBe(1);
     const d1 = await call('list_transactions');
     expect(d1.sc.preview_is_partial || d1.sc.trial_preview, 'list_transactions did not wall').toBeTruthy();
     expect(count(d1.text, DIGEST)).toBe(1);
@@ -163,11 +182,11 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
   it('a free-key wall as the second tool shows its email line; the same tool again does not', async () => {
     const call = await session();
     await call('rank_markets');
-    const g1 = await call('get_grid_data');
-    expect(g1.sc.preview_is_partial || g1.sc.trial_preview, 'get_grid_data did not wall').toBeTruthy();
+    const g1 = await call('get_water_risk');
+    expect(g1.sc.preview_is_partial || g1.sc.trial_preview, 'get_water_risk did not wall').toBeTruthy();
     expect(g1.text).toMatch(/Reply with your email/);
     expect(count(g1.text, EMAIL_ASK)).toBe(1);   // item 4 (2026-11-13): lib/unlock-line.mjs's sentence
-    const g2 = await call('get_grid_data');
+    const g2 = await call('get_water_risk');
     expect(g2.text).not.toMatch(/Reply with your email|`bind_email`/);
     expect(count(g2.text, HUMAN)).toBe(0);
   });
@@ -185,7 +204,9 @@ describe('ask once per tool per session (/mcp, keyless, real handler)', () => {
   it('kill switch DCHUB_ASK_PER_TOOL=0: the per-session cap of 11-09 (no human line, no digest on the second tool; gas asks every time)', async () => {
     await withEnv('DCHUB_ASK_PER_TOOL', '0', async () => {
       const call = await session();
-      expect(count((await call('rank_markets')).text, RANK_ASK)).toBe(1);
+      const r1 = await call('rank_markets');
+      expect(count(r1.text, RANK_ASK)).toBe(0);
+      expect(count(r1.text, HUMAN)).toBe(1);
       const r2 = await call('get_grid_intelligence');
       expect(count(r2.text, HUMAN)).toBe(0);
       expect(r2.text).toContain('sent the full ask earlier in this session');
@@ -235,7 +256,8 @@ describe('execute_plan steps keep the per-session memo', () => {
     const pOff = await withEnv('DCHUB_ASK_PER_TOOL', '0', async () => (await session())('execute_plan'));
     expect(pOn.text.length).toBeGreaterThan(1000);
     expect(norm(pOn.text)).toBe(norm(pOff.text));
-    expect(count((await on('rank_markets')).text, RANK_ASK)).toBe(1);
+    expect(count((await on('rank_markets')).text, HUMAN)).toBe(1);
+    expect(count((await on('get_water_risk')).text, HUMAN)).toBe(1);
     expect(count((await on('get_grid_intelligence')).text, HUMAN)).toBe(1);
   });
 });

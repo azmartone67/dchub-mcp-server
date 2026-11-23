@@ -21,10 +21,12 @@ import { unsealPayload } from '../lib/token-seal.mjs';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 import * as WC from '../lib/withheld-copy.mjs';
 import * as RE from '../lib/wall-relay-everywhere.mjs';
 import * as VF from '../lib/wall-value-first.mjs';
@@ -36,6 +38,10 @@ const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SHORT = 'https://dchub.cloud/u/abcdef';
 
 let H, O, SB, S, fence, why = '';
+// Owner 2026-11-23 (lib/paid-full-only.mjs): below Developer the paid-only tools answer a preview (a keyless
+// execute_plan's refined-queue step included). Until origin/main carries that rule its answers on those tools are not
+// the baseline; MAIN_HAS_GATE says which holds.
+let MAIN_HAS_GATE = false;
 const shorts = [];
 const teasers = [];
 const routes = () => (p, _req, body) => {
@@ -70,6 +76,7 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'wall-relay-value-first-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -156,6 +163,10 @@ const ACCEPT = [
   ['search_facilities', { city: 'Dallas' }],
   ['get_market_dcpi_rank', { market_slug: 'dallas' }],
 ];
+// origin/main is the baseline unless the tool is paid-only and origin/main predates that rule; then this server with
+// every item off (a fresh keyless caller: each call() draws a new IP).
+const changedSince1123 = (name) => !MAIN_HAS_GATE && isPaidFullOnly(name);
+const LICENCE_KEY = /\\*"licence\\*":\{/;
 // The price / plan / credit / calls-per-day ban (the brief's list; "free" too: the 2026-11-21 no-free sweep).
 const NO_PRICE = /[$€£¥]|\bper month\b|\/mo\b|\b(?:free|developer|pro|enterprise|starter)\b|\bcredits?\b|\b\d[\d,]*\s+(?:MCP\s+)?(?:calls?|full answers?|answers?)\b|\/day\b|\bper day\b|\ba day\b/i;
 
@@ -323,11 +334,25 @@ describe('flags OFF: origin/main byte for byte on /mcp, /mcp/claude, /mcp/chatgp
       for (const [name, args] of ACCEPT) {
         setEnv(env);
         const here = norm((await call(H, p, name, args)).msg);
+        if (changedSince1123(name)) {
+          // no origin/main baseline for it yet: the items stay off (no licence block, no /u/ value-first lead)
+          expect(here, `${p} ${name}`).not.toMatch(LICENCE_KEY);
+          expect(here === norm((await call(H, p, name, args)).msg), `${p} ${name}: stable across callers`).toBe(true);
+          continue;
+        }
         const main = norm((await call(O, p, name, args)).msg);
         expect(here === main, `${p} ${name}${firstDiff(here, main)}`).toBe(true);
       }
     }
   }, 240_000);
+});
+
+describe('flags OFF: the paid-only fallback check bites', () => {
+  it('CONTROL: with the items ON, the same keyless execute_plan carries the licence block the check looks for', async () => {
+    setEnv({ ...PROD, ...ALL_ON });
+    const on = norm((await call(H, '/mcp', 'execute_plan', { intent: 'how soon can a 100 MW load get power in ERCOT' })).msg);
+    expect(on).toMatch(LICENCE_KEY);
+  }, 120_000);
 });
 
 describe('flags ON: /mcp/claude and /mcp/chatgpt stay origin/main byte for byte', () => {
@@ -338,7 +363,7 @@ describe('flags ON: /mcp/claude and /mcp/chatgpt stay origin/main byte for byte'
         setEnv({ ...PROD, ...ALL_ON });
         const here = norm((await call(H, p, name, args)).msg);
         setEnv(PROD);
-        const main = norm((await call(O, p, name, args)).msg);
+        const main = norm((await call(changedSince1123(name) ? H : O, p, name, args)).msg);
         expect(here === main, `${p} ${name}${firstDiff(here, main)}`).toBe(true);
       }
     }
