@@ -531,6 +531,7 @@ test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
 test/paid-only-plan-and-grid-data-1123.test.mjs
+test/paid-only-six-more-tools-1123.test.mjs
 test/paid-sell-line.test.mjs
 test/parcel-gps-hint.test.mjs
 test/partner-inbox-tools.test.mjs

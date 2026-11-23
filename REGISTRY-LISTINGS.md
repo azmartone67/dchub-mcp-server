@@ -292,7 +292,7 @@ Why agents pick it: DC Hub adds live, dated power, grid and queue data that comp
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
 ## Pricing line (paste wherever a form asks for pricing)
-No signup — No key needed: the first call each UTC day to each core energy tool (get_grid_intelligence, get_interconnection_queue, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. Developer, Pro and
+No signup — A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. Developer, Pro and
 Enterprise plans: see https://dchub.cloud/pricing
 
 > Keep this block in sync with `tier_registry.py` in dchub-backend, where plans

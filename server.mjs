@@ -2212,7 +2212,8 @@ export function _paidSellStep(result, name) {
       unlocked ? 'continuation.gated.fields_unlocked' : 'the _in_pro markers');
     // Honest rows ask (owner 2026-11-04, lib/paid-sell-line.rankEmailClause): first wall only, and not
     // where the grid email line is withheld too (Grok contract, directory / Claude / core profiles).
-    const emailClause = name === 'rank_markets' && hasLine && _rankEmailAskOn() && c && !_pcIsGrok(c.platform)
+    // rank_markets is paid-full-only (owner 2026-11-23): an email no longer opens its rows, so no email clause.
+    const emailClause = name === 'rank_markets' && !_isPaidFullOnly(name) && hasLine && _rankEmailAskOn() && c && !_pcIsGrok(c.platform)
       && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && c.profile !== CORE_PROFILE
       ? _rankEmailClause({ total: sc._results_total_in_pro, perDay: IDENTIFIED_DAILY_FULL_CAP }) : null;
     if (emailClause) agentLine = agentLine.replace(' After they pay,', ' ' + emailClause + ' After they pay,');
@@ -2266,7 +2267,8 @@ const _fiberEmailAskOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DC
 export function _aicapEmailAskStep(result, name) {
   try {
     const fiber = name === 'get_fiber_intel';
-    if (fiber ? !_fiberEmailAskOn() : (name !== 'ai_capacity_index' || !_aicapEmailAskOn())) return result;
+    // ai_capacity_index is paid-full-only (owner 2026-11-23): an email no longer opens its rows, so no email clause.
+    if (fiber ? !_fiberEmailAskOn() : (name !== 'ai_capacity_index' || !_aicapEmailAskOn() || _isPaidFullOnly(name))) return result;
     const c = getCtx();
     if (!c || c.api_key || c.loopback_step || _pcIsGrok(c.platform) || _isCleanPlatform()) return result;
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
@@ -5987,6 +5989,8 @@ export function _wallUnlockFor(name, sc, c) {
     if (name === 'analyze_site') {
       return !(c && c.api_key) && /^email/.test(String(s.unlock_kind || '')) ? _RE.UNLOCK_EMAIL : _RE.UNLOCK_LICENCE;
     }
+    // A paid-full-only tool (owner 2026-11-23, lib/paid-full-only.mjs; execute_plan included): no email opens it.
+    if (_isPaidFullOnly(name)) return _RE.UNLOCK_LICENCE;
     if (name === 'execute_plan') return _planUnlockFor(s, c);
     if (_emailFullDecisionTool(name, c)) return _RE.UNLOCK_EMAIL;
     // A depth wall (the email floor's own rule, _floorKindFor: a backend-masked field such as the DCPI sub-scores
@@ -10741,7 +10745,7 @@ const KEYED_FREE_BONUS = new Set([
   'get_market_intel',     // 990 sessions/7d (the strongest demand signal)
   // get_grid_data left 2026-11-23 (owner): its full answer needs a paid key, so a free key gets its preview.
   'get_water_risk',       // 651 sessions/7d
-  'get_energy_prices',    // 540 sessions/7d
+  // get_energy_prices left 2026-11-23 (owner): its full answer needs a paid key, so a free key gets its taste.
   'get_renewable_energy', // 425 sessions/7d
 ]);
 
@@ -10834,7 +10838,9 @@ export function _chatgptFrozenCopy(neutral, legacy, c) {
 }
 // The tools that may still enter the capped free full-answer (trial_taste) path.
 export function _freeTasteTool(name) {
-  return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
+  // A paid-full-only tool (owner 2026-11-23, lib/paid-full-only.mjs: rank_markets) gets no capped full taste on a
+  // free-class seat: the per-IP/day full answers of this path were a free full answer.
+  return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name) && !_isPaidFullOnly(name);
 }
 // ── Item 3 (owner draft 2026-10-16): email-bound keys on the grid and queue reads ─────────
 // Modifies the 10-08 rule for EMAIL-BOUND keys only. A free-class key that carries a bound
@@ -10845,7 +10851,8 @@ export function _freeTasteTool(name) {
 // for the tool, one for the seat; applyTierGate's `email_full` branch is the only door.
 // Kill switch DCHUB_EMAIL_FULL_DECISION_TOOLS=0 (read per call) restores the 10-08 rule.
 export function _emailFullDecisionTool(name, c) {
-  return _freePreviewOnlyTool(name) && emailFullDecisionOn()
+  // Owner 2026-11-23: grid and queue are paid-full-only (lib/paid-full-only.mjs); an email no longer opens them.
+  return _freePreviewOnlyTool(name) && !_isPaidFullOnly(name) && emailFullDecisionOn()
     && _EMAIL_FULL_DECISION_LIST.includes(String(name || '')) && EMAIL_DECISION_DAILY_FULL_CAP > 0
     && !(String(name || '') === 'get_market_intel' && _chatgptFrozenSeat(c));
 }
@@ -10876,7 +10883,7 @@ export function chatgptFirstFullOn() {
   return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CHATGPT_FIRST_FULL || ''));
 }
 export function _chatgptFirstFullCall(name, c) {
-  return chatgptFirstFullOn() && _freePreviewOnlyTool(name)
+  return chatgptFirstFullOn() && _freePreviewOnlyTool(name) && !_isPaidFullOnly(name)
     && !!c && c.profile === DIRECTORY_PROFILE && !c.api_key
     && typeof c.session_id === 'string' && c.session_id.startsWith('oai-');
 }
@@ -11168,7 +11175,9 @@ export function _emailFullSeat(c) {
 // surfaces that still quote them.
 export function _freeDecisionClause() {
   if (!freeDecisionPreviewOnlyOn()) return '';
-  return (emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0)
+  // "an email opens fuller answers" spoke for all three; grid and queue are paid-full-only since 2026-11-23, so the
+  // line with no email promise is the one left standing.
+  return (emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0 && !_FREE_DECISION_TOOL_LIST.some((t) => _isPaidFullOnly(t)))
     ? _DECISION_TOOLS_LINE : 'Grid/queue/market-intel tools: previews. ' + INSTR_CONNECT_LINE;
 }
 // claim_free_key / bind_email `free_tier_rule` value: the enforced keyless clause, then what the key keeps.
@@ -11320,7 +11329,7 @@ export function _normalizesToPaid(g, tool) {
 }
 
 export function isFreeWithEmailTool(name) {
-  // get_grid_data (owner 2026-11-23): no email opens it any more; its full answer needs a paid key.
+  // The paid-full-only tools (owner 2026-11-23, lib/paid-full-only.mjs): no email opens them; a paid key does.
   return PAID_ONLY_TOOLS.has(name) && !PRO_ONLY_TOOLS.has(name) && !_PAID_FULL_GATED_LIST.includes(name);
 }
 
@@ -11801,7 +11810,7 @@ export const KEY_REQUIRED_TOOLS = new Set([
 // opens those, and the keyless cap line promised "the full answer" on them.
 export function _emailOpensTool(name) {
   const t = String(name || '');
-  if (!t || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t)) return false;
+  if (!t || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t) || _isPaidFullOnly(t)) return false;   // paid-full-only: 2026-11-23
   const g = applyTierGate(t, {}, 'free', true, false, undefined, true);
   if (!g.allowed || g.masked) return false;
   if (g.trial_taste || g.email_full || g.bonus) return true;
@@ -11818,6 +11827,7 @@ export function _capEmailOpens(name, payload) {
 export function _tierRequiredFor(name) {
   const n = String(name || '');
   if (PRO_ONLY_TOOLS.has(n) || LP_TOOLS.has(n)) return 'pro';
+  if (_isPaidFullOnly(n)) return 'developer_for_full';   // owner 2026-11-23 (lib/paid-full-only.mjs)
   if (isFreeWithEmailTool(n)) return _emailOpensTool(n) ? 'email' : 'developer_for_full';
   if (ALWAYS_PARTIAL_PREVIEW.has(n) || DEPTH_TEASE_TOOLS.has(n)) return 'developer_for_full';
   if (KEY_REQUIRED_TOOLS.has(n)) return 'free_key';
@@ -22854,7 +22864,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is full for everyone. get_grid_intelligence: below full access a preview; full access gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: below full access a preview; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     // 5.39 (Grok cross-domain head-to-head, 2026-11-17 night): "Where can I get 50 MW of colocation or powered capacity
@@ -22950,7 +22960,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: below full access a preview; full access gets the full answer. get_refined_queue: below full access a trimmed preview (3 rows, MW withheld; MISO and SPP project names and queue ids held); full access gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -31016,14 +31026,15 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
       // deliberate validated-trial full-data "wow" lever (r62c); we don't
       // undercut it. Anonymous already trimmed above (L1954) for non-FREE_FULL
       // tools, so this is the keyed-but-unpaid leak it couldn't catch.
-      if (DEPTH_TEASE_TOOLS.has(name) && !_isPaidDepthTier(_gateTier) && !gate.trial_taste) {
+      // A paid-full-only tool (owner 2026-11-23: get_market_context) is teased whatever lane set trial_taste.
+      if (DEPTH_TEASE_TOOLS.has(name) && !_isPaidDepthTier(_gateTier) && (!gate.trial_taste || _isPaidFullOnly(name))) {
         // Returning-key REWARD (DCHUB_RETURN_REWARD; dormant when off → the
         // short-circuit in _keyReturning means this whole clause is a no-op):
         // a genuine cross-session returner gets ONE bonus full-depth call/day
         // here instead of the tease — the "welcome back" payoff for the
         // 0.5%-reuse return loop. Bounded (1/key/day), returners only, no
         // paid-data leak to one-shot/anon callers.
-        if (RETURN_REWARD && c.api_key && (await _keyReturning(c.api_key))
+        if (RETURN_REWARD && c.api_key && !_isPaidFullOnly(name) && (await _keyReturning(c.api_key))
             && _returnRewardAvailableToday(c.api_key)) {
           status = 'return_reward_full';
           const _full = withCitation(withBindHint(result, name, c), name);
@@ -33259,7 +33270,8 @@ export function _claimHandoffStep(result, name) {
     // Item 3 (owner draft 2026-10-16): a keyless decision-tool PREVIEW now carries the line too (its own
     // copy, _claimHandoffDecisionText). With the item-3 switch off it is skipped, as on 10-08.
     // Not on the Grok contract: a Grok wall carries no key or header copy (paywall-contract G3).
-    const decisionPreview = !isLimit && _freePreviewOnlyTool(name) && emailFullDecisionOn() && !_pcIsGrok(c.platform);
+    // Not on a paid-full-only tool (owner 2026-11-23: grid, queue): an email does not open it, so no email line.
+    const decisionPreview = !isLimit && _freePreviewOnlyTool(name) && !_isPaidFullOnly(name) && emailFullDecisionOn() && !_pcIsGrok(c.platform);
     if (!isLimit && !decisionPreview && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return _handoffSkip(result, 's8', name);
     const textOf = (b) => (b && b.type === 'text' && typeof b.text === 'string') ? b.text : '';
     const proseOf = (t) => { const sp = _splitLeadingJson(t); return sp ? sp.rest : t; };
@@ -37014,7 +37026,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key with a bound email unlocks full answers. Ex: "How deep is ERCOT\'s queue?"',
+    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Keyless and free keys: a trimmed preview; DCHUB_API_KEY is optional. Ex: "How deep is ERCOT\'s queue?"',
     { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE, or NESO for Great Britain (the NESO TEC Register: generation and demand connections together, not a generation-only queue); omit for the all-ISO snapshot') },
     async (a) => {
       if (a.iso && !_queueIsoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
@@ -38270,7 +38282,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub (ERCOT, CAISO, NYISO, ISO-NE), served to every caller with the ISO credited: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar reuse (PJM, MISO, SPP), wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why; for PJM, wholesale_context carries published, cited figures (capacity auction clearing prices, the market monitor\'s average LMP) with their period and source_url, plus live_prices.url, PJM\'s own live LMP page. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a key that has no bound email, the figures come back null with gated: true; an email-bound key opens them. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp and wholesale_context blocks are not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?", "ERCOT North hub LMP right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Can be scoped to a data center market or site: execute_plan pairs these prices with that place\'s facilities and grid headroom. Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. With iso, it also returns wholesale_lmp, the wholesale locational marginal price at one ISO pricing hub (ERCOT, CAISO, NYISO, ISO-NE), served to every caller with the ISO credited: {label "wholesale LMP, $/MWh", iso, hub, hubs_available, real_time {lmp_usd_mwh, interval_ending, as_of, market "RTM", stale, stale_after_minutes}, day_ahead {lmp_usd_mwh, delivery_date, hour_ending, as_of, market "DAM"} or null, day_ahead_note, source, source_url, license, basis}; quote it with its as_of and label. Where an ISO\'s terms bar reuse (PJM, MISO, SPP), wholesale_lmp is null and wholesale_lmp_withheld {iso, reason} says why; for PJM, wholesale_context carries published, cited figures (capacity auction clearing prices, the market monitor\'s average LMP) with their period and source_url, plus live_prices.url, PJM\'s own live LMP page. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); hub (optional, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON; omit for the ISO\'s default hub; an unknown hub is an error that lists hubs_available); data_type is accepted but does not change the response. Keyless, or with a free key (bound email included), the figures are withheld. natural_gas.status says whether the Henry Hub price was served or withheld for this caller; the wholesale_lmp and wholesale_context blocks are not gated. This tool has no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
@@ -38347,7 +38359,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use this when the user asks about grid capacity, power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Can be scoped to a data center market or site: execute_plan pairs the grid with that place\'s facilities, capacity and markets. Keyless gets a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks full briefs. Ex: "PJM headroom for 200 MW?"',
+  trackedTool(srv, 'get_grid_intelligence', 'Use this when the user asks about grid capacity, power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Can be scoped to a data center market or site: execute_plan pairs the grid with that place\'s facilities, capacity and markets. Keyless and free keys get a trimmed preview; DCHUB_API_KEY is optional. Ex: "PJM headroom for 200 MW?"',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for Ashburn / Northern Virginia zone load from EIA-930: hourly and dated, but posted daily, so about 1.25-2.25 days old and not live. Real-time LMP for the zone is withheld for licence reasons (licence_withheld).'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
       region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
@@ -38713,7 +38725,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   //   POST /api/v1/mcp/tools/score_facility
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'rank_markets',
-    'Use this when the user wants a ranked list of data-center markets, including where a data center can get grid power (criteria="ai_ready", DCPI): top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; DCHUB_API_KEY is optional, and a key unlocks full lists. Ex: "Top 10 US markets, ai_ready."',
+    'Use this when the user wants a ranked list of data-center markets, including where a data center can get grid power (criteria="ai_ready", DCPI): top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless and free keys: a trimmed preview; DCHUB_API_KEY is optional. Ex: "Top 10 US markets, ai_ready."',
     { criteria: S.describe('Ranking criterion: "cheapest_power", "most_capacity", "most_operators", "fastest_growing", "best_overall" (default), or "ai_ready" (DCPI buildability — where new AI load can land, for AI-campus siting; region us/global)'),
       region: S.describe('Region scope: "global", "us" (default), "canada", "eu", "apac", or "americas"'),
       limit: LIMIT.describe('Number of markets to return, 1-50 (default 10)'),
