@@ -5608,8 +5608,11 @@ function _planFloor(result, c) {
   uncovered.sort((a, b) => a.step - b.step);
   const keyed = _wallEnt(c).keyed;
   let out = result;
-  const emailSteps = uncovered.filter((w) => w.kind === 'email');
-  const digestSteps = uncovered.filter((w) => w.kind === 'digest');
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): a free-class caller's plan runs every step keyless, so an email opens
+  // no step of a plan, even one it opens on a direct call (get_fiber_intel): a step the floor would ask an email for
+  // is offered the digest instead ("an email does not open the fields held back here").
+  const emailSteps = [];
+  const digestSteps = uncovered.filter((w) => w.kind === 'digest' || w.kind === 'email');
   if (emailSteps.length) {
     const para = _planAskParagraph(emailSteps, { keyed });
     if (para) { out = _withFloorLine(out, para); _markEmailAsk(c, 'line'); }
@@ -12031,7 +12034,10 @@ export function _planWalledSteps(executed, c) {
   for (const e of executed) {
     try {
       if (!e || typeof e !== 'object' || typeof e.tool !== 'string') continue;
-      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool, email_opens: _planStepEmailOpens(e.tool, e.result, c) });
+      // Owner 2026-11-23 (lib/paid-full-only.mjs): execute_plan's full answer needs a paid key, and a free-class
+      // caller's plan runs every step keyless, so an email opens no step of a plan (a get_fiber_intel step included:
+      // the next plan runs it keyless too). The plan names walled steps as depth steps, never as email-opened ones.
+      if (planLooksWalled([e], { isWall: (r) => _isRelayWall(r, c) })) out.push({ step: e.step, tool: e.tool, email_opens: false });
     } catch (_) { /* unreadable: not named */ }
   }
   return out;

@@ -224,6 +224,28 @@ describe('1) a keyless plan whose walled steps are all paid-only asks for no ema
   });
 });
 
+// Review of #1700 (owner 2026-11-23): a free-class caller's plan runs every step keyless, so an email opens no step
+// of a plan, not even one an email opens on a direct call (get_fiber_intel). The keyless plan used to say "the next
+// plan runs every step under that key", which stopped being true. Now the walled fiber step is a depth step.
+const FIBER_ARGS = { intent: 'fiber routes and carrier diversity for a data center in Ashburn, Virginia' };
+describe('1a) a keyless plan with a walled get_fiber_intel step asks for no email and promises no keyed next plan', () => {
+  it.each([['sessionless', { sessionless: true }], ['in a session', {}]])('%s', async (_l, opts) => {
+    await withEnv('DCHUB_LEAN_RESPONSES', '0', async () => {
+      const r = await plan(null, undefined, opts, FIBER_ARGS);
+      const walled = (r.data.executed || []).filter((e) => e.result && e.result.human_url).map((e) => e.tool);
+      expect(walled, JSON.stringify((r.data.executed || []).map((e) => [e.tool, e.status]))).toContain('get_fiber_intel');
+      // on a direct call an email still opens get_fiber_intel, so the plan is what decides here
+      expect(S._planStepEmailOpens('get_fiber_intel', {}, {})).toBe(true);
+      expect(S._planWalledSteps(r.data.executed, {}).filter((w) => w.email_opens !== false)).toEqual([]);
+      expect(r.text).not.toContain('the next plan runs every step under that key');
+      expect(askBlock(r), r.text.slice(0, 1500)).toBeNull();
+      expect(String(r.data._upgrade?.message || '')).not.toMatch(ASK_LEAD);
+      expect(r.data._upgrade?.next_tool, JSON.stringify(r.data._upgrade)).not.toBe('bind_email');
+      for (const w of r.walls) expect(w.email_ask, JSON.stringify(w)).not.toBe('line');
+    });
+  });
+});
+
 describe('1b) with the lean step off, _upgrade carries no email ask either', () => {
   it('sessionless keyless plan', async () => {
     await withEnv('DCHUB_LEAN_RESPONSES', '0', async () => {
