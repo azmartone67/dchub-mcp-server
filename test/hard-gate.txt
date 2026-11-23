@@ -103,6 +103,7 @@ test/chatgpt-resubmission-round2.test.mjs
 test/chatgpt-resubmission-round3.test.mjs
 test/chatgpt-taste-and-cap-coaching-836-838.test.mjs
 test/chatgpt-toolset-frozen.test.mjs
+test/checkout-attrib-1122.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
 test/cite-as-record-vintage.test.mjs
@@ -410,6 +411,7 @@ test/licence-coherence.test.mjs
 test/licence-page-url-1122.test.mjs
 test/license-per-layer-envelope.test.mjs
 test/light-list-instructions-v2.test.mjs
+test/light-on-source-paths-1122.test.mjs
 test/light-profile.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
@@ -592,6 +594,7 @@ test/planner-548-market-lead-first.test.mjs
 test/planner-559-named-markets-on-grid-plans.test.mjs
 test/planner-561-site-hunt.test.mjs
 test/planner-dallas-capacity-near-cut.test.mjs
+test/planner-dcpi-one-market-1122.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/planner-handoff.test.mjs
@@ -737,6 +740,7 @@ test/snapshot-repairs-missing-keys.test.mjs
 test/source-capacity-match.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
+test/stale-session-notify-1122.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
 test/static-docs-no-free-1121.test.mjs

@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
+import { DCPI_ONE_MARKET_ASK_RE as _DCPI_ONE_MARKET_ASK_RE, dcpiClassifyFixOn as _dcpiClassifyFixOn, DCPI_ONE_MARKET_SCORE as _DCPI_ONE_MARKET_SCORE } from './lib/dcpi-one-market.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
 import { WINDSURF_PERSIST_FILE } from './lib/windsurf-config-where.mjs';
 import { AGENT_DEMAND_TOOL, AGENT_DEMAND_PATH, AGENT_DEMAND_DESCRIPTION, agentDemandEnabled, agentDemandPayload } from './lib/agent-demand.mjs';
@@ -178,7 +179,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
-import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
+import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
 import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
@@ -325,6 +326,8 @@ import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotAppl
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
 import { recognizedClientFromName as _recognizedClientFromName, recognizedClientFromUa as _recognizedClientFromUa } from './lib/client-recognition.mjs';
+import * as _CA from './lib/checkout-attrib.mjs';   // checkout-attribution spec 2026-11-22 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF)
+import { platformFamily as _platformFamily } from './lib/platform-family.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
 import { rpcShape as _rpcShape, isReinitWithSession as _isReinitWithSession, isNotificationsOnly as _isNotificationsOnly, isStatelessServable as _isStatelessServable, protocolHeaderVerdict as _protocolHeaderVerdict, describeRequest as _describeMcpRequest, failureReason as _mcpFailureReason, dropRequestHeader as _dropRequestHeader, getVerdict as _mcpGetVerdict, mcpGetDescription as _mcpGetDescription, sseDeclineFrame as _sseDeclineFrame, chunkText as _chunkText } from './lib/mcp-request-shape.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
@@ -5047,7 +5050,7 @@ export function _pathPack(req) {
   const _lk = (def) => (_W2K.subOn('LEAN_KEY_TOOLS') ? _W2K.withKeyTools(def, [_KEY_TOOL_REGISTERED, 'recover_my_key']) : def);
   if (p === LIGHT_PATH) return _lk(LIGHT_PACK);
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
-  if (p === '/mcp') {
+  if (_lightEligiblePath(p)) {   // bare /mcp; the client arrival paths too with DCHUB_LIGHT_ON_SOURCE_PATHS (off)
     const _id = _lightIdentityFromReq(req);
     if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
       return _lk((_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT);
@@ -5533,11 +5536,20 @@ function _floorKindFor(name, sc, c, ent = _wallEnt(c)) {
 // The wall's standing under the floor (owner 2026-11-11, "Measure allowed only"): 'allowed', or why the floor
 // skips it by design. It leaves on the wall row as offer_floor (lib/keyless-wall.mjs OFFER_FLOOR_STANDINGS), so
 // the funnel reads the 95% offer target over the walls the floor is allowed on.
+// Checkout-attribution spec 2026-11-22 section 6 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): a ChatGPT-family wall on /mcp
+// carries the same email ask as other platforms (7d to 11-22: 23 ChatGPT walls, 0 with an ask): the clean-platform
+// exemption no longer applies to it. The /mcp/chatgpt directory profile KEEPS its exemption: its copy is frozen while
+// it is in OpenAI review, and changing it is the owner's call. Response text only: no tool added or removed, no quota
+// or keyless rule changes. Off: the clean exemption stands.
+export function _chatgptAskOn(c) {
+  return _CA.checkoutAttribOn() && _platformFamily({ client: c && c.platform }) === 'chatgpt';
+}
 function _floorStanding(c, name) {
   if (!_wallOfferFloorOn()) return 'off';
   if (c.loopback_step) return 'plan_step';
   if (_pcIsGrok(c.platform)) return 'grok';
-  if (_isCleanPlatform()) return 'clean';
+  const chatgptAsk = _chatgptAskOn(c);
+  if (_isCleanPlatform() && !chatgptAsk) return 'clean';
   if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return 'profile';
   if (_FLOOR_SKIP_TOOLS.has(String(name || ''))) return 'tool';
   return 'allowed';
@@ -26877,6 +26889,9 @@ export function _planQuery(intent, context) {
     // class's bare "market" credit by more than the 1-point ambiguity margin, so
     // no runner-up ranking step is appended behind it).
     if (s.cls.id === 'market_outlook') {
+      // DCHUB_PLANNER_DCPI_CLASSIFY_FIX (off): "the DCPI / Data Center Power Index for <market>" is a one-market
+      // ask (lib/dcpi-one-market.mjs); the rules below still bind the market or zero a ranking / comparison.
+      try { if (_dcpiClassifyFixOn() && _DCPI_ONE_MARKET_ASK_RE.test(text)) s.score = Math.max(s.score, _DCPI_ONE_MARKET_SCORE); } catch (_e) { /* routing must never throw */ }
       if (d.comparePair || _OUTLOOK_MULTI_RE.test(text)) s.score = 0;
       // A place the index knows, bound or not (Columbus, GA is still about
       // Columbus): the class owns it, and says what it could not bind.
@@ -27867,10 +27882,14 @@ function _sourceLineCb(name, fn) {
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
       // Wall to key (DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_*, all default OFF): the email ask on licence-only walls, the one
-      // sign_in_url, the claimed key handed back once, the native email ask. LAST, on what every step above produced.
+      // sign_in_url, the claimed key handed back once, the native email ask. Just before the aref step, which stays LAST.
       _final = _wallToKeyStep(_final, name, c);
+      // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
+      // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
+      _final = _arefLinksStep(_final, name, c);
       return _final;
     } finally {
+      _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
       _expOutcomeStep(name, c, _final);   // Nov 22 tests: continued / returned_next_day / key_minted (flags OFF: no-op)
       _finishWallRow(c, name, _final);   // C3: the wall row reads what the agent receives
       if (name === 'execute_plan') _fdFlushRow(c, c._frontDeskShown || null);
@@ -27880,6 +27899,32 @@ function _sourceLineCb(name, fn) {
       _flushTrackRows(c, name, _final);
     }
   };
+}
+// Checkout-attribution spec 2026-11-22, section 1: the aref on every checkout-bound link. Off: the result unchanged.
+export function _arefLinksStep(result, name, c) {
+  try {
+    if (!_CA.checkoutAttribOn() || !c || c.loopback_step) return result;
+    return _CA.withArefLinks(result, _CA.arefForCtx(c, name));
+  } catch (_) { return result; }
+}
+// Section 3: the first full-depth (not gated) answer to a licensed key, reported once per key per process; the
+// backend writes exactly one licence_activated per key (licence_activations PK). Off: nothing is sent.
+const _licenceActivatedSent = new Set();
+export function _licenceActivatedStep(name, c, result) {
+  try {
+    if (!_CA.checkoutAttribOn() || !c || c.loopback_step || !c.api_key || !INTERNAL_KEY) return false;
+    if (_LB.licenceTier({ apiKey: c.api_key, tier: c.tier }) !== 'licensed' || _gatedAnswer(result, name, c)) return false;
+    const kref = _CA.keyRef(c.api_key);
+    if (_licenceActivatedSent.has(kref)) return false;
+    _licenceActivatedSent.add(kref);
+    fetch(new URL('/api/v1/mcp/licence-activated', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ key_ref: kref, platform: String(c.platform || '').slice(0, 80), tool: name }),
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+    return true;
+  } catch (_) { return false; }
 }
 // The one send for a tool call's /api/v1/mcp/track row (lib/agent-outreach.mjs holdTrackRow). Held for the
 // outermost wrapper on the surfaces where the agent receives next_ask as built here; sent at once on the
@@ -34442,6 +34487,9 @@ export function _leanPromptsFor(req) {
     const p = _pathPack(req);
     return !!(p && p.light);
   } catch (_) { return false; }
+}
+export function _staleSessionNotifyAcceptOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_NOTIFY_ACCEPT) || '').trim());
 }
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
@@ -42569,6 +42617,14 @@ app.post(MCP_PATHS, async (req, res) => {
     // spec's 404 below, so a client still re-initializes on it.
     const _shape = _rpcShape(body);
     if (!sessionId && _isNotificationsOnly(_shape)) return res.status(202).end();
+    // DCHUB_STALE_SESSION_NOTIFY_ACCEPT (default OFF, 2026-11-22): a notification (or a batch of only notifications /
+    // responses) bearing a session id this process does not hold is accepted with 202, as one with no id is above.
+    // A notification needs no session state and gets no reply. Measured in the [mcp-4xx] log 2026-11-18..23: every
+    // Mistral (MistralAI-MCPClient/1.0) 404 was notifications/initialized with an unknown id (20), and Claude-User
+    // had 17 of the same. Inferred, not measured: the id was minted by another instance or before a redeploy (each
+    // process holds its own in-memory session map). A request that needs an answer keeps the
+    // spec's 404 below (tools/call, tools/list and ping are already served statelessly above).
+    if (sessionId && _isNotificationsOnly(_shape) && _staleSessionNotifyAcceptOn()) return res.status(202).end();
     const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
     if ((body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {

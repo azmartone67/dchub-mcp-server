@@ -1,0 +1,25 @@
+{
+  "_note": "Mirror: dchub-mcp-server test/fixtures/platform_family_cases.json and dchub-backend tests/fixtures/platform_family_cases.json carry these same bytes. Change both, or neither (checkout-attribution spec 2026-11-22 section 5).",
+  "cases": [
+    {"in": {"client": "claude-code"}, "out": "claude"},
+    {"in": {"client": "anthropic/claudeai"}, "out": "claude"},
+    {"in": {"client": "Claude Desktop"}, "out": "claude"},
+    {"in": {"client": "connectors-manager"}, "out": "other"},
+    {"in": {"client": "chatgpt"}, "out": "chatgpt"},
+    {"in": {"client": "openai-mcp"}, "out": "chatgpt"},
+    {"in": {"client": "grok"}, "out": "grok"},
+    {"in": {"client": "xai-mcp-client"}, "out": "grok"},
+    {"in": {"client": "mcp-generic-client"}, "out": "other"},
+    {"in": {"client": "n8n-nodes-mcp"}, "out": "other"},
+    {"in": {}, "out": "other"},
+    {"in": {"client": ""}, "out": "other"},
+    {"in": {"src": "claude-code", "client": "grok"}, "out": "claude"},
+    {"in": {"src": "openai"}, "out": "chatgpt"},
+    {"in": {"src": "xai"}, "out": "grok"},
+    {"in": {"src": "cursor", "client": "chatgpt"}, "out": "chatgpt"},
+    {"in": {"via": "grok", "client": "claude-code"}, "out": "grok"},
+    {"in": {"aref_family": "grok", "src": "claude", "client": "chatgpt"}, "out": "grok"},
+    {"in": {"aref_family": "bogus", "src": "claude"}, "out": "claude"},
+    {"in": {"client": "OpenAI-MCP/1.0 (ChatGPT)"}, "out": "chatgpt"}
+  ]
+}
