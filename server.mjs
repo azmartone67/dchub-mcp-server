@@ -351,6 +351,7 @@ import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetizat
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
+import * as _EAB from './lib/email-ask-ab.mjs';   // F4 DCHUB_EMAIL_ASK_AB, the email-ask copy A/B (default OFF)
 import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
@@ -5413,9 +5414,9 @@ export function _quotaWallEventFor(c, name, status) {
   try {
     if (!_quotaWallEventOn()) return null;
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
-    return _WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+    return _EAB.withArmEvent(_WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
                                  isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm),
-                             c && c._wallOneDoorArm);
+                             c && c._wallOneDoorArm), c && c._emailAskAbArm);
   } catch (_) { return null; }
 }
 // Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
@@ -6089,6 +6090,29 @@ export function _wallOneDoorStep(result, name, c = getCtx()) {
     if (!arm) return result;
     c._wallOneDoorArm = arm;
     return arm === _WOD.ARM_ONE_DOOR ? _WOD.withOneDoor(result, link) : result;
+  } catch (_) { return result; }
+}
+// F4 (lib/email-ask-ab.mjs, DCHUB_EMAIL_ASK_AB, default OFF; Grok funnel spec 2026-11-22): on a gated answer whose
+// email-ask mark is an unlock ask and whose prose carries a generic ask sentence, the caller gets a sticky 50/50 arm
+// (c._emailAskAbArm, sent as email_ask_ab on the wall row and carried to the email entered after it). Arm a: unchanged.
+// Arm b: the ask names the call's own ISO or market. Same skips as the other new wall steps (directory / Claude / core
+// profiles, /mcp/chatgpt and ChatGPT / OpenAI clients, clean platforms, loopback steps, key tools), plus a gateway, a
+// paid caller, a caller with an email on file and a keyless Grok caller. No arm while mcp#1677's email-ask-all runs.
+export function _emailAskAbStep(result, name, args, c = getCtx()) {
+  try {
+    if (!_EAB.emailAskAbOn() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const facts = {
+      skip: _newWallStepSkip(c, name) || _WPL.isGatewayCaller(c),
+      walled: _gatedAnswer(result, name, c),
+      grok: !!_pcIsGrok(c.platform),
+      paid: _planCallerPaid(c),
+      hasEmail: !!c.email,
+      emailAsk: c._emailAsk || '',
+    };
+    const { arm, result: out } = _EAB.decide(result, { c, args, facts });
+    if (!arm) return result;
+    c._emailAskAbArm = arm;
+    return out;
   } catch (_) { return result; }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
@@ -27797,6 +27821,9 @@ function _sourceLineCb(name, fn) {
       // DCHUB_WALL_ONE_DOOR (default OFF): the one-door A/B, on the gated answer value-first just finished. Test B's
       // step below skips every gated answer, so the two never add to one answer.
       _final = _wallOneDoorStep(_final, name, c);
+      // F4 (DCHUB_EMAIL_ASK_AB, default OFF): the email-ask copy A/B on an unlock wall (lib/email-ask-ab.mjs). After every
+      // step that writes or rewrites the ask, before _finishWallRow reads the arm onto the wall row.
+      _final = _emailAskAbStep(_final, name, args, c);
       // Nov 22 Test B (DCHUB_EXP_SAVE_KEY_PROMPT, default OFF): the save-key line on a keyless caller's 3rd good call.
       _final = await _expSaveKeyStep(_final, name, c);
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
@@ -28161,7 +28188,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const t0 = Date.now();
     let status = 'ok';
     try { c._askTool = name; } catch (_) { /* the wall's human line is capped per (session, this tool): _wallHumanLineAlreadySent */ }
-    try { c._paidBlocked = false; c._emailAsk = ''; c._offersShown = undefined; c._askGap = undefined; c._offerFloor = undefined; c._wallIdMarket = undefined; c._wallIdPlanMarket = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
+    try { c._paidBlocked = false; c._emailAsk = ''; c._emailAskAbArm = undefined; c._offersShown = undefined; c._askGap = undefined; c._offerFloor = undefined; c._wallIdMarket = undefined; c._wallIdPlanMarket = undefined; } catch (_) { /* set by signalPaywall / the wall builders (option E) / _wallOuterStep (C3) for this call only */ }
     try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
