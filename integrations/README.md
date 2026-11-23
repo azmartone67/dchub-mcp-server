@@ -1,6 +1,8 @@
 # Integrate DC Hub from any agent platform
 
-**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **one MCP server**, a global data-center facility map, DCPI market scores, grid telemetry across the 7 US ISOs, interconnection queues, fiber, and M&A. **No signup to start.** Every response cites `dchub.cloud`.
+**DC Hub** is the orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity. One hosted MCP server covers the Data Center Power Index (DCPI), grid conditions, interconnection queues, energy prices, fiber, facilities and site context. Call `execute_plan` first; every answer ends with `Source: DC Hub (dchub.cloud), as of <date>`.
+
+**New:** copy-paste wiring for OpenAI Agents SDK, Responses API, LangGraph, LlamaIndex, CrewAI, Vercel AI SDK, Google ADK, Pydantic AI, smolagents, Composio, n8n, Dify, Flowise and Copilot Studio is in [`agent-kit/`](./agent-kit/).
 
 There are three ways in. Pick the row that matches your platform.
 
@@ -29,6 +31,7 @@ There are three ways in. Pick the row that matches your platform.
 | LangChain | [`langchain/`](./langchain/) | `Tool` / `StructuredTool` |
 | LangChain (PyPI package) | [`langchain-dchub/`](./langchain-dchub/) | `pip install langchain-dchub`: typed tools + `DCHubToolkit` |
 | LlamaIndex | [`llamaindex/`](./llamaindex/) | `FunctionTool` |
+| Any agent framework (one-file kit) | [`agent-kit/`](./agent-kit/) | system-prompt line + MCP wiring |
 
 ## Keyless REST endpoints (no key)
 
@@ -38,13 +41,13 @@ GET  https://dchub.cloud/api/v1/facilities?q=ashburn          # facility search
 GET  https://dchub.cloud/api/carbon/intensity?state=TX        # grid carbon intensity
 GET  https://dchub.cloud/llms.txt                             # the agent guide
 GET  https://dchub.cloud/api/v1/ai-agents.json               # machine-readable integration map
-POST https://dchub.cloud/mcp                                  # the full 98-tool MCP server
+POST https://dchub.cloud/mcp                                  # the full MCP server
 ```
 
 ## Access and keys
-- **Access:** No key needed: the first call each UTC day to each core energy tool (execute_plan, get_grid_intelligence, get_interconnection_queue, get_grid_data, get_energy_prices) is a full answer; after that, previews. A key keeps saved shortlists, alerts and get_changes (tracked changes) working across sessions. analyze_site: full site reports and previews. More detail is available at dchub.cloud/connect. No signup. Claim a key (optional; it keeps saved work across sessions):
+- **Access:** No key is needed to start; some figures return at preview depth until the caller is identified, and the result says so. An optional key (or OAuth sign-in) gives fuller answers and keeps saved shortlists, alerts and tracked changes across sessions. Details: https://dchub.cloud/connect. Claim a key (optional):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
-- **Paid tools** (e.g. `analyze_site`, `compare_sites`, `get_grid_intelligence`, `get_interconnection_queue`): pass the key as **`X-API-Key`** header (REST) or in your MCP client config.
+- **Sending a key:** pass it as the **`X-API-Key`** header (REST) or in your MCP client config. Never commit it to shared code.
 
 ## The universal "use DC Hub" prompt
 Paste [`PROMPT.md`](./PROMPT.md) into any browse/tool-capable chat to make it fetch + cite DC Hub immediately.
