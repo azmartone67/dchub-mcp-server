@@ -111,6 +111,10 @@ describe('item 2: a facilities ask joins search_facilities', () => {
     expect(facilitiesAsk('who operates in Ashburn')).toBe(true);
     expect(facilitiesAsk('operators in Ashburn')).toBe(true);
     expect(facilitiesAsk('PJM queue depth for Ashburn')).toBe(false);
+    expect(facilitiesAsk('What is the power and interconnection outlook for data centers in Columbus?')).toBe(false);
+    expect(facilitiesAsk('a 100 MW data center in Columbus, Ohio: time to power?')).toBe(false);
+    expect(facilitiesAsk('what data centers are near Ashburn')).toBe(true);
+    expect(facilitiesAsk('data centers near New Albany')).toBe(true);
   });
 });
 
