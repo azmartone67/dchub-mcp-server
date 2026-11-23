@@ -42,7 +42,7 @@ If you need the client to stay open, use `createDCHubTools`, which returns
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `apiKey` | `process.env.DCHUB_API_KEY` | Sent as `X-API-Key`. If you set neither, the tools run keyless on the free tier. |
+| `apiKey` | `process.env.DCHUB_API_KEY` | Sent as `X-API-Key`. If you set neither, the tools run keyless (previews). |
 | `url` | `https://dchub.cloud/mcp` | The MCP endpoint. |
 | `only` | all tools | An array of tool names to keep, e.g. `['get_grid_scoreboard', 'search_facilities']`. It throws if a name isn't served. |
 
@@ -50,15 +50,15 @@ Passing a subset with `only` keeps the model's context small.
 
 ## Keys and tiers
 
-The server answers without a key on the free tier. For more, get a free key at
-https://dchub.cloud/signup, or ask an agent that is already connected to call
-`claim_free_key`. Then:
+The server answers without a key; keyless results are previews. For more, get a
+key at https://dchub.cloud/signup, or ask an agent that is already connected to
+call `get_api_key`. Then:
 
 ```bash
 export DCHUB_API_KEY=dch_live_...
 ```
 
-On the free tier some fields are previews. Each tool's response says what it
+Without a key some fields are previews. Each tool's response says what it
 covers and what it does not.
 
 ## Links
