@@ -34406,6 +34406,9 @@ export function _leanPromptsFor(req) {
     return !!(p && p.light);
   } catch (_) { return false; }
 }
+export function _staleSessionNotifyAcceptOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_NOTIFY_ACCEPT) || '').trim());
+}
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
@@ -42532,6 +42535,14 @@ app.post(MCP_PATHS, async (req, res) => {
     // spec's 404 below, so a client still re-initializes on it.
     const _shape = _rpcShape(body);
     if (!sessionId && _isNotificationsOnly(_shape)) return res.status(202).end();
+    // DCHUB_STALE_SESSION_NOTIFY_ACCEPT (default OFF, 2026-11-22): a notification (or a batch of only notifications /
+    // responses) bearing a session id this process does not hold is accepted with 202, as one with no id is above.
+    // A notification needs no session state and gets no reply. Measured in the [mcp-4xx] log 2026-11-18..23: every
+    // Mistral (MistralAI-MCPClient/1.0) 404 was notifications/initialized with an unknown id (20), and Claude-User
+    // had 17 of the same. Inferred, not measured: the id was minted by another instance or before a redeploy (each
+    // process holds its own in-memory session map). A request that needs an answer keeps the
+    // spec's 404 below (tools/call, tools/list and ping are already served statelessly above).
+    if (sessionId && _isNotificationsOnly(_shape) && _staleSessionNotifyAcceptOn()) return res.status(202).end();
     const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
     if ((body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
