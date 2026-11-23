@@ -42,7 +42,7 @@ If you need the client to stay open, use `createDCHubTools`, which returns
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `apiKey` | `process.env.DCHUB_API_KEY` | Sent as `X-API-Key`. If you set neither, the tools run keyless. |
+| `apiKey` | `process.env.DCHUB_API_KEY` | Sent as `X-API-Key`. If you set neither, the tools run keyless (previews). |
 | `url` | `https://dchub.cloud/mcp` | The MCP endpoint. |
 | `only` | all tools | An array of tool names to keep, e.g. `['get_grid_scoreboard', 'search_facilities']`. It throws if a name isn't served. |
 
@@ -50,13 +50,15 @@ Passing a subset with `only` keeps the model's context small.
 
 ## Keys
 
-The server answers without a key. An optional key (or OAuth sign-in) returns fuller answers and keeps saved work across sessions; get one at https://dchub.cloud/connect. Then:
+The server answers without a key; keyless results are previews. For more, get a
+key at https://dchub.cloud/signup, or ask an agent that is already connected to
+call `get_api_key`. Then:
 
 ```bash
 export DCHUB_API_KEY="<your key>"
 ```
 
-Keyless results may be previews. Each response says what it covers, what was withheld, and links the full view.
+Each response says what it covers, what was withheld, and links the full view.
 
 ## Citing
 
