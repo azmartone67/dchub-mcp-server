@@ -52,6 +52,7 @@ beforeAll(async () => {
     if (p === '/api/v1/dcpi/iso-comparison') {
       return json({ isos: [{ iso: 'ERCOT', market_count: 5, build_count: 3 }] });
     }
+    if (p.includes('/fiber/')) return json({ metro: 'ashburn', routes: [{ id: 'r1', carrier: 'X', miles: 10 }], total: 1 });
     return json({});
   };
   const prev = process.env.DCHUB_API_BASE;
@@ -88,29 +89,51 @@ const payload = (u) => Buffer.from(u.split('/go/c/')[1].split('.')[0], 'base64ur
 const keyedSeat = (ip, key) => ({ api_key: key, tier: 'free', platform: 'claude', client_name_raw: 'claude-ai',
   client_ip: ip, session_id: 'sess-day2-' + (++n) });
 
-describe('keyed free caller, grid calls in one UTC day', () => {
-  it('call 1 carries the digest ask; call 2 (last free) carries the pack ask instead, never both', async () => {
-    const restore = env('DCHUB_PAYWALL_CONTRACT', undefined);
-    try {
-      const ip = '203.0.115.202', key = 'dch_live_day2_fixture_key_0001';
-      const r1 = await grid(keyedSeat(ip, key)), r2 = await grid(keyedSeat(ip, key));
-      expect(r1.structuredContent.user_message).toBe(day2DigestLine({ tool: 'get_grid_intelligence', what: 'ERCOT' }).human);
-      expect(r1.structuredContent.for_your_human).toEqual({ text: r1.structuredContent.user_message });
-      expect(text(r1)).toContain('subscribe_digest');
-      expect(text(r2)).not.toContain('subscribe_digest');
-      expect(text(r2)).toContain('last included full');
-    } finally { restore(); }
+async function fiber(s, args = { metro: 'ashburn' }) {
+  const T = TOOLS.get_fiber_intel;
+  const parsed = await T.inputSchema.safeParseAsync(args);
+  return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
+}
+
+// ★ Owner 2026-11-23 (lib/paid-full-only.mjs): get_grid_intelligence is paid-full-only, so a free key's grid call is a
+// preview and never the "first full answer of the day" this ask rides on. The ask still fires on get_fiber_intel, the
+// other tool the day-2 lever covers, so the mechanics are pinned there; grid is pinned as never carrying it.
+describe('keyed free caller, grid is a preview and never carries the day-2 ask', () => {
+  it('two grid calls: both previews, neither carries the day2_grid ask nor the last-free pack ask', async () => {
+    const ip = '203.0.115.204', key = 'dch_live_day2_fixture_key_0004';
+    const r1 = await grid(keyedSeat(ip, key)), r2 = await grid(keyedSeat(ip, key));
+    for (const r of [r1, r2]) {
+      expect(r.structuredContent.preview_is_partial).toBe(true);
+      expect(r.structuredContent._metered_trial).toBeUndefined();
+      expect(text(r)).not.toContain('day2_grid');
+      expect(text(r)).not.toContain('last included full');
+      expect(r.structuredContent.user_message).not.toBe(day2DigestLine({ tool: 'get_grid_intelligence', what: 'ERCOT' }).human);
+    }
+  });
+});
+
+describe('keyed free caller, fiber calls in one UTC day', () => {
+  it('call 1 carries the digest ask; call 2 (the last included full answer) does not', async () => {
+    const ip = '203.0.115.202', key = 'dch_live_day2_fixture_key_0001';
+    const r1 = await fiber(keyedSeat(ip, key)), r2 = await fiber(keyedSeat(ip, key));
+    expect(r1.structuredContent._metered_trial.call).toBe(1);
+    expect(r1.structuredContent.user_message).toBe(day2DigestLine({ tool: 'get_fiber_intel', what: 'ashburn' }).human);
+    expect(r1.structuredContent.for_your_human).toEqual({ text: r1.structuredContent.user_message });
+    expect(text(r1)).toContain('subscribe_digest');
+    expect(text(r1)).toContain('day2_fiber');
+    expect(text(r2)).not.toContain('day2_fiber');
   });
   it('the kill switch removes it and leaves the answer untouched', async () => {
     const restore = env('DCHUB_DAY2_DIGEST_ASK', '0');
     try {
-      const r = await grid(keyedSeat('203.0.115.203', 'dch_live_day2_fixture_key_0002'));
+      const r = await fiber(keyedSeat('203.0.115.203', 'dch_live_day2_fixture_key_0002'));
+      expect(r.structuredContent._metered_trial.call).toBe(1);
       expect(text(r)).not.toContain('subscribe_digest');
       expect(r.structuredContent.user_message).toBeUndefined();
     } finally { restore(); }
   });
-  it('a keyless caller never gets it', async () => {
-    const r = await grid(seat());
-    expect(text(r)).not.toContain('subscribe_digest');
+  it('a keyless caller never gets it (grid or fiber)', async () => {
+    expect(text(await grid(seat()))).not.toContain('day2_grid');
+    expect(text(await fiber(seat()))).not.toContain('day2_fiber');
   });
 });

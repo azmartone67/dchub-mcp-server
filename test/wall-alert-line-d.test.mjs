@@ -36,6 +36,12 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const C_FIRST_LINE = (link) => new RegExp('^Get a key by email: show your human this link → '
   + esc(link) + '\\. One email unlocks the full answer to this question\\.$');   // option A: no calls-per-day figure
 const D_LINE = (market, link) => 'Your human can get the full answer and an alert when ' + market + ' moves: ' + link;
+// Owner 2026-11-23 (lib/paid-full-only.mjs): execute_plan, this file's vehicle through the handler, is paid-only, so an
+// email no longer opens it (server.mjs _emailOpensTool false) and its walls take keylessCapEmailOnlyLine's
+// emailOpens=false copy: no "full answer" promise. The lib units above still pin the emailOpens=true copy.
+const C_PLAN_LINE = (link) => new RegExp('^Get a key by email: show your human this link → '
+  + esc(link) + '\\. One email unlocks more answers\\.$');
+const D_PLAN_LINE = (market, link) => 'Your human can get an alert when ' + market + ' moves: ' + link;
 
 let H, fence, anonCount = 0, ipN = 0;
 const shortReqs = [];
@@ -152,8 +158,8 @@ describe('1. switch off: no m- field, the copy is unchanged', () => {
     } finally { delete process.env.DCHUB_WALL_FREE_NEXT; }
     for (const r of [withM, noM]) {
       expect(r.sc.unlock_kind).toBe('email_cap');
-      expect(r.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
-      expect(r.text.split('\n')[0]).toMatch(C_FIRST_LINE(SHORT));
+      expect(r.sc.user_message).toMatch(C_PLAN_LINE(SHORT));
+      expect(r.text.split('\n')[0]).toMatch(C_PLAN_LINE(SHORT));
       expect(r.relays.length).toBeGreaterThan(0);
       for (const rel of r.relays) {
         expect(rel.sigOk).toBe(true);
@@ -174,7 +180,7 @@ describe('1. switch off: no m- field, the copy is unchanged', () => {
       process.env.DCHUB_WALL_ALERT_LINE = v;
       _resetCapWallDay();
       const r = await call('execute_plan', { intent: 'x', market: 'dallas' });
-      expect(r.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
+      expect(r.sc.user_message).toMatch(C_PLAN_LINE(SHORT));
       for (const rel of r.relays) expect(mFields(rel)).toEqual([]);
     }
   });
@@ -187,9 +193,9 @@ describe('2. switch on + a market arg', () => {
     const ip = { 'x-dc-client-ip': '203.0.113.41' };
     const f = await call('execute_plan', { intent: 'compare power for a 100 MW campus', market: 'Northern Virginia' }, { extraHdr: ip });
     expect(f.sc.unlock_kind).toBe('email_cap');
-    expect(f.sc.user_message).toBe(D_LINE('Northern Virginia', SHORT));
-    expect(f.text.split('\n')[0]).toBe(D_LINE('Northern Virginia', SHORT));
-    expect(f.sc.for_your_human.text).toBe(D_LINE('Northern Virginia', SHORT));
+    expect(f.sc.user_message).toBe(D_PLAN_LINE('Northern Virginia', SHORT));
+    expect(f.text.split('\n')[0]).toBe(D_PLAN_LINE('Northern Virginia', SHORT));
+    expect(f.sc.for_your_human.text).toBe(D_PLAN_LINE('Northern Virginia', SHORT));
     expect(f.relays.length).toBeGreaterThan(0);
     for (const rel of f.relays) {
       expect(rel.sigOk).toBe(true);
@@ -211,8 +217,8 @@ describe('2. switch on + a market arg', () => {
     const r = await call('execute_plan', { intent: 'rank sites for a 200 MW campus', market: 'dallas' });
     const up = r.sc._upgrade || {};
     expect(up.unlock_kind).toBe('email_cap');
-    expect(r.sc.user_message).toBe(D_LINE('Dallas', SHORT));
-    expect(up.message.startsWith(D_LINE('Dallas', SHORT) + ' ')).toBe(true);
+    expect(r.sc.user_message).toBe(D_PLAN_LINE('Dallas', SHORT));
+    expect(up.message.startsWith(D_PLAN_LINE('Dallas', SHORT) + ' ')).toBe(true);
     expect(r.relays.length).toBeGreaterThan(0);
     for (const rel of r.relays) { expect(rel.sigOk).toBe(true); expect(rel.fields[rel.fields.length - 1]).toBe('m-dallas'); }
     expect(copyViolations({ l: r.sc.user_message })).toEqual([]);
@@ -224,7 +230,7 @@ describe('3/4. switch on, no market or a bad slug: no field, C\'s line', () => {
     process.env.DCHUB_WALL_ALERT_LINE = 'yes';
     anonCount = 999;
     const r = await call('execute_plan', { intent: 'compare power for a 100 MW campus' });
-    expect(r.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
+    expect(r.sc.user_message).toMatch(C_PLAN_LINE(SHORT));
     expect(r.relays.length).toBeGreaterThan(0);
     for (const rel of r.relays) { expect(rel.sigOk).toBe(true); expect(rel.fields.length).toBe(5); expect(mFields(rel)).toEqual([]); }
   });
@@ -234,7 +240,7 @@ describe('3/4. switch on, no market or a bad slug: no field, C\'s line', () => {
     for (const market of ['dallas|w-capacity', '-dallas', 'São Paulo', 'x'.repeat(49)]) {
       _resetCapWallDay();
       const r = await call('execute_plan', { intent: 'x', market });
-      expect(r.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
+      expect(r.sc.user_message).toMatch(C_PLAN_LINE(SHORT));
       expect(r.relays.length).toBeGreaterThan(0);
       for (const rel of r.relays) { expect(rel.fields.length).toBe(5); expect(mFields(rel)).toEqual([]); }
     }
@@ -256,10 +262,10 @@ describe('per call: the market is reset for every call sharing one request conte
       return { sc: r.structuredContent || {}, relays: shortReqs.map((x) => relayFields(x && x.relay_url)).filter(Boolean) };
     };
     const a = await run({ intent: 'x', market: 'dallas' });
-    expect(a.sc.user_message).toBe(D_LINE('Dallas', SHORT));
+    expect(a.sc.user_message).toBe(D_PLAN_LINE('Dallas', SHORT));
     _resetCapWallDay();
     const b = await run({ intent: 'x' });
-    expect(b.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
+    expect(b.sc.user_message).toMatch(C_PLAN_LINE(SHORT));
     expect(b.relays.length).toBeGreaterThan(0);
     for (const rel of b.relays) expect(mFields(rel)).toEqual([]);
   });

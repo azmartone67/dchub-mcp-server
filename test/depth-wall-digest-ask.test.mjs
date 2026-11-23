@@ -157,13 +157,16 @@ describe('digestAskLine / digestAskApplies (pure)', () => {
 });
 
 describe('depth wall tool set', () => {
+  // 2026-11-23 (owner): rank_markets and ai_capacity_index are paid-full-only (lib/paid-full-only.mjs): no free taste
+  // and no email unlock, so their walls are depth walls now. All ten paid-only tools are depth walls: an email opens none.
   it('the depth tools and Pro-only tools are in; tools where an email opens more, Land & Power and write tools are out', () => {
     for (const t of ['list_transactions', 'compare_isos', 'get_pipeline', 'hyperscaler_deals', 'get_tax_incentives', 'get_market_dcpi_rank',
-      'get_dchub_recommendation', 'export_dataset'])
-      expect(S._depthWallTool(t, {})).toBe(true);
-    for (const t of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel', 'rank_markets', 'ai_capacity_index',
+      'get_dchub_recommendation', 'export_dataset', 'rank_markets', 'ai_capacity_index',
+      'get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices', 'execute_plan'])
+      expect(S._depthWallTool(t, {}), t).toBe(true);
+    for (const t of ['get_market_intel',
       'get_fiber_intel', 'analyze_site', 'compare_sites', 'get_composite_site_score', 'generate_site_analysis', 'subscribe_digest', 'bind_email'])
-      expect(S._depthWallTool(t, {})).toBe(false);
+      expect(S._depthWallTool(t, {}), t).toBe(false);
   });
 });
 
@@ -193,9 +196,18 @@ describe('keyless list_transactions wall on /mcp, production transport', () => {
   });
 
   it('a tool where an email opens more keeps its own ask, never the digest line', async () => {
-    const r = await (await session('Claude Code', 'ai_capacity_index'))();
+    const r = await (await session('Claude Code', 'get_fiber_intel'))({ metro: 'ashburn' });
+    expect(r.sc.preview_is_partial || r.sc.trial_preview, 'get_fiber_intel did not wall').toBeTruthy();
     expect(r.text).not.toContain('`subscribe_digest`');
     expect(r.ev && r.ev.email_ask).toBe('line');
+  });
+  // ai_capacity_index used to be that tool; since 2026-11-23 an email opens nothing on it, so it reads the digest line.
+  it('ai_capacity_index (paid key only): the digest line, no email unlock ask', async () => {
+    const r = await (await session('Claude Code', 'ai_capacity_index'))();
+    expect(r.sc.preview_is_partial || r.sc.trial_preview).toBe(true);
+    expect(count(r.text, '`subscribe_digest`')).toBe(1);
+    expect(r.text.replace(new RegExp(KEY_LINE_RE.source, 'g'), '')).not.toContain('bind_email');
+    expect(r.ev && r.ev.email_ask).toBe('key_line');
   });
 });
 
@@ -247,8 +259,8 @@ describe('_depthDigestAskStep guards, one context at a time', () => {
   // Measured live 11-08 after mcp#1316: keyless get_grid_data carried the line under a human line
   // that names "a free DC Hub key" as the plan that returns the fields. A free-key or capacity wall
   // is not a depth wall; an email does open (or raise) it.
-  it('a free-key wall (keyless get_grid_data, an email-cap unlock): nothing', () => {
-    const grid = S._runInCtxForTest({ tier: 'anonymous' }, () => S._depthDigestAskStep(wall(), 'get_grid_data'));
+  it('a free-key wall (keyless get_water_risk, an email-cap unlock): nothing', () => {
+    const grid = S._runInCtxForTest({ tier: 'anonymous' }, () => S._depthDigestAskStep(wall(), 'get_water_risk'));
     expect(JSON.stringify(grid)).not.toContain('subscribe_digest');
     const cap = S._runInCtxForTest({ tier: 'free' }, () => S._depthDigestAskStep(
       { ...wall(), structuredContent: { preview_is_partial: true, unlock_kind: 'email_cap' } }, 'list_transactions'));

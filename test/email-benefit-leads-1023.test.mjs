@@ -17,7 +17,9 @@ describe('the email benefit sentence', () => {
   // KEEPS (lib/continuity-ask.mjs emailKeepsText), with no call count, per-day allowance or "no card".
   it('states what an email keeps, the fuller decision answers and recovery', () => {
     expect(t).toMatch(/^WHAT AN EMAIL KEEPS: the key, with its saved shortlists, alerts and tracked changes \(get_changes\), for the next chat/);
-    expect(t).toMatch(/fuller grid, queue and market answers/);
+    // 2026-11-23 (owner): grid and queue are paid-full-only (lib/paid-full-only.mjs): an email opens only fuller market answers.
+    expect(t).toMatch(/fuller market answers/);
+    expect(t).not.toMatch(/grid|queue/i);
     expect(t).toMatch(/recover_my_key/);
     expect(t).not.toMatch(/calls\/day|per day|a day\b|no card|\bfree\b/i);
   });

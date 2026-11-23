@@ -16,17 +16,22 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { unsealPayload } from '../lib/token-seal.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 import * as W from '../lib/wall-to-key.mjs';
 import { LIGHT_TOOLS_LIST_MAX_BYTES } from '../lib/light-profile.mjs';
 
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SHORT = 'https://dchub.cloud/u/abcdef';
 let H, O, SB, fence, why = '';
+// Owner 2026-11-23 (lib/paid-full-only.mjs): below Developer get_grid_intelligence answers its preview and no longer says
+// a bound email deepens it. Until origin/main carries that rule its answer is not the baseline; MAIN_HAS_GATE says which.
+let MAIN_HAS_GATE = false;
 const RESTORE_KEY = 'dch_live_w2kRestoredKey0123456789';
 const RESTORE = { on: false };
 const HARNESS_PLANTED_KEY = 'dch_live_PLANTEDlivekey0123456789';
@@ -68,6 +73,7 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'wall-to-key-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -152,7 +158,10 @@ describe('wall to key: flags OFF and the master flag alone are byte-identical to
         const ip = ipIn(W.ARM_TREATMENT);
         const a = await call(H, name, args, { ip });
         W._resetForTests();
-        const b = await call(O, name, args, { ip });
+        // a paid-only tool before origin/main has the rule: this server with every wall-to-key flag off, a fresh caller
+        const pre = !MAIN_HAS_GATE && isPaidFullOnly(name);
+        if (pre) { setEnv(PROD); expect(JSON.stringify(a.result), name).not.toMatch(/bound email gets full answers/); }
+        const b = pre ? await call(H, name, args, { ip: ipIn(W.ARM_TREATMENT) }) : await call(O, name, args, { ip });
         const x = norm(a.result), y = norm(b.result);
         expect(x === y, firstDiff(x, y)).toBe(true);
         expect(a.rows.some((r) => Object.prototype.hasOwnProperty.call(r, W.EVENT_FIELD))).toBe(false);
@@ -188,7 +197,8 @@ describe('wall to key: treatment arm', () => {
       setEnv({ ...PROD, DCHUB_WALL_TO_KEY_V1: '1', [W.SUB_FLAGS.SIGNIN_URL]: '1' });
       const a = await call(H, name, args, { ip });
       setEnv(PROD);
-      const b = await call(O, name, args, { ip });
+      // the baseline's links: origin/main's, or (paid-only, origin/main without the 2026-11-23 rule) this server, flags off
+      const b = !MAIN_HAS_GATE && isPaidFullOnly(name) ? await call(H, name, args, { ip: ipIn(W.ARM_TREATMENT) }) : await call(O, name, args, { ip });
       const sc = a.result.structuredContent || {};
       const link = W.humanLinkOf(a.result);
       if (!link) continue;   // an answer with no human link gets no sign_in_url

@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
@@ -27,6 +28,7 @@ import { wallIdentityV2On, SIGNIN_LINE, emailAskLine, emailAskCall, wallMarketFr
   signInEligible, EMAIL_ASK_LEAD } from '../lib/wall-identity-v2.mjs';
 import { BANNED_WORDING } from '../lib/keyless-plan-wording.mjs';
 import { offersShown } from '../lib/offers-shown.mjs';
+import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
 
 const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const TRIAL = 'dch_trial_V2testKEY0123456789abcdef';
@@ -35,11 +37,15 @@ const ROWS = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: 'Row ' + i
 const NO_PRICE = /\$|\bper month\b|\/mo\b|\b(?:pro|developer|starter|enterprise|credit pack)\b|\b\d[\d,]*\s+(?:MCP\s+)?(?:calls?|full answers?|answers?|credits?)\b|\bfree\b/i;
 
 let H, O, SB, S, fence, why = '', anonCount = 999;
+// Owner 2026-11-23 (lib/paid-full-only.mjs): below Developer the paid-only tools answer a preview. Until origin/main
+// carries that rule its answers on them differ from this branch by design; MAIN_HAS_GATE says which baseline holds.
+let MAIN_HAS_GATE = false;
 const events = [];
 const routes = () => (p, _req, body) => {
   if (p === '/api/v1/mcp/funnel-event') { if (body && body.event === 'quota_wall_hit') events.push(body); return { ok: true }; }
   if (p === '/api/v1/mcp/anon-usage') return { count: anonCount };
   if (p === '/api/v1/keys/validate' && body && typeof body.api_key === 'string' && body.api_key.startsWith('dch_trial_V2')) return { valid: true, tier: 'trial', email: null, tier_detail: { users_plan: null } };
+  if (p === '/api/v1/keys/validate' && body && typeof body.api_key === 'string' && body.api_key.startsWith('dch_live_V2dev')) return { valid: true, tier: 'developer', email: 'dev-v2@example.com', tier_detail: { users_plan: 'developer' } };
   if (p === '/api/v1/relay/short') return { ok: true, url: 'https://dchub.cloud/u/abcdef' };
   if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
   return { success: true, count: 12, total_count: 12, data: ROWS, results: ROWS, items: ROWS, markets: ROWS, rows: ROWS };
@@ -63,6 +69,7 @@ beforeAll(async () => {
   SB = createGitRefSandbox(REPO, 'origin/main', 'wallid-v2-origin-main');
   if (!SB) why = 'origin/main is not available in this clone';
   else {
+    MAIN_HAS_GATE = fs.existsSync(path.join(SB.root, 'lib', 'paid-full-only.mjs'));
     O = await startHarness({ env, extraRoutes: routes(), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
     SERVER_PORTS.add(O.PORT);
   }
@@ -132,6 +139,13 @@ const TOOLS = [
 ];
 // keyless at the anonymous hard wall (count 999), keyless at the trial / preview walls (count 0), and a trial key.
 const CALLERS = [['keyless hard wall', { trial: false, cnt: 999 }], ['keyless preview wall', { trial: false, cnt: 0 }], ['trial key', { trial: true, cnt: 0 }]];
+// Owner 2026-11-23: every TOOLS entry is a paid-only tool and every caller here is below Developer, so until origin/main
+// carries the rule the flag-OFF cases on them pin "no full row" instead of origin/main's bytes, and the /mcp/chatgpt
+// flag-ON cases compare with this same server, flag off. get_iso_context (not paid-only) keeps the origin/main check.
+const changedSince1123 = (name) => !MAIN_HAS_GATE && isPaidFullOnly(name);
+const CMP_TOOLS = [['get_iso_context', { iso: 'PJM' }, ''], ...TOOLS];
+// A full row of the stub (capacity_mw 100.., score 50..), raw or inside a JSON text block. A preview nulls or drops them.
+const FULL_ROW = /\\*"capacity_mw\\*":1\d\d\b|\\*"score\\*":5\d\b/;
 
 describe('lib/wall-identity-v2.mjs', () => {
   it('the flag is on only for 1 / true / yes / on', () => {
@@ -190,7 +204,9 @@ describe('lib/wall-identity-v2.mjs', () => {
 
 describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it', () => {
   for (const [label, who] of CALLERS) {
-    const tools = TOOLS.filter(([n]) => !(label === 'keyless preview wall' && n === 'get_grid_intelligence'));   // answers in full there: no wall
+    // get_grid_intelligence below the hard wall takes its taste path (keyless preview wall; and since 2026-11-23 the
+    // trial key too): with this stub's grid telemetry that is an error answer, not a wall. Pinned below.
+    const tools = TOOLS.filter(([n]) => !(label !== 'keyless hard wall' && n === 'get_grid_intelligence'));
     it.each(tools)(`${label}: %s`, async (name, args, market) => {
       process.env.DCHUB_WALL_IDENTITY_V2 = '1';
       anonCount = who.cnt;
@@ -208,10 +224,20 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
       }
       // where the wall asks for an email, the ask is the V2 copy with this call's market, and the structured call names it
       const t = texts(result).join('\n');
-      if (t.includes(EMAIL_ASK_LEAD)) {
+      const prose = texts(result).filter((x) => !/^\s*[{[]/.test(x)).join('\n');
+      if (prose.includes(EMAIL_ASK_LEAD) || (t.includes(EMAIL_ASK_LEAD) && result.structuredContent.email_ask)) {
         expect(t).toContain(emailAskLine(market));
         expect(result.structuredContent.email_ask).toMatchObject({ tool: 'get_api_key' });
         expect(result.structuredContent.email_ask.arguments.market).toBe(market || undefined);
+      } else if (t.includes(EMAIL_ASK_LEAD)) {
+        // 2026-11-23 (owner, lib/paid-full-only.mjs): an execute_plan whose walled steps are all paid-only asks for no
+        // email unlock, so the wall adds no email_ask; the V2 copy is the plan's own key entry (next_tools), which is
+        // the structured get_api_key call with this call's market.
+        const keyEntry = (result.structuredContent.next_tools || []).find((e) => e && e.tool === 'get_api_key');
+        expect(keyEntry, 'the V2 copy rides a structured get_api_key entry').toBeTruthy();
+        expect(keyEntry.say).toBe(emailAskLine(market));
+        expect((keyEntry.args || {}).market).toBe(market || undefined);
+        for (const e of rows) expect(e.offers_shown || [], `${e.tool}`).not.toContain('email_unlock');
       }
     }, 120_000);
   }
@@ -241,6 +267,26 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
     expect(nt.say).toBe(emailAskLine('dallas'));
   }, 120_000);
 
+  it('owner 2026-11-23: a trial key on get_grid_intelligence gets no full row (the taste path, like the keyless preview)', async () => {
+    process.env.DCHUB_WALL_IDENTITY_V2 = '1';
+    anonCount = 0;
+    for (const trial of [true, false]) {
+      const { result } = await call(H, '/mcp', 'get_grid_intelligence', { iso: 'ERCOT', market: 'dallas' }, { trial });
+      expect(result, 'an answer came back').toBeTruthy();
+      expect(JSON.stringify(result)).not.toMatch(FULL_ROW);
+    }
+  }, 120_000);
+
+  it('CONTROL: the no-full-row check bites (a Developer key gets the full rows of get_interconnection_queue)', async () => {
+    process.env.DCHUB_WALL_IDENTITY_V2 = '1';
+    anonCount = 0;
+    const { result } = await call(H, '/mcp', 'get_interconnection_queue', { iso: 'PJM' }, { trial: true, key: 'dch_live_V2dev' + 'a'.repeat(20) });
+    expect(JSON.stringify(result)).toMatch(FULL_ROW);
+    const kl = await call(H, '/mcp', 'get_interconnection_queue', { iso: 'PJM' });
+    expect(JSON.stringify(kl.result)).not.toMatch(FULL_ROW);
+    expect(JSON.stringify(kl.result), 'the keyless answer is a preview with rows').toContain('Row 0');
+  }, 120_000);
+
   it('/mcp still answers a keyless initialize with 200, never 401', async () => {
     process.env.DCHUB_WALL_IDENTITY_V2 = '1';
     const r = await rpc(H, '/mcp', { jsonrpc: '2.0', id: rid++, method: 'initialize',
@@ -252,7 +298,7 @@ describe('flag ON: /mcp walls carry the sign-in line and offers_shown counts it'
 
 describe('flag OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main with the flag ON', () => {
   const CASES = [];
-  for (const [label, who] of CALLERS) for (const t of TOOLS) CASES.push(['/mcp', label, who, ...t]);
+  for (const [label, who] of CALLERS) for (const t of CMP_TOOLS) CASES.push(['/mcp', label, who, ...t]);
   for (const flag of [undefined, '0']) {
     it.each(CASES)(`flag ${flag === undefined ? 'unset' : flag}: %s %s %s`, async (p, _label, who, name, args) => {
       if (!O) { console.warn(`[wall-identity-v2] origin/main comparison not run: ${why}`); return; }
@@ -261,13 +307,16 @@ describe('flag OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main wi
       const ip = `198.51.122.${ipN++ % 250}`;
       const key = 'dch_trial_V2cmp' + String(ipN).padStart(6, '0') + 'abcdefghijklmn';   // a key neither server has seen
       const here = await call(H, p, name, args, { trial: who.trial, ip, key });
-      const main = await call(O, p, name, args, { trial: who.trial, ip, key });
-      const a = norm(here.result), b = norm(main.result);
-      expect(a === b, firstDiff(a, b)).toBe(true);
+      if (changedSince1123(name)) expect(JSON.stringify(here.result), 'below Developer, no full row').not.toMatch(FULL_ROW);
+      else {
+        const main = await call(O, p, name, args, { trial: who.trial, ip, key });
+        const a = norm(here.result), b = norm(main.result);
+        expect(a === b, firstDiff(a, b)).toBe(true);
+      }
       expect(JSON.stringify(here.result)).not.toContain(SIGNIN_LINE);
     }, 120_000);
   }
-  it.each(TOOLS)('/mcp/chatgpt flag ON: %s is origin/main byte for byte, keyless and trial-key', async (name, args) => {
+  it.each(CMP_TOOLS)('/mcp/chatgpt flag ON: %s is origin/main byte for byte (paid-only tools before the rule is on main: this server, flag off), keyless and trial-key', async (name, args) => {
     if (!O) { console.warn(`[wall-identity-v2] origin/main comparison not run: ${why}`); return; }
     process.env.DCHUB_WALL_IDENTITY_V2 = '1';
     for (const [, who] of CALLERS) {
@@ -275,7 +324,12 @@ describe('flag OFF is origin/main, byte for byte; /mcp/chatgpt is origin/main wi
       const ip = `198.51.123.${ipN++ % 250}`;
       const key = 'dch_trial_V2gpt' + String(ipN).padStart(6, '0') + 'abcdefghijklmn';
       const here = await call(H, '/mcp/chatgpt', name, args, { trial: who.trial, ip, key });
-      const main = await call(O, '/mcp/chatgpt', name, args, { trial: who.trial, ip, key });
+      let main;
+      if (changedSince1123(name)) {   // a fresh caller on this server with the flag off
+        delete process.env.DCHUB_WALL_IDENTITY_V2;
+        main = await call(H, '/mcp/chatgpt', name, args, { trial: who.trial, ip: `198.51.124.${ipN++ % 250}`, key: 'dch_trial_V2gpb' + String(ipN).padStart(6, '0') + 'abcdefghijklmn' });
+        process.env.DCHUB_WALL_IDENTITY_V2 = '1';
+      } else main = await call(O, '/mcp/chatgpt', name, args, { trial: who.trial, ip, key });
       const a = norm(here.result), b = norm(main.result);
       expect(a === b, firstDiff(a, b)).toBe(true);
       expect(JSON.stringify(here.result)).not.toContain('mcp/oauth');

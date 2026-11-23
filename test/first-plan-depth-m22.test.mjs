@@ -4,6 +4,9 @@
 //   * the arm: off by default, off without a salt (fail closed), 50±2% over 10k synthetic IPs, stable per IP;
 //   * the step token carries the arm once, and a reused token carries nothing;
 //   * kff_arm rides first in the LOGGED params, never in the handler's args.
+//   * 2026-11-23 (owner): execute_plan left the keyless first-full lane, so no keyless plan is a first full answer
+//     and the arm is never assigned through the real handler. The lib is kept (inert); the end-to-end section below
+//     pins that a keyless plan carries no arm and no full depth with the switch on, salted or not.
 import { describe, it, expect } from 'vitest';
 import { firstPlanArm, firstPlanDepthTestOn, withKffArm, KFF_ARM_EMAIL, KFF_ARM_PRO } from '../lib/first-plan-depth-test.mjs';
 import { mintPlanFirstFullToken, planFirstFullTokenArm, consumePlanFirstFullToken } from '../lib/keyless-first-full.mjs';
@@ -61,12 +64,8 @@ describe('the step token and the logged params', () => {
 // ── end to end: the real server, a stub backend that answers by the forwarded caller tier (as routes/dcpi.py does),
 // each step a real loopback request. ──────────────────────────────────────────────────────────────────────────────
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
-import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
 import { beforeAll, afterAll } from 'vitest';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const REPO = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SALT = 'e2e-salt-m22';
 const EMAIL_KEY = 'dch_live_EMAILm22key0123456789abcdef00';
 const ROW = { iso: 'ERCOT', market_count: 12, avg_constraint: 41.2, avg_excess: 63.5, avg_time_to_power_months: 30,
@@ -91,23 +90,18 @@ const validate = (inner) => (p, req, body) => {
   }
   return inner(p, req, body);
 };
-const heardH = [], heardO = [];
-let H, O, SB, fence, why = '';
+const heardH = [];
+let H, fence;
 const _compact = process.env.DCHUB_PLAN_COMPACT;
 beforeAll(async () => {
   process.env.DCHUB_PLAN_COMPACT = '0';   // this file reads executed[] step bodies
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: validate(routes(heardH)) });
-  SB = createGitRefSandbox(REPO, 'origin/main', 'm22-origin-main');
-  if (!SB) why = 'origin/main is not available in this clone';
-  else O = await startHarness({ extraRoutes: validate(routes(heardO)), serverUrl: pathToFileURL(path.join(SB.root, 'server.mjs')).href });
 }, 180_000);
 afterAll(async () => {
   for (const k of ['DCHUB_FIRST_PLAN_DEPTH_TEST', 'DCHUB_FIRST_PLAN_TEST_SALT']) delete process.env[k];
   if (_compact === undefined) delete process.env.DCHUB_PLAN_COMPACT; else process.env.DCHUB_PLAN_COMPACT = _compact;
-  if (O) await O.stop();
   if (H) await H.stop();
-  if (SB) SB.cleanup();
   if (fence) fence.restore();
 });
 const on = () => { process.env.DCHUB_FIRST_PLAN_DEPTH_TEST = '1'; process.env.DCHUB_FIRST_PLAN_TEST_SALT = SALT; };
@@ -149,81 +143,20 @@ async function armedPlan(arm, extra = {}) {
   } finally { off(); }
 }
 
-// What differs between two runs of the same call by design: relay tokens, timestamps, ids, timings, and the planner
-// version (a planner bump is not a depth change; 5.46 broke "byte for byte origin/main" on it alone, as 5.44 did m12's).
-const norm = (r) => JSON.stringify(r)
-  .replace(/(\\*"planner_version\\*":\\*")\d+\.\d+/g, '$1V')
-  .replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^"\s\\]*)?/g, 'RELAY')
-  .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
-  .replace(/pr1\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/g, 'RERUN')   // the rerun token carries its mint second
-  .replace(/(\\?")(ms|elapsed_ms|duration_ms|took_ms|latency_ms|wall_ms)(\\?"):\d+/g, '$1$2$3:0')
-  .replace(/(plan|req|sess|run|rp)[-_][A-Za-z0-9]{6,}/g, '$1-ID')
-  .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID');
-// The steps run in parallel, so their rows arrive in either order: compared as a sorted set.
-// Brain 2026-11-23 item 6: params._aq (the answer-quality marks, lib/answer-quality.mjs) is new beside origin/main by
-// design, so it is set aside here; every other field still has to match byte for byte.
-const _noAq = (p) => { if (!p || typeof p !== 'object' || Array.isArray(p)) return p; const { _aq, ...rest } = p; return rest; };
-const rowsNorm = (rows) => rows.map((r) => norm({ tool: r.tool, status: r.status, tier: r.tier, params: _noAq(r.params) })).sort().join('\n');
-
-// First, while both servers are fresh (a session's first call carries a one-time starter_pack on each).
-describe('off is origin/main, byte for byte (git-ref sandbox)', () => {
-  for (const [label, set] of [['switch off', off], ['switch on, no salt', () => { process.env.DCHUB_FIRST_PLAN_DEPTH_TEST = '1'; }]]) {
-    it(`${label}: the first plan, its tracked rows and the backend's caller tier`, async () => {
-      if (!O) { console.warn(`[first-plan-depth-m22] origin/main comparison not run: ${why}`); return; }
-      set();
-      // The keyless key-path entry (lib/key-path-next.mjs, 2026-11-20) is not this switch's; held off on both sides.
-      process.env.DCHUB_KEY_PATH_NEXT = '0';
-      try {
-        const ip = ipIn(KFF_ARM_EMAIL);
-        const fh = H.hits.length, fo = O.hits.length;
-        heardH.length = 0; heardO.length = 0;
-        const here = await plan(H, ip);
-        const main = await plan(O, ip);
-        expect(norm(here)).toBe(norm(main));
-        expect(heardH).toEqual(heardO);
-        expect(rowsNorm(await trackRows(H, fh))).toBe(rowsNorm(await trackRows(O, fo)));
-      } finally { off(); delete process.env.DCHUB_KEY_PATH_NEXT; }
+describe('through the real handler, each step a real loopback request (owner 2026-11-23: no keyless plan is full)', () => {
+  for (const arm of [KFF_ARM_PRO, KFF_ARM_EMAIL]) {
+    it(`switch on, salted, an IP in the ${arm} arm: no first full answer, no arm on any row, no full-depth step`, async () => {
+      const { res, rows, heard } = await armedPlan(arm);
+      expect(res.structuredContent.first_full_answer).toBeUndefined();
+      expect(rows.length).toBeGreaterThan(0);
+      for (const r of rows) expect(r.params && r.params.kff_arm, r.tool).toBeUndefined();
+      expect(rows.find((r) => r.tool === 'execute_plan').status).not.toBe('keyless_first_full_answer');
+      expect(heard).not.toContain('pro');
+      for (const k of DECISION) expect(gridStep(res).figures ? gridStep(res).figures[k] ?? null : null, k).toBeNull();
     }, 120_000);
   }
-});
 
-describe('through the real handler, each step a real loopback request', () => {
-  it('pro_depth: the steps read at full depth, as today; kff_arm leads the plan row and every step row', async () => {
-    const { res, rows, heard } = await armedPlan(KFF_ARM_PRO);
-    expect(res.structuredContent.first_full_answer).toMatchObject({ used: 1 });
-    expect(heard).toEqual(['pro']);
-    for (const k of DECISION) expect(typeof gridStep(res).figures[k], k).toBe('number');
-    const planRow = rows.find((r) => r.tool === 'execute_plan');
-    expect(planRow.status).toBe('keyless_first_full_answer');
-    expect(Object.keys(planRow.params)[0]).toBe('kff_arm');
-    expect(planRow.params.kff_arm).toBe(KFF_ARM_PRO);
-    for (const t of STEP_TOOLS) expect(rows.find((r) => r.tool === t).params.kff_arm, t).toBe(KFF_ARM_PRO);
-  }, 120_000);
-
-  it('email_depth: the steps take the email key\'s depth; the grid step equals a direct email-bound key call', async () => {
-    const { res, rows, heard } = await armedPlan(KFF_ARM_EMAIL);
-    expect(res.structuredContent.first_full_answer).toMatchObject({ used: 1 });
-    expect(rows.find((r) => r.tool === 'execute_plan').status).toBe('keyless_first_full_answer');
-    for (const r of rows.filter((x) => x.tool === 'execute_plan' || STEP_TOOLS.includes(x.tool))) {
-      expect(Object.keys(r.params)[0], r.tool).toBe('kff_arm');
-      expect(r.params.kff_arm, r.tool).toBe(KFF_ARM_EMAIL);
-      expect(r.tier, r.tool).toBe('free');   // the caller's own tier is logged, never a promoted one
-    }
-    heardH.length = 0;
-    const d = await H.call('/mcp', 'get_grid_intelligence', { iso: 'ERCOT' }, { ...UA, 'x-forwarded-for': '198.18.99.1', 'x-api-key': EMAIL_KEY });
-    expect(heard).toEqual(heardH);   // the backend saw the same caller tier: 'free'
-    expect(heard).toEqual(['free']);
-    const figures = gridStep(res).figures;
-    const direct = d.msg.result.structuredContent;
-    // Every data field the step shows; next_session and starter_pack are the caller's session envelope (a keyed vs a
-    // keyless caller, a session's first call), not data.
-    const shared = Object.keys(figures).filter((k) => k in direct && k !== 'next_session' && k !== 'starter_pack');
-    expect(shared.length).toBeGreaterThan(15);
-    for (const k of shared) expect(norm(figures[k]), k).toBe(norm(direct[k]));   // served_at is per call
-    for (const k of DECISION) expect(figures[k], k).toBeNull();
-  }, 120_000);
-
-  it('QA and bot callers are not assigned: no arm on any row, the steps keep today\'s depth', async () => {
+  it('QA and bot callers are not assigned: no arm on any row', async () => {
     for (const extra of [{ 'x-dchub-qa': '1' }, { 'user-agent': 'dchub-internal/1.0' }]) {
       const { rows } = await armedPlan(KFF_ARM_EMAIL, extra);
       expect(rows.length).toBeGreaterThan(0);
@@ -231,14 +164,14 @@ describe('through the real handler, each step a real loopback request', () => {
     }
   }, 120_000);
 
-  it('the switch on without a salt: no arm, today\'s full depth', async () => {
+  it('the switch on without a salt: no arm, no first full answer', async () => {
     process.env.DCHUB_FIRST_PLAN_DEPTH_TEST = '1';
     try {
       const from = H.hits.length; heardH.length = 0;
       const res = await plan(H, ipIn(KFF_ARM_EMAIL));
       const rows = await trackRows(H, from);
-      expect(res.structuredContent.first_full_answer).toMatchObject({ used: 1 });
-      expect(heardH).toEqual(['pro']);
+      expect(res.structuredContent.first_full_answer).toBeUndefined();
+      expect(heardH).not.toContain('pro');
       for (const r of rows) expect(r.params && r.params.kff_arm, r.tool).toBeUndefined();
     } finally { off(); }
   }, 120_000);

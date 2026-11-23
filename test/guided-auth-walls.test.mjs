@@ -122,9 +122,18 @@ describe('_authWallGuidance / _guideAuthWall (unit)', () => {
   it('a keyed 401 on an email-class tool points at bind_email', () => {
     // get_grid_data: get_facility left the email class 2026-11-10 (an email-bound key gets the same facility
     // field mask as a keyless call; test/wall-ask-guard measures it).
-    const g = S._authWallGuidance('get_grid_data', 401, 'identity_required', true);
+    // get_grid_data left the email class 2026-11-23 (owner: its full answer needs a paid key, lib/paid-full-only.mjs);
+    // get_fiber_intel is still one.
+    const g = S._authWallGuidance('get_fiber_intel', 401, 'identity_required', true);
+    expect(g.tier_required).toBe('email');
     expect(g.next_tool).toBe('bind_email');
     expect(g.required_plan).toBe('identified');   // builder still feeds _isRelayWall; stripped last
+  });
+  it('a paid-full-only tool is not email-class: its plan is Developer, not identified', () => {
+    const g = S._authWallGuidance('get_grid_data', 402, 'upgrade_required', true);
+    expect(g.tier_required).toBe('developer_for_full');
+    expect(g.next_tool).toBe('unlock_more_data');
+    expect(g.required_plan).toBe('developer');
   });
   it('_wallNoPlanFieldStep strips required_plan from auth guidance on any tool, keeps the rest', () => {
     const g = S._authWallGuidance('export_dataset', 402, 'upgrade_required', false);

@@ -90,9 +90,14 @@ describe('cite_as', () => {
     expect(citeAsFor(sc)).toBe('DC Hub (dchub.cloud) — PARTIAL preview, 3 of 10 shown, as of 2026-09-26');
   });
   it('falls back to provenance.as_of, then the clock', () => {
+    // A timestamp is said as its America/Phoenix day (Grok 2026-11-23 item 1): 00:00Z is the previous evening there.
     expect(citeAsFor({ citation: { cite_as: 'DC Hub, dchub.cloud' }, provenance: { as_of: '2026-10-03T00:00:00Z' } }))
+      .toBe('DC Hub (dchub.cloud), as of 2026-10-02');
+    expect(citeAsFor({ citation: { cite_as: 'DC Hub, dchub.cloud' }, provenance: { as_of: '2026-10-03' } }))
       .toBe('DC Hub (dchub.cloud), as of 2026-10-03');
     expect(citeAsFor({}, Date.parse('2026-10-04T12:00:00Z'))).toBe('DC Hub (dchub.cloud), as of 2026-10-04');
+    // the serve-clock fallback is the Phoenix date too: 03:00Z on the 5th is still the 4th there
+    expect(citeAsFor({}, Date.parse('2026-10-05T03:00:00Z'))).toBe('DC Hub (dchub.cloud), as of 2026-10-04');
   });
 });
 

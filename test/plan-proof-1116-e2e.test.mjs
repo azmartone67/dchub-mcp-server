@@ -8,6 +8,8 @@
 //      (/api/v1/dcpi/scores/<slug>) returned no narrative for any tier on 2026-11-16.
 //   8. the keyless first full answer dropped `replay` (the description promises it on the envelope) and
 //      no envelope carried a plan id.
+// 2026-11-23 (owner): a keyless execute_plan is a preview, never a full answer, so the full-answer checks below run
+// under a Pro key (the stub validates PRO_KEY); the preview run stays keyless.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -33,6 +35,7 @@ const REFINED = {
     estimated_ttp_months: 50.5, fuel_type: 'GAS', queue_status: 'active' })),
 };
 const PLAN = { intent: 'how soon can a 100 MW load get power in ERCOT', capacity_mw: 100 };
+const PRO_KEY = 'dch_live_PROOF1116pro0123456789abcdef00';
 
 let S, stub, httpServer, PORT, TOOLS;
 const freePort = () => new Promise((resolve) => {
@@ -45,6 +48,13 @@ beforeAll(async () => {
       const p = new URL(req.url, 'http://stub').pathname;
       const tier = String(req.headers['x-dchub-caller-tier'] || '');
       const send = (o) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+      if (p === '/api/v1/keys/validate') {
+        let b = ''; req.on('data', (c) => { b += c; });
+        return req.on('end', () => {
+          let k = ''; try { k = JSON.parse(b || '{}').api_key || ''; } catch { k = ''; }
+          send(k === PRO_KEY ? { valid: true, tier: 'pro', developer_id: 'dev_proof_pro', email: 'pro@example.com', tier_detail: { users_plan: 'pro' } } : { valid: false });
+        });
+      }
       if (p === '/api/v1/dcpi/iso-comparison') return send({ isos: [['pro', 'enterprise', 'admin'].includes(tier) ? ROW : LOCKED] });
       if (p.startsWith('/api/v1/grid/intelligence/')) {
         return send({ iso: 'ERCOT', demand_mw: 52000, as_of: '2026-11-16T00:00:00Z', generation_mix: { NG: { mw: 27000 } } });
@@ -82,8 +92,8 @@ async function post(headers, body) {
   return { headers: res.headers, body: b };
 }
 let rpc = 10;
-async function session(ip) {
-  const h0 = { 'x-forwarded-for': ip };
+async function session(ip, extra = {}) {
+  const h0 = { 'x-forwarded-for': ip, ...extra };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'cursor', version: '1.0' } } });
   const sid = init.headers.get('mcp-session-id');
@@ -100,15 +110,13 @@ async function session(ip) {
 describe('item 8: replay and a stable plan id on every execute_plan envelope', () => {
   let first, second;
   beforeAll(async () => {
-    const run = await session('198.18.91.10');
-    first = await run();
-    second = await run();
+    first = await (await session('198.18.91.10', { 'x-api-key': PRO_KEY }))();
+    second = await (await session('198.18.91.13'))();
   }, 180_000);
 
-  it('the keyless first full answer carries replay with each decision\'s executed/failed status', () => {
-    expect(first.sc.first_full_answer, 'this is the compact first full answer').toMatchObject({ used: 1, limit: 1 });
+  it('the full answer (Pro key) carries replay with each decision\'s executed/failed status', () => {
     const rp = first.sc.replay;
-    expect(rp, 'replay was dropped from the first full answer').toBeTruthy();
+    expect(rp, 'replay was dropped from the full answer').toBeTruthy();
     const steps = rp.decisions.filter((d) => d.kind === 'step');
     expect(steps.length).toBeGreaterThan(0);
     for (const d of steps) expect(['executed', 'failed', 'timed_out', 'skipped_unresolved', 'not_run', 'gated_preview']).toContain(d.status);
@@ -119,7 +127,7 @@ describe('item 8: replay and a stable plan id on every execute_plan envelope', (
   it('plan_id is on the envelope and inside replay, and the same question gets the same id on the preview run', () => {
     expect(first.sc.plan_id).toMatch(/^plan_[0-9a-f]{16}$/);
     expect(first.sc.replay.plan_id).toBe(first.sc.plan_id);
-    expect(second.sc.first_full_answer, 'the second run is the preview').toBeUndefined();
+    expect(second.sc.first_full_answer, 'the keyless run is the preview').toBeUndefined();
     expect(second.sc.replay && second.sc.replay.decisions.length).toBeGreaterThan(0);
     expect(second.sc.plan_id).toBe(first.sc.plan_id);
   });
@@ -133,13 +141,14 @@ describe('item 8: replay and a stable plan id on every execute_plan envelope', (
 });
 
 describe('item 1: one time-to-power figure, named by its field, and no "not part of this answer"', () => {
-  it('the first full answer leads with the grid DCPI average and says which field it is', async () => {
-    const run = await session('198.18.91.12');
+  it('the full answer (Pro key) leads with the grid DCPI average and says which field it is', async () => {
+    const run = await session('198.18.91.12', { 'x-api-key': PRO_KEY });
     const { sc, block0 } = await run();
-    expect(sc.first_full_answer).toMatchObject({ used: 1 });
-    expect(sc.answer).toMatch(/average time-to-power 44\.9 months \(get_grid_intelligence\.avg_time_to_power_months\)/);
-    expect(sc.answer).not.toMatch(/50\.5/);
-    expect(sc.intent_answer.headline).toBe(sc.answer);
+    // A keyed plan carries no top-level `answer` (that is the keyless compact lead); its headline is the same sentence.
+    const lead = sc.answer || sc.intent_answer.headline;
+    expect(lead).toMatch(/average time-to-power 44\.9 months \(get_grid_intelligence\.avg_time_to_power_months\)/);
+    expect(lead).not.toMatch(/50\.5/);
+    expect(sc.intent_answer.headline).toBe(lead);
     expect(sc.intent_answer.time_to_power_basis).toMatchObject({ field: 'get_grid_intelligence.avg_time_to_power_months' });
     expect(block0).not.toMatch(/not part of this answer/);
   }, 120_000);
