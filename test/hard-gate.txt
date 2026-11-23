@@ -605,6 +605,7 @@ test/platform-desc-sync.test.mjs
 test/platform-header.test.mjs
 test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
+test/potential-powered-land.test.mjs
 test/power-grid-listing.test.mjs
 test/power-place-slots-1119.test.mjs
 test/power-step-evidence.test.mjs
