@@ -275,8 +275,10 @@ describe('smithery.yaml canonical-quantity guard', () => {
 
   it("never flags GEM's own dataset coverage as a stale country count", () => {
     withServerMutation(
-      (orig) => orig.replace('geolocated units across 170+ countries',
-        'geolocated units across 190+ countries'),
+      // 2026-11-23 (QA v2.12.63): the live description no longer states a country count (no in-repo source
+      // for "170+ countries"), so the control puts a GEM-shaped coverage claim back to test the rule.
+      (orig) => orig.replace('geolocated units worldwide, each with',
+        'geolocated units across 190+ countries, each with'),
       () => {
         // NB: the overall check MAY fail here — mutating a live description
         // legitimately trips the mcp-server.json description-drift guard

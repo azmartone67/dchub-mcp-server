@@ -136,7 +136,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages,
-         isGated as _directoryIsGated, PARTIAL_LINK_META_KEY as _PARTIAL_LINK_META_KEY } from './lib/chatgpt-directory.mjs';
+         isGated as _directoryIsGated, PARTIAL_LINK_META_KEY as _PARTIAL_LINK_META_KEY,
+         directoryToolsList as _chatgptToolsList } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep, LEAN_SKIP_TOOLS as _LEAN_SKIP_TOOLS } from './lib/lean-response.mjs';
 import { answerShapeStep as _answerShapeStep } from './lib/answer-shape.mjs';
@@ -164,7 +165,7 @@ import { unboundKeyLine as _unboundKeyLine, claudePlatformLine as _claudePlatfor
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, MUSE_PATH, MUSE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
-         installClaudeResponseFilter as _installClaudeFilter,
+         installClaudeResponseFilter as _installClaudeFilter, claudeToolsList as _claudeToolsList,
          applyClaudeArgDefaults as _applyClaudeArgDefaults,
          excludedFromRelayReadout as _excludedFromRelayReadout,
          claudePromptListing as _claudePromptListing, claudePromptText as _claudePromptText,
@@ -8698,17 +8699,61 @@ async function callAPI(path, params = {}, opts = {}) {
     headers['Content-Type'] = 'application/json';
     fetchOpts.body = JSON.stringify(opts.body || {});
   }
+  const _t0 = Date.now();
   try {
     const resp = await fetch(url.toString(), fetchOpts);
     const text = await resp.text();
     // r-listings (2026-09-11): opt-in only. See _withStatusEnvelope.
     if (opts && opts.withStatus) return _withStatusEnvelope(resp.status, text);
     if (!resp.ok) return _upstreamError(resp.status, text);
+    // QA v2.12.63 (2026-11-23): an empty 2xx body parsed to {raw: ''} and the tool answered as if the
+    // backend had found nothing. It is a failed read: say so, and say it can be retried.
+    // GET reads only: a write (POST) is never told to retry itself, and a 204 is an answer.
+    if (!fetchOpts.method && resp.status !== 204 && !String(text || '').trim()) return _upstreamRetryable('empty_body', path, Date.now() - _t0, c);
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   } catch (err) {
     if (opts && opts.withStatus) return _withStatusTransportError(err);
+    // QA v2.12.63: a read that hit its own deadline came back {error: '<abort message>'}, which no
+    // failure test reads (no "API <status>", no mitigation block), so the tool served an empty answer.
+    if (!fetchOpts.method && _isTimeoutError(err)) return _upstreamRetryable('timeout', path, Date.now() - _t0, c);
     return { error: err.message };
   }
+}
+
+// An AbortSignal.timeout() abort: TimeoutError on Node 18+, AbortError where the signal was aborted by hand.
+export function _isTimeoutError(err) {
+  const n = err && (err.name || (err.cause && err.cause.name));
+  return n === 'TimeoutError' || n === 'AbortError';
+}
+// QA v2.12.63 (2026-11-23, P3): analyze_site and find_sites came back EMPTY after ~15 s on 2 of ~20 calls
+// and answered on a retry. A backend read that timed out or returned an empty body now logs one
+// structured line ([upstream-retryable] {tool, path, reason, elapsed_ms}) and returns a failure envelope:
+// _error_mitigation makes it a failure (_isFailureEnvelope, so the tool result is isError), and
+// retryable / retry_after_s say the same call may simply be sent again. No timeout is changed.
+export const UPSTREAM_RETRY_AFTER_S = 5;
+export function _upstreamRetryable(reason, path, elapsedMs, c = {}) {
+  const code = reason === 'timeout' ? 'upstream_timeout' : 'upstream_empty_response';
+  try {
+    console.log('[upstream-retryable] ' + JSON.stringify({ tool: (c && c._askTool) || null,
+      path: String(path || '').split('?')[0].slice(0, 120), reason, elapsed_ms: elapsedMs }));
+  } catch (_) { /* a log line is never worth a response */ }
+  return {
+    error: code,
+    retryable: true,
+    retry_after_s: UPSTREAM_RETRY_AFTER_S,
+    detail: reason === 'timeout'
+      ? 'The data service did not answer in time. This is transient: retry the same call.'
+      : 'The data service returned an empty response. This is transient: retry the same call.',
+    error_version: 1,
+    _error_mitigation: {
+      error_code: code,
+      severity: 'transient_backoff',
+      retryable: true,
+      retry_after_s: UPSTREAM_RETRY_AFTER_S,
+      deterministic_hint: 'Retry the same call after ' + UPSTREAM_RETRY_AFTER_S + ' seconds. Do not report the result as empty: '
+        + 'nothing was read. If it fails again, report the data as temporarily unavailable rather than substituting an estimate.',
+    },
+  };
 }
 
 // r-listings (2026-09-11): the Capacity Source tools need the HTTP status AND
@@ -20243,6 +20288,59 @@ async function _toolsListCached(platform, descOverrides) {
       .finally(() => { e.refreshing = null; });
   }
   return e.refreshing;   // rejection → caller falls back to the ephemeral SDK path
+}
+
+// The wire tools/list the cached fast path writes for one path, before any response filter. Shared by
+// that path and _servedToolCounts below, so a published count is read off the same projection.
+export function _projectCachedList(cachedList, { dirProfile = null, coreProfile = false, pack = null } = {}) {
+  // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
+  const _slim = (dirProfile || coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
+  // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
+  const _listFor = dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(cachedList) : cachedList;
+  // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
+  const _keyName = (dirProfile || coreProfile) ? ((x) => x) : _listResultKeyToolAs;
+  return pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+}
+
+// ── Served tool counts per path (QA v2.12.63, 2026-11-23, item c) ─────────────────────────────────────
+// GET /mcp/claude said "tools": 98 while its tools/list returned 69: every GET under /mcp published the
+// full catalog's count (the zone worker answers those GETs from its MCP_FALLBACK_TOOLS). The count a path
+// publishes is now the length of what that path's tools/list returns, computed from the same warm cache
+// and the same projections: _projectCachedList, then the profile's own response-filter projection
+// (claude / chatgpt directoryToolsList), or the core profile's own server. A request with no client
+// identity is assumed, which is what a GET is (a known light-list client may be shown fewer on /mcp).
+// Synchronous and read-only: a cold cache returns null (no count), it never builds a list. Memoised per
+// cache build. Served on /health as tools_by_path (the zone worker reads it) and on the origin's GET.
+const _servedCountsMemo = { at: -1, counts: null };
+export function _servedToolCountFor(path, cachedList) {
+  const req = { path, headers: {}, query: {}, body: null };
+  const dir = _pathProfile(req);
+  if (_pathIsCore(req)) return CORE_TOOL_NAMES.length;
+  const wire = _projectCachedList(cachedList, { dirProfile: dir, coreProfile: false, pack: _pathPack(req) });
+  if (dir === CLAUDE_PROFILE) return _claudeToolsList(wire).tools.length;
+  if (dir === DIRECTORY_PROFILE) return _chatgptToolsList(wire).tools.length;
+  return (wire && Array.isArray(wire.tools)) ? wire.tools.length : null;
+}
+export function _servedToolCounts(cachedList) {
+  try {
+    let at = null;
+    if (!cachedList) {
+      const e = _TOOLSLIST_CACHE.get('__generic__');
+      if (!e || !e.result) return null;
+      if (_servedCountsMemo.at === e.at && _servedCountsMemo.counts) return _servedCountsMemo.counts;
+      cachedList = e.result; at = e.at;
+    }
+    if (!Array.isArray(cachedList.tools) || !cachedList.tools.length) return null;
+    const counts = {};
+    for (const p of new Set(MCP_PATHS)) {
+      try {
+        const n = _servedToolCountFor(p, cachedList);
+        if (Number.isInteger(n) && n > 0) counts[p] = n;
+      } catch (_) { /* a path whose count cannot be read publishes none */ }
+    }
+    if (at !== null) { _servedCountsMemo.at = at; _servedCountsMemo.counts = counts; }
+    return counts;
+  } catch (_) { return null; }
 }
 
 // Minimal streamable-HTTP response writer for CACHED single-request replies.
@@ -33376,23 +33474,27 @@ export function _singleAskWall(name) {
 }
 // QA-only diagnostic (2026-10-24 full-stack QA): a keyless grid/queue preview on production carried no
 // claim/email line although the harness does, and the step's early returns are silent. A call that
-// carries the QA marker (X-DCHub-QA: 1 or UA dchub-qa-readonly) gets the skip point and the inputs it
-// read in structuredContent._claim_handoff_debug; every other caller gets the result unchanged.
+// carries the QA marker (X-DCHub-QA: 1 or UA dchub-qa-readonly) logs the skip point and the inputs it
+// read as one structured [claim-handoff-skip] line. QA v2.12.63 (2026-11-23): it used to ride in
+// structuredContent._claim_handoff_debug, which reached the client; the result is now returned unchanged
+// for every caller, and the diagnostic lives in the log only.
+export function _claimHandoffSkipRecord(result, at, name, err, c = {}) {
+  const sc = (result && result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+    ? result.structuredContent : null;
+  return {
+    at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
+    daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
+    clean_platform: _isCleanPlatform(), had_structured: !!sc, blocks: Array.isArray(result && result.content) ? result.content.length : null, tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
+    ...(err ? { error: String((err && err.message) || err).slice(0, 200) } : {}),
+  };
+}
 function _handoffSkip(result, at, name, err) {
   try {
     const c = getCtx() || {};
     if (!_isQaCaller(c) || !result || typeof result !== 'object') return result;
-    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
-      ? result.structuredContent : null;
-    // A result with no structuredContent yet (production's keyless grid preview reaches this step
-    // that way; the harness's does not) gets one carrying only the diagnostic.
-    return { ...result, structuredContent: { ...(sc || {}), _claim_handoff_debug: {
-      at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
-      daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
-      clean_platform: _isCleanPlatform(), had_structured: !!sc, blocks: Array.isArray(result.content) ? result.content.length : null, tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
-      error: err ? String((err && err.message) || err).slice(0, 200) : undefined,
-    } } };
-  } catch (_) { return result; }
+    console.log('[claim-handoff-skip] ' + JSON.stringify(_claimHandoffSkipRecord(result, at, name, err, c)));
+  } catch (_) { /* a diagnostic is never worth a response */ }
+  return result;
 }
 export function _claimHandoffStep(result, name) {
   try {
@@ -37157,7 +37259,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
 
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
   // international operating + planned/UC asset set the US-federal feeds don't cover.
-  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
+  trackedTool(srv, 'get_global_power', 'Use this when the user asks about power plants worldwide or in a non-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units worldwide, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Answers "what power is being built in India", "how much coal is still running in Vietnam". Try: get_global_power country=India pipeline=true. country= also adds electricity_monthly (Ember, CC BY 4.0): latest monthly mix, demand, carbon intensity. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
     { country: S.describe('Country/area name to filter, e.g. Germany, India, Brazil, Japan'),
       fuel: S.describe('Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal'),
       status: S.describe('Status substring filter, e.g. operating, construction, pre-construction, announced'),
@@ -38729,7 +38831,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs, or a US EIA balancing-authority code.',
           valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
           example: 'get_grid_intelligence region_id="PJM"',
-          instead: 'For non-US power infrastructure use get_global_power (plant/unit inventory, 170+ countries). There is no live grid telemetry outside the US.',
+          instead: 'For non-US power infrastructure use get_global_power (worldwide plant/unit inventory). There is no live grid telemetry outside the US.',
           _error_mitigation: {
             error_code: 'region_not_covered',
             severity: 'parameter_adjustment',
@@ -41264,6 +41366,8 @@ app.get('/health', (req, res) => {
     server: 'DC Hub MCP',
     version: SERVER_VERSION,
     tools: CANONICAL_TOOL_COUNT,   // canonical count from mcp-server.json (matches live tools/list); CI-guarded by sync-tools-manifest
+    // QA v2.12.63 item c: what each path's tools/list returns (the zone worker's GET /mcp/<path> reads it).
+    ...(() => { const t = _servedToolCounts(); return t ? { tools_by_path: t } : {}; })(),
     sessions: sessions.size,
     // ★2026-09-03: sessionSrv is the EXPENSIVE map (sessionId -> McpServer,
     // ~3.4MB of tool definitions each) and it was only ever reported into the
@@ -42903,13 +43007,7 @@ app.post(MCP_PATHS, async (req, res) => {
         try {
           const _cachedList = await _toolsListCached(platform, _descOverrides);
           if (_cachedList) {
-            // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
-            const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
-            // Daily habit: the frozen /mcp/chatgpt catalog keeps get_changes as reviewed (lib/daily-habit.mjs holdDailyInputs).
-            const _listFor = _dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(_cachedList) : _cachedList;
-            // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
-            const _keyName = (_dirProfile || _coreProfile) ? ((x) => x) : _listResultKeyToolAs;
-            return _writeRpcResult(req, res, body.id, _pack ? _slim(_keyName(_packFilter(_listFor, _pack))) : _slim(_keyName(_listFor)));
+            return _writeRpcResult(req, res, body.id, _projectCachedList(_cachedList, { dirProfile: _dirProfile, coreProfile: _coreProfile, pack: _pack }));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {
@@ -43160,7 +43258,7 @@ app.get(MCP_PATHS, async (req, res) => {
   }
   // 'describe': HEAD, or a GET that did not ask for an event stream. Express sends HEAD without the body.
   return res.status(200).set('Cache-Control', 'no-store').set('Allow', 'GET, POST, DELETE, OPTIONS')
-    .json(_mcpGetDescription({ path, version: SERVER_VERSION }));
+    .json(_mcpGetDescription({ path, version: SERVER_VERSION, tools: (_servedToolCounts() || {})[path] }));
 });
 
 // ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle
