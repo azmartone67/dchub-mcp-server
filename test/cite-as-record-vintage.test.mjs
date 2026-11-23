@@ -88,7 +88,8 @@ describe('a feature or row vintage is not a response timestamp', () => {
     expect(dated(o, 2014)).toBe(false);
     expect(dated(o, 2019)).toBe(false);
     expect(o.provenance.as_of.startsWith('2026-10-14')).toBe(true);
-    expect(o.citation.cite_as).toContain('(as of 2026-10-14)');
+    // the spoken day is America/Phoenix (00:30Z on the 14th is the 13th there; Grok 2026-11-23 item 1)
+    expect(o.citation.cite_as).toContain('(as of 2026-10-13)');
   });
 });
 
@@ -120,7 +121,9 @@ describe('execute_plan (the front door): the citation agents are told to quote',
 
   it('cite_as and citation.as_of carry the newest input; provenance keeps the oldest real one', () => {
     const o = stamp(plan(), 'execute_plan');
-    expect(o.citation.cite_as).toMatch(/\(as of 2026-10-14\)$/);
+    // Grok 2026-11-23 item 1: the spoken day is America/Phoenix (00:32Z on the 14th is the 13th there);
+    // citation.as_of keeps the full newest timestamp.
+    expect(o.citation.cite_as).toMatch(/\(as of 2026-10-13\)$/);
     expect(o.citation.as_of.startsWith('2026-10-14T00:32:58')).toBe(true);
     expect(o.citation.as_of_basis).toBe(CITE_AS_OF_NEWEST_BASIS);
     // the stalest REAL input (the metro dataset date) binds provenance.as_of and the range

@@ -22,6 +22,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import { phoenixDay } from '../lib/cite-day.mjs';
 // These pin the keyless preview a caller meets AFTER its first full answer of the day on the energy tools
 // (lib/keyless-first-full.mjs, owner 2026-11-14); test/keyless-first-full.test.mjs covers the first answer.
 process.env.DCHUB_KEYLESS_FIRST_FULL = '0';
@@ -169,16 +170,25 @@ describe('G-1016-01: grid taste with no demand reading', () => {
     expect(h.basis).toMatch(/did not return|failed|absent/i);
   });
 
-  it('MISO: every cite carries the real as_of to the hour, never a bare day that reads as today', async () => {
+  // Grok 2026-11-23 item 1 supersedes the hour in the spoken cite: every cite says the data hour's
+  // America/Phoenix DAY (lib/cite-day.mjs), never a time of day and never the serve day; the hour stays in
+  // the headline's own as_of. 04Z today is YESTERDAY in Phoenix, so a serve-day cite would still fail here.
+  it('MISO: every cite carries the data hour as its Phoenix day, never the serve day; the hour stays in as_of', async () => {
     const { sc } = await anonCall({ region_id: 'MISO' });
-    expect(sc.taste.cite_as).toContain(`as of ${MIX_PERIOD}:00Z`);
+    const day = phoenixDay(`${MIX_PERIOD}:00Z`);
+    expect(day).not.toBe(TODAY);
+    expect(sc.taste.headline.as_of).toBe(`${MIX_PERIOD}:00Z`);
+    expect(sc.taste.cite_as).toContain(`as of ${day}`);
     expect(typeof sc.cite_as).toBe('string');
-    expect(sc.cite_as).toContain(`as of ${MIX_PERIOD}:00Z`);
-    expect(sc.citation.cite_as).toContain(`as of ${MIX_PERIOD}:00Z`);
+    expect(sc.cite_as).toContain(`as of ${day}`);
+    expect(sc.citation.cite_as).toContain(`as of ${day}`);
     expect(sc.citation.cite_as).toMatch(/PARTIAL/);
     const phrases = asOfPhrases({ taste: sc.taste, cite_as: sc.cite_as, citation: sc.citation });
     expect(phrases.length).toBeGreaterThan(0);
-    for (const p of phrases) expect(p, `cite "as of ${p}" must carry the hour`).not.toBe(TODAY);
+    for (const p of phrases) {
+      expect(p, `cite "as of ${p}" must be the data day, not the serve day`).not.toBe(TODAY);
+      expect(p, `cite "as of ${p}" must be a date, not a time`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
   });
 
   it('no measured figure at all: headline as_of null, basis says why, cite carries no data date', async () => {
@@ -197,8 +207,11 @@ describe('G-1016-01: grid taste with no demand reading', () => {
     const { sc } = await anonCall({ region_id: 'PJM' });
     expect(sc.taste.headline).toMatchObject({ name: 'demand_mw', value: 95021, unit: 'MW', window: `${TODAY}T17` });
     expect(sc.taste.headline.fallback_from).toBeUndefined();
-    expect(sc.taste.cite_as).toContain(`as of ${TODAY}T17:00Z`);
-    expect(sc.cite_as).toContain(`as of ${TODAY}T17:00Z`);
+    const day = phoenixDay(`${TODAY}T17:00Z`);
+    expect(sc.taste.headline.as_of).toMatch(new RegExp(`^${TODAY}T17:00`));
+    expect(sc.taste.cite_as).toContain(`as of ${day}`);
+    expect(sc.cite_as).toContain(`as of ${day}`);
+    expect(sc.cite_as).not.toMatch(/as of \d{4}-\d{2}-\d{2}T/);
   });
 
   it('made no off-loopback connection', () => {

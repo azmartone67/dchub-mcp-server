@@ -350,6 +350,7 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
+import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
@@ -3352,6 +3353,11 @@ const SERVER_VERSION = { version: '2.12.63' }.version;  // 2.12.63 (2026-11-23):
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
+// execute_plan's loopback goes to the port this process actually serves on, read from the
+// request socket (2026-11-23). PORT is only the default: a test that listens on port 0 sent every
+// plan step, loopback tokens included, to whatever else owned 3100 on the machine.
+let _servedPort = PORT;
+export function _loopbackPort() { return _servedPort; }
 // Note V keyed follow-up (owner 2026-11-16): /ai has no #pricing anchor any more (fe#2337), so the old default
 // https://dchub.cloud/ai#pricing was a dead link. No wall composes from this constant (every wall link is the signed
 // relay, _unlockUrl / buildHumanRelay; test/gated-unlock-is-tokenized.test.mjs), so it is the neutral front door,
@@ -5827,6 +5833,35 @@ export function _wallPaidLineStep(result, name, c = getCtx()) {
     c._wallPaidLineArm = arm;
     if (arm !== _WPL.ARM_PAID_LINE || _askOnceSeen(c.session_id, 'paid_line', name)) return result;
     return _WPL.withPaidLine(result);
+  } catch (_) { return result; }
+}
+// DCHUB_WALL_PACK_FIRST (lib/wall-pack-first.mjs, default OFF; owner 2026-11-22): the one-time credit pack leads the
+// offer on a capacity wall, and on the last full answer of the day (one call before the wall). Only where a credit
+// opens the tool (_packOpensTool), never for a paid tier or a key holding credits, once per (session, tool).
+// AFTER _commercialWallStep (so its `access` block stays where it is) and BEFORE _arefLinksStep (which tags the link).
+export async function _wallPackFirstStep(result, name, c = getCtx()) {
+  try {
+    if (!_WPF.wallPackFirstOn() || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_newWallStepSkip(c, name) || !_packOpensTool(name, c) || _isPaidDepthTier(c.tier)) return result;
+    const sc = result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent)
+      ? result.structuredContent : null;
+    if (!sc || sc.pack_offer) return result;
+    const gated = _gatedAnswer(result, name, c);
+    let kind = '';
+    if (gated && _wallKindFor(sc, c, name) === WALL_KIND_CAPACITY) kind = _WPF.KIND_WALL;
+    else if (!gated && sc.quota && typeof sc.quota === 'object' && sc.quota.full_answers_remaining_today === 0) kind = _WPF.KIND_LAST_FULL;
+    if (!kind) return result;
+    if (c.api_key) {
+      let cr = 0;
+      try { cr = Number((await _getCredits(c)).credits) || 0; } catch (_) { cr = 0; }
+      if (cr > 0) return result;
+    }
+    if (_askOnceSeen(c.session_id, 'pack_first', name)) return result;
+    const url = _WPF.tagPackUrl(_packCheckoutUrl(c.session_id));
+    const line = _WPF.packFirstLine({ kind, tool: name, url });
+    if (!line) return result;
+    c._packFirstShown = kind;
+    return _WPF.withPackFirst(result, { line, offer: _WPF.packOffer({ kind, url, agentPayment: sc.agent_payment }) });
   } catch (_) { return result; }
 }
 // ── Nov 22 monetization tests with holdouts (lib/monetization-experiments.mjs; DRAFT, every flag OFF) ───────────────
@@ -28030,6 +28065,8 @@ function _sourceLineCb(name, fn) {
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
+      // DCHUB_WALL_PACK_FIRST (default OFF): the credit pack leads the offer on a capacity wall / the last full answer.
+      _final = await _wallPackFirstStep(_final, name, c);
       // Plan report link (DCHUB_PLAN_REPORT_LINK, default OFF): report_url + one closing line, minted from the
       // answer exactly as this caller received it (lib/plan-report.mjs). Before wall-to-key, so a key it hands back never reaches a report.
       _final = await _planReportStep(_final, name, c);
@@ -37679,7 +37716,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
       if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken(Date.now(), c.kff_arm || null);
-      const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
+      const r = await fetch('http://127.0.0.1:' + _servedPort + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
                                params: { name, arguments: args } }),
@@ -40617,6 +40654,8 @@ const app = express();
 // UTF-8 charset on every JSON / SSE response, the SDK transport's included (lib/utf8-charset.mjs):
 // a bare text/event-stream let clients decode an em dash as Windows-1252 mojibake. First, so it wraps every writer.
 app.use(utf8CharsetMiddleware);
+// execute_plan's loopback port (_loopbackPort above): the port this request actually arrived on.
+app.use((req, _res, next) => { const lp = req.socket && req.socket.localPort; if (lp) _servedPort = lp; next(); });
 app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));
 app.use((req, res, next) => listingSrcCtx.run(_listingSrcFromRequest(req, getVia()), next));

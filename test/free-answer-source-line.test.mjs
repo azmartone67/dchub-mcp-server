@@ -134,12 +134,13 @@ describe('path selection: the most specific public page', () => {
     expect(sourcePath({}, 'search_facilities', {})).toBe('');
     expect(sourceLine({}, 'search_facilities', {})).toBe('Source: DC Hub (dchub.cloud)');
   });
-  it('an hourly grid read: the Source line names the hour the citation names (MISO)', () => {
+  // Grok 2026-11-23 item 1: the Source line says the data hour's America/Phoenix day, never a time of day.
+  it('an hourly grid read: the Source line names the Phoenix day of the hour the citation names (MISO)', () => {
     const miso = { iso: 'MISO', as_of: '2026-10-17T03:00:00Z',
       provenance: { as_of: '2026-10-16T04:00:00.000Z' },
       citation: { cite_as: 'DC Hub, dchub.cloud \u2014 PARTIAL preview (not the full dataset) (as of 2026-10-17T03:00Z)', as_of: '2026-10-17T03:00:00Z' } };
     expect(dataAsOfHour(miso)).toBe('2026-10-17T03:00Z');
-    expect(sourceLine(miso, 'get_grid_intelligence', { iso: 'MISO' })).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17T03:00Z');
+    expect(sourceLine(miso, 'get_grid_intelligence', { iso: 'MISO' })).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-16');
     // a day-only citation stays day-only; UNMEASURED and retrieval-dated stay undated
     expect(sourceLine({ iso: 'MISO', citation: { cite_as: 'DC Hub (as of 2026-10-17)' } }, 'get_grid_intelligence', {})).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17');
     expect(dataAsOfHour({ ...miso, provenance: { as_of: null } })).toBe(null);
@@ -234,11 +235,11 @@ describe('the instructions point at summarize_for_citation', () => {
   });
 });
 
-describe('Source line carries the hour a grid cite names', () => {
+describe('Source line says the Phoenix day of the hour a grid cite names, not the hour', () => {
   const sc = { iso: 'MISO', cite_as: 'DC Hub (dchub.cloud), as of 2026-10-16T04:00Z', provenance: { as_of: '2026-10-16T04:00:00Z' } };
-  it('adds the hour', () => {
+  it('says the Phoenix day of that hour (04:00Z on the 16th is the 15th in Phoenix)', () => {
     expect(dataAsOfHour(sc)).toBe('2026-10-16T04:00Z');
-    expect(sourceLine(sc, 'get_grid_data', {})).toMatch(/, as of 2026-10-16T04:00Z$/);
+    expect(sourceLine(sc, 'get_grid_data', {})).toMatch(/, as of 2026-10-15$/);
   });
   it('a day-only cite stays day-only', () => {
     const d = { cite_as: 'DC Hub (dchub.cloud), as of 2026-10-16', provenance: { as_of: '2026-10-16' } };
