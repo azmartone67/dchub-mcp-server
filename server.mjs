@@ -11995,6 +11995,18 @@ export async function _sitingSeat(c, name, gateTier, env = process.env) {
   if (credits > 0) return null;   // a pack buyer is a paid read (CLAUDE.md: read _getCredits)
   return _emailFullSeat(c) ? 'email' : 'noemail';
 }
+// Owner 2026-11-23 (lib/paid-full-only.mjs) on the directory profile: a free-class key (no email, a bound email, a
+// trial key) holding no pack credits runs execute_plan's steps keyless, as everywhere else. A paid key keeps its key.
+export async function _directoryPlanStepsKeyless(c, gateTier) {
+  try {
+    if (!c || !c.api_key || c.profile !== DIRECTORY_PROFILE) return false;
+    if (!_SITING_FREE_CLASS.has(String(c.tier || '').trim().toLowerCase())) return false;
+    if (gateTier !== undefined && !_SITING_FREE_CLASS.has(String(gateTier || '').trim().toLowerCase())) return false;
+    let credits = 0;
+    try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
+    return !(credits > 0);
+  } catch (_) { return false; }
+}
 // The monthly block on a full plan, inside the JSON payload so block 0 still parses.
 export function _withSitingFreeRun(result, fr, tool) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -29020,6 +29032,9 @@ function trackedTool(srv, name, description, schema, handler) {
       // full grid read). This replaces the 2026-11-11 rule that ran a free key's steps under the key.
       if (_sitingSeatNow && name === PLAN_PAID_ONLY_TOOL) _sitingPreview = true;
       if (_sitingPreview && name === PLAN_PAID_ONLY_TOOL) c.plan_steps_keyless = true;
+      // The same rule on the frozen ChatGPT directory (/mcp/chatgpt and /mcp/chatgpt/oauth), where _sitingSeat seats
+      // no one so the frozen copy is untouched: a free-class key's plan steps run keyless. Output copy is unchanged.
+      if (name === PLAN_PAID_ONLY_TOOL && !c.plan_steps_keyless && await _directoryPlanStepsKeyless(c, _gateTier)) c.plan_steps_keyless = true;
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
       // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's

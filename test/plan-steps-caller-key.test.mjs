@@ -90,6 +90,7 @@ beforeAll(async () => {
       if (p === '/api/v1/keys/validate') {
         const k = (await readBody(req)).api_key || '';
         if (k === NOEMAIL) return send({ valid: true, tier: 'free', developer_id: 'd_pckne', email: null });
+        if (k === PAIDK) return send({ valid: true, tier: 'paid', developer_id: 'd_pckpaid', email: 'paid@example.com', tier_detail: { users_plan: 'developer' } });
         if (k === FAILCTR || k.startsWith('dch_live_planckbound')) {
           return send({ valid: true, tier: 'identified', developer_id: 'd_' + k.slice(-6), email: 'plan+' + k.slice(-6) + '@example.com' });
         }
@@ -136,8 +137,9 @@ afterAll(async () => {
   net.Socket.prototype.connect = realConnect;
 });
 
-async function post(headers, body) {
-  const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
+const PAIDK = 'dch_live_planckpaiddeveloper0001';   // a Developer key: the control whose steps DO carry the key
+async function post(headers, body, path = '/mcp') {
+  const res = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
     body: JSON.stringify(body),
@@ -148,14 +150,14 @@ async function post(headers, body) {
   return { headers: res.headers, body: b };
 }
 let ipN = 20, rpcId = 100;
-async function callAs(key, name, args) {
+async function callAs(key, name, args, path = '/mcp') {
   const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, ...(key ? { 'x-api-key': key } : {}) };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
-    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1.0' } } });
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '1.0' } } }, path);
   const sid = init.headers.get('mcp-session-id');
   const h = { ...h0, ...(sid ? { 'mcp-session-id': sid } : {}) };
-  if (sid) await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });
-  const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name, arguments: args } });
+  if (sid) await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' }, path);
+  const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name, arguments: args } }, path);
   const result = JSON.parse(body).result || {};
   const text = (result.content || []).map((c) => c.text || '').join('\n');
   let data = {};
@@ -164,9 +166,9 @@ async function callAs(key, name, args) {
 }
 const withEnv = async (k, v, fn) => { const prev = process.env[k]; process.env[k] = v;
   try { return await fn(); } finally { if (prev === undefined) delete process.env[k]; else process.env[k] = prev; } };
-async function plan(key, args = PLAN_ARGS) {
+async function plan(key, args = PLAN_ARGS, path = '/mcp') {
   const before = dataHits.length;
-  const r = await callAs(key, 'execute_plan', args);
+  const r = await callAs(key, 'execute_plan', args, path);
   return { ...r, hits: dataHits.slice(before) };
 }
 const step = (r, tool) => (r.data.executed || []).find((e) => e.tool === tool);
@@ -245,6 +247,34 @@ describe('5) inside the free plan, the paid-only step is the preview too', () =>
     expect(rq.result.preview_is_partial || rq.result.trial_preview || rq.result._upgrade).toBeTruthy();
     const direct = await callAs(NOEMAIL, 'get_refined_queue', rq.args);
     expect(direct.data.human_url, 'the direct call is the preview for this key too').toMatch(/^https:\/\/dchub\.cloud\//);
+  });
+});
+
+// Review of #1700: on the frozen ChatGPT directory _sitingSeat seats no one, so plan_steps_keyless was never set and a
+// free key's steps sent its X-API-Key. The rule holds there too; the frozen copy is untouched (output only).
+describe('5b) /mcp/chatgpt: a free-class key\'s plan steps run keyless; a Developer key\'s carry its key', () => {
+  for (const [label, keyOf] of [['no-email free key', () => NOEMAIL], ['email-bound key', () => freshBound()]]) {
+    it(`${label}: no step read carries the caller's key`, async () => {
+      const r = await plan(keyOf(), PLAN_ARGS, '/mcp/chatgpt');
+      expect(Array.isArray(r.data.executed), r.text.slice(0, 600)).toBe(true);
+      expect(r.hits.length, 'the plan ran steps').toBeGreaterThan(0);
+      expect(r.hits.filter((h) => h.key), JSON.stringify(r.hits)).toEqual([]);
+    });
+  }
+  it('CONTROL: a Developer key on /mcp/chatgpt: every step read carries its key', async () => {
+    const r = await plan(PAIDK, PLAN_ARGS, '/mcp/chatgpt');
+    expect(r.hits.length, 'the plan ran steps').toBeGreaterThan(0);
+    expect(r.hits.filter((h) => h.key !== PAIDK), JSON.stringify(r.hits)).toEqual([]);
+  });
+  it('the seat rule (the profile both /mcp/chatgpt and /mcp/chatgpt/oauth resolve to)', async () => {
+    const f = S._directoryPlanStepsKeyless;
+    const D = (await import('../lib/chatgpt-directory.mjs')).DIRECTORY_PROFILE;
+    expect(await f({ api_key: NOEMAIL, tier: 'free', profile: D }, 'free')).toBe(true);
+    expect(await f({ api_key: 'k', tier: 'identified', profile: D }, 'identified')).toBe(true);
+    expect(await f({ api_key: 'k', tier: 'trial', profile: D }, 'trial')).toBe(true);
+    expect(await f({ api_key: PAIDK, tier: 'paid', profile: D }, 'paid')).toBe(false);
+    expect(await f({ api_key: NOEMAIL, tier: 'free' }, 'free')).toBe(false);   // not the directory: _sitingSeat's rule
+    expect(await f({ tier: 'free', profile: D }, 'free')).toBe(false);        // keyless: no key to send anyway
   });
 });
 
