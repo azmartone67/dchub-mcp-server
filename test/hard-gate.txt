@@ -741,6 +741,7 @@ test/snapshot-repairs-missing-keys.test.mjs
 test/source-capacity-match.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
+test/stale-session-notify-1122.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
 test/static-docs-no-free-1121.test.mjs
@@ -826,6 +827,7 @@ test/wall-paid-line-1121.test.mjs
 test/wall-relay-value-first-1121.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs
+test/wall-to-key-1122.test.mjs
 test/wall-transport.test.mjs
 test/wall-upgrade-offer.test.mjs
 test/wall-user-line-hard-wall.test.mjs

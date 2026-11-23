@@ -352,6 +352,7 @@ import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
+import * as _W2K from './lib/wall-to-key.mjs';      // DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_* sub-flags (all default OFF)
 import * as _RE from './lib/wall-relay-everywhere.mjs';   // DCHUB_WALL_RELAY_EVERYWHERE (default OFF)
 import * as _VF from './lib/wall-value-first.mjs';        // DCHUB_WALL_VALUE_FIRST (default OFF)
 const _headlineOf = _VF.headlineOf;
@@ -5045,12 +5046,15 @@ function _lightIdentityFromReq(req) {
 export function _pathPack(req) {
   const p = _normPath(req);
   if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
-  if (p === LIGHT_PATH) return LIGHT_PACK;
+  // Wall to key 3.5 (DCHUB_W2K_LEAN_KEY_TOOLS, default OFF): a light list also lists get_api_key and recover_my_key, so
+  // a wall's email_ask points at a tool the agent can see.
+  const _lk = (def) => (_W2K.subOn('LEAN_KEY_TOOLS') ? _W2K.withKeyTools(def, [_KEY_TOOL_REGISTERED, 'recover_my_key']) : def);
+  if (p === LIGHT_PATH) return _lk(LIGHT_PACK);
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
   if (_lightEligiblePath(p)) {   // bare /mcp; the client arrival paths too with DCHUB_LIGHT_ON_SOURCE_PATHS (off)
     const _id = _lightIdentityFromReq(req);
     if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
-      return (_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT;
+      return _lk((_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT);
     }
   }
   return MCP_PACKS.get(p) || null;
@@ -5414,9 +5418,9 @@ export function _quotaWallEventFor(c, name, status) {
   try {
     if (!_quotaWallEventOn()) return null;
     const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
-    return _EAB.withArmEvent(_WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+    return _EAB.withArmEvent(_W2K.withArmEvent(_WOD.withArmEvent(_WPL.withArmEvent(_quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
                                  isQa: _isQaCaller(c), platform: tagged.platform }), c && c._wallPaidLineArm),
-                             c && c._wallOneDoorArm), c && c._emailAskAbArm);
+                             c && c._wallOneDoorArm), c && c._wallToKeyArm), c && c._emailAskAbArm);
   } catch (_) { return null; }
 }
 // Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
@@ -6091,6 +6095,76 @@ export function _wallOneDoorStep(result, name, c = getCtx()) {
     c._wallOneDoorArm = arm;
     return arm === _WOD.ARM_ONE_DOOR ? _WOD.withOneDoor(result, link) : result;
   } catch (_) { return result; }
+}
+// Wall to key (Brain spec 2026-11-22; lib/wall-to-key.mjs). Master DCHUB_WALL_TO_KEY_V1 plus one sub-flag per piece,
+// all default OFF. 3.1-3.3 run in the treatment arm only (salted hash of the keyless caller, c._wallToKeyArm, recorded
+// on the quota_wall_hit event as wall_to_key). Same surfaces as the other wall steps (_newWallStepSkip): no directory,
+// Claude or core profile, no ChatGPT client, no clean platform, no loopback step, no key tool.
+export function _wallToKeyStep(result, name, c = getCtx()) {
+  try {
+    if (!_W2K.wallToKeyOn() || !c || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_newWallStepSkip(c, name)) return result;
+    let out = result;
+    const armed = _W2K.subOn('EMAIL_ASK_ALL') || _W2K.subOn('SIGNIN_URL') || _W2K.subOn('NEXT_CALL_KEY');
+    const a = armed ? _W2K.arm(_W2K.armCallerId(c)) : null;
+    // 3.3: a key the human claimed on the wall page, restored for this session; handed to the agent once.
+    if (a === _W2K.ARM_TREATMENT && _W2K.subOn('NEXT_CALL_KEY') && _W2K.shouldIssue(c)) {
+      _W2K.markIssued(c);
+      c._wallToKeyArm = a;
+      out = _W2K.withKeyIssued(out, _W2K.keyIssuedBlock(c.api_key));
+      console.log(`[w2k] key_issued sid=${_logId(c.session_id)} tool=${name}`);
+    }
+    if (!_gatedAnswer(out, name, c)) return out;
+    // A paid caller keeps its answer (same rule as relay-everywhere).
+    if (c.api_key && !(c.is_trial === true || /^dch_trial_/.test(String(c.api_key))) && _isPaidDepthTier(c.tier)) return out;
+    if (a) c._wallToKeyArm = a;
+    if (a === _W2K.ARM_TREATMENT) {
+      const sc = out.structuredContent && typeof out.structuredContent === 'object' ? out.structuredContent : {};
+      const link = _W2K.humanLinkOf(out);
+      // 3.1: a licence-only wall on a listed tool gets the email ask, naming exactly what the email opens.
+      const opens = _W2K.EMAIL_OPENS[name];
+      if (_W2K.subOn('EMAIL_ASK_ALL') && typeof opens === 'string' && (!c.api_key || /^dch_trial_/.test(String(c.api_key)))
+          && _wallUnlockFor(name, sc, c) !== _RE.UNLOCK_EMAIL) {
+        // The rows only reach the agent when this session's next call is served under the claimed key, so the data promise
+        // needs a session-bound link; without one the line says only what the email keeps.
+        const bound = !!c._relayEverywhereSessionBound;
+        out = _W2K.withEmailAskAll(out, { tool: name, opens: bound ? opens : _W2K.KEEP_ONLY, link, sessionBound: bound });
+      }
+      // 3.2: the one copyable sign-in URL is the wall's own human link.
+      if (_W2K.subOn('SIGNIN_URL') && link) out = _W2K.withSignInUrl(out, link);
+    }
+    // 3.6: preview_only beside free_preview_only.
+    if (_W2K.subOn('COPY_NEUTRAL')) out = _W2K.withNeutralPreviewKey(out);
+    // 3.4: one native email ask per session, on a user-initiated walled call, fire and forget.
+    if (_W2K.subOn('ELICITATION') && !c.api_key) _wallToKeyElicit(c, name);
+    return out;
+  } catch (_) { return result; }   // never worth failing a response over
+}
+// 3.4: elicitation/create (form mode, one email field) when the client declared the capability. The tool result is
+// never delayed. Accept: the same claim get_api_key makes, counted as via mcp-elicit; the backend binds the key to this
+// session, so the session's next call is served under it (and 3.3 hands it back). Decline / cancel: no new ask for this
+// caller for 7 days; the wall's own link and email_ask stay. An email that already has a key gets the recovery mail.
+function _wallToKeyElicit(c, name) {
+  try {
+    const sid = (c && c.session_id) || '';
+    const id = _W2K.armCallerId(c);
+    const srv = sid ? sessionSrv.get(sid) : null;
+    const caps = srv && srv.server && srv.server.getClientCapabilities ? srv.server.getClientCapabilities() : null;
+    if (!_W2K.elicitDue({ sid, id, caps, userCall: !c.loopback_step && !_isQaCaller(c) })) return;
+    _W2K.markElicited(sid);
+    // The consent token below is sent only with its purpose sentence shown (WEEKLY_SUMMARY_PURPOSE rule).
+    srv.server.elicitInput({ message: _W2K.ELICIT_MESSAGE + ' (' + EMAIL_PURPOSE_TEXT + '.)', requestedSchema: _W2K.ELICIT_SCHEMA }, { timeout: 300000 })
+      .then(async (r) => {
+        const email = _W2K.acceptedEmail(r);
+        if (!email) { _W2K.markDeclined(id); console.log(`[w2k] elicit ${(r && r.action) || '?'} sid=${_logId(sid)} tool=${name}`); return; }
+        const body = { client_name: String(c.client_name_raw || 'mcp-agent').replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 80) || 'mcp-agent',
+          email, email_source: _retEmailSourceFor(c), consent_purpose: WEEKLY_SUMMARY_PURPOSE };
+        const k = await callAPIWrite('/api/v1/keys/claim', body, { via: _W2K.ELICIT_VIA });
+        if (k && k.error === 'email_has_key') { await callAPIWrite('/api/v1/keys/recover', { email }); }
+        console.log(`[w2k] elicit accept sid=${_logId(sid)} tool=${name} minted=${!!(k && (k.api_key || k.key))} existing=${!!(k && k.error === 'email_has_key')}`);
+      })
+      .catch((e) => console.log(`[w2k] elicit failed sid=${_logId(sid)}: ${String((e && e.message) || e).slice(0, 140)}`));
+  } catch (_) { /* the native ask is never worth failing a response over */ }
 }
 // Dead-end walls (owner 2026-11-13; lib/wall-depth-trial.mjs): on the seven digest-only depth walls the agent read
 // "an account does not open ..." and "an email does not open ..." and nothing that does. One line names what does:
@@ -8937,6 +9011,8 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // 2026-11-05 (owner, "ship ... MCP-side via tag"): a session that was handed a wall link credits its later
   // claim_free_key / bind_email to mcp-wall (lib/wall-via-tag.mjs). Only the two call sites that pass
   // opts.wallVia; a via the connector URL declared wins; no wall seen, no session id or a QA caller: nothing.
+  // Wall to key 3.4: a claim from the native email ask is counted as its own channel.
+  if (opts && opts.via === 'mcp-elicit') headers['X-DCHub-Via'] = 'mcp-elicit';
   if (opts && opts.wallVia && !headers['X-DCHub-Via']) {
     try {
       const _wv = wallViaHeaderFor({ on: wallViaTagOn(), explicitVia: getVia(), qa: _isQaCaller(c),
@@ -11733,6 +11809,9 @@ function _accessTagFor(name) {
   // tools/list annotations, so a /pricing/upgrade URL here became listing copy. Every tool,
   // gated or not, now points at /connect; a gated RESULT still carries its own per-call link.
   const tag = { access, tier_required: tierRequired, free_answer: FREE_ANSWER_BY_TIER[tierRequired] };
+  // Wall to key 3.6 (DCHUB_W2K_COPY_NEUTRAL, default OFF): a neutral access word beside `access` (open | preview |
+  // keyed). `access` itself stays for one release, for the consumers that read it.
+  if (_W2K.subOn('COPY_NEUTRAL')) tag.access_level = _W2K.neutralAccess(access);
   tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
   if (gated) {
     // This tag rides the SHARED tools/list, so it cannot know the caller's
@@ -27804,6 +27883,9 @@ function _sourceLineCb(name, fn) {
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
+      // Wall to key (DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_*, all default OFF): the email ask on licence-only walls, the one
+      // sign_in_url, the claimed key handed back once, the native email ask. Just before the aref step, which stays LAST.
+      _final = _wallToKeyStep(_final, name, c);
       // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
       // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
       _final = _arefLinksStep(_final, name, c);
@@ -34445,6 +34527,9 @@ export function _leanPromptsFor(req) {
     const p = _pathPack(req);
     return !!(p && p.light);
   } catch (_) { return false; }
+}
+export function _staleSessionNotifyAcceptOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_NOTIFY_ACCEPT) || '').trim());
 }
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
@@ -42572,6 +42657,14 @@ app.post(MCP_PATHS, async (req, res) => {
     // spec's 404 below, so a client still re-initializes on it.
     const _shape = _rpcShape(body);
     if (!sessionId && _isNotificationsOnly(_shape)) return res.status(202).end();
+    // DCHUB_STALE_SESSION_NOTIFY_ACCEPT (default OFF, 2026-11-22): a notification (or a batch of only notifications /
+    // responses) bearing a session id this process does not hold is accepted with 202, as one with no id is above.
+    // A notification needs no session state and gets no reply. Measured in the [mcp-4xx] log 2026-11-18..23: every
+    // Mistral (MistralAI-MCPClient/1.0) 404 was notifications/initialized with an unknown id (20), and Claude-User
+    // had 17 of the same. Inferred, not measured: the id was minted by another instance or before a redeploy (each
+    // process holds its own in-memory session map). A request that needs an answer keeps the
+    // spec's 404 below (tools/call, tools/list and ping are already served statelessly above).
+    if (sessionId && _isNotificationsOnly(_shape) && _staleSessionNotifyAcceptOn()) return res.status(202).end();
     const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
     if ((body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
