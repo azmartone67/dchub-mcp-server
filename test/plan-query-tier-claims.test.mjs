@@ -414,7 +414,8 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
   it('"free-tier friendly" tools give a free key every row, not a walled preview', async () => {
     const { claims } = extractClaims();
     const ff = [...new Set(claims.filter((c) => c.ph.free_friendly).map((c) => c.tool))];
-    expect(ff.length).toBeGreaterThanOrEqual(5);
+    // 4, not 5: owner 2026-11-23 took rank_markets and get_energy_prices off every-access-level (lib/paid-full-only.mjs).
+    expect(ff.length).toBeGreaterThanOrEqual(4);
     const bad = [];
     for (const tool of ff) {
       const out = await call(tool, K_FREE);

@@ -158,12 +158,13 @@ describe('digestAskLine / digestAskApplies (pure)', () => {
 
 describe('depth wall tool set', () => {
   // 2026-11-23 (owner): rank_markets and ai_capacity_index are paid-full-only (lib/paid-full-only.mjs): no free taste
-  // and no email unlock, so their walls are depth walls now. Grid and queue stay out (preview-only tools, own walls).
+  // and no email unlock, so their walls are depth walls now. All ten paid-only tools are depth walls: an email opens none.
   it('the depth tools and Pro-only tools are in; tools where an email opens more, Land & Power and write tools are out', () => {
     for (const t of ['list_transactions', 'compare_isos', 'get_pipeline', 'hyperscaler_deals', 'get_tax_incentives', 'get_market_dcpi_rank',
-      'get_dchub_recommendation', 'export_dataset', 'rank_markets', 'ai_capacity_index'])
+      'get_dchub_recommendation', 'export_dataset', 'rank_markets', 'ai_capacity_index',
+      'get_grid_intelligence', 'get_interconnection_queue', 'get_grid_data', 'get_energy_prices', 'execute_plan'])
       expect(S._depthWallTool(t, {}), t).toBe(true);
-    for (const t of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel',
+    for (const t of ['get_market_intel',
       'get_fiber_intel', 'analyze_site', 'compare_sites', 'get_composite_site_score', 'generate_site_analysis', 'subscribe_digest', 'bind_email'])
       expect(S._depthWallTool(t, {}), t).toBe(false);
   });

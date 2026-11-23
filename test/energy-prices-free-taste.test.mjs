@@ -49,8 +49,8 @@ describe('energy taste', () => {
     expect(JSON.stringify(env)).not.toMatch(/9\.9|6\.1/);
     expect(env.retail_rates).toBeUndefined();
   });
-  it('does not claim the preview-only rule (a free key keeps its full answers) and names no plan or price', () => {
-    expect(env.free_preview_only).toBe(false);
+  it('claims the preview-only rule (owner 2026-11-23: paid-only, a free key gets the preview too) and names no plan or price', () => {
+    expect(env.free_preview_only).toBe(true);
     expect('full_unlocks_at' in env).toBe(false);
     expect(env._taste_note).not.toMatch(/\$|Developer|Pro\b/);
   });
