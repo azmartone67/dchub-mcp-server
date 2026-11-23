@@ -134,7 +134,8 @@ describe('a keyed Pro caller gets full data, still scrubbed', () => {
     const anon = await H.call(DIR, 'analyze_site', { lat: 39.04, lon: -77.48 });
     const t = anon.msg.result.content.map((c) => c.text);
     expect(t).toHaveLength(2);
-    expect(t[0]).toMatch(/^The full site report .*\[Unlock the full site report\]\(https:\/\/dchub\.cloud\//);
+    // QA v2.12.63 (P3 b): /mcp/claude states the same v15 lead as /mcp (lib/gated-preview.mjs gatedPreviewLead).
+    expect(t[0]).toMatch(/^This is a preview, not the full site report\..*\[Unlock the full site report\]\(https:\/\/dchub\.cloud\//s);
     expect(t[1]).toBe(CLAUDE_PLANS_NOTICE);
     const pro = await H.call(`${DIR}?api_key=${PRO_KEY}`, 'analyze_site', { lat: 39.04, lon: -77.48 });
     expect(pro.msg.result.isError).toBeUndefined();
