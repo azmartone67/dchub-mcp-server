@@ -168,6 +168,21 @@ describe('find_sites free coarsening', () => {
     expect(H.S._previewDistanceNote('odd 37.5 km wording')).toBe('odd some distance wording');
     expect(p.candidates[0].market.distance_note).toBe(NOTE);   // the input is not mutated
   });
+  it('be#9314 verdict_market_distance_km: a preview withholds it like market.distance_km, keeps verdict_market', () => {
+    const p = payload();
+    p.candidates = p.candidates.map((c) => ({ ...c, verdict_market: 'Council Bluffs', verdict_market_distance_km: 6.5 }));
+    for (const dp of [1, 2]) {
+      const out = H.S._coarsenFindSites(p, dp);
+      for (const c of out.candidates) {
+        expect(c.verdict_market_distance_km).toBeNull();
+        expect(c.verdict_market).toBe('Council Bluffs');
+      }
+      expect(JSON.stringify(out)).not.toMatch(/\b6\.5\b/);
+    }
+    expect(p.candidates[0].verdict_market_distance_km).toBe(6.5);   // the input is not mutated
+    const bare = H.S._coarsenFindSites({ success: true, candidates: [{ lat: 1, lon: 2, next_calls: [] }] }, 1);
+    expect('verdict_market_distance_km' in bare.candidates[0]).toBe(false);
+  });
   it('a candidate without the blocks is left as it was', () => {
     const out = H.S._coarsenFindSites({ success: true, candidates: [{ lat: 1.23, lon: 4.56, next_calls: [] }] }, 1);
     expect(out.candidates[0].market).toBeUndefined();

@@ -15850,6 +15850,9 @@ export function _coarsenFindSites(payload, dp = 1) {
       c2.market = { ...cand.market, distance_km: null };
       if (typeof cand.market.distance_note === 'string') c2.market.distance_note = _previewDistanceNote(cand.market.distance_note);
     }
+    // be#9314 (2026-11-23) names the verdict's market on the row with its distance; that is the same figure as
+    // market.distance_km, so a preview withholds it too.
+    if (Object.prototype.hasOwnProperty.call(cand, 'verdict_market_distance_km')) c2.verdict_market_distance_km = null;
     if (cand.time_to_power && typeof cand.time_to_power === 'object' && !Array.isArray(cand.time_to_power)) {
       const t = cand.time_to_power;
       c2.time_to_power = { ...t, time_to_power_months: null,
