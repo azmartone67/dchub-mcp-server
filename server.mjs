@@ -10833,6 +10833,10 @@ const PAID_ONLY_TOOLS = new Set([
 // All bonus calls still count against the keyed-free tier's daily quota
 // (10/day in MCP_TIERS.free, enforced at the CF worker layer), so this
 // isn't unlimited — it's a meaningful taste before the upgrade prompt.
+// DCHUB_BONUS_TASTE_CAP (default ON, 2026-11-23): KEYED_FREE_BONUS full answers spend the per-key taste budget.
+export function _bonusTasteCapOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String((env && env.DCHUB_BONUS_TASTE_CAP) || '').trim());
+}
 const KEYED_FREE_BONUS = new Set([
   'get_market_intel',     // 990 sessions/7d (the strongest demand signal)
   // get_grid_data left 2026-11-23 (owner): its full answer needs a paid key, so a free key gets its preview.
@@ -14053,9 +14057,16 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   if (tier === 'starter' && hasApiKey && STARTER_TASTE_TOOLS.has(toolName)) {
     return { allowed: true, params, trial_taste: true, paid_taste: true };
   }
-  // r46-conversion: keyed-free users get the 5 demand-tools through —
-  // daily cap still applies at the worker layer (10/day).
-  if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true }; // free-class: identified is the registration carrot (r-identified)
+  // r46-conversion: keyed-free users get the bonus tools through.
+  // 2026-11-23: the "daily cap at the worker layer (10/day)" this relied on never bound /mcp: one free key took 25
+  // full get_water_risk answers in a row. A bonus full answer now spends the same per-key taste budget as every other
+  // free-key full answer (2 per tool per day, 10 with a bound email; the copy every door publishes), then the caller
+  // gets the trimmed preview and the over-cap offer. A preview-only tool (get_market_intel) has no budget to spend.
+  // Kill switch DCHUB_BONUS_TASTE_CAP=0 restores the uncapped bonus.
+  if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FREE_BONUS.has(toolName)) {
+    if (_bonusTasteCapOn() && !_freePreviewOnlyTool(toolName)) return { allowed: true, params, bonus: true, trial_taste: true };
+    return { allowed: true, params, bonus: true }; // free-class: identified is the registration carrot (r-identified)
+  }
   // r-facility-parity (2026-07-02, friction audit): a KEYED free user calling
   // get_facility was hard-blocked (PAID_ONLY) even though (a) the block text
   // itself lists get_facility as free-covered and (b) the KEYED_FACILITY_MASK

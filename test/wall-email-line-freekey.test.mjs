@@ -281,7 +281,10 @@ describe('option A line on a keyless free-key wall, production transport', () =>
       const r = await wallCall('get_water_risk');
       const lines = humanLines(r.text);
       expect(lines.length).toBe(1);
-      expect(lines[0]).toMatch(/\bDC Hub key/);   // option A (owner 2026-11-16): "free DC Hub key" reads "DC Hub key"
+      // 2026-11-23 (DCHUB_BONUS_TASTE_CAP): a free key now opens get_water_risk only as a capped taste (2/day), and a
+      // capped taste is not "a key opens it" (_tierGateOpensForSeat), so with the free-key email line off the wall keeps
+      // the generic withheld line that every capped-taste tool carries, with its link, and still no plan words.
+      expect(lines[0]).toContain(r.sc.human_url);
       expect(lines[0]).not.toMatch(/free DC Hub key/);
       expect(r.text).not.toMatch(/held back part of this answer/);
       const g = await wallCall('get_grid_intelligence');
