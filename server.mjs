@@ -647,8 +647,8 @@ const ARG_ALIASES = {
                               question: 'context', use_case: 'context',
                               request: 'context' },
   get_fiber_intel:          { location: 'market', city: 'market',
-                              metro: 'market' },
-  get_metro_fiber:          { location: 'market', city: 'market' },
+                              metro: 'market', market_slug: 'market' },
+  get_metro_fiber:          { location: 'market', city: 'market', market_slug: 'market' },
   // ★2026-09-05 market_slug MEASURED failing, and it is the name our OWN
   //   description teaches. get_market_intel's tools/list text reads "Params:
   //   market is the market_slug (e.g. \"northern-virginia\", \"dallas\")" —
@@ -677,6 +677,21 @@ const ARG_ALIASES = {
   //   this is a pure rename. predict_market_trajectory requires the same market_slug and gets the same entry.
   get_market_dcpi_rank:     { market: 'market_slug' },
   predict_market_trajectory: { market: 'market_slug' },
+  // ★2026-11-23: the reverse guess. get_market_dcpi_rank and predict_market_trajectory teach `market_slug`,
+  //   and these tools take the same metro slug as `market`. Undeclared arguments are stripped, so
+  //   market_slug was dropped with no error and the call answered for no market (or was refused where
+  //   market is required). Pure rename: each tool's `market` accepts a slug. NOT here, on purpose:
+  //   get_grid_intelligence (value resolved to an ISO; see test/arg-aliases), source_capacity (listing
+  //   name), register_standing_intent (substring), get_hosting_capacity (utility), get_api_key.
+  execute_plan:             { market_slug: 'market' },
+  get_gas_economics:        { market_slug: 'market' },
+  get_market_context:       { market_slug: 'market' },
+  get_pipeline:             { market_slug: 'market' },
+  get_facility_risk_delta:  { market_slug: 'market' },
+  save_site:                { market_slug: 'market' },
+  set_market_alert:         { market_slug: 'market' },
+  find_sites:               { market_slug: 'market' },
+  simulate_scenario:        { market_slug: 'market' },
   get_energy_prices:        { location: 'state', region: 'state' },
   list_transactions:        { limit_results: 'limit' },
 };
