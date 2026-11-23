@@ -393,6 +393,8 @@ import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-p
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
 import { nearMetroSlug as _nearMetroSlug, nearMetroRadiusKm as _nearMetroRadiusKm } from './lib/metro-anchor.mjs';
 import { siteHuntAsk as _siteHuntAsk } from './lib/site-hunt.mjs';
+import { landSearchExtras as _landSearchExtras, potentialLandOn as _potentialLandOn, potentialLandCall as _potentialLandCall,
+  POTENTIAL_LAND_LINE as _POTENTIAL_LAND_LINE } from './lib/land-search.mjs';
 import { landSearchAsk as _landSearchAsk, landSearchArgs as _landSearchArgs, landSearchFirst as _landSearchFirst,
   landSearchLead as _landSearchLead, withLandLead as _withLandLead, LAND_FIRST_CLASSES as _LAND_FIRST_CLASSES,
   LAND_RADIUS_KM as _LAND_RADIUS_KM } from './lib/land-search.mjs';
@@ -10369,6 +10371,11 @@ export function _listingBrowseExtras(body, args) {
   }
   const gc = _listingGridCheck(args, rows);
   if (gc) { fields.grid_check = gc; tail.push(_listingGridCheckLine(gc)); }
+  // Potential powered land (DCHUB_POTENTIAL_LAND): an empty land browse names find_sites, labelled as not a listing.
+  if (n === 0 && _potentialLandOn(process.env)) {
+    const pl = _potentialLandCall(args);
+    if (pl) { fields.potential_land = pl; tail.push(_POTENTIAL_LAND_LINE); }
+  }
   return { fields, lead, tail };
 }
 
@@ -13167,17 +13174,33 @@ export const FIND_SITES_ANCHOR_LOCKED = ['anchor.name', 'anchor.operator', 'anch
   'anchor.capacity_mva', 'anchor.city', 'anchor.state', 'anchor.status'];
 // Below Pro an anchor is {type, kv_band, voltage_basis}: the shape be#6303 gives
 // cross-layer anchors. Removed, never nulled.
+// Potential powered land (2026-11-23, backend include_parcels): a hosted parcel's id and its point
+// are Pro, like the anchor; county, acreage and distance stay so a preview still says there is land.
+export const FIND_SITES_PARCEL_LOCKED = ['parcels.parcels[].parcel_id', 'parcels.parcels[].lat',
+  'parcels.parcels[].lon', 'parcels.parcels[].next_call'];
+const _PARCEL_OPEN_KEYS = ['county', 'state', 'acres', 'acres_basis', 'distance_km'];
+function _lockParcelBlock(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p) || !Array.isArray(p.parcels)) return p;
+  return { ...p, parcels: p.parcels.map((r) => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+    const o = {}; for (const k of _PARCEL_OPEN_KEYS) if (k in r) o[k] = r[k]; return o;
+  }) };
+}
 export function _lockFindSitesAnchors(payload) {
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.candidates)) return payload;
+  let parcels = false;
   const candidates = payload.candidates.map((cand) => {
     if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
+    let out = cand;
+    if (cand.parcels && typeof cand.parcels === 'object') { parcels = true; out = { ...out, parcels: _lockParcelBlock(cand.parcels) }; }
     const a = cand.anchor;
-    if (!a || typeof a !== 'object' || Array.isArray(a)) return cand;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) return out;
     const anchor = { type: a.type ?? null, kv_band: a.kv_band || _kvBandOf(a.voltage_kv) };
     if (a.voltage_basis !== undefined) anchor.voltage_basis = a.voltage_basis;
-    return { ...cand, anchor };
+    return { ...out, anchor };
   });
-  return { ...payload, candidates, _locked_fields: [...FIND_SITES_ANCHOR_LOCKED],
+  return { ...payload, candidates,
+    _locked_fields: [...FIND_SITES_ANCHOR_LOCKED, ...(parcels ? FIND_SITES_PARCEL_LOCKED : [])],
     _required_tier: SUBSTATION_DETAIL_MIN_TIER };
 }
 // get_retirement_headroom rows: nearest_substations [{name, distance_km}] becomes
@@ -27322,7 +27345,7 @@ export function _planQuery(intent, context) {
     // (LAND_RE reads plural "sites") and its fiber / line wording routes it to fiber_power_pairing, which ran no
     // find_sites. A site hunt held to one place is a land question in those classes too.
     const _hunt = (_LAND_FIRST_CLASSES.has(top.cls.id) || top.cls.id === 'fiber_power_pairing') && _siteHuntAsk(text, d);
-    if ((_hunt || (_LAND_FIRST_CLASSES.has(top.cls.id) && _landSearchAsk(text, d))) && !_stateFan && !d.__stateCompare) {
+    if ((_hunt || (_LAND_FIRST_CLASSES.has(top.cls.id) && _landSearchAsk(text, d, { potentialLand: _potentialLandOn(process.env) }))) && !_stateFan && !d.__stateCompare) {
       let pl = null;
       try { pl = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }); } catch (_e) { pl = null; }
       const pt = _dcHostingPoint(d, pl);
@@ -27342,6 +27365,8 @@ export function _planQuery(intent, context) {
       const fs = args ? _landSearchFirst(seq, args, `The land step, first: candidate SEARCH AREAS ${args.lat != null ? `within ${args.radius_km} km of ${label || 'the place'}` : (args.market ? `around ${args.market}` : `in ${args.state}`)}, each anchored on a real substation with measured gas and fiber distance and its nearest market's DCPI verdict. A search area is not a parcel or land for sale; score a coordinate with analyze_site. Independent of the power reads: same wave.`) : null;
       if (fs && label) fs.land_label = label;
       if (fs && geo) fs.geocode_fallback = { state: st };
+      // Potential powered land (DCHUB_POTENTIAL_LAND): hosted parcels near each area, and the water screen when asked.
+      if (fs && _potentialLandOn(process.env)) fs.args_hint = { ...(fs.args_hint || {}), ..._landSearchExtras(text) };
     }
   } catch (_e) { /* routing must never throw */ }
   // 5.58 (Grok QA 2026-11-20 item 1; owner: "anchor fastest-site-near-X asks to the metro"): "fastest 250 MW site near
@@ -37872,6 +37897,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       max_gas_km: N.describe('Drop candidates farther than this from the nearest gas pipeline. Applied ONLY if the gas layer answers — check constraint_coverage'),
       max_fiber_km: N.describe('Drop candidates farther than this from the nearest fiber route (CHORD approximation — see fiber_distance_basis). Applied ONLY if the fiber layer answers'),
       exclude_moratorium: B.describe('true = drop candidates in a state with a published data-center moratorium. STATE grain, not jurisdiction grain'),
+      max_water_km: N.describe('Keep only areas whose anchor substation lies within this many km (max 10) of a named river, stream, lake or reservoir (NHDPlus, US only). An area whose water read did not answer is kept, flagged water.status not_evaluated and listed last'),
+      water_include_canals: B.describe('true = canals and ditches count as water for max_water_km (default: natural water and reservoirs only)'),
+      include_parcels: B.describe('true = list the largest hosted county parcels near each anchor (parcels that exist, NOT for sale), where DC Hub hosts the county parcel layer; elsewhere parcels.status is not_covered'),
+      min_parcel_acres: N.describe('Smallest parcel to list in acres (default 20); implies include_parcels'),
+      parcel_radius_km: N.describe('How far from the anchor to look for parcels in km (default 3, max 10)'),
       cluster_km: N.describe('Collapse anchors within this many km into one candidate area (default 8, max 100). Raise it for broader coverage, lower it for denser results'),
       limit: LIMIT },
     async (a) => withFreshness(
