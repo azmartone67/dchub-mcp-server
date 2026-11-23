@@ -158,6 +158,8 @@ Optional key variant: `auth_schemes=[{"mode": "API_KEY", "headers": {"X-API-Key"
 - **Dify:** Tools → MCP → Add MCP Server (HTTP) → URL `https://dchub.cloud/mcp`, name `DC Hub`, identifier `dchub`. Add the system-prompt line to the app's instructions.
 - **Flowise:** Tools → **Custom MCP** → config `{"url": "https://dchub.cloud/mcp"}` → attach to a Tool Agent.
 - **Microsoft Copilot Studio:** Agent → Tools → Add a tool → New tool → **Model Context Protocol** → name `DC Hub`, description = short description, server URL `https://dchub.cloud/mcp`, authentication None (or API key header `X-API-Key`, or OAuth 2.0 dynamic discovery).
+- **AWS Quick (Amazon Q successor for business):** Connectors → Model Context Protocol → endpoint `https://dchub.cloud/mcp`, public connectivity, no auth (or API key header); review and enable the discovered tools, starting with `execute_plan`.
+- **Poe / Mistral Le Chat / Perplexity / Grok / Claude / ChatGPT custom connectors:** add a custom MCP connector with URL `https://dchub.cloud/mcp` where the host offers one (install guides: https://dchub.cloud/connect).
 - **Zapier / Make / Pipedream:** no DC Hub app in their catalogs yet; call the REST API (`https://dchub.cloud/openapi.json`) with a generic HTTP/webhook step, or use the platform's MCP client step where one exists.
 
 ## Raw JSON-RPC smoke test
