@@ -76,18 +76,18 @@ describe('one nudge per MCP session (/mcp, keyless, real handler)', () => {
   });
   // A sessionless HTTP call from this harness arrives over a loopback socket, which the server reads as an
   // execute_plan step (loopback_step), so the sessionless fallback is pinned on the server's real step directly.
-  it('no session id: the same client name and IP /24 get it once; another /24 or client gets its own', () => {
+  it('no session id: the same client name and IP /24 get it once; another /24 or client gets its own', async () => {
     const step = H.S._emailNudgeOnceStep;
     const res = () => ({ content: [{ type: 'text', text: 'Answer. ' + EMAIL_ASK_LEAD + ' and get a daily change note.' }],
       structuredContent: { email_ask: { tool: 'get_api_key', copy: EMAIL_ASK_LEAD + ' and get a daily change note.' } } });
     const has = (r) => JSON.stringify(r).includes(EMAIL_ASK_LEAD);
     const c = (ip, name = 'Cursor') => ({ session_id: null, client_ip: ip, client_name_raw: name, platform: 'cursor' });
-    expect(has(step(res(), c('198.18.40.11')))).toBe(true);
-    expect(has(step(res(), c('198.18.40.99'))), 'same /24, same client: none').toBe(false);
-    expect(has(step(res(), c('198.18.41.11'))), 'another /24').toBe(true);
-    expect(has(step(res(), c('198.18.40.12', 'Windsurf'))), 'another client name').toBe(true);
-    expect(has(step(res(), { ...c('198.18.42.1'), loopback_step: true })), 'a plan step: never touched').toBe(true);
-    expect(has(step(res(), { ...c('198.18.42.1'), loopback_step: true })), 'a plan step: never touched').toBe(true);
+    expect(has(await step(res(), c('198.18.40.11')))).toBe(true);
+    expect(has(await step(res(), c('198.18.40.99'))), 'same /24, same client: none').toBe(false);
+    expect(has(await step(res(), c('198.18.41.11'))), 'another /24').toBe(true);
+    expect(has(await step(res(), c('198.18.40.12', 'Windsurf'))), 'another client name').toBe(true);
+    expect(has(await step(res(), { ...c('198.18.42.1'), loopback_step: true })), 'a plan step: never touched').toBe(true);
+    expect(has(await step(res(), { ...c('198.18.42.1'), loopback_step: true })), 'a plan step: never touched').toBe(true);
   });
 });
 
@@ -100,8 +100,8 @@ describe('/mcp/chatgpt unchanged', () => {
     const { DIRECTORY_PROFILE } = await import('../lib/chatgpt-directory.mjs');
     const res = { content: [{ type: 'text', text: EMAIL_ASK_LEAD + ' and get a daily change note.' }] };
     const c = { session_id: 'sess-chatgpt-1', profile: DIRECTORY_PROFILE, client_ip: '198.18.50.1' };
-    expect(H.S._emailNudgeOnceStep(res, c)).toBe(res);
-    expect(H.S._emailNudgeOnceStep(res, c)).toBe(res);
+    expect(await H.S._emailNudgeOnceStep(res, c)).toBe(res);
+    expect(await H.S._emailNudgeOnceStep(res, c)).toBe(res);
   });
 });
 
