@@ -5,7 +5,7 @@
     "coverage": "https://dchub.cloud/api/v1/canon/coverage",
     "capture_evidence": "https://dchub.cloud/api/v1/reports/canonical-benchmarks"
   },
-  "retrieved_at": "2026-11-17T13:42:41.084Z",
+  "retrieved_at": "2026-11-23T13:42:34.980Z",
   "contract_hash": "a4f6fc226ffb14c8",
   "version": 6,
   "source": "dchub-backend routes/problem_taxonomy.py",
@@ -534,7 +534,7 @@
     "source": "https://dchub.cloud/api/v1/reports/canonical-benchmarks",
     "captures_measured": 7,
     "captures_contracted": 7,
-    "last_successful_execution": "2026-11-16T07:47:21Z",
+    "last_successful_execution": "2026-11-23T07:33:58Z",
     "deferred_tools": [
       "plan_fiber_leadin"
     ],
