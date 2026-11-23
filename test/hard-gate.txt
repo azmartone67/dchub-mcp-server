@@ -106,6 +106,7 @@ test/chatgpt-toolset-frozen.test.mjs
 test/checkout-attrib-1122.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
+test/cite-as-every-tool.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs

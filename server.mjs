@@ -255,6 +255,7 @@ import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE, DAILY_CHECKIN_LINE, LAST_SESSION
 import { changesParams as _dhChangesParams, changesFallbackParams as _dhChangesFallback, attachDailyNext as _dhAttachDailyNext, dailyResourceText as _dhDailyResourceText, DAILY_RESOURCE_URI, dailyClaimAgentText as _dhClaimAgentText, dailyClaimAsk as _dhClaimAsk, withClaimFollowing as _dhWithClaimFollowing, normMarketSlug as _dhSlug, holdDailyInputs as _dhHoldDailyInputs } from './lib/daily-habit.mjs';
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY,
          nextAskShownLogOn as _nextAskShownLogOn, holdTrackRow as _holdTrackRow, flushTrackRows as _flushTrackRows } from './lib/agent-outreach.mjs';
+import { withCiteFirst as _withCiteFirst } from './lib/cite-first.mjs';
 import { withSourceLine as _withSourceLine, isTierPreview as _isTierPreview } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter, NEWS_SITE_REPORT_LINE as _NEWS_SITE_REPORT_LINE } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks, WALL_LINK_STATUSES as _WALL_LINK_STATUSES } from './lib/wall-link-track.mjs';
@@ -27974,6 +27975,11 @@ function _sourceLineCb(name, fn) {
       // F4 (DCHUB_EMAIL_ASK_AB, default OFF): arm B's unlock ask names the call's market or ISO. After every step, so it
       // rewrites the line the agent actually gets, and sees any other step's email_ask (wall to key) and stands down.
       _final = _emailAskAbStep(_final, name, args, c);
+      // Brain 2026-11-23 item 4 (lib/cite-first.mjs): one dated citation on every answer: cite_as, the Source line
+      // first (inside content[0]'s first 300 chars) and last, one date. Not on the directory / Claude / core
+      // profiles (their reviewed copy), a clean platform or a loopback plan step. DCHUB_CITE_FIRST=1 (default OFF).
+      _final = _withCiteFirst(_final, name, args, { skip: !!(c && c.loopback_step) || _isCleanPlatform()
+        || !!(c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) });
       return _final;
     } finally {
       _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)
