@@ -827,6 +827,7 @@ test/wall-paid-line-1121.test.mjs
 test/wall-relay-value-first-1121.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs
+test/wall-to-key-1122.test.mjs
 test/wall-transport.test.mjs
 test/wall-upgrade-offer.test.mjs
 test/wall-user-line-hard-wall.test.mjs
