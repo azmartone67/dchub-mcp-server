@@ -13,7 +13,7 @@ export const DCHUB_MCP_URL = 'https://dchub.cloud/mcp';
  *
  * @param {object} [options]
  * @param {string} [options.apiKey]  Sent as X-API-Key. Defaults to process.env.DCHUB_API_KEY.
- *                                   Omit both to run keyless on the free tier.
+ *                                   Omit both to run keyless.
  * @param {string} [options.url]     MCP endpoint. Defaults to https://dchub.cloud/mcp.
  * @param {string[]} [options.only]  Keep only these tool names.
  */
