@@ -176,9 +176,10 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
+// Plan report link (2026-11-22, DCHUB_PLAN_REPORT_LINK): lib/plan-report.mjs.
+import * as _PR from './lib/plan-report.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
-import * as _PR from './lib/plan-report.mjs';
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
@@ -27828,11 +27829,11 @@ function _sourceLineCb(name, fn) {
       // Agent Handoff P0-2 (DCHUB_EXP_UPGRADE_BLOCK, Test A treatment, default OFF): the `access` block and its handoff link,
       // appended after everything above.
       _final = await _commercialWallStep(_final, name, args, c);
-      // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
-      // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
       // Plan report link (DCHUB_PLAN_REPORT_LINK, default OFF): report_url + one closing line, minted from the
       // answer exactly as this caller received it (lib/plan-report.mjs). After every rewrite above, before the aref.
       _final = await _planReportStep(_final, name, c);
+      // Checkout-attribution spec 2026-11-22 section 1 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF): every relay, /licence
+      // and /go/* link in the answer carries the signed attribution ref. LAST, so it sees every link the agent gets.
       _final = _arefLinksStep(_final, name, c);
       return _final;
     } finally {

@@ -86,6 +86,24 @@ describe('lib/plan-report', () => {
     expect(b.is_qa).toBe(true);
   });
 
+  it('a block 0 that is wall copy (a link, an email or key ask) is never stored as the lead', async () => {
+    process.env[FLAG] = '1';
+    for (const text of ['ERCOT 461 GW. Your user can see the rest at https://dchub.cloud/u/abcdef123',
+      'Add an email to see the withheld headroom.', 'Get a key to continue.']) {
+      const m = okMint();
+      const r = plan();
+      r.content[0] = { type: 'text', text };
+      await PR.planReportStep(r, 'execute_plan', { mint: m });
+      expect(m.calls[0].payload.lead).toBeUndefined();
+      expect(JSON.stringify(m.calls[0])).not.toContain('/u/abcdef123');
+    }
+    const m = okMint();
+    const r = plan();
+    r.content[0] = { type: 'text', text: '350 E Cermak is a key fiber endpoint, on-net as of 2026-11-20.' };
+    await PR.planReportStep(r, 'execute_plan', { mint: m });
+    expect(m.calls[0].payload.lead).toBe('350 E Cermak is a key fiber endpoint, on-net as of 2026-11-20.');
+  });
+
   it('a slow, failed or mismatched mint attaches nothing', async () => {
     process.env[FLAG] = '1';
     const r = plan();
