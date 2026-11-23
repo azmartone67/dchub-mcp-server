@@ -27,7 +27,7 @@ const { text } = await withDCHubTools({}, ({ tools }) =>
     model: gateway('openai/gpt-5-mini'),
     tools,
     stopWhen: isStepCount(5),
-    prompt: 'Which US grid has the most headroom right now? Cite the source.',
+    prompt: 'What are current PJM grid conditions relevant to Ashburn data centers? Cite the source.',
   }),
 );
 
