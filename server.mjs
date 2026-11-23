@@ -3347,6 +3347,11 @@ const SERVER_VERSION = { version: '2.12.63' }.version;  // 2.12.63 (2026-11-23):
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
+// execute_plan's loopback goes to the port this process actually serves on, read from the
+// request socket (2026-11-23). PORT is only the default: a test that listens on port 0 sent every
+// plan step, loopback tokens included, to whatever else owned 3100 on the machine.
+let _servedPort = PORT;
+export function _loopbackPort() { return _servedPort; }
 // Note V keyed follow-up (owner 2026-11-16): /ai has no #pricing anchor any more (fe#2337), so the old default
 // https://dchub.cloud/ai#pricing was a dead link. No wall composes from this constant (every wall link is the signed
 // relay, _unlockUrl / buildHumanRelay; test/gated-unlock-is-tokenized.test.mjs), so it is the neutral front door,
@@ -37585,7 +37590,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
       if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken(Date.now(), c.kff_arm || null);
-      const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
+      const r = await fetch('http://127.0.0.1:' + _servedPort + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
                                params: { name, arguments: args } }),
@@ -40522,6 +40527,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
 const app = express();
 // UTF-8 charset on every JSON / SSE response, the SDK transport's included (lib/utf8-charset.mjs):
 // a bare text/event-stream let clients decode an em dash as Windows-1252 mojibake. First, so it wraps every writer.
+app.use((req, _res, next) => { const lp = req.socket && req.socket.localPort; if (lp) _servedPort = lp; next(); });
 app.use(utf8CharsetMiddleware);
 app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));
