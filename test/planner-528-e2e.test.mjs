@@ -45,7 +45,7 @@ afterAll(async () => {
 describe('execute_plan 5.28 (real server.mjs on loopback)', () => {
   it('B1: Sweetwater TX air permits: get_air_permit_context runs at the geocoded point, and `geocoded` says where it came from', async () => {
     const o = sc(await H.call('/mcp', 'execute_plan', { intent: 'Behind-the-meter gas generation near Sweetwater TX: what air permits apply?' }, PRO));
-    expect(o.planner_version).toBe('5.61');
+    expect(o.planner_version).toBe('5.62');
     const air = o.executed.find((e) => e.tool === 'get_air_permit_context');
     expect(air, steps(o)).toBeTruthy();
     expect(air.status, steps(o)).not.toBe('skipped_unresolved');

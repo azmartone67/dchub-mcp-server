@@ -15,7 +15,7 @@ const concrete = (v) => typeof v === 'string' && v.trim() !== '' && !v.startsWit
 // dc / power: the values a step bound to this place may carry (market slug or metro search word, state, ISO).
 const TEN = [
   { q: 'colocation in Dallas for 2 MW', cls: 'colocation', dc: ['dallas', 'Dallas'], power: ['ERCOT', 'TX'], before: 'paired' },
-  { q: 'Equinix facilities in Ashburn', cls: 'facility_search', dc: ['Northern Virginia', 'ashburn'], power: ['PJM', 'VA'], before: 'needed power', tool: 'get_grid_intelligence' },
+  { q: 'Equinix facilities in Ashburn', cls: 'facility_search', dc: ['Northern Virginia', 'ashburn', 'Ashburn'], power: ['PJM', 'VA'], before: 'needed power', tool: 'get_grid_intelligence' },
   { q: 'data center pipeline in Phoenix', cls: 'dc_capacity', dc: ['phoenix', 'AZ'], power: ['AZ'], before: 'paired' },
   { q: 'is Atlanta a good data center market', cls: 'market_outlook', dc: ['atlanta'], power: ['GA'], before: 'routing' },
   { q: 'colo options in Chicago 500 kW', cls: 'colocation', dc: ['chicago', 'Chicago'], power: ['PJM', 'IL'], before: 'paired' },
@@ -30,7 +30,7 @@ const POWER_KEYS = ['iso', 'state'];
 const boundTo = (s, keys, want) => keys.some((k) => concrete(s.args_hint && s.args_hint[k]) && want.includes(s.args_hint[k]));
 
 describe('planner 5.38: both sides of the place', () => {
-  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.61'); });
+  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.62'); });
 
   describe('the owner\'s ten questions: a data-center step and a power step for the same place', () => {
     for (const t of TEN) {

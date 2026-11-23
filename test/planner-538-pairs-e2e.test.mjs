@@ -134,7 +134,7 @@ async function plan(args) {
 const TEN = [
   // data-center first
   { q: 'colocation in Dallas for 2 MW', cls: 'colocation', dc: ['get_market_dcpi_rank', D.dcpi], power: ['get_grid_intelligence', D.grid] },
-  { q: 'Equinix facilities in Ashburn', cls: 'facility_search', dc: ['search_facilities', null], power: ['get_grid_intelligence', D.grid], added: 'power' },
+  { q: 'Equinix facilities in Ashburn', cls: 'facility_search', dc: ['search_facilities', '2026-03-30'], power: ['get_grid_intelligence', D.grid], added: 'power' },
   { q: 'data center pipeline in Phoenix', cls: 'dc_capacity', dc: ['get_pipeline', D.pipeline], power: ['get_power_availability_timeline', D.timeline] },
   { q: 'is Atlanta a good data center market', cls: 'market_outlook', dc: ['get_market_dcpi_rank', D.dcpi], power: ['get_power_availability_timeline', D.timeline] },
   { q: 'colo options in Chicago 500 kW', cls: 'colocation', dc: ['get_market_dcpi_rank', D.dcpi], power: ['get_grid_intelligence', D.grid] },
@@ -184,7 +184,7 @@ describe('planner 5.38: both sides of the place, end to end (keyless, compact)',
 
       it(`routes to ${t.cls} on planner 5.38, compact`, () => {
         expect(o.intent_class).toBe(t.cls);
-        expect(o.planner_version).toBe('5.61');
+        expect(o.planner_version).toBe('5.62');
         expect(o.detail).toBe('compact');
       });
 

@@ -13,7 +13,7 @@ const show = (p) => JSON.stringify(p.recommended_sequence.map((s) => [s.tool, s.
 const tools = (p) => p.recommended_sequence.map((s) => s.tool);
 
 describe('planner 5.61: a site hunt is a site search', () => {
-  it('PLANNER_VERSION is 5.61', () => { expect(PLANNER_VERSION).toBe('5.61'); });
+  it('PLANNER_VERSION is 5.61', () => { expect(PLANNER_VERSION).toBe('5.62'); });
 
   it('the owner brief (with a moratorium check) is a site search around Miami, not permitting', () => {
     for (const ctx of [{}, { capacity_mw: 50, state: 'FL', market: 'miami' }]) {
