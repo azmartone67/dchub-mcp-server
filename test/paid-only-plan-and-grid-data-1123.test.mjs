@@ -107,7 +107,7 @@ beforeAll(async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input && input.url ? input.url : input);
     if (url.startsWith('http://127.0.0.1:')) return runStep(init);
-    if (!url.startsWith(BASE)) throw new Error('network fence: ' + url);
+    if (new URL(url).origin !== new URL(BASE).origin) throw new Error('network fence: ' + url);
     const p = new URL(url).pathname;
     const h = (init && init.headers) || {};
     if (p === '/api/v1/mcp/full-cap/consume' || p === '/api/v1/mcp/full-cap/peek') return json({ ok: false });

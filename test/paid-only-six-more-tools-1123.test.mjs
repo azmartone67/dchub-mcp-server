@@ -75,7 +75,7 @@ beforeAll(async () => {
   realFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input && input.url ? input.url : input);
-    if (!url.startsWith(BASE)) throw new Error('network fence: ' + url);
+    if (new URL(url).origin !== new URL(BASE).origin) throw new Error('network fence: ' + url);
     const p = new URL(url).pathname;
     if (p.startsWith('/api/v1/context/market/')) return json(PACK(decodeURIComponent(p.split('/').pop())));
     if (p === '/api/v1/mcp/tools/rank_markets') return json(structuredClone(RANK));
