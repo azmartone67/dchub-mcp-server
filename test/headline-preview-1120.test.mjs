@@ -156,6 +156,12 @@ const prose = (r) => (res(r).content || []).map((b) => (b && b.text) || '').join
 // What differs between two runs of one call by design: relay tokens, timestamps, ids, timings.
 const norm = (r) => JSON.stringify(r && r.msg)
   .replace(/https:\/\/dchub\.cloud\/(upgrade\/h\/[A-Za-z0-9_.-]+|u\/[A-Za-z0-9]+)(?:\?[^"\s\\]*)?/g, 'RELAY')
+  // The r-arms split (server.mjs composeHumanCta, continuationArmFor) draws the human line's arm per session: the
+  // treatment names what is held back ("the full DC Hub answer has `projects` for this query — open RELAY to see it and
+  // unlock."), the control is the generic line. Two calls are two sessions, so the arm is not this flag's difference.
+  // Owner 2026-11-23: grid and queue walls are depth walls now and carry that line where the email unlock line was.
+  .replace(/the full DC Hub answer has [^"\\]*? (?:— open RELAY to see it and unlock\.)/g, 'ARM_LINE')
+  .replace(/open RELAY — see what your agent found and how to unlock it\./g, 'ARM_LINE')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
   // A planner version bump is not this flag's: the branch and origin/main differ there by design until it merges.
   .replace(/(\\?"planner_version\\?":\\?")[0-9.]+/g, '$1V')
@@ -295,13 +301,13 @@ describe('flag on leaves alone what already had its headline, and the surfaces i
   it('grid: the taste already carried demand + share with their hours and source', async () => {
     const [on, off, ask] = await same('get_grid_intelligence', { region_id: 'PJM' });
     expect(on).toBe(off);
-    expect(ask).toBe(true);   // keyless wall: #1604's email_ask
+    expect(ask).toBe(false);   // owner 2026-11-23: grid is paid-only, so the keyless wall carries no email unlock ask
     expect(on).toContain('"demand_mw"');
   });
   it('queue, report-dated ISO (ERCOT): already dated', async () => {
     const [on, off, ask] = await same('get_interconnection_queue', { iso: 'ERCOT' });
     expect(on).toBe(off);
-    expect(ask).toBe(true);
+    expect(ask).toBe(false);   // owner 2026-11-23: queue is paid-only, no email unlock ask
     expect(on).toContain('2026-09-30');
   });
   // The last field: whether #1604's email_ask lands there (a ChatGPT surface and a paid key: never; a free key's wall: yes).
