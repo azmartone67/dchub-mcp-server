@@ -53,6 +53,12 @@ const SERVER_PORTS = new Set();
 const _peer = net.Socket.prototype._getpeername;
 const FLAGS = ['DCHUB_WALL_PAID_LINE', 'DCHUB_WALL_COPY_V2', 'DCHUB_WALL_IDENTITY_V2'];
 const setEnv = (o) => { for (const k of FLAGS) { if (o[k] === undefined) delete process.env[k]; else process.env[k] = o[k]; } };
+// #1594 (2026-11-23, lib/email-nudge-once.mjs): the get_api_key email nudge shows once per MCP session, or per client name
+// + IP /24 for 30 minutes with no session. The calls here are sessionless from one /24 and stand for separate callers, and
+// several compare against origin/main byte for byte, so the dedupe is off in this file; test/email-nudge-once-1123 pins it.
+let _nudgeOncePrev;
+beforeAll(() => { _nudgeOncePrev = process.env.DCHUB_EMAIL_NUDGE_ONCE; process.env.DCHUB_EMAIL_NUDGE_ONCE = '0'; });
+afterAll(() => { if (_nudgeOncePrev === undefined) delete process.env.DCHUB_EMAIL_NUDGE_ONCE; else process.env.DCHUB_EMAIL_NUDGE_ONCE = _nudgeOncePrev; });
 beforeAll(async () => {
   net.Socket.prototype._getpeername = function _getpeername() {
     const p = _peer.call(this);
