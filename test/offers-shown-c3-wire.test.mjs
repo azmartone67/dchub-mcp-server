@@ -155,10 +155,19 @@ describe('C3 on the wire: the wall row names what the agent received', () => {
     expect(r.ev.offers_shown).toEqual(offersShown(r.result, r.ev.email_ask));
   });
 
-  it('a marked email ask that reached the agent is an email_unlock offer (ai_capacity_index rows ask)', async () => {
-    const r = await (await session('Claude Code', 'ai_capacity_index'))();
+  it('a marked email ask that reached the agent is an email_unlock offer (get_fiber_intel rows ask)', async () => {
+    const r = await (await session('Claude Code', 'get_fiber_intel'))({ metro: 'ashburn' });
     expect(r.ev.email_ask).toBe('line');
     expect(r.ev.offers_shown).toContain('email_unlock');
+  });
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): ai_capacity_index rows open only at Developer, so its rows ask is
+  // gone and the row marks no email_unlock offer.
+  it('ai_capacity_index (paid-only since 11-23): no email ask is marked, so no email_unlock offer', async () => {
+    const r = await (await session('Claude Code', 'ai_capacity_index'))();
+    expect(r.ev).toBeTruthy();
+    expect(r.ev.email_ask).not.toBe('line');
+    expect(r.ev.offers_shown).not.toContain('email_unlock');
+    expect(r.ev.offers_shown).toEqual(offersShown(r.result, r.ev.email_ask));
   });
 
   it('DCHUB_OFFERS_SHOWN_EVENT=0: the row carries no offers_shown (unknown, stored NULL)', async () => {

@@ -251,7 +251,8 @@ const CASES = [
   ['get_grid_intelligence',   { region_id: 'PJM' },
     TASTE(['dcpi_scores', 'queue_and_time_to_power', 'demand_history', 'generation_mix_detail', 'grid_stress', 'capacity', 'price', 'related_intel'])],
   ['get_facility',            { id: 100 },                        PREVIEW],
-  ['get_grid_data',           { iso: 'PJM' },                    PREVIEW],
+  // owner 2026-11-23: get_grid_data is paid-full-only; keyless gets the taste (headline demand, rest listed)
+  ['get_grid_data',           { iso: 'PJM' },                    TASTE(['other_readings'])],
   ['get_fiber_intel',         { metro: 'ashburn' },               PREVIEW],
   ['rank_markets',            {},                                 PREVIEW],
   ['get_dchub_recommendation', {},                                PREVIEW],
@@ -274,7 +275,7 @@ describe('anonymous responses of the ten top tools', () => {
       if (tool !== 'analyze_site') expect(s.provenance_completeness, 'a response that returned data read walled/unknown').toBe('partial_preview');
       else expect(s.provenance_completeness).toBe('walled');
       // 3. taste class: headline + a withheld LIST with counts (no silent nulls) + completeness partial
-      if (tool === 'get_energy_prices' || /^(get_interconnection_queue|get_market_intel|get_grid_intelligence)$/.test(tool)) {
+      if (tool === 'get_energy_prices' || /^(get_interconnection_queue|get_market_intel|get_grid_intelligence|get_grid_data)$/.test(tool)) {
         expect(sc.taste && sc.taste.headline, 'taste rows missing').toBeTruthy();
         expect(Array.isArray(sc.withheld) && sc.withheld.length > 0, 'no withheld list').toBe(true);
         for (const w of sc.withheld) {

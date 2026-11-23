@@ -123,6 +123,8 @@ const H2H = [
   { args: { intent: 'Compare Equinix DC2 vs CoreSite VA1 for colocation in Ashburn' }, cls: 'colocation', lead: 'Northern Virginia', pair: true },
   { args: { intent: 'What does colocation cost per kW in Dallas?' }, cls: 'pricing_out_of_scope', lead: 'Dallas' },
 ];
+// A keyless plan's steps read at preview depth since 2026-11-23 (owner): a step that ran is executed or gated_preview.
+const RAN = ['executed', 'gated_preview'];
 const PRICE_PLAN_WORDING = /\$\s?\d|\bcredits?\b|free key|calls?\s*\/\s*day|per day|higher limits|free tier|fee only on close/i;
 
 describe('colocation head-to-head eval (planner 5.32, real server, stub backend)', () => {
@@ -165,14 +167,14 @@ describe('colocation head-to-head eval (planner 5.32, real server, stub backend)
           expect(rows.map((r) => r.city)).toEqual([q.city]);
           expect(body.submarket_scope).toMatchObject({ submarket: q.city, dropped_outside_submarket: 1 });
           for (const r of rows) expect(r.fit_note, r.name).toMatch(/^Size not checked: .*500 kW asked/);
-          const gf = o.executed.find((e) => e.tool === 'get_facility' && e.status === 'executed');
+          const gf = o.executed.find((e) => e.tool === 'get_facility' && RAN.includes(e.status));
           expect(gf.args.slug).toBe('ntt-ashburn-va7-data-center-ashburn-0809b12f');
         });
       }
 
       if (q.pair) {
         it('each named facility is read from its own search row', () => {
-          const gf = o.executed.filter((e) => e.tool === 'get_facility' && e.status === 'executed').map((e) => e.args.slug);
+          const gf = o.executed.filter((e) => e.tool === 'get_facility' && RAN.includes(e.status)).map((e) => e.args.slug);
           expect(gf).toEqual(['equinix-dc2-ashburn-0a1b2c3d', 'coresite-va1-reston-4e5f6a7b']);
         });
         it('item 1: the profile carries the specs and the answer says them, and which are not on record; no street address', () => {

@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { leanResponseStep, leanObject, humanLine, LEAN_SKIP_TOOLS } from '../lib/lean-response.mjs';
 import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { RANK_EMAIL_ASK_LEAD } from '../lib/paid-sell-line.mjs';
+import { KEY_LINE_LEAD } from '../lib/wall-key-line.mjs';
 import { createServer } from 'node:http';
 import net from 'node:net';
 
@@ -307,8 +308,11 @@ describe('/mcp end to end: the same anonymous call with the step on and off', ()
       // on the grid / queue previews (full-stack QA 2026-10-24: lean used to drop it from every production preview).
       // The rows asks (rank_markets, ai_capacity_index, get_fiber_intel 2026-11-08) are the same kind, with their own
       // lead; lean keeps either one (lib/lean-response.mjs emailAsk).
+      // Owner 2026-11-23: rank_markets gives full rows only to Developer and up, so its rows ask is off and the wall
+      // carries the free-key line instead (lib/wall-key-line.mjs, an email-for-key ask, never an unlock). It is the
+      // same kind of agent instruction, so it counts as the one agent ask.
       const paras = askParas(on.result);
-      const isEmailAsk = (p) => p.includes(EMAIL_ASK) || p.includes(RANK_EMAIL_ASK_LEAD);
+      const isEmailAsk = (p) => p.includes(EMAIL_ASK) || p.includes(RANK_EMAIL_ASK_LEAD) || p.includes(KEY_LINE_LEAD);
       expect(paras.filter((p) => !isEmailAsk(p)).length, `${tool}: human ask paragraphs`).toBeLessThanOrEqual(1);
       expect(paras.filter(isEmailAsk).length, `${tool}: the email ask, once`).toBeLessThanOrEqual(1);
       if (off.sc.human_url) expect(scOn.human_url, `${tool}: the one human link stays`).toBeTruthy();

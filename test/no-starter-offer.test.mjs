@@ -225,6 +225,8 @@ describe('the anonymous trim of an allowed free tool (_upgrade.tier anonymous)',
 });
 
 describe('the trial-cap wall (_upgrade.tier trial)', () => {
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): rank_markets no longer gives a free-class key capped full answers,
+  // so it never reaches this wall; get_fiber_intel is still on the capped-taste path and does.
   // The day counter is per client IP and tool, and every call here comes from 127.0.0.1, so a
   // later test may be walled on its first call. Call until the wall, never count calls.
   async function wall(s, tool, args) {
@@ -237,7 +239,7 @@ describe('the trial-cap wall (_upgrade.tier trial)', () => {
 
   it('a live key: no Starter; Developer and Pro bind k-<sha256(key)> with the session beside it', async () => {
     const s = await openSession({ 'x-api-key': K_LIVE });
-    const r = await wall(s, 'rank_markets', { limit: 5 });
+    const r = await wall(s, 'get_fiber_intel', { metro: 'ashburn' });
     expect(validated.has(K_LIVE), 'the key never reached validation').toBe(true);
     const up = upgradeOf(r);
     const identity = ['k-' + sha(K_LIVE), s.sid];
@@ -248,7 +250,7 @@ describe('the trial-cap wall (_upgrade.tier trial)', () => {
 
   it('a trial key: no Starter, and Developer binds the session (a k- ref has no row to land on)', async () => {
     const s = await openSession({ 'x-api-key': K_TRIAL });
-    const r = await wall(s, 'rank_markets', { limit: 5 });
+    const r = await wall(s, 'get_fiber_intel', { metro: 'ashburn' });
     expect(validated.has(K_TRIAL), 'the key never reached validation').toBe(true);
     expect(fields(upgradeOf(r).developer_url, GO).parts).toEqual(['developer', s.sid]);
     expect(starterOffers(r)).toEqual([]);

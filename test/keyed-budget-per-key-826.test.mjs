@@ -35,6 +35,7 @@ beforeAll(async () => {
       return json({ isos: [{ iso: 'ERCOT', avg_constraint: 46.5, avg_excess: 60, avg_time_to_power_months: 30,
         market_count: 5, build_count: 3 }] });
     }
+    if (p.includes('/fiber/')) return json({ metro: 'ashburn', total: 1, routes: [{ id: 'r1', carrier: 'X', miles: 10 }] });
     return json({});
   };
   const prev = process.env.DCHUB_API_BASE;
@@ -52,8 +53,16 @@ afterAll(() => {
 let n = 0;
 const seat = (extra = {}) => ({ tier: 'free', platform: 'claude', client_name_raw: 'claude-ai',
   client_ip: '203.0.115.' + (10 + (n % 200)), session_id: 'sess-826-' + (++n), ...extra });
-async function grid(s, args = { iso: 'ERCOT' }) {
+async function gridIntel(s, args = { iso: 'ERCOT' }) {
   const T = TOOLS.get_grid_intelligence;
+  const parsed = await T.inputSchema.safeParseAsync(args);
+  return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
+}
+// ★ Owner 2026-11-23 (lib/paid-full-only.mjs): get_grid_intelligence is paid-full-only, so a free key gets no full
+// grid answer to count. The per-key budget (#826) is the same code for every capped taste tool, so it is driven
+// through get_fiber_intel, which a free key still gets in full twice a day; grid is pinned as never metered below.
+async function grid(s, args = { metro: 'ashburn' }) {
+  const T = TOOLS.get_fiber_intel;
   const parsed = await T.inputSchema.safeParseAsync(args);
   return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
 }
@@ -63,7 +72,7 @@ const env = (k, v) => { const p = process.env[k]; if (v === undefined) delete pr
 
 
 
-const GRID = 'get_grid_intelligence';
+const GRID = 'get_fiber_intel';
 const keyed = (ip, key) => ({ api_key: key, tier: 'free', platform: 'chatgpt', client_name_raw: 'openai-mcp',
   client_ip: ip, session_id: 'sess-826-k-' + (++n) });
 
@@ -111,6 +120,16 @@ describe('#826 keyed budget is per key, not per shared IP', () => {
     // and the peek states the ceiling, not the fresh key's own 2
     expect(S._keyedFullRemaining({ api_key: 'dch_live_826_cycle_new', client_ip: ip }, GRID, 2)).toBe(0);
     expect(S._keyedFullRemaining({ api_key: 'dch_live_826_cycle_new', client_ip: '198.51.100.29' }, GRID, 2)).toBe(2);
+  });
+
+  it('get_grid_intelligence (paid-full-only): a free key is never metered on it, so it spends no budget', async () => {
+    const ip = '198.51.100.30', k = 'dch_live_826_grid_key_0001';
+    for (let i = 0; i < 3; i++) {
+      const r = await gridIntel(keyed(ip, k));
+      expect(r.structuredContent._metered_trial).toBeUndefined();
+      expect(r.structuredContent._constraint_score_withheld).toBe(true);   // the preview: the DCPI fields are withheld
+    }
+    expect(S._keyedFullRemaining({ api_key: k, client_ip: ip }, 'get_grid_intelligence', 2)).toBe(2);
   });
 
   it('_fullBudgetId: key when presented, IP only for a keyless seat', () => {

@@ -617,6 +617,26 @@
           "description": "true = drop candidates in a state with a published data-center moratorium. STATE grain, not jurisdiction grain",
           "type": "boolean"
         },
+        "max_water_km": {
+          "description": "Keep only areas whose anchor substation lies within this many km (max 10) of a named river, stream, lake or reservoir (NHDPlus, US only). An area whose water read did not answer is kept, flagged water.status not_evaluated and listed last",
+          "type": "number"
+        },
+        "water_include_canals": {
+          "description": "true = canals and ditches count as water for max_water_km (default: natural water and reservoirs only)",
+          "type": "boolean"
+        },
+        "include_parcels": {
+          "description": "true = list the largest hosted county parcels near each anchor (parcels that exist, NOT for sale), where DC Hub hosts the county parcel layer; elsewhere parcels.status is not_covered",
+          "type": "boolean"
+        },
+        "min_parcel_acres": {
+          "description": "Smallest parcel to list in acres (default 20); implies include_parcels",
+          "type": "number"
+        },
+        "parcel_radius_km": {
+          "description": "How far from the anchor to look for parcels in km (default 3, max 10)",
+          "type": "number"
+        },
         "cluster_km": {
           "description": "Collapse anchors within this many km into one candidate area (default 8, max 100). Raise it for broader coverage, lower it for denser results",
           "type": "number"

@@ -233,7 +233,10 @@ const refsIn = (body) => [
   ...[...body.matchAll(/client_reference_id=([^&"\s\\]+)/g)].map((m) => decodeURIComponent(m[1])),
 ];
 
-const GRID = ['get_grid_intelligence', { region_id: 'PJM' }];
+// 2026-11-23 (owner): get_grid_intelligence is paid-full-only (lib/paid-full-only.mjs), so a trial key no longer
+// gets its capped full taste. The auto-mint / trial-budget mechanics are pinned on get_fiber_intel, which still
+// rides the same trial_taste path (ALWAYS_PARTIAL_PREVIEW).
+const GRID = ['get_fiber_intel', { metro: 'ashburn' }];
 // 2026-09-22: compare_sites became Land & Power, which answers a key below Pro
 // with its own preview (test/lp-pro-only.test.mjs), not the Pro wall these
 // mechanisms ride on. get_dchub_recommendation is the same class of tool

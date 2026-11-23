@@ -43,7 +43,7 @@ const { text } = await generateText({
   prompt: "Rank US markets for a 200 MW AI campus and cite the as-of date.",
 });
 ```
-No key is needed to start (free-tier previews). `dchubTools({ apiKey })` or
+No key is needed to start (keyless previews). `dchubTools({ apiKey })` or
 `DCHUB_API_KEY` sends `X-API-Key`. `tools: "all"` exposes every tool, or pass a list
 of names; `prefix: "dchub_"` namespaces them; `via` names your app in DC Hub's
 partner counts (default `"ai-sdk"`). Each tool returns DC Hub's text unchanged, so
@@ -58,7 +58,7 @@ export DCHUB_API_KEY=dch_live_...
 `DCHUB_UA_SUFFIX` (or `new DCHub({ uaSuffix })`) appends a label to the User-Agent,
 e.g. your app name: `dc-sdk-node/0.3.1 (acme-siting)`.
 
-On the **free tier** some fields are masked and `grid` returns a gated preview;
+Without a key some fields are masked and `grid` returns a gated preview;
 the SDK strips the upsell wrapper and returns the real embedded payload either
 way. Source/citation: https://dchub.cloud (CC-BY-4.0).
 

@@ -116,12 +116,22 @@ describe('E3 copy', () => {
     expect(out.structuredContent.error).toBe('anon_hard_wall');
     expect(out.isError).toBe(w.isError);
   });
-  it('arm B names the ISO, and "queue" on the queue tools', () => {
-    const c = ctxFor(ipInArm(EAB.ARM_B));
-    const q = _emailAskAbStep(hardWall('get_interconnection_queue'), 'get_interconnection_queue', { iso: 'ercot' }, c, { post: () => {} });
-    expect(q.structuredContent.user_message).toBe('Add an email to get the full ERCOT queue: ' + LINK);
-    const g = _emailAskAbStep(hardWall('get_grid_intelligence'), 'get_grid_intelligence', { iso: 'iso-ne' }, ctxFor(ipInArm(EAB.ARM_B)), { post: () => {} });
-    expect(g.structuredContent.user_message).toBe('Add an email to get the full ISO-NE answer: ' + LINK);
+  // 2026-11-23 (owner): grid and queue are paid-full-only (lib/paid-full-only.mjs). An email no longer opens them, so
+  // arm B has no "Add an email to get the full ... answer" line to offer there: the wall is served exactly as built
+  // (lib/email-ask-ab.mjs reason email_does_not_open), and the caller is still recorded in its arm, like the
+  // no-subject fallback below.
+  it('grid and queue (paid key only): arm B leaves the wall unchanged (no email line), the arm is still recorded', () => {
+    for (const [tool, args] of [['get_interconnection_queue', { iso: 'ercot' }], ['get_grid_intelligence', { iso: 'iso-ne' }]]) {
+      const c = ctxFor(ipInArm(EAB.ARM_B));
+      const w = hardWall(tool);
+      const out = _emailAskAbStep(w, tool, args, c, { post: () => {} });
+      expect(JSON.stringify(out), tool).toBe(JSON.stringify(w));
+      expect(out.structuredContent.user_message, tool).not.toMatch(/^Add an email to get the full/);
+      expect(c._emailAskAbArm, tool).toBe(EAB.ARM_B);
+    }
+    // control: the same arm-B caller on get_market_intel is rewritten
+    const m = _emailAskAbStep(hardWall(), 'get_market_intel', { market: 'Dallas' }, ctxFor(ipInArm(EAB.ARM_B)), { post: () => {} });
+    expect(m.structuredContent.user_message).toBe('Add an email to get the full Dallas answer: ' + LINK);
   });
   it('arm B on the soft cap rewrites the line in the JSON text, user_message and _upgrade.message', () => {
     const w = softWall();

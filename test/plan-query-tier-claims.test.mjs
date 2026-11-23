@@ -111,6 +111,20 @@ const PHRASES = [
   { id: 'developer-only-full-starter-allowance',
     re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a (?:\$10 )?credit pack\); (?:Developer and up get|a paid DC Hub plan gets|full access gets) the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
+  // Owner 2026-11-23 (lib/paid-full-only.mjs): grid intelligence, the queue and the refined queue are full only at
+  // Developer and up; every seat below (no key, a free key, a bound email, a trial, the pack) gets the preview, with
+  // no daily allowance. A grandfathered Starter key keeps its daily allowance where the note says so.
+  { id: 'below-full-access-preview-starter-allowance',
+    re: /below full access a preview; full access gets the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
+    fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
+  { id: 'below-full-access-preview',
+    re: /below full access a preview; full access gets the full answer(?! \(a grandfathered)/,
+    fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
+  { id: 'below-full-access-three-row-preview',
+    re: /below full access a trimmed preview \(3 rows, MW withheld; MISO and SPP project names and queue ids held\); full access gets the full survivor set/,
+    // The refined queue is not depth-teased: a credit still buys the full call, so the pack seat reads full (as on
+    // pack-or-developer-full below). Measured 2026-11-23.
+    fresh: m(P, P, F, F, F, F), spent: m(P, P, F, F, F, F), threeRowPreview: true },
   { id: 'any-key-full',
     re: /with no key a trimmed preview \(3 rows, MW withheld; MISO and SPP project names and queue ids held\); (?:any key, a free one included,|any DC Hub key) gets the full survivor set/,
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },
@@ -332,6 +346,8 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
     const { claims } = extractClaims();
     const refined = claims.filter((c) => c.tool === 'get_refined_queue');
     expect(refined.length, 'the three get_refined_queue claims were not found').toBe(3);
+    // Owner 2026-11-23: all three now carry the below-full-access wording, not the any-key one.
+    expect(refined.map((c) => c.ph.id)).toEqual(Array(3).fill('below-full-access-three-row-preview'));
     expect(claims.length).toBeGreaterThanOrEqual(25);
     expect(S.TRIAL_PREVIEW_ROWS, 'the any-key-full phrase says "3 rows"').toBe(3);
   });
@@ -398,7 +414,8 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
   it('"free-tier friendly" tools give a free key every row, not a walled preview', async () => {
     const { claims } = extractClaims();
     const ff = [...new Set(claims.filter((c) => c.ph.free_friendly).map((c) => c.tool))];
-    expect(ff.length).toBeGreaterThanOrEqual(5);
+    // 4, not 5: owner 2026-11-23 took rank_markets and get_energy_prices off every-access-level (lib/paid-full-only.mjs).
+    expect(ff.length).toBeGreaterThanOrEqual(4);
     const bad = [];
     for (const tool of ff) {
       const out = await call(tool, K_FREE);

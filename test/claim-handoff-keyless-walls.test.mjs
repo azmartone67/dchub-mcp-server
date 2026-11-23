@@ -375,8 +375,11 @@ describe('what it must not do', () => {
     // the decision tools (item 3, default on): a keyless preview carries the decision line; off: left alone
     const runKeyless = (name) => S._ctxALS.run({ session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor',
       auth_source: 'none', _wallStatus: 'trial_used' }, async () => S._claimHandoffStep(res(), name));
-    for (const n of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel']) {
-      expect((await runKeyless(n)).content, n + ' item 3 on').toHaveLength(3);
+    expect((await runKeyless('get_market_intel')).content, 'get_market_intel item 3 on').toHaveLength(3);
+    // 2026-11-23 (owner): grid and queue are paid-full-only (lib/paid-full-only.mjs): an email opens neither, so their
+    // keyless preview gets no decision line, and as preview-only tools the step skips them.
+    for (const n of ['get_grid_intelligence', 'get_interconnection_queue']) {
+      expect((await runKeyless(n)).content, n + ' paid key only: no decision line').toHaveLength(2);
     }
     process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = '0';
     try {
