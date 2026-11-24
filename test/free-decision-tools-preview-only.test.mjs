@@ -569,14 +569,23 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
     expect(q('2026-08-31', 'daily').envelope.taste.headline).not.toHaveProperty('as_of_label');
     expect(q('2026-08-31', undefined).envelope.taste.headline).not.toHaveProperty('as_of_label');
   });
-  it('queue (ERCOT large-load basis): the generation total is the headline and the 474 GW large-load total is withheld', () => {
+  // Owner 2026-11-24 ("Yes, open it"): ERCOT's large-load total and the tracker rows reach a free seat; DC Hub's
+  // data-center split of that queue stays withheld.
+  it('queue (ERCOT large-load basis): generation headline; the 474 GW large-load total and tracker rows are served; the DC split is withheld', () => {
+    const LL = { iso: 'ERCOT', rows: [{ metric: 'large_load_queue_total', value_mw: 474000, as_of_date: '2026-07-29', source_url: 'https://www.ercot.com/x' }] };
     const out = T.buildFreeDecisionTaste('get_interconnection_queue', { iso: 'ERCOT', as_of: '2026-10-07',
       queued_load_total_gw: 474.0, queued_load_total_gw_basis: 'large_load', queued_generation_gw: 454.5,
-      queued_load_data_center_gw: 426.6, project_count: 1907, projects: [{ queue_id: 'x' }] });
+      queued_load_data_center_gw: 426.6, project_count: 1907, projects: [{ queue_id: 'x' }], large_load: LL });
     expect(out.envelope.taste.headline).toMatchObject({ name: 'queued_generation_gw', value: 454.5 });
+    expect(out.envelope.queued_large_load_gw).toBe(474.0);
+    expect(out.envelope.large_load).toEqual(LL);
     const lq = out.envelope.withheld.find((w) => w.section === 'load_queue');
-    expect(lq.count).toBe(2);
-    expect(JSON.stringify(out.envelope)).not.toContain('474');
+    expect(lq.count).toBe(1);
+    expect(JSON.stringify(out.envelope)).not.toContain('426.6');
+    // a generation-basis ISO carries no large-load total
+    const pjm = T.buildFreeDecisionTaste('get_interconnection_queue', { iso: 'PJM', as_of: '2026-10-07',
+      queued_load_total_gw: 99.0, queued_generation_gw: 300, project_count: 10, projects: [{ queue_id: 'y' }] });
+    expect(pjm.envelope).not.toHaveProperty('queued_large_load_gw');
   });
   it('market: no DCPI row → headline value null with an UNMEASURED basis, never a fabricated verdict', () => {
     const out = T.buildFreeDecisionTaste('get_market_intel', { ...MARKET, siting: { available: false, reason: 'no_dcpi_row', mw: { total_mw: 1 } } });
