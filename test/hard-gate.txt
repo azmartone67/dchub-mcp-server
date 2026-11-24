@@ -775,6 +775,7 @@ test/source-capacity-match.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
 test/stale-session-notify-1122.test.mjs
+test/stale-session-serve-two-replicas-1124.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
 test/starter-prompts-1124.test.mjs
