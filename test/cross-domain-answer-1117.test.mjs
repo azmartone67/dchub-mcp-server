@@ -165,7 +165,8 @@ describe('the answer for (b), keyless', () => {
   const ia = buildCrossDomainAnswer({ intent: QB, intent_class: 'grid_headroom', place: { label: 'Northern Virginia', state: 'VA', iso: 'PJM' } }, executed, asMap(executed));
 
   it('names both sides with figures and dates, and says what DC Hub prices are', () => {
-    expect(ia.headline).toBe('Northern Virginia (PJM). Data centers: 587 facilities, 11,313 MW tracked (as of 2026-11-03); DCPI AVOID (as of 2026-11-18).'
+    // The DCPI date is said as the America/Phoenix day (lib/cite-day.mjs): siting.dcpi.as_of 00:34Z on 11-18 is 11-17.
+    expect(ia.headline).toBe('Northern Virginia (PJM). Data centers: 587 facilities, 11,313 MW tracked (as of 2026-11-03); DCPI AVOID (as of 2026-11-17).'
       + ' Power: PJM queue 373.5 GW (collected 2026-11-17); PJM headroom withheld;'
       + ' VA retail rate 10.63 cents/kWh (EIA 2026 average, as of 2026-08-31; not wholesale/LMP).');
     expect(ia.headline.length).toBeLessThanOrEqual(HEADLINE_MAX);
@@ -297,7 +298,7 @@ describe('end to end, keyless, compact', () => {
     beforeAll(async () => { ({ o, lead } = await plan({ intent: QA, detail: 'compact' })); }, 120_000);
     it('routes to capacity_grid on planner 5.40', () => {
       expect(o.intent_class).toBe('capacity_grid');
-      expect(o.planner_version).toBe('5.62');
+      expect(o.planner_version).toBe('5.63');
     });
     it('reads the shortlist, both finalist grids\' queue and headroom, and Capacity Source; nothing failed', () => {
       const ran = o.executed.filter((e) => e.status === 'executed' || e.status === 'gated_preview');

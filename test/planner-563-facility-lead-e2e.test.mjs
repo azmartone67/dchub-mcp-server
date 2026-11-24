@@ -78,7 +78,7 @@ describe('planner 5.63 facility lead end to end (real server.mjs on loopback)', 
       it(`P4 ${JSON.stringify(extra)}: facility_search, the facilities lead, N of M, Ashburn I kept, Sterling cut`, async () => {
         const o = await plan(H, P4, extra);
         expect(o.intent_class, o.replay && o.replay.decisions && o.replay.decisions[0].rationale).toBe('facility_search');
-        expect(o.replay.planner_version).toBe('5.63');
+        expect(o.replay.planner_version).toBe('5.64');
         expect(o.executed[0].tool).toBe('search_facilities');
         expect(seen[0]).toMatchObject({ city: 'Ashburn', state: 'VA' });
         expect(o.executed.some((e) => e.tool === 'site_selection_canvas')).toBe(false);
@@ -125,10 +125,10 @@ describe('planner 5.63 facility lead end to end (real server.mjs on loopback)', 
 
   describe('flag off (5.62 unchanged)', () => {
     beforeAll(() => { delete process.env.DCHUB_PLAN_FACILITY_LEAD_V1; });
-    it('P4 with market:"Ashburn" keeps market_ranking and planner_version 5.62; the count wording is 5.62', async () => {
+    it('P4 with market:"Ashburn" keeps market_ranking and planner_version 5.63; the count wording is 5.62', async () => {
       const o = await plan(H, P4, { market: 'Ashburn' });
       expect(o.intent_class).toBe('market_ranking');
-      expect(o.replay.planner_version).toBe('5.62');
+      expect(o.replay.planner_version).toBe('5.63');
       const p = await plan(H, P4);
       expect(p.intent_class).toBe('facility_search');
       expect(p.intent_answer.headline).toMatch(/^2 facilities in Ashburn on record/);

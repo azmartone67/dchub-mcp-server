@@ -56,7 +56,7 @@ describe('planner 5.62 end to end (real server.mjs on loopback)', () => {
     seen.length = 0;
     const o = await plan(H, 'Which data center facilities are in the Ashburn market?');
     expect(o.intent_class).toBe('facility_search');
-    expect(o.planner_version).toBe('5.62');
+    expect(o.planner_version).toBe('5.63');
     expect(seen[0]).toMatchObject({ city: 'Ashburn', state: 'VA' });
     expect(seen[1]).toMatchObject({ q: 'Northern Virginia', state: 'VA' });
     const sf = o.executed.find((e) => e.tool === 'search_facilities');

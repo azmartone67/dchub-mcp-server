@@ -30,7 +30,7 @@ const POWER_KEYS = ['iso', 'state'];
 const boundTo = (s, keys, want) => keys.some((k) => concrete(s.args_hint && s.args_hint[k]) && want.includes(s.args_hint[k]));
 
 describe('planner 5.38: both sides of the place', () => {
-  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.62'); });
+  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.63'); });
 
   describe('the owner\'s ten questions: a data-center step and a power step for the same place', () => {
     for (const t of TEN) {
@@ -175,7 +175,8 @@ describe('planner 5.38: both sides of the place', () => {
       ];
       const r = pairLines(executed);
       expect(r.data_center.line).toBe('DATA CENTER SIDE (step 4, get_market_intel): Columbus: 112 facilities tracked (as of 2026-10-13); '
-        + 'Data Center Power Index (DCPI) verdict AVOID (as of 2026-11-15). Source: DC Hub (dchub.cloud).');
+        // DCPI dates are said as the America/Phoenix day (lib/cite-day.mjs): 00:00Z on 11-15 is 11-14 there.
+        + 'Data Center Power Index (DCPI) verdict AVOID (as of 2026-11-14). Source: DC Hub (dchub.cloud).');
       expect(r.power.line).toBe('POWER SIDE (step 1, get_grid_intelligence): PJM: average time to power 40 months (as of 2026-11-16); '
         + 'retail electricity 9.1 cents/kWh (as of 2026-11-16). Source: DC Hub (dchub.cloud).');
       expect(r.lines).toEqual([r.data_center.line, r.power.line]);
@@ -192,7 +193,8 @@ describe('planner 5.38: both sides of the place', () => {
     it('the DCPI card is named in full', () => {
       const r = pairLines([{ step: 1, tool: 'get_market_dcpi_rank', status: 'executed', args: { market_slug: 'dallas' },
         result: { market_slug: 'dallas', verdict: 'CAUTION', composite_score: 42, computed_at: '2026-11-14T00:39:23Z' } }]);
-      expect(r.data_center.line).toBe('DATA CENTER SIDE (step 1, get_market_dcpi_rank): dallas: Data Center Power Index (DCPI) verdict CAUTION, composite score 42 (as of 2026-11-14). Source: DC Hub (dchub.cloud).');
+      // computed_at 00:39Z on 11-14 is 11-13 in America/Phoenix (lib/cite-day.mjs).
+      expect(r.data_center.line).toBe('DATA CENTER SIDE (step 1, get_market_dcpi_rank): dallas: Data Center Power Index (DCPI) verdict CAUTION, composite score 42 (as of 2026-11-13). Source: DC Hub (dchub.cloud).');
     });
   });
 });
