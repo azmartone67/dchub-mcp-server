@@ -169,7 +169,7 @@ describe('cross-domain answer, one place (gaps 2, 3, 4, 6)', () => {
     expect(a.headline).toMatch(/^Phoenix \(APS\/SRP\/TEP, WECC\)\./);
     expect(a.headline).not.toMatch(/WECC \(ISO\)|no figure this caller can read came back/);
     expect(a.headline).toMatch(/Power: filed retirement: Springerville unit 1/);
-    expect(a.facts.some((f) => f.tool === 'get_power_availability_timeline' && /26 active generation requests located in the state/.test(f.text))).toBe(true);
+    expect(a.facts.some((f) => f.tool === 'get_power_availability_timeline' && /AZ: 26 active generation requests from the CAISO queue file located in AZ \(AZ load is served by APS \/ SRP \/ TEP, WECC, not by CAISO/.test(f.text))).toBe(true);
   });
 
   it('gap 4: compact facts[] carry one PJM queue fact, not the answer\'s and the step\'s', () => {

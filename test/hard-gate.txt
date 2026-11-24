@@ -33,6 +33,7 @@ test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
 test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
+test/answer-noniso-twin-ttp-1123.test.mjs
 test/answer-quality-and-slug-suggest-1123.test.mjs
 test/answer-quality-and-slug-suggest-e2e-1123.test.mjs
 test/answer-question-alias-1121.test.mjs
