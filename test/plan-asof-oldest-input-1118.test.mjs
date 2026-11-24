@@ -24,7 +24,8 @@ describe('the plan as_of names its oldest input', () => {
     ]);
     expect(p.provenance.as_of).toBe('2026-11-05T09:37:00.000Z');
     expect(p.fact_header.split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-05T09:37:00.000Z | OLDEST_INPUT: PJM interconnection queue');
-    expect(planLeadText(p)).toContain('Source: DC Hub (dchub.cloud), as of 2026-11-05T09:37:00.000Z (oldest input: PJM interconnection queue).');
+    // The lead is a sentence: the stamp prints as its America/Phoenix day (lib/cite-day.mjs); the header keeps the hour.
+    expect(planLeadText(p)).toContain('Source: DC Hub (dchub.cloud), as of 2026-11-05 (oldest input: PJM interconnection queue).');
   });
 
   it('two steps on the same oldest date are both named; a third is counted', () => {
