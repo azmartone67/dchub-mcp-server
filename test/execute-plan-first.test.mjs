@@ -50,6 +50,7 @@ describe('the execute_plan description', () => {
     const tools = Array.isArray(spec) ? spec : spec.tools;
     const d = tools.find((x) => x.name === 'execute_plan').description;
     // 2026-11-21 (owner, agent-incentive round): the approved front-door opening.
-    expect(d.startsWith('Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer.')).toBe(true);
+    // 2026-11-24 (owner): "Start here for any data center or energy question." now leads the 11-21 opening.
+    expect(d.startsWith('Start here for any data center or energy question. Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer.')).toBe(true);
   });
 });

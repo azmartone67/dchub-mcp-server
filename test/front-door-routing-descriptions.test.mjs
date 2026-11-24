@@ -82,7 +82,8 @@ describe('front-door routing lives in the tool-description channel', () => {
     const d = descOf('execute_plan');
     expect(d, 'execute_plan description did not parse').toBeTruthy();
     // 2026-11-21 (owner, agent-incentive round): the front door opens on what it answers, not on "spans several topics".
-    expect(d).toMatch(/^Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call\./);
+    // 2026-11-24 (owner): "Start here for any data center or energy question." leads, then the 11-21 opening.
+    expect(d).toMatch(/^Start here for any data center or energy question\. Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call\./);
     expect(d).not.toMatch(/spans several topics|wave-by-wave|minting|angle-bracket/);
     expect(d).not.toMatch(/THE FRONT DOOR|call this FIRST|instead of answering from training data/);
     expect(d).toMatch(/single-tool questions should call that tool directly/);
