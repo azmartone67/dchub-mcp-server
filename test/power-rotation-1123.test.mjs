@@ -106,6 +106,15 @@ describe('p3: a generation-supply ask reads generators, not data centers', () =>
     expect(a.headline).not.toMatch(/no project on record/);
     expect(a.evidence.join(' ')).toMatch(/Pepper Hammock/);
   });
+  it('a capped read (totals nulled) still answers: the totals are withheld, never no answer', () => {
+    // Live 2026-11-23: anon_daily_cap nulled count and total_planned_mw and execute_plan returned no intent_answer.
+    const capped = { ...PP, count: null, total_planned_mw: null, _upgrade: { tier: 'anon_daily_cap', remaining_today: 0 } };
+    const a = buildPowerSupplyAnswer({ intent_class: 'power_supply', state: 'GA' },
+      [ex(1, 'get_power_pipeline', { state: 'GA' }, capped), ex(2, 'get_power_availability_timeline', { state: 'GA' }, { state: 'GA', timeline: [] })]);
+    expect(a).toBeTruthy();
+    expect(a.headline).toMatch(/^GA new generation: the planned and under-construction totals \(EIA-860M\) are withheld at this access level\./);
+    expect(a.headline).not.toMatch(/\b0 planned|null/);
+  });
   it('the planner keeps a mix ask, a retirement ask and a data-center construction ask', () => {
     expect(_planQuery('What is the generating capacity mix in Virginia?').intent_class).toBe('generation_mix');
     expect(_planQuery('Which data centers are under construction in Virginia?').intent_class).not.toBe('power_supply');
