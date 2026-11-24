@@ -184,7 +184,7 @@ describe('planner 5.38: both sides of the place, end to end (keyless, compact)',
 
       it(`routes to ${t.cls} on planner 5.38, compact`, () => {
         expect(o.intent_class).toBe(t.cls);
-        expect(o.planner_version).toBe('5.62');
+        expect(o.planner_version).toBe('5.63');
         expect(o.detail).toBe('compact');
       });
 

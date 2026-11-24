@@ -30,7 +30,7 @@ const POWER_KEYS = ['iso', 'state'];
 const boundTo = (s, keys, want) => keys.some((k) => concrete(s.args_hint && s.args_hint[k]) && want.includes(s.args_hint[k]));
 
 describe('planner 5.38: both sides of the place', () => {
-  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.62'); });
+  it('PLANNER_VERSION is the current one (5.40)', () => { expect(PLANNER_VERSION).toBe('5.63'); });
 
   describe('the owner\'s ten questions: a data-center step and a power step for the same place', () => {
     for (const t of TEN) {

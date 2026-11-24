@@ -626,6 +626,8 @@ test/portfolio-nudge.test.mjs
 test/potential-powered-land.test.mjs
 test/power-grid-listing.test.mjs
 test/power-place-slots-1119.test.mjs
+test/power-rotation-1123-e2e.test.mjs
+test/power-rotation-1123.test.mjs
 test/power-step-evidence.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
