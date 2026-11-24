@@ -177,6 +177,17 @@ describe('p5: a transmission constraint ask reads the lines at the place', () =>
     expect(a.evidence.join(' ')).toMatch(/765 kV Build a new 115 mile/);
     expect(a.not_established.join(' ')).not.toMatch(/Planned transmission upgrades/);
   });
+  it('the upgrade date: a keyless per_iso without PJM uses the PJM rows\' own source_release, never the oldest ISO date', () => {
+    // Live 2026-11-23: the keyless preview listed per_iso BPA/CAISO/ERCOT only; the line said "as of 2026-05-15".
+    const IP = { summary: { as_of: { transmission: '2026-05-15' }, by_type: { transmission: { matching: 690, by_status: { Planned: 591 } } } },
+      transmission_projects: [{ iso: 'PJM', kv: 765, description: 'x', status: 'Planned', source_release: '2026-11-19' },
+        { iso: 'PJM', kv: 500, description: 'y', status: 'Planned', source_release: '2026-11-19' }],
+      sources: { transmission: { per_iso: [{ iso: 'BPA', as_of: '2026-09-30' }, { iso: 'CAISO', as_of: '2026-08-03' }, { iso: 'ERCOT', as_of: '2026-10-01' }] } } };
+    const a = buildGridConstraintsAnswer({ intent_class: 'grid_constraints', state: 'VA', place_label: 'Loudoun County, VA' },
+      [ex(4, 'get_infra_projects', { type: 'transmission', state: 'VA' }, IP)]);
+    expect(a.headline).toMatch(/PJM project list, as of 2026-11-19\)/);
+    expect(a.headline).not.toMatch(/2026-05-15/);
+  });
   it('Georgia (no ISO project list) runs no upgrade step and says so', () => {
     const p = _planQuery('What transmission constraints limit new data center loads near Atlanta, Georgia, and what upgrades are planned?');
     if (p.intent_class === 'grid_constraints') expect(tools(p)).not.toContain('get_infra_projects');
