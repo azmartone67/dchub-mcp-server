@@ -114,15 +114,15 @@ describe('copy rules', () => {
   });
 
   // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): listing copy names no plan, no free tier
-  // and no pricing page. The price_line field is retired; long and glama_400 say "No key needed to start."
+  // and no pricing page. The price_line field is retired; long and glama_400 say "DCHUB_API_KEY is optional."
   it('names no plan, no free tier and no pricing page; price_line is retired', () => {
     expect(COPY).not.toHaveProperty('price_line');
     expect(FIELDS).not.toContain('price_line');
     const PLAN = /\bfree[- ]tiers?\b|\bpaid (?:plans?|tiers?|keys?)\b|\/pricing\b|\bpricing page\b/i;
     for (const k of TEXT_FIELDS) expect(COPY[k], k).not.toMatch(PLAN);
     expect(SMITHERY_DESC).not.toMatch(PLAN);
-    expect(COPY.long).toContain('No key needed to start.');
-    expect(COPY.glama_400).toContain('No key needed to start.');
+    expect(COPY.long).toContain('DCHUB_API_KEY is optional.');
+    expect(COPY.glama_400).toContain('DCHUB_API_KEY is optional.');
   });
 
   it('no field names a price (no dollar sign anywhere)', () => {

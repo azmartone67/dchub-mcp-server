@@ -52,7 +52,7 @@ describe('the Smithery listing body', () => {
     expect(SMITHERY).toContain('https://dchub.cloud/api/v1');
     expect(SMITHERY).not.toMatch(/\b\d+ MCP tools\b/);
     // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): no plan, free tier or pricing page either.
-    expect(SMITHERY).toContain('No key needed to start.');
+    expect(SMITHERY).toContain('DCHUB_API_KEY is optional.');
     expect(SMITHERY).not.toMatch(/free[- ]tier|paid plans|dchub\.cloud\/pricing/i);
     expect(SMITHERY).not.toMatch(/\$\d/);
     expect(SMITHERY).not.toMatch(/REST API at https:\/\/dchub\.cloud\/mcp/);
