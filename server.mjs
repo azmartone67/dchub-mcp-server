@@ -35038,6 +35038,16 @@ export function _leanPromptsFor(req) {
 export function _staleSessionNotifyAcceptOn(env = process.env) {
   return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_NOTIFY_ACCEPT) || '').trim());
 }
+// DCHUB_STALE_SESSION_SERVE (default OFF, 2026-11-24): a request bearing a session id this process does not hold is
+// served from the one-shot stateless transport, exactly as tools/call already is (r-stateless-call), instead of the
+// spec's 404. Each replica holds its own in-memory session map and Railway has no sticky routing, so with 2 replicas a
+// prompts/list or resources/list after initialize 404'd whenever it landed on the other replica (4 of 12 follow-ups,
+// measured live 11-24). Nothing those methods answer depends on the in-process session: key and tier are re-resolved
+// per request and the funnel keys off the backend-stored session id, which is threaded through unchanged. What a
+// foreign replica cannot do is push server-to-client messages on that session, which it never could.
+export function _staleSessionServeOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_SERVE) || '').trim());
+}
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
@@ -43256,7 +43266,9 @@ app.post(MCP_PATHS, async (req, res) => {
     // process holds its own in-memory session map). A request that needs an answer keeps the
     // spec's 404 below (tools/call, tools/list and ping are already served statelessly above).
     if (sessionId && _isNotificationsOnly(_shape) && _staleSessionNotifyAcceptOn()) return res.status(202).end();
-    const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
+    // A session id that reached this point is one this process does not hold (a held one routed above).
+    const _statelessOther = (!sessionId || _staleSessionServeOn())
+      && body?.method !== 'tools/call' && _isStatelessServable(_shape);
     if ((body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
       const _clientHdr = _sessionlessClientHeader(req, sessionId || _planLoopbackSid);   // 2026-11-10
@@ -43278,7 +43290,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
       const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey, leanPrompts: _leanPromptsFor(req) }) : createServer(_descOverrides);   // A3 leanPrompts
       await ephServer.connect(ephTransport);
-      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
