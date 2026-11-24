@@ -112,7 +112,8 @@ describe('the handshake and execute_plan lead with energy', () => {
     const ep = list.result.tools.find((t) => t.name === 'execute_plan');
     expect(ep.inputSchema.properties.intent.description).toMatch(/Examples: "how soon can a 100 MW load get power in ERCOT"/);
     // 2026-11-21 (owner): the front door opens on power, grid, queue and time to power; gas and DCGI stay named.
-    expect(ep.description).toMatch(/^Answers any data center power, grid, interconnection queue, time-to-power/);
+    // 2026-11-24 (owner): the front door now opens "Start here for any data center or energy question." and then the 11-21 text.
+    expect(ep.description).toMatch(/^Start here for any data center or energy question\. Answers any data center power, grid, interconnection queue, time-to-power/);
     expect(ep.description).toMatch(/power generation, gas and energy infrastructure \(the Data Center Gas Index, DCGI\)/);
   }, 30_000);
 });

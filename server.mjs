@@ -35165,7 +35165,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // silently drops the tool from the derived count (caught 2026-07-31 when
   // the count healed 82→81 across every registry surface).
   trackedTool(srv, 'execute_plan',
-    'Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer. Covers megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), and markets scored by the Data Center Power Index (DCPI). Each step is listed with its status, as_of and citation, at your own access level; single-tool questions should call that tool directly, and plan_query shows the plan without running it.',
+    'Start here for any data center or energy question. Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer. Covers megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), and markets scored by the Data Center Power Index (DCPI). Each step is listed with its status, as_of and citation, at your own access level; single-tool questions should call that tool directly, and plan_query shows the plan without running it.',
     { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "how soon can a 100 MW load get power in ERCOT" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "interconnection queue and energy prices in MISO for a 200 MW campus" · "gas economics for on-site generation in Texas" · "rank markets for a 200 MW AI campus" · "find 100 MW of buildable capacity near Ashburn"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict.'),
       // ★★★2026-08-19 [6]: these values were ALWAYS accepted — but only inside
@@ -40647,26 +40647,42 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
      { location: z.string().describe('Street address or "lat,lon"'),
        capacity_mw: z.string().optional().describe('Target load in MW, e.g. 100') },
      (a) => `Use the DC Hub MCP server to evaluate ${a.location} for a ${a.capacity_mw ? a.capacity_mw + ' MW ' : ''}data center. Call analyze_site (geocode the address first if it is not already lat,lon). Report grid headroom, nearest substation + voltage, fiber carrier count, water stress, tax incentives, and the BUILD/CAUTION/AVOID verdict. Attribute figures to DC Hub (dchub.cloud, CC-BY-4.0).`);
-  _P('pick-a-market', 'Pick a data-center market',
-     'Rank the best US markets to build a given load, with DCPI verdicts + time-to-power.',
-     { capacity_mw: z.string().describe('Target load in MW, e.g. 100'),
+  // 2026-11-24 (owner): four starter prompts on plain /mcp, each one execute_plan with the user's intent. The three
+  // below keep their names (prompts/get still resolves them, old arguments still accepted, none required now) and take
+  // the starter titles; dcpi-verdict is the fourth. The lean five (lib/lean-prompts.mjs) are unchanged.
+  const _EP_TAIL = ' Answer from its result and lead with the Data Center Power Index (DCPI) verdict when it carries one. '
+    + 'Quote each figure with its as_of date and cite "DC Hub (dchub.cloud)". Report any factor returned as unavailable as unknown; never estimate it.';
+  const _epText = (intent) => `Call the DC Hub execute_plan tool with intent set to: "${intent}".` + _EP_TAIL;
+  const _pq = (v) => String(v == null ? '' : v).replace(/"/g, "'").trim().slice(0, 200);
+  _P('pick-a-market', 'Rank markets for a 200 MW AI campus',
+     'Rank data center markets for an AI campus (200 MW unless you say otherwise) with each market\'s Data Center Power Index (DCPI) verdict and time to power. One execute_plan call.',
+     { capacity_mw: z.string().optional().describe('Target load in MW, default 200'),
        region: z.string().optional().describe('Optional region/state filter, e.g. TX or Midwest'),
        max_months: z.string().optional().describe('Max acceptable time-to-power in months') },
-     (a) => `Use DC Hub to recommend where to build ${a.capacity_mw} MW${a.region ? ' in ' + a.region : ''}${a.max_months ? ' within ' + a.max_months + ' months to power' : ''}. Call rank_markets (or site_selection_canvas) and return a ranked shortlist with each market's DCPI verdict, excess-power score, and time-to-power. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
-  _P('power-availability', 'Power availability in an ISO',
-     'How much headroom an ISO has and the time-to-power for a target load.',
-     { iso: z.string().describe('PJM | ERCOT | CAISO | MISO | SPP | NYISO | ISO-NE'),
-       capacity_mw: z.string().optional().describe('Target load in MW') },
-     (a) => `Use DC Hub get_grid_intelligence for ${a.iso}. Report current demand, fuel mix, renewable share, interconnection-queue depth, average time-to-power${a.capacity_mw ? ' for a ' + a.capacity_mw + ' MW load' : ''}, and stranded capacity. State plainly whether power is readily available and how long it takes. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
+     (a) => _epText(`rank markets for a ${_pq(a.capacity_mw) || '200'} MW AI campus${_pq(a.region) ? ' in ' + _pq(a.region) : ''}${_pq(a.max_months) ? ' with power within ' + _pq(a.max_months) + ' months' : ''}`));
+  _P('power-availability', 'How much power is available in ERCOT for a 100 MW data center',
+     'Grid headroom, interconnection queue and time to power for a data center load in one ISO (ERCOT and 100 MW unless you say otherwise). One execute_plan call.',
+     { iso: z.string().optional().describe('ERCOT (default) | PJM | CAISO | MISO | SPP | NYISO | ISO-NE'),
+       capacity_mw: z.string().optional().describe('Target load in MW, default 100') },
+     (a) => _epText(`how much power is available in ${_pq(a.iso) || 'ERCOT'} for a ${_pq(a.capacity_mw) || '100'} MW data center`));
   _P('site-report', 'Premium site intelligence report',
      'A full one-page site brief: power, gas, fiber, market, risk, verdict.',
      { location: z.string().describe('Address or "lat,lon"'),
        capacity_mw: z.string().optional().describe('Target load in MW') },
      (a) => `Build a DC Hub site-intelligence report for ${a.location}${a.capacity_mw ? ' (' + a.capacity_mw + ' MW)' : ''}. Combine analyze_site, get_market_dcpi_rank, get_grid_intelligence, get_gas_index, and get_fiber_intel into one brief with sections: Power, Gas, Fiber & Latency, Market (DCPI), Risk (water/climate), and a Bottom-Line BUILD/CAUTION/AVOID. Cite DC Hub (dchub.cloud, CC-BY-4.0) throughout.`);
-  _P('compare-markets', 'Compare data-center markets',
-     'Side-by-side of 2-4 markets on power, price, pipeline and DCPI verdict.',
-     { markets: z.string().describe('2-4 market slugs, comma-separated, e.g. northern-virginia,dallas,phoenix') },
-     (a) => `Use DC Hub to compare these markets head-to-head: ${a.markets}. Pull get_market_dcpi_rank for each and present a table of composite score, verdict, excess-power score, time-to-power, and retail price. End with a one-line recommendation. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
+  _P('compare-markets', 'Compare Dallas vs Phoenix for a GPU cluster',
+     'Compare data center markets (Dallas and Phoenix unless you name others) for a GPU cluster on Data Center Power Index (DCPI) verdict, power and time to power. One execute_plan call.',
+     { markets: z.string().optional().describe('2-4 markets, comma-separated, default dallas,phoenix') },
+     (a) => {
+       const ms = _pq(a.markets).split(',').map((m) => m.trim()).filter(Boolean);
+       return _epText(`compare ${ms.length ? ms.join(' vs ') : 'Dallas vs Phoenix'} for a GPU cluster`);
+     });
+  _P('dcpi-verdict', 'Data Center Power Index (DCPI) verdict for my market',
+     'The Data Center Power Index (DCPI) verdict (BUILD / CAUTION / AVOID), score and time to power for one data center market. One execute_plan call.',
+     { market: z.string().optional().describe('Market or metro, e.g. dallas or northern-virginia') },
+     (a) => (_pq(a.market)
+       ? _epText(`Data Center Power Index (DCPI) verdict for ${_pq(a.market)}`)
+       : 'Ask the user which data center market they mean, then call the DC Hub execute_plan tool with intent set to: "Data Center Power Index (DCPI) verdict for <that market>".' + _EP_TAIL));
   _P('fiber-plan', 'Plan diverse fibre routes',
      'N diverse road-following fibre lead-in routes from a site to a carrier hotel, with indicative cost.',
      { from: z.string().describe('Site address or "lat,lon"'),
