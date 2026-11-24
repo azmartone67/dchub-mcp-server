@@ -175,8 +175,9 @@ describe('planner 5.38: both sides of the place', () => {
       ];
       const r = pairLines(executed);
       expect(r.data_center.line).toBe('DATA CENTER SIDE (step 4, get_market_intel): Columbus: 112 facilities tracked (as of 2026-10-13); '
-        // DCPI dates are said as the America/Phoenix day (lib/cite-day.mjs): 00:00Z on 11-15 is 11-14 there.
-        + 'Data Center Power Index (DCPI) verdict AVOID (as of 2026-11-14). Source: DC Hub (dchub.cloud).');
+        // DCPI dates are said as the America/Phoenix day (lib/cite-day.mjs), but exactly 00:00:00Z is a date serialized as
+        // a timestamp and keeps its own date (spokenDay's midnight rule).
+        + 'Data Center Power Index (DCPI) verdict AVOID (as of 2026-11-15). Source: DC Hub (dchub.cloud).');
       expect(r.power.line).toBe('POWER SIDE (step 1, get_grid_intelligence): PJM: average time to power 40 months (as of 2026-11-16); '
         + 'retail electricity 9.1 cents/kWh (as of 2026-11-16). Source: DC Hub (dchub.cloud).');
       expect(r.lines).toEqual([r.data_center.line, r.power.line]);
