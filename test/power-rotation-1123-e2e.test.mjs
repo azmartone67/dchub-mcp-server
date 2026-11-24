@@ -15,7 +15,7 @@ beforeAll(async () => {
     const q = u ? u.searchParams : new URLSearchParams();
     if (p === '/api/v1/interconnection-queue/by-iso' && String(q.get('iso') || '').toUpperCase() === 'ERCOT') {
       return { status: 200, body: { iso: 'ERCOT', queued_generation_gw: 461.4, queued_generation_gw_as_of: '2026-10-31', project_count: 1766,
-        queue_basis: 'large_load', queued_large_load_gw: 474, queued_load_dc_share_pct: 90.2, source_as_of: '2026-10-31' } };
+        queue_kind: 'large_load', queued_large_load_gw: 474, queued_load_dc_share_pct: 90.2, source_as_of: '2026-10-31' } };
     }
     if (p === '/api/v1/planned-generators') {
       // the backend's raw rows; the MCP tool sums them (count, total_planned_mw, by_status)
@@ -52,6 +52,20 @@ describe('execute_plan 5.63 POWER rotation (real server.mjs, stub backend)', () 
     expect(o.executed.map((e) => e.tool)).not.toContain('search_facilities');
     expect(o.intent_answer.headline).toMatch(/^ERCOT large-load interconnection: 474 GW of large loads seeking interconnection/);
     expect(o.intent_answer.headline).not.toMatch(/facilities in TX/);
+    expect(fence.foreign).toEqual([]);
+  }, 120_000);
+
+  // Owner 2026-11-24 ("Yes, open it"): ERCOT's large-load total reaches a keyless caller's preview too. Two calls from
+  // one keyless IP: the second is past the daily full answer, so it is the preview (taste) path.
+  it('p2 keyless preview: still leads with the 474 GW large-load total, not "withheld"', async () => {
+    const ANON = { 'user-agent': 'dchub-qa-readonly', 'x-dc-client-ip': '198.51.100.124' };
+    const ask = { intent: 'How many GW of large loads have requested interconnection in ERCOT?' };
+    await H.call('/mcp', 'execute_plan', ask, ANON);
+    const o = sc(await H.call('/mcp', 'execute_plan', ask, ANON));
+    expect(o.intent_class).toBe('interconnection_queue');
+    expect(o.intent_answer.headline).toMatch(/^ERCOT large-load interconnection: 474 GW of large loads seeking interconnection/);
+    expect(o.intent_answer.headline).not.toMatch(/withheld/);
+    expect(JSON.stringify(o)).not.toContain('90.2');   // the data-center share stays withheld
     expect(fence.foreign).toEqual([]);
   }, 120_000);
 
