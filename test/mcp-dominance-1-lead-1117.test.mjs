@@ -66,7 +66,8 @@ describe('gap 2: one line per entity, never "ran N lookups" when a step returned
   });
   it('a DCPI read is a fact with its own date', () => {
     const f = factsFromStep('get_market_dcpi_rank', { market_slug: 'columbus-oh', verdict: 'CAUTION', composite_score: 51.2, computed_at: '2026-11-16T04:00:00Z' }, { market_slug: 'columbus-oh' });
-    expect(f[0].text).toBe('Columbus Oh DCPI verdict: CAUTION (51.2) (DCPI, as of 2026-11-16).');
+    // 04:00Z on 11-16 is 21:00 on 11-15 in America/Phoenix (lib/cite-day.mjs): the line says the Phoenix day.
+    expect(f[0].text).toBe('Columbus Oh DCPI verdict: CAUTION (51.2) (DCPI, as of 2026-11-15).');
   });
   it('whole lines only: a fourth entity that does not fit is dropped, never cut mid-line', () => {
     const many = ['PJM', 'MISO', 'SPP', 'ERCOT', 'CAISO', 'NYISO', 'ISONE', 'AESO'].map((iso, i) => ex(i + 1, 'get_interconnection_queue', { iso }, queueTaste(iso, 100 + i)));

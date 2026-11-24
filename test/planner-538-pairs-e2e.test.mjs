@@ -41,16 +41,18 @@ beforeAll(async () => {
       seen.push(p + u.search);
       const send = (o, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
       let m;
+      // DCPI and pipeline lines say the America/Phoenix day of their stamp (lib/cite-day.mjs); these stamps sit at midday
+      // UTC so that day is the fixture's own date. The 00:xxZ edge is test/asof-phoenix-answer-lines-1123.test.mjs.
       if ((m = /^\/api\/v1\/dcpi\/scores\/([^/]+)$/.exec(p))) {
         const v = DCPI[m[1]];
-        return v ? send({ market_slug: m[1], verdict: v[0], composite_score: v[1], computed_at: `${D.dcpi}T00:39:23Z` }) : send({ error: 'not found' }, 404);
+        return v ? send({ market_slug: m[1], verdict: v[0], composite_score: v[1], computed_at: `${D.dcpi}T12:39:23Z` }) : send({ error: 'not found' }, 404);
       }
       if ((m = /^\/api\/v1\/markets\/([^/]+)$/.exec(p))) {
         const name = MARKETS[m[1]];
         if (!name) return send({ error: 'not found' }, 404);
         return send({ success: true, market: { id: m[1], name }, as_of: `${D.intel}T21:06:18`,
           stats: { facility_count: 112, total_power_mw: 2111, mw_reporting_count: 12 },
-          siting: { dcpi: { verdict: (DCPI[m[1]] || ['AVOID'])[0], as_of: `${D.intelDcpi}T00:34:29Z` } } });
+          siting: { dcpi: { verdict: (DCPI[m[1]] || ['AVOID'])[0], as_of: `${D.intelDcpi}T12:34:29Z` } } });
       }
       if (p === '/api/v1/facilities') {
         const q = u.searchParams.get('q') || '';
@@ -75,7 +77,7 @@ beforeAll(async () => {
       }
       if (p === '/api/v1/pipeline') {
         return send({ projects: [{ name: 'Stub Campus One', capacity_mw: 300, status: 'construction' }, { name: 'Stub Campus Two', capacity_mw: null, status: 'announced' }],
-          total: 2, as_of: `${D.pipeline}T00:00:00Z` });
+          total: 2, as_of: `${D.pipeline}T12:00:00Z` });
       }
       if (p === '/api/v1/power/availability-timeline') {
         const st = u.searchParams.get('state') || '';
