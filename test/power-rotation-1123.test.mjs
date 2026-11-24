@@ -68,6 +68,13 @@ describe('p2: a large-load ask reads the large-load queue', () => {
     expect(a.headline).toContain(LARGE_LOAD_PAGE);
     expect(a.facts[0].text).toMatch(/461\.4 GW requested generation, not load/);
   });
+  it('a PJM large-load ask is not told PJM figures are withheld: DC Hub holds only ERCOT\'s large-load queue', () => {
+    const a = buildLargeLoadAnswer({ intent_class: 'interconnection_queue', large_load: true },
+      [ex(1, 'get_interconnection_queue', { iso: 'PJM' }, { iso: 'PJM', taste: { headline: { name: 'queued_generation_gw', value: 373.5, as_of: '2026-11-01' } } })]);
+    expect(a.headline).toMatch(/^PJM large-load interconnection: DC Hub holds no PJM large-load queue figure/);
+    expect(a.headline).not.toMatch(/withheld/);
+    expect(a.headline).not.toContain(LARGE_LOAD_PAGE);
+  });
   it('only an asked large-load plan gets this answer', () => {
     expect(buildLargeLoadAnswer({ intent_class: 'interconnection_queue', large_load: false },
       [ex(1, 'get_interconnection_queue', { iso: 'ERCOT' }, { ...Q, large_load: BLOCK })])).toBeNull();
