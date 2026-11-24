@@ -166,6 +166,9 @@ const norm = (r) => JSON.stringify(r && r.msg)
   // The spoken cite's time of day (Grok 2026-11-23 item 1, lib/cite-day.mjs: "as of YYYY-MM-DD", never a time) is not
   // this flag's: only the "THH:MMZ" suffix after "as of" is dropped, so the day itself still compares.
   .replace(/(as of \d{4}-\d\d-\d\d)T\d\d:\d\dZ/g, '$1')
+  // A live reading's hour said on the Phoenix clock (lib/cite-day.mjs spokenTime: "2026-10-07T23" -> "2026-10-07 16:00
+  // MST") is not this flag's: only the window text is masked, the figure and its "as of" day still compare.
+  .replace(/\((?:\d{4}-\d\d-\d\dT\d\d|\d{4}-\d\d-\d\d \d\d:\d\d MST), DC Hub/g, '(WINDOW, DC Hub')
   // A planner version bump is not this flag's: the branch and origin/main differ there by design until it merges.
   .replace(/(\\?"planner_version\\?":\\?")[0-9.]+/g, '$1V')
   .replace(/pr1\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*/g, 'RERUN')
