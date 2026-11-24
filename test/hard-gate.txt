@@ -33,6 +33,7 @@ test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
 test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
+test/answer-noniso-twin-ttp-1123.test.mjs
 test/answer-quality-and-slug-suggest-1123.test.mjs
 test/answer-quality-and-slug-suggest-e2e-1123.test.mjs
 test/answer-question-alias-1121.test.mjs
@@ -627,6 +628,8 @@ test/portfolio-nudge.test.mjs
 test/potential-powered-land.test.mjs
 test/power-grid-listing.test.mjs
 test/power-place-slots-1119.test.mjs
+test/power-rotation-1123-e2e.test.mjs
+test/power-rotation-1123.test.mjs
 test/power-step-evidence.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
