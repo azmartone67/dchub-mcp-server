@@ -80,6 +80,7 @@ import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
+import { facilityLeadOn as _facilityLeadOn, facilityLeadRoutingAdjust as _facilityLeadRoutingAdjust, marketArgBoostAllowed as _facilityLeadMarketArgBoostAllowed, FACILITY_LEAD_PLANNER_VERSION as _FACILITY_LEAD_PLANNER_VERSION } from './lib/plan-facility-lead.mjs';
 import { DCPI_ONE_MARKET_ASK_RE as _DCPI_ONE_MARKET_ASK_RE, dcpiClassifyFixOn as _dcpiClassifyFixOn, DCPI_ONE_MARKET_SCORE as _DCPI_ONE_MARKET_SCORE } from './lib/dcpi-one-market.mjs';
 import { coreRerunOn as _coreRerunOn } from './lib/core-profile.mjs';
 import { WINDSURF_PERSIST_FILE } from './lib/windsurf-config-where.mjs';
@@ -25418,6 +25419,9 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
+// 5.64 is reported (replay.planner_version) only with DCHUB_PLAN_FACILITY_LEAD_V1 on (lib/plan-facility-lead.mjs):
+// a singular "<place> market" facilities ask stays facility_search, its header leads with the facilities, the count
+// says N of M for a preview, and "Ashburn I" is inside Ashburn. Off, plans stay 5.63 byte for byte.
 export const PLANNER_VERSION = '5.63';   // 5.63 (daily MCP head-to-head 2026-11-23, POWER rotation): a large-load status ask reads the large-load queue and leads with it (or says it is withheld); a generation-supply ask for one state reads EIA-860M planned generators (power_supply) and never the data-center pipeline; a wholesale / LMP / hub ask is price_now beside a data-center noun, passes the named ERCOT hub, and its ISO price read never gets a state; a transmission / constraint / upgrade ask about one place reads the lines and substations there (grid_constraints) and emits an intent_answer (lib/power-rotation-1123.mjs). 5.62 (Grok answer-quality note 2026-11-23): a corridor-table centroid ("Loudoun County") is the named place, not a user site, so a moratorium or permitting-constraints ask there routes to permitting and a site hunt there runs the land flow; the permitting answer leads with the jurisdiction the question named (or says none is on file, dated); a facility search is held to the named town (city=, widened once to the metro when it has no row) and its answer leads with the facilities, counted in the place and dated by row as_of; a question that asks for facilities reads search_facilities in the same wave (lib/facility-join.mjs), and a site plan naming a place reads it for context when it fits the step budget. 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
@@ -27108,7 +27112,7 @@ export function _planReplay(sc, signals) {
     // intent + intent_class are duplicated here so a consumer can deserialize
     // `replay` alone without reaching back to the top-level plan object.
     schema_version: REPLAY_SCHEMA_VERSION,
-    planner_version: PLANNER_VERSION,
+    planner_version: _facilityLeadOn() ? _FACILITY_LEAD_PLANNER_VERSION : PLANNER_VERSION,
     compatibility: REPLAY_COMPATIBILITY,
     intent: sc.intent,
     intent_class: sc.intent_class,
@@ -27234,6 +27238,10 @@ export function _planQuery(intent, context) {
     }
     return { cls, score, hits };
   });
+  // DCHUB_PLAN_FACILITY_LEAD_V1 (off): a singular "<place> market" beside a facilities ask is not a ranking ask
+  // (lib/plan-facility-lead.mjs). Before the boosts, so it reads text evidence only.
+  const _facLead = _facilityLeadOn();
+  if (_facLead) { try { _facilityLeadRoutingAdjust(text, scored); } catch (_e) { /* routing must never throw */ } }
   // Context boosts — structured context outweighs weak keyword overlap.
   // ★★★[#209] `_anyTextMatch` must be read BEFORE any boost is applied, or a
   // boost would count as its own evidence that the text matched.
@@ -27253,7 +27261,9 @@ export function _planQuery(intent, context) {
     //  An ISO the TEXT names is different and still boosts: naming the operator
     //  IS evidence of a grid question, which is what the +1.5 was for.
     if (s.cls.id === 'grid_headroom' && d.iso && (d.isoFromText || !_anyTextMatch)) s.score += 1.5;
-    if (s.cls.id === 'market_ranking' && d.market) s.score += 1.5;
+    // DCHUB_PLAN_FACILITY_LEAD_V1 (off): a bound market is geography only once the text matched a class (the 5.12
+    // corridor rule, extended to the market arg); it still rescues text that matched nothing.
+    if (s.cls.id === 'market_ranking' && d.market && (!_facLead || _facilityLeadMarketArgBoostAllowed(_anyTextMatch))) s.score += 1.5;
     if (s.cls.id === 'market_comparison' && d.comparePair) s.score += 1.5;
     // market_outlook is single-market: a head-to-head or a ranking ask is not it,
     // and a named tracked metro is the evidence it is (+3 clears the ranking
