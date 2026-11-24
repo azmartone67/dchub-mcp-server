@@ -106,6 +106,15 @@ describe('p3: a generation-supply ask reads generators, not data centers', () =>
     expect(a.headline).not.toMatch(/no project on record/);
     expect(a.evidence.join(' ')).toMatch(/Pepper Hammock/);
   });
+  it('a capped read (totals nulled) still answers: the totals are withheld, never no answer', () => {
+    // Live 2026-11-23: anon_daily_cap nulled count and total_planned_mw and execute_plan returned no intent_answer.
+    const capped = { ...PP, count: null, total_planned_mw: null, _upgrade: { tier: 'anon_daily_cap', remaining_today: 0 } };
+    const a = buildPowerSupplyAnswer({ intent_class: 'power_supply', state: 'GA' },
+      [ex(1, 'get_power_pipeline', { state: 'GA' }, capped), ex(2, 'get_power_availability_timeline', { state: 'GA' }, { state: 'GA', timeline: [] })]);
+    expect(a).toBeTruthy();
+    expect(a.headline).toMatch(/^GA new generation: the planned and under-construction totals \(EIA-860M\) are withheld at this access level\./);
+    expect(a.headline).not.toMatch(/\b0 planned|null/);
+  });
   it('the planner keeps a mix ask, a retirement ask and a data-center construction ask', () => {
     expect(_planQuery('What is the generating capacity mix in Virginia?').intent_class).toBe('generation_mix');
     expect(_planQuery('Which data centers are under construction in Virginia?').intent_class).not.toBe('power_supply');
@@ -176,6 +185,17 @@ describe('p5: a transmission constraint ask reads the lines at the place', () =>
     expect(a.headline).not.toMatch(/planned upgrades are not in this answer/);
     expect(a.evidence.join(' ')).toMatch(/765 kV Build a new 115 mile/);
     expect(a.not_established.join(' ')).not.toMatch(/Planned transmission upgrades/);
+  });
+  it('the upgrade date: a keyless per_iso without PJM uses the PJM rows\' own source_release, never the oldest ISO date', () => {
+    // Live 2026-11-23: the keyless preview listed per_iso BPA/CAISO/ERCOT only; the line said "as of 2026-05-15".
+    const IP = { summary: { as_of: { transmission: '2026-05-15' }, by_type: { transmission: { matching: 690, by_status: { Planned: 591 } } } },
+      transmission_projects: [{ iso: 'PJM', kv: 765, description: 'x', status: 'Planned', source_release: '2026-11-19' },
+        { iso: 'PJM', kv: 500, description: 'y', status: 'Planned', source_release: '2026-11-19' }],
+      sources: { transmission: { per_iso: [{ iso: 'BPA', as_of: '2026-09-30' }, { iso: 'CAISO', as_of: '2026-08-03' }, { iso: 'ERCOT', as_of: '2026-10-01' }] } } };
+    const a = buildGridConstraintsAnswer({ intent_class: 'grid_constraints', state: 'VA', place_label: 'Loudoun County, VA' },
+      [ex(4, 'get_infra_projects', { type: 'transmission', state: 'VA' }, IP)]);
+    expect(a.headline).toMatch(/PJM project list, as of 2026-11-19\)/);
+    expect(a.headline).not.toMatch(/2026-05-15/);
   });
   it('Georgia (no ISO project list) runs no upgrade step and says so', () => {
     const p = _planQuery('What transmission constraints limit new data center loads near Atlanta, Georgia, and what upgrades are planned?');

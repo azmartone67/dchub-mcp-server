@@ -438,6 +438,7 @@ test/listing-links-survive-wall.test.mjs
 test/listing-no-monthly-price.test.mjs
 test/listing-paste-single-origin.test.mjs
 test/live-handshakes-unit.test.mjs
+test/live-reading-phoenix-time-1123.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs
 test/log-redaction.test.mjs
@@ -744,6 +745,7 @@ test/sessionless-client-header-platform.test.mjs
 test/sessionless-freekey-wall-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/since-last-check.test.mjs
+test/site-coverage-spec2-1123.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
 test/site-market-verdict.test.mjs

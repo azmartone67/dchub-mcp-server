@@ -66,7 +66,8 @@ beforeAll(async () => {
       if (p.startsWith('/api/v1/grid/intelligence/')) {
         const iso = p.split('/').pop().toUpperCase();
         // The shaper dates the read by the EIA demand hour and the DCPI ISO row (as the live backend does).
-        return send({ iso, iso_name: iso, demand_mw: 52000, demand_period: `${D.grid}T00` });
+        // An EIA hour is UTC and the line says its Phoenix clock (lib/cite-day.mjs spokenTime): 19Z keeps the fixture's day.
+        return send({ iso, iso_name: iso, demand_mw: 52000, demand_period: `${D.grid}T19` });
       }
       if (p === '/api/v1/dcpi/iso-comparison') {
         return send({ isos: ['ERCOT', 'PJM'].map((iso) => ({ iso, market_count: 12, avg_constraint: 41.2, avg_excess: 63.5, avg_time_to_power_months: 44.9,
