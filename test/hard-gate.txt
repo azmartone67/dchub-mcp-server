@@ -320,6 +320,7 @@ test/global-infra-unreadable-floor.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
+test/grid-constraints-pause-1124.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
 test/grid-gating-one-rule.test.mjs
@@ -577,6 +578,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-header-phoenix-1124.test.mjs
 test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs
 test/plan-proof-1116-e2e.test.mjs

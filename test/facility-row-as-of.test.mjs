@@ -114,9 +114,13 @@ function expectRowsCarryTheirDate(out, label) {
   expect(b.as_of_basis).toMatch(/^UNMEASURED/);
   expect('verified_at' in b, `${label}: verified_at invented on an unverified row`).toBe(false);
   // paid fields and raw load/refresh dates stay off the wire
-  for (const needle of ['power_mw', '48.5', 'jv_partners', 'Rowasof JV Partner', 'first_seen', '2026-03-18', 'last_updated']) {
+  for (const needle of ['power_mw', 'jv_partners', 'Rowasof JV Partner', 'first_seen', '2026-03-18', 'last_updated']) {
     expect(out.text.includes(needle), `${label}: "${needle}" reached the answer`).toBe(false);
   }
+  // The paid power figure as a standalone number. A bare includes('48.5') also matched the serve clock: smoke on
+  // mcp#1714 (2026-11-24 08:33Z) failed when a retrieved_at stamp read "...:48.5xxZ". Digits, '.' or ':' on either
+  // side mean it is part of a timestamp or a longer number, not the row's power_mw.
+  expect(/(^|[^\d.:])48\.5(?![\d])/.test(out.text), `${label}: "48.5" (power_mw) reached the answer`).toBe(false);
   const prov = out.lead.provenance || {};
   expect(prov.as_of, `${label}: a row date was promoted to the collection`).toBeNull();
   expect(prov.as_of_record_fields || [], `${label}: the per-record field is not named`).toContain('as_of');

@@ -114,7 +114,7 @@ describe('buildPlanFactHeader: shape, values from the plan only', () => {
     const p = clone(MARKET_PLAN);
     expect(buildPlanFactHeader(p)).toContain('AS_OF: 2026-09-30');
     p.provenance.as_of = '2026-11-16T03:55:10.604Z';
-    expect(buildPlanFactHeader(p)).toContain('AS_OF: 2026-11-16T03:55:10.604Z');   // a full timestamp, unmangled
+    expect(buildPlanFactHeader(p)).toContain('AS_OF: 2026-11-15T20:55-07:00');   // a full timestamp, printed as its America/Phoenix minute (2026-11-24)
     p.provenance.as_of = 'last week'; p.citation.as_of = 'today';
     expect(buildPlanFactHeader(p)).not.toContain('AS_OF');
   });

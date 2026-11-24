@@ -62,7 +62,7 @@ describe('5.59: the header of a grid plan with named markets leads with their ve
     expect(h).toMatch(/SUMMARY: Columbus DCPI AVOID[^|]*\| Atlanta DCPI CAUTION/);
     expect(h).toMatch(/ENTITY: Columbus \(market\) \| Atlanta \(market\)/);
     expect((h.match(/AS_OF:/g) || []).length).toBe(1);
-    expect(h).toMatch(/AS_OF: 2026-11-21T17:10Z/);
+    expect(h).toMatch(/AS_OF: 2026-11-21T10:10-07:00/);
     expect(h).not.toMatch(/2026-06-30/);
   });
   it('one named market only: the existing header is kept', () => {

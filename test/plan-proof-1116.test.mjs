@@ -90,7 +90,7 @@ describe('item 2: a comparison header names every compared market and is dated b
   const h = buildPlanFactHeader(COMPARE);
   it('names both markets, each with its own DCPI verdict and figures', () => {
     expect(h).toBe([
-      'SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-16T18:29Z',
+      'SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-16T11:29-07:00',
       'ENTITY: Phoenix (market) | Columbus (market) | PJM (ISO) | WECC (ISO)',
       'SUMMARY: Phoenix DCPI CAUTION 43.5/100, time to power 42 months | Columbus DCPI AVOID 17.2/100, time to power 60.3 months',
     ].join('\n'));
@@ -102,7 +102,7 @@ describe('item 2: a comparison header names every compared market and is dated b
     const p = JSON.parse(JSON.stringify(COMPARE));
     p.executed[1].result.computed_at = '2026-11-15T07:00:00Z';
     p.executed[1].result.citation.as_of = '2026-11-15T07:00:00Z';
-    expect(buildPlanFactHeader(p).split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-15T07:00Z');
+    expect(buildPlanFactHeader(p).split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-15T00:00-07:00');
     for (const k of ['computed_at', 'citation', 'provenance']) delete p.executed[1].result[k];
     expect(buildPlanFactHeader(p).split('\n')[0]).toBe('SOURCE: DC Hub (dchub.cloud)');
   });
