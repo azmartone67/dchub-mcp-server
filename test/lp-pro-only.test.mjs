@@ -83,7 +83,7 @@ const SITE_REPORT = {
   // Digit-free on purpose: a signed report link must be dropped by name, not
   // only when a digit in it happens to trip the figure rule.
   pdf_report_url: 'https://dchub.cloud/report?sig=abcdefsigned',
-  deliverable: 'Branded 5-page DC Hub Site Analysis PDF',
+  deliverable: 'Branded DC Hub Land & Power Site Analysis PDF',
   share_text: 'DC Hub Site Analysis, download: https://dchub.cloud/report?sig=abcdefsigned',
 };
 
