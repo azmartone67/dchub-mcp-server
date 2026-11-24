@@ -21,8 +21,8 @@ describe('MapLedger hint: pure', () => {
     expect(MAPLEDGER_HINT).toBe(EXACT);
     expect(MAPLEDGER_NAME).toBe('MapLedger');
     expect(MAPLEDGER_MCP_URL).toBe('https://mapledger.app/mcp');
-    // MapLedger's own canonical cross-link, kept exactly as sent.
-    expect(MAPLEDGER_DOCS_URL).toBe('https://mapledger.app/docs?utm_source=dchub&utm_medium=partner&utm_campaign=mcp_crosslink#agents');
+    // MapLedger's cross-link, utm_medium=referral (owner, 2026-11-24; was partner as MapLedger sent it).
+    expect(MAPLEDGER_DOCS_URL).toBe('https://mapledger.app/docs?utm_source=dchub&utm_medium=referral&utm_campaign=mcp_crosslink#agents');
   });
 
   it('Austin and Nashville, by slug or by point, with a power read, earn the hint', () => {
