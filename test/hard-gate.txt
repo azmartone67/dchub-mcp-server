@@ -378,6 +378,7 @@ test/instructions-canon-parity.test.mjs
 test/instructions-compose.test.mjs
 test/instructions-constraint-coverage.test.mjs
 test/instructions-selftest-pointer.test.mjs
+test/intent-answer-noniso-queue-1123.test.mjs
 test/intent-answers-e2e.test.mjs
 test/intent-answers.test.mjs
 test/interconnection-queue-neso.test.mjs
