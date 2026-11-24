@@ -19,7 +19,7 @@ const LOUDOUN = [
 ];
 
 describe('planner 5.62', () => {
-  it('PLANNER_VERSION is 5.62', () => { expect(PLANNER_VERSION).toBe('5.62'); });
+  it('PLANNER_VERSION is 5.62', () => { expect(PLANNER_VERSION).toBe('5.63'); });
 });
 
 describe('item 1: permitting survives a corridor centroid', () => {

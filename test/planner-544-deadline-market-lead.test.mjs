@@ -35,7 +35,7 @@ const ctx = (over = {}) => ({ intent: DAL, intent_class: 'siting_search', constr
 const NOW = Date.parse('2026-11-19T23:00:00Z');
 
 describe('planner 5.44: routing', () => {
-  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.62'); });
+  it('PLANNER_VERSION is 5.44', () => { expect(PLANNER_VERSION).toBe('5.63'); });
 
   it('the Dallas prompt reads Dallas, the TX canvas at 300 MW / 36 months, search areas and the timeline', () => {
     const p = _planQuery(DAL, {});

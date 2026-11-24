@@ -393,6 +393,12 @@ import { dcPowerPlaceAsk as _dcPowerPlaceAsk, dcPowerPlaceSequence as _dcPowerPl
   dcPowerPlaceTakes as _dcPowerPlaceTakes, DC_POWER_PLACE_MAX_STEPS as _DC_POWER_PLACE_MAX_STEPS,
   priceNowAsk as _priceNowAsk, priceNowSequence as _priceNowSequence, queueWithdrawalsAsk as _queueWithdrawalsAsk,
   queueWithdrawalsSequence as _queueWithdrawalsSequence } from './lib/dc-power-place.mjs';
+// 5.63 (daily MCP head-to-head 2026-11-23, POWER rotation): large-load, generation-supply, wholesale-hub and transmission
+// asks keep their question (lib/power-rotation-1123.mjs).
+import { powerRotationRoute as _powerRotationRoute, powerSupplySequence as _powerSupplySequence,
+  gridConstraintsSequence as _gridConstraintsSequence, buildLargeLoadAnswer as _buildLargeLoadAnswer,
+  buildPowerSupplyAnswer as _buildPowerSupplyAnswer, buildGridConstraintsAnswer as _buildGridConstraintsAnswer,
+  namedHub as _namedHub, largeLoadAsk as _largeLoadAsk } from './lib/power-rotation-1123.mjs';
 import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _buildGasPriceAnswer,
   buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer } from './lib/energy-answers.mjs';
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
@@ -23151,6 +23157,35 @@ export const _PLAN_CLASSES = [
     coverage_notes: 'get_refined_queue takes status=withdrawn; the queue tables hold active requests today, so a zero is said as not held.',
   },
   {
+    // 5.63 (POWER rotation 2026-11-23, p3): "How much firm generating capacity does Georgia have, and how much new
+    // generation is planned or under construction?" read the DATA-CENTER pipeline. A generation-supply ask for one
+    // state reads the EIA-860M generator pipeline, the firm-supply timeline and the state's queue slice. Scored in
+    // _planQuery only (lib/power-rotation-1123.mjs).
+    id: 'power_supply', recipe: null,
+    patterns: [],
+    rationale: 'Generation supply is answered from generators, not data centers: EIA-860M planned and under-construction units for the state (every balancing authority, non-ISO utilities included), the firm-supply timeline, and the ISO queue slice where an ISO serves the state.',
+    sequence: (d) => _powerSupplySequence(d, _STATE_ISO_META),
+    alternatives: [
+      { tool: 'get_pipeline', when: 'You want data-center construction projects, not power plants.',
+        rejected_because: 'The question asked about generation.' },
+    ],
+    coverage_notes: 'get_power_pipeline serves EIA-860M planned generators to every caller; firm-supply MW (get_power_availability_timeline) is withheld below a DC Hub licence and the answer says so.',
+  },
+  {
+    // 5.63 (POWER rotation 2026-11-23, p5): "What transmission constraints limit new large loads in Northern Virginia
+    // (Loudoun County)?" led with a DCPI ranking line and no intent_answer. Transmission, constraint, congestion and
+    // upgrade asks about one place read the lines and substations there, the grid read and the state's permitting.
+    id: 'grid_constraints', recipe: 'grid_and_queue',
+    patterns: [],
+    rationale: 'A transmission constraint is read at the place: lines by voltage and the nearest line (get_infrastructure), the grid that serves it (get_grid_intelligence) and the permitting / large-load records for the state (get_permitting_intel).',
+    sequence: (d) => _gridConstraintsSequence(d, _STATE_ISO_META),
+    alternatives: [
+      { tool: 'get_market_dcpi_rank', when: 'You want markets ranked, not the transmission at one place.',
+        rejected_because: 'The question asked about transmission at one place.' },
+    ],
+    coverage_notes: 'get_infrastructure counts lines and substations from the HIFLD / EIA layers (no collection date); planned transmission upgrade lists are not held.',
+  },
+  {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
     patterns: [
       [/\binterconnection\b/i, 3], [/\bqueue(?:d|s)?\b/i, 3], [/\bbacklog\b/i, 2],
@@ -23779,6 +23814,8 @@ export const _CLASS_WHY_LIVE = {
   dc_power_place: 'requires_live_queue_data',
   price_now: 'requires_current_market_pricing',
   queue_withdrawals: 'requires_live_queue_data',
+  power_supply: 'requires_live_queue_data',
+  grid_constraints: 'requires_current_infrastructure_layers',
   power_timeline: 'requires_live_queue_data',
   grid_headroom: 'requires_live_grid_telemetry',
   hosting_capacity: 'requires_current_infrastructure_layers',
@@ -24346,7 +24383,10 @@ export function _execInjectGeo(tool, args, sig) {
   const isoArg = typeof args.iso === 'string' ? args.iso.toUpperCase().replace('ISO-NE', 'ISONE') : null;
   const served = !isoArg || !_EXEC_IS_RTO(isoArg) || !st || !_STATE_ISO_META[String(st).toUpperCase()]
     || _STATE_ISO_META[String(st).toUpperCase()].includes(isoArg);
-  if (spec.state && st && served && args[spec.state] == null && args.region == null) {
+  // 5.63 (POWER rotation p4): get_energy_prices with an iso is the ISO's wholesale read; a state on it turns the backend
+  // answer into the state retail rate.
+  const isoPriceRead = tool === 'get_energy_prices' && isoArg;
+  if (spec.state && st && served && !isoPriceRead && args[spec.state] == null && args.region == null) {
     args[spec.state] = st; set.push(spec.state);
   }
   return set;
@@ -25378,7 +25418,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         not disclosed as state-wide (it reads the metro query); "fastest" is a power-timing ask.
 // 5.48 (Grok daily note 2026-11-19): a site screen at a street address geocodes the address (never the market's
 //         default point) and says "The address could not be located; give lat/lon" when it cannot (lib/street-address.mjs).
-export const PLANNER_VERSION = '5.62';   // 5.62 (Grok answer-quality note 2026-11-23): a corridor-table centroid ("Loudoun County") is the named place, not a user site, so a moratorium or permitting-constraints ask there routes to permitting and a site hunt there runs the land flow; the permitting answer leads with the jurisdiction the question named (or says none is on file, dated); a facility search is held to the named town (city=, widened once to the metro when it has no row) and its answer leads with the facilities, counted in the place and dated by row as_of; a question that asks for facilities reads search_facilities in the same wave (lib/facility-join.mjs), and a site plan naming a place reads it for context when it fits the step budget. 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
+export const PLANNER_VERSION = '5.63';   // 5.63 (daily MCP head-to-head 2026-11-23, POWER rotation): a large-load status ask reads the large-load queue and leads with it (or says it is withheld); a generation-supply ask for one state reads EIA-860M planned generators (power_supply) and never the data-center pipeline; a wholesale / LMP / hub ask is price_now beside a data-center noun, passes the named ERCOT hub, and its ISO price read never gets a state; a transmission / constraint / upgrade ask about one place reads the lines and substations there (grid_constraints) and emits an intent_answer (lib/power-rotation-1123.mjs). 5.62 (Grok answer-quality note 2026-11-23): a corridor-table centroid ("Loudoun County") is the named place, not a user site, so a moratorium or permitting-constraints ask there routes to permitting and a site hunt there runs the land flow; the permitting answer leads with the jurisdiction the question named (or says none is on file, dated); a facility search is held to the named town (city=, widened once to the metro when it has no row) and its answer leads with the facilities, counted in the place and dated by row as_of; a question that asks for facilities reads search_facilities in the same wave (lib/facility-join.mjs), and a site plan naming a place reads it for context when it fits the step budget. 5.61 (owner head-to-head 2026-11-22): a site hunt (a finding verb before site / location / land, a size, one named place, no point) is no longer taken by permitting on a moratorium or zoning word; it keeps the class it would have had (the land flow) and the moratorium (and zoning) read joins it (lib/site-hunt.mjs). 5.60: /workflows spec §7 (lib/plan-workflows-1122.mjs). 5.59: a grid plan (iso_comparison, grid_headroom, interconnection_queue, power_timeline) whose question names two or more tracked markets also reads each named market's DCPI card (agent-incentive round 2026-11-21). 5.58 (owner 2026-11-20, "anchor fastest-site-near-X asks to the metro"): a one-state siting_search whose question puts the site near ONE named metro (near / around / outside / within N miles of / the X area) centres find_sites on it (market=<slug>, state beside it as the backend's fallback, a stated radius passed), and a speed superlative near one metro with no deadline is a siting search, not a screen of the city centre (lib/metro-anchor.mjs). 5.57: answer composition (Grok daily 2026-11-20 items 6, 7, 8, 10): a time-to-power lead with no served figure says it is withheld at this access level and not_established says no figure came back; a served figure carries its field and date. A MISO withdrawals ask leads with the by-iso queue_withdrawals count, GW and date. Headline slots keep the queue GW beside the firm supply (capacity_grid) and the retail cents/kWh, state queue and firm supply (place). "Where in TX/NY" leads with the ISO queue's top three counties by queued MW (by-iso summary.by_county). 5.56: routing (Grok daily 2026-11-20 items 1-4): a street address with a screen verb is a site screen, not permitting; one named facility is searched by its name and its record leads; a status ask (under construction ...) reads get_pipeline with that status; a data-center capacity ask reads get_market_intel beside the construction pipeline. 5.55: a siting answer that names a find_sites area 100 km or more from the named metro, or areas whose markets read AVOID (find_sites avoid_note, ranked_after, or the metro's own DCPI card), leads with one plain line saying so and the find_sites market= call that centres the search there (Grok QA 2026-11-20 P2). 5.54: when the fact header prints a DCPI verdict read after the oldest input, AS_OF is the verdict's date (AS_OF_BASIS: DCPI verdict) and the oldest input keeps its name and date (OLDEST_INPUT, OLDEST_INPUT_AS_OF); the lead's Source line says both (Grok QA 2026-11-20 item 5). 5.53: a capacity read near ONE named market cuts retirement rows to 160 km of it (Dallas read Bexar County), leads with that market's own time to power (canonical slug) and the deadline, and a miss says by how much (Grok 2026-11-20 P2). 5.52: a Henry Hub ask with no place reads the keyless Henry Hub spot (get_energy_prices) and leads with it (Grok daily 2026-11-19 item 6 re-test). 5.51: a named-market time-to-power lead names the market, its grid and its verdict first (5.49 never shipped alone). 5.50: a site screen at a point reads the FEMA NFHL flood zone at the point and the nearest transmission line in km; composite capped at 4 s in a plan (Grok daily 2026-11-19 item 13). 5.48: a street address is the site (Grok daily 2026-11-19). 5.47: the siting answer counts the timeline's published operator report date (both dates labelled). 5.46: deadline + fastest near a bare city (state from its market) is siting; a withheld market figure still leads. 5.45: Grok weekly 2026-11-19 items 1-4 (one human link, dated Source line, both dates, retirement target note)
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -27432,6 +27472,24 @@ export function _planQuery(intent, context) {
       const pt = _dcHostingPoint(d, place);
       d.__dcHc = pt ? _planHostingCoverage(text, pt) : null;
       win('dc_power_place', 'data centers and their power in one place (' + (place.label || place.state) + (topId !== 'unknown' ? ', over ' + topId : '') + ')');
+    }
+  } catch (_e) { /* routing must never throw */ }
+  // 5.63 (POWER rotation 2026-11-23, p2-p5): a large-load status ask reads the large-load queue, a generation-supply ask
+  // the generator pipeline, a wholesale / hub ask the ISO price, and a transmission ask the lines at the place, even
+  // when the question also names data centers. +1.5 over the best other class, the 5.40 margin.
+  try {
+    let b = null;
+    for (const s of scored) if (!b || s.score > b.score) b = s;
+    const topNow = b && b.score > 0 ? b.cls.id : 'unknown';
+    const r = _powerRotationRoute(text, d, topNow);
+    const w = r && scored.find((s) => s.cls.id === r.cls);
+    if (w) {
+      let best = 0;
+      for (const s of scored) if (s !== w && s.score > best) best = s.score;
+      w.score = Math.max(best, 2) + 1.5;
+      w.hits = [r.why + (topNow !== 'unknown' && topNow !== r.cls ? ', over ' + topNow : '')];
+      if (r.largeLoad) { d.__largeLoad = true; if (!d.iso && (d.state || d.stateFromPlace) === 'TX') d.iso = 'ERCOT'; }
+      if (r.cls === 'price_now') { const hub = _namedHub(text, d.iso || (d.isos && d.isos[0])); if (hub) d.__hub = hub; }
     }
   } catch (_e) { /* routing must never throw */ }
   scored.sort((a, b) => b.score - a.score);
@@ -31834,6 +31892,8 @@ const _ROUTING_OUTPUTS = {
   dc_power_place:       ['the place\'s data centers and DCPI verdict', 'the state slice of the queue, headroom and published feeder hosting capacity', 'the dated power timeline and price for the state'],
   price_now:            ['the power price DC Hub serves for the grid, with its basis', 'the grid\'s live demand'],
   queue_withdrawals:    ['withdrawn queue requests by ISO and state, or that they are not held', 'the active queue they left'],
+  power_supply:         ['planned and under-construction generators for the state (EIA-860M)', 'firm supply, or that it is withheld', 'the state queue slice where an ISO serves it'],
+  grid_constraints:     ['transmission lines and substations at the place, with the nearest line', 'the grid read for the place', 'permitting and large-load records for the state'],
   siting_search:        ['DCPI-scored markets per named state for the size and deadline', 'candidate search areas per state', 'the dated power timeline per state'],
   unknown:              ['the tool families that could answer this', 'a suggested entry call'],
 };
@@ -31854,6 +31914,8 @@ const _ROUTING_WHY = {
   dc_power_place:       'One place\'s data centers and the power behind them span market data, queues, headroom, feeders, timelines and prices.',
   price_now:            'A grid\'s power price now is the price DC Hub serves for it and the grid\'s live demand.',
   queue_withdrawals:    'Withdrawals are a single-capability queue lookup.',
+  power_supply:         'Generation supply spans the generator pipeline, the firm-supply timeline and the queue.',
+  grid_constraints:     'Transmission at a place spans the line and substation layers, the grid read and permitting records.',
   fiber:                'Fiber depth for one market is a single-capability lookup.',
   price:                'Price alone mis-answers siting; the cheapest ISO is often the one with no headroom.',
   incentives_tax:       'Statutory programs are a single-capability lookup.',
@@ -31942,6 +32004,8 @@ const _ROUTING_EXTERNAL = {
   dc_power_place:       ['utility_or_iso_filing', 'operator_disclosure'],
   price_now:            ['utility_or_iso_filing'],
   queue_withdrawals:    ['utility_or_iso_filing'],
+  power_supply:         ['utility_or_iso_filing'],
+  grid_constraints:     ['utility_or_iso_filing'],
   unknown:              [],
 };
 
@@ -35707,7 +35771,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.40: the price, gas and withdrawal answers lead with the figure asked; a one-place data-center + power plan
       // leads with both sides (lib/energy-answers.mjs, lib/cross-domain-answer.mjs).
       const _energyAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
-        : (_buildPriceNowAnswer({ intent: sc.intent, intent_class: sc.intent_class, iso: _sig && _sig.iso }, executed, fullByEntry)
+        : (_buildLargeLoadAnswer({ intent: sc.intent, intent_class: sc.intent_class, iso: _sig && _sig.iso,
+            // _sig is re-derived here (no planner marks), so the ask is read from the question again.
+            large_load: _largeLoadAsk(String(sc.intent || '')) }, executed, fullByEntry)
+          || _buildPowerSupplyAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            state: _sig ? (_sig.state || _sig.stateFromPlace || null) : null }, executed, fullByEntry)
+          || _buildGridConstraintsAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+            state: _sig ? (_sig.state || _sig.stateFromPlace || null) : null,
+            place_label: _sig && _sig.placeScope && Array.isArray(_sig.placeScope.places) ? _sig.placeScope.places.join(', ')
+              : (_pl540 && _pl540.label) || null }, executed, fullByEntry)
+          || _buildPriceNowAnswer({ intent: sc.intent, intent_class: sc.intent_class, iso: _sig && _sig.iso }, executed, fullByEntry)
           // 5.42: a permitting plan leads with the moratorium count and its jurisdictions; a named campus with the project.
           || _buildPermittingAnswer({ intent: sc.intent, intent_class: sc.intent_class }, executed, fullByEntry)
           || _buildNamedCampusAnswer({ intent: sc.intent, intent_class: sc.intent_class,
