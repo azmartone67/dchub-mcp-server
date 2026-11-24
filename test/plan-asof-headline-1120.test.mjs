@@ -42,7 +42,7 @@ describe('planner 5.54: AS_OF is the headline verdict\'s date; the oldest input 
   it('Grok 11-20 Dallas: AS_OF is the DCPI read (under 7 days old), ERCOT\'s 10-31 report is named and dated beside it', () => {
     const p = plan([retire, queue, dcpi()]);
     expect(p.provenance.as_of).toBe('2026-10-31');   // the plan's binding as_of is still the oldest input: unchanged
-    expect(line0(p)).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-20T18:30Z | AS_OF_BASIS: DCPI verdict'
+    expect(line0(p)).toBe('SOURCE: DC Hub (dchub.cloud) | AS_OF: 2026-11-20T11:30-07:00 | AS_OF_BASIS: DCPI verdict'
       + ' | OLDEST_INPUT: ERCOT interconnection queue (refined) | OLDEST_INPUT_AS_OF: 2026-10-31');
     expect(ageDays(/AS_OF: (\S+)/.exec(line0(p))[1])).toBeLessThanOrEqual(7);
     expect(p.fact_header.length).toBeLessThanOrEqual(HEADER_MAX_CHARS);

@@ -150,6 +150,11 @@ const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
 // (measured 2026-09-26: 1 in ~7 local runs; mcp#571 smoke run 36220517830).
 const _ISO_TS = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g;
 const all = (r) => (textOf(r) + '\n' + JSON.stringify(r.structuredContent || {})).replace(_ISO_TS, '<ts>');
+// Signed link tokens are masked the same way for the figure checks: mcp#1714's smoke (2026-11-24 08:48Z) failed on
+// "/upgrade/h/...U0.53f5d2fd..." (a random signature, not the withheld 0.53 mi). The link prefix stays, so a check
+// that the relay link is present still reads it; plansOf() keeps reading the unmasked tokens from all().
+const _LINK_TOKEN = /(dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/)[A-Za-z0-9_.-]+/g;
+const figText = (r) => all(r).replace(_LINK_TOKEN, (_m, pre) => `${pre}<tok>`);
 function head(r) {
   const t = textOf(r);
   try { return JSON.parse(t); } catch { /* prose */ }
@@ -212,7 +217,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     const sc = r.structuredContent || {};
     expect(sc._wall).toBe(true);
     expect(sc.error).toBe('full_access_required');   // Note V (2026-11-16): the keyless wall code (was pro_required)
-    const text = all(r);
+    const text = figText(r);
     // B2 (owner 2026-10-03; merge on/after 2026-10-19): keyless analyze_site
     // carries its headline, the verdict BAND (and the weakest factor's name and
     // counts; test/b2-analyze-site-keyless-headline.test.mjs). Still no figure,
@@ -251,7 +256,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     const p = head(r);
     expect(p && p._gated).toBe(true);
     expect(p._preview_only).toBe(true);
-    const text = all(r);
+    const text = figText(r);
     for (const f of K.figures) expect(text).not.toContain(f);
     expect(K.kept(p)).toEqual(K.keptWant);
     // Grok audit 2026-10-08 (one link per wall): below Developer the preview carries the relay page
@@ -317,7 +322,7 @@ describe('a real Developer/Pro key both validate as tier:"paid" — only the bac
     const p = head(r);
     expect(p && p._gated).toBe(true);
     expect(p._preview_only).toBe(true);
-    const text = all(r);
+    const text = figText(r);
     for (const f of CASES.analyze_site.figures) expect(text).not.toContain(f);
     expect(burns).toEqual([]);
   });
