@@ -8,7 +8,7 @@ const SITE = { success: true, location: { lat: 33.45, lon: -112.07, state: 'AZ' 
   scores: { power_infrastructure: 88.1, fiber_connectivity: 95.4, market_conditions: 60.6, risk_resilience: 72.2 },
   nearby: { facilities_100km: 685, substations_50km: 212 }, interpretation: 'Excellent site', source: 'DC Hub' };
 const REPORT = { ok: true, lat: 33.45, lon: -112.07, survey: { verdict: 'BUILD', power: { headroom_mw: 350.5 } },
-  pdf_report_url: 'https://dchub.cloud/report?sig=SECRET_REPORT_SIG', deliverable: 'Branded 5-page PDF' };
+  pdf_report_url: 'https://dchub.cloud/report?sig=SECRET_REPORT_SIG', deliverable: 'Branded DC Hub Land & Power Site Analysis PDF' };
 const ENV = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_SITE_EMAIL_UNLOCK', 'DCHUB_REPORT_KEYLESS_PREVIEW'];
 const prev = {};
 let httpServer, stub, PORT, S;
@@ -74,7 +74,7 @@ describe('keyless wall, end to end', () => {
     expect(sc.site_teaser.locked).toContain('shareable_report');
     expect(sc.next_tool).toBe('get_api_key');
     const all = JSON.stringify(r);
-    for (const leak of ['83.7', '88.1', '95.4', '350.5', 'SECRET_REPORT_SIG', 'Branded 5-page']) expect(all).not.toContain(leak);
+    for (const leak of ['83.7', '88.1', '95.4', '350.5', 'SECRET_REPORT_SIG', 'Land & Power Site Analysis PDF']) expect(all).not.toContain(leak);
   });
   it('kill switch restores the plain wall', async () => {
     process.env.DCHUB_REPORT_KEYLESS_PREVIEW = '0';
