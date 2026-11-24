@@ -24218,7 +24218,7 @@ export const _EXEC_ALLOWED_TOOLS = Object.freeze([
   'get_composite_site_score', 'get_dchub_recommendation', 'get_disaster_risk',
   'get_energy_prices', 'get_facility', 'get_facility_risk_delta', 'get_fiber_intel',
   'get_fiber_readiness', 'get_gas_economics', 'get_gas_index', 'get_grid_data',
-  'get_grid_intelligence', 'get_grid_scoreboard', 'get_hosting_capacity', 'get_infrastructure',
+  'get_grid_intelligence', 'get_grid_scoreboard', 'get_hosting_capacity', 'get_infra_projects', 'get_infrastructure',
   'get_interconnection_queue', 'get_market_dcpi_rank', 'get_market_intel', 'get_metro_fiber',
   'get_news', 'get_peering_intel', 'get_permitting_intel', 'get_pipeline', 'get_power_availability_timeline',
   'get_power_pipeline', 'get_refined_queue', 'get_renewable_energy', 'get_retirement_headroom',

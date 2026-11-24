@@ -28,6 +28,10 @@ beforeAll(async () => {
     if (p === '/api/v1/grid/transmission-proximity') return { status: 200, body: { status: 'measured', distance_km: 1.8, voltage_kv: 230, operator: 'VIRGINIA ELECTRIC & POWER CO',
       substation: 'GREENWAY', lines_in_radius: 230, ehv_230kv_plus: 103 } };
     if (p === '/api/v1/infrastructure') return { status: 200, body: { success: true, counts: { substations: 225, transmission_lines_eia: 91 }, filter: { lat: 39.09, lon: -77.64, radius_km: 30 } } };
+    if (p === '/api/v1/infra-projects') return { status: 200, body: { success: true, summary: { as_of: { transmission: '2026-05-15' },
+      by_type: { transmission: { matching: 690, returned: 1, by_status: { Planned: 591, 'Under Construction': 86, 'On Hold': 13 } } } },
+      sources: { transmission: { per_iso: [{ iso: 'PJM', as_of: '2026-11-19' }, { iso: 'CAISO', as_of: '2026-08-03' }] } },
+      transmission_projects: [{ iso: 'PJM', kv: 500, owner: 'Dominion', status: 'Planned', projected_isd: '2029-06-01', description: 'Stub 500 kV rebuild', states: 'VA' }] } };
     if (p === '/api/v1/power/availability-timeline') return { status: 200, body: { state: q.get('state'), timeline: [] } };
     if (p === '/api/v1/energy/summary') {
       const iso = String(q.get('iso') || '').toUpperCase();
@@ -76,6 +80,10 @@ describe('execute_plan 5.63 POWER rotation (real server.mjs, stub backend)', () 
     expect(o.executed.map((e) => e.tool)).toContain('get_infrastructure');
     expect(o.intent_answer).toBeTruthy();
     expect(o.intent_answer.headline).not.toMatch(/^DCPI/);
-    expect(o.intent_answer.not_established.join(' ')).toMatch(/Planned transmission upgrades/);
+    // execute_plan runs get_infra_projects (it is on the read-only allowlist), so the planned upgrades are in the answer.
+    const ip = o.executed.find((e) => e.tool === 'get_infra_projects');
+    expect(ip && ip.status).toBe('executed');
+    expect(JSON.stringify(o.intent_answer)).toMatch(/VA planned transmission upgrades: 690 on file \(591 planned, 86 under construction, 13 on hold; PJM project list, as of 2026-11-19\)/);
+    expect(o.intent_answer.not_established.join(' ')).not.toMatch(/Planned transmission upgrades/);
   }, 120_000);
 });

@@ -254,6 +254,7 @@ test/execute-plan-first.test.mjs
 test/execute-plan-geo-bind.test.mjs
 test/execute-plan-invariants.test.mjs
 test/execute-plan-nevada-geo.test.mjs
+test/execute-plan-planned-tools-allowed-1123.test.mjs
 test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-location-allowance.test.mjs
