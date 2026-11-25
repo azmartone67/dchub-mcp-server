@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { _planQuery } from '../server.mjs';
 import { buildCrossDomainAnswer, WHOLESALE_SCOPE_NOTE } from '../lib/cross-domain-answer.mjs';
-import { buildPriceNowAnswer, NOT_LMP_NOTE, wholesaleContextFacts, noLmpNote } from '../lib/energy-answers.mjs';
+import { buildPriceNowAnswer, NOT_LMP_NOTE, wholesaleContextFacts, noLmpNote, currentWholesaleFigures } from '../lib/energy-answers.mjs';
 
 const fx = (n) => JSON.parse(fs.readFileSync(new URL(`./fixtures/xd-energy-1118/${n}.json`, import.meta.url), 'utf8'));
 const ex = (n, tool, args, result) => ({ step: n, tool, args, status: 'executed', result });
@@ -78,7 +78,8 @@ describe('price_now reads the be#8996 wholesale block', () => {
     expect(a.headline).toContain("PJM live LMP (PJM's own public pages): https://dataviewer.pjm.com/dataviewer/pages/public/lmp.jsf.");
     expect(a.headline.length).toBeLessThanOrEqual(600);
     const figs = a.facts.filter((f) => f.tool === 'get_energy_prices' && /\$\d/.test(f.text) && f.entity === 'PJM');
-    expect(figs).toHaveLength(file.figures.length);
+    // Grok Brain 2026-11-24 item 4: figures superseded by a newer report of the same series are not said.
+    expect(figs).toHaveLength(currentWholesaleFigures(file.figures).kept.length);
     for (const f of figs) expect(f.as_of, f.text).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
   it('a figure with no published date is dated by when it was retrieved', () => {
@@ -122,8 +123,10 @@ describe('dc_power_place reads the ISO wholesale block when wholesale is asked',
   };
   it('PJM: the published figure and the live link are on the power side, ahead of retail; the reason is the gap', () => {
     const a = answerWith(PJM_EP);
-    expect(a.headline).toContain('Load-weighted average LMP $50/MWh (2025); Live PJM prices: https://dataminer2.pjm.com/');
-    expect(a.not_established).toContain(`PJM wholesale LMP is not served: ${PJM_REASON}.`);
+    // Grok Brain 2026-11-24 item 4: one compact clause from the served figures; the live link moves to evidence.
+    expect(a.headline).toContain('PJM wholesale: load-weighted LMP $50/MWh (2025, IMM); capacity $100/MW-day (2027/28)');
+    expect(a.evidence).toContain('Live PJM prices: https://dataminer2.pjm.com/');
+    expect(a.not_established).toContain(`PJM live wholesale LMP is not served (the LMP figures quoted are published report averages): ${PJM_REASON}.`);
     expect(a.not_established).not.toContain(WHOLESALE_SCOPE_NOTE);
     expect(a.headline).not.toMatch(/has no wholesale/);
     expect(noUnderscore(a.facts)).toBe(true);

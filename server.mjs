@@ -401,7 +401,8 @@ import { powerRotationRoute as _powerRotationRoute, powerSupplySequence as _powe
   buildPowerSupplyAnswer as _buildPowerSupplyAnswer, buildGridConstraintsAnswer as _buildGridConstraintsAnswer,
   namedHub as _namedHub, largeLoadAsk as _largeLoadAsk } from './lib/power-rotation-1123.mjs';
 import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _buildGasPriceAnswer,
-  buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer } from './lib/energy-answers.mjs';
+  buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer,
+  trimWholesaleContext as _trimWholesaleContext } from './lib/energy-answers.mjs';
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
@@ -38739,7 +38740,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
       hub: S.describe('Optional ISO pricing hub for wholesale_lmp, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON (ERCOT); omit for the ISO\'s default hub') },
     async (a) => {
-      const d = await callAPI('/api/v1/energy/summary', a);
+      // Grok Brain 2026-11-24 item 4: superseded PJM report figures (older auction years, the prior monitor report) are
+      // left out, so an answer's oldest input is a current report (lib/energy-answers.mjs trimWholesaleContext).
+      const d = _trimWholesaleContext(await callAPI('/api/v1/energy/summary', a));
       const e = _energyHubError(d, a);
       if (e) return { isError: true, content: [{ type: 'text', text: JSON.stringify(e) }], structuredContent: e };
       return { content: [{ type: 'text', text: JSON.stringify(d) }] };

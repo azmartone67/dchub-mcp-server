@@ -31,6 +31,7 @@ test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
+test/answer-composition-1124.test.mjs
 test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
 test/answer-noniso-twin-ttp-1123.test.mjs
