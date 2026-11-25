@@ -228,6 +228,19 @@ describe('through the handler', () => {
       [ipId(t), 'treatment', a.sid], [ipId(h), 'holdout', b.sid]].sort());
   }, 60_000);
 
+  it('a gateway caller (one egress IP for many people) is never counted: no exposure, no outcome', () => {
+    setFlag('1');
+    const posts = [];
+    const post = (row) => { posts.push(row); return Promise.resolve(); };
+    const base = { sid: 's-gw', clientIp: pickIp('treatment'), platform: 'mcp' };
+    expect(H.S._genericLightExposure({ ...base, userAgent: 'pipeworx-mcp/1.0' }, { post })).toBe(false);
+    expect(H.S._genericLightOutcomeStep('execute_plan', { client_ip: base.clientIp, platform: 'pipeworx',
+      generic_light_arm: 'treatment', session_id: 's-gw' }, { content: [] }, { post })).toEqual([]);
+    expect(posts).toEqual([]);
+    // Control: the same call without the gateway UA is counted.
+    expect(H.S._genericLightExposure({ ...base, userAgent: 'node' }, { post })).toBeTruthy();
+  });
+
   it('outcomes: first_tool_call once per session with its tool, tool_call per call, both arms', async () => {
     setFlag('1');
     for (const arm of ['treatment', 'holdout']) {

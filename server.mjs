@@ -5124,7 +5124,7 @@ export function _pathPack(req) {
 // Item 8 (DCHUB_GENERIC_LIGHT_LIST, default OFF): this /mcp request's arm, or null when it is not in the test (flag off,
 // another path, a full-catalog ask, a client the platform classifier names, no identity). Called only after the named
 // light rules and the slim ask have said no. A session keeps the arm it got at initialize (sessionMeta); otherwise the
-// arm is computed from the caller's key or IP, which _mcpCallerForArm stashes on req in the /mcp handler.
+// arm is computed from the caller's key or IP, which the /mcp handler stashes on req._dchubArmCaller.
 export function _genericLightArm(req) {
   try {
     if (!_GLL.genericLightOn() || _normPath(req) !== '/mcp' || _wantsFullCatalog(req)) return null;
@@ -6004,7 +6004,8 @@ export function _genericLightExposure({ sid, apiKey, clientIp, platform = '', qa
     if (!_GLL.genericLightOn() || !sid) return false;
     const c = { api_key: apiKey || '', client_ip: clientIp || '', platform, qa_marker: qaMarker, user_agent: userAgent,
                 session_id: sid };
-    if (qaMarker || _isQaCaller(c) || isBotOrInternalCtx(c)) return false;
+    // A gateway (one egress IP for many people) is one identity and one arm: listed, never counted.
+    if (qaMarker || _isQaCaller(c) || isBotOrInternalCtx(c) || _WPL.isGatewayCaller(c)) return false;
     const identity = _MX.identityOf(c);
     if (!identity) return false;
     return _MX.noteExposure(post, { test: _MX.GENERIC_LIGHT_LIST, identity, tool: '', session_id: sid, platform });
@@ -6014,7 +6015,7 @@ export function _genericLightExposure({ sid, apiKey, clientIp, platform = '', qa
 // counts only rows whose session has an exposure row.
 export function _genericLightOutcomeStep(name, c, result, { post = _mxPost } = {}) {
   if (!_GLL.genericLightOn() || !c || c.loopback_step || !c.generic_light_arm || !c.session_id) return [];
-  if (c.qa_marker || _isQaCaller(c) || isBotOrInternalCtx(c)) return [];
+  if (c.qa_marker || _isQaCaller(c) || isBotOrInternalCtx(c) || _WPL.isGatewayCaller(c)) return [];
   const identity = _MX.identityOf(c);
   if (!identity) return [];
   let walled = false;
