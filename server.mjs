@@ -76,6 +76,7 @@
  * a 'free' tier with capped result sizes and an upgrade nudge in responses.
  */
 
+import { withHeldDcpiLinks as _withHeldDcpiLinks } from './lib/dcpi-hold-links.mjs';
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
@@ -28511,6 +28512,10 @@ function _sourceLineCb(name, fn) {
       // #1594 (QA 2026-11-23): the get_api_key email nudge once per MCP session (no session: client name + IP /24 for
       // 30 minutes). LAST, so it sees the sentence wherever an earlier step put it. Copy only (lib/email-nudge-once.mjs).
       _final = await _emailNudgeOnceStep(_final, c);
+      // DCPI hold #117162 (Grok QA 2026-11-25, lib/dcpi-hold-links.mjs): every /dcpi/<slug> link to a held market
+      // (404 since be#9344) becomes /markets/<slug>. LAST, so it sees every link any step above wrote. Links only.
+      // Kill switch DCHUB_DCPI_HOLD_LINKS=0.
+      _final = _withHeldDcpiLinks(_final);
       return _final;
     } finally {
       _licenceActivatedStep(name, c, _final);   // checkout-attribution section 3 (flag OFF: no-op)

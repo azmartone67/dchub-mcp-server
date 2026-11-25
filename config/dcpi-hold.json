@@ -1,0 +1,7 @@
+{
+  "hold_id": "117162",
+  "held_isos": ["ERCOT", "MISO"],
+  "held_states": ["AZ"],
+  "hold_hides_verdicts": true,
+  "_comment": "DCPI hold #117162. true = hide numeric scores AND BUILD/CAUTION/AVOID verdicts for held markets. Only Jonathan changes this."
+}
