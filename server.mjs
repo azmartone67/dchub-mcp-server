@@ -359,6 +359,7 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
+import * as _GLL from './lib/generic-light-list.mjs';   // item 8: light list for unnamed /mcp clients, 50/50 (default OFF)
 import * as _qpm from './lib/queue-project-mode.mjs';   // DCHUB_QUEUE_PROJECT_MODE (default OFF): get_interconnection_queue mode=project
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): followable next_call, DCHUB_NEXT_ASK_V2 (default OFF)
@@ -5079,6 +5080,9 @@ const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
 // F3 (DCHUB_CLI_STARTER, default OFF; lib/cli-starter.mjs): the six named coding clients get the implicit light list in the
 // starter order (five starter tools first, get_fiber_intel added, nothing removed).
 const LIGHT_PACK_STARTER = Object.freeze({ ...LIGHT_PACK_IMPLICIT, tools: _cliStarterOrder(LIGHT_TOOLS), starter: true });
+// Item 8 (DCHUB_GENERIC_LIGHT_LIST, default OFF; lib/generic-light-list.mjs): the treatment arm for a client the light
+// rules do not name. LIGHT_TOOLS in their own order (ten, execute_plan first): not the starter order, not the key tools.
+const GENERIC_LIGHT_PACK = Object.freeze({ ...LIGHT_PACK_IMPLICIT, generic: true });
 // Item 7 (DCHUB_SLIM_PROFILE_TEST, default OFF): the opt-in core list on bare /mcp (?tools=core), lib/slim-profile.mjs.
 const SLIM_PACK = Object.freeze({ pack: SLIM_PACK_NAME, spine: false, tools: SLIM_TOOLS, slim: true });
 
@@ -5115,6 +5119,7 @@ export function _pathPack(req) {
       return _lk((_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT);
     }
   }
+  if (p === '/mcp' && _genericLightArm(req) === _MX.TREATMENT) return GENERIC_LIGHT_PACK;   // item 8 (default OFF)
   return MCP_PACKS.get(p) || null;
 }
 // DCHUB_NEXT_ASK_V2 (Grok item 5): the pack this request's tools/list is served from, on the ctx of a tools/call, so a
@@ -5133,6 +5138,37 @@ export function _listedNamesFor(c) {
   if (!def) return _CATALOG_TOOL_NAMES.size ? _CATALOG_TOOL_NAMES : null;
   const names = def.spine ? packToolNames(def) : (Array.isArray(def.tools) ? def.tools : []);
   return new Set(names.filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n)));
+}
+
+// Item 8 (DCHUB_GENERIC_LIGHT_LIST, default OFF): this /mcp request's arm, or null when it is not in the test (flag off,
+// another path, a full-catalog ask, a client the platform classifier names, no identity). Called only after the named
+// light rules and the slim ask have said no. A session keeps the arm it got at initialize (sessionMeta); otherwise the
+// arm is computed from the caller's key or IP, which the /mcp handler stashes on req._dchubArmCaller.
+export function _genericLightArm(req) {
+  try {
+    if (!_GLL.genericLightOn() || _normPath(req) !== '/mcp' || _wantsFullCatalog(req)) return null;
+    const sid = req && req.headers ? req.headers['mcp-session-id'] : null;
+    if (sid && sessionMeta.has(sid)) {
+      const m = sessionMeta.get(sid) || {};
+      if (Object.prototype.hasOwnProperty.call(m, 'generic_light_arm')) return m.generic_light_arm || null;
+    }
+    if (!_GLL.isGenericPlatform(_genericLightPlatform(req))) return null;
+    const caller = (req && req._dchubArmCaller) || null;
+    if (!caller) return null;
+    return _GLL.genericLightArm(_MX.identityOf(caller));
+  } catch (_) { return null; }
+}
+// The platform the classifier gives this request's client: the initialize's clientInfo.name, else a recalled session
+// name or X-MCP-Client, with the User-Agent and the explicit platform headers, through detectPlatformFromInit.
+function _genericLightPlatform(req) {
+  const h = (req && req.headers) || {};
+  const sid = h['mcp-session-id'];
+  try { if (sid && sessionMeta.has(sid) && sessionMeta.get(sid).platform) return sessionMeta.get(sid).platform; } catch (_) { /* fall through */ }
+  try { const r = sid ? _recallPlatform(sid) : null; if (r) return r; } catch (_) { /* fall through */ }
+  const id = _lightIdentityFromReq(req);
+  const hint = (_pathSelfTag(req) || h['x-mcp-platform'] || h['x-client-source'] || h['x-client-info'] || '').toString();
+  const body = id.clientName ? { params: { clientInfo: { name: String(id.clientName) } } } : null;
+  return detectPlatformFromInit(body, String(id.userAgent || ''), hint, '');
 }
 
 // Project a canonical ListToolsResult onto a pack. Order follows the pack
@@ -5195,7 +5231,8 @@ export function _INSTR_TAIL_PACK(def) {
   // Owner 2026-11-22 ("fix the 10 DC Hub tools count too"): the scope line names no count, served or total.
   // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): a light list states its count once, in the lead
   // (lib/light-list-instructions.mjs lightListInstructions), so this tail carries the rules and no second count.
-  if (def.light && _lightListInstructionsV2On()) {
+  // Item 8: the generic treatment arm always gets the light-list handshake (its own flag is the switch).
+  if (def.light && (_lightListInstructionsV2On() || def.generic)) {
     return _lightListTail({ implicit: !!def.implicit, pack: def.pack, listed: _lightServedNames(def), fullCatalogUrl: _FULL_CATALOG_URL });
   }
   // v14 (2026-10-10): shortened so /mcp/grok's handshake fits the 2,048-character budget; the rules
@@ -5968,6 +6005,7 @@ function _noteFollowedNextAsk(c, params) {
 // caller's key mint. A caller that minted a key is also looked up by its keyless identity, so a converted caller's
 // return is not lost to the identity change.
 export function _expOutcomeStep(name, c, result, { post = _mxPost } = {}) {
+  try { _genericLightOutcomeStep(name, c, result, { post }); } catch (_) { /* item 8 telemetry never breaks an answer */ }
   try {
     if (!c || c.loopback_step || !_MX.CLIENT_TESTS.some((t) => _MX.expOn(t))) return;
     if (c.profile === DIRECTORY_PROFILE || _isCleanPlatform() || /chatgpt|openai/i.test(String(c.platform || ''))) return;
@@ -5985,6 +6023,32 @@ export function _expOutcomeStep(name, c, result, { post = _mxPost } = {}) {
   } catch (_) { /* telemetry never breaks an answer */ } finally {
     if (c) { c._mxExposureCall = false; c._mxFollowedNextAsk = false; }   // the exposure call itself is never its own "continued"
   }
+}
+// Item 8 (DCHUB_GENERIC_LIGHT_LIST): one exposure row per initialize in the test, BOTH arms (intent to treat). Not for
+// QA, our own or bot traffic (they still get their arm, so a probe can see the treatment; they are never counted).
+export function _genericLightExposure({ sid, apiKey, clientIp, platform = '', qaMarker = false, userAgent = '' } = {},
+                                      { post = _mxPost } = {}) {
+  try {
+    if (!_GLL.genericLightOn() || !sid) return false;
+    const c = { api_key: apiKey || '', client_ip: clientIp || '', platform, qa_marker: qaMarker, user_agent: userAgent,
+                session_id: sid };
+    // A gateway (one egress IP for many people) is one identity and one arm: listed, never counted.
+    if (qaMarker || _isQaCaller(c) || isBotOrInternalCtx(c) || _WPL.isGatewayCaller(c)) return false;
+    const identity = _MX.identityOf(c);
+    if (!identity) return false;
+    return _MX.noteExposure(post, { test: _MX.GENERIC_LIGHT_LIST, identity, tool: '', session_id: sid, platform });
+  } catch (_) { return false; }
+}
+// Item 8: the per-session outcomes of an exposed session (first_tool_call, tool_call, walled), either arm. The backend
+// counts only rows whose session has an exposure row.
+export function _genericLightOutcomeStep(name, c, result, { post = _mxPost } = {}) {
+  if (!_GLL.genericLightOn() || !c || c.loopback_step || !c.generic_light_arm || !c.session_id) return [];
+  if (c.qa_marker || _isQaCaller(c) || isBotOrInternalCtx(c) || _WPL.isGatewayCaller(c)) return [];
+  const identity = _MX.identityOf(c);
+  if (!identity) return [];
+  let walled = false;
+  try { walled = !!_gatedAnswer(result, name, c); } catch (_) { walled = false; }
+  return _MX.noteGenericCall(post, { identity, session_id: c.session_id, tool: name, walled, platform: c.platform || '' });
 }
 // ── Agent Handoff P0-2 / P0-4 (lib/commercial-wall.mjs createRuntime; DRAFT, every flag OFF): the commercial wall
 // `access` block, the handoff elicitation, the linked-identity resolve and get_access_status. The rules live there.
@@ -28510,7 +28574,7 @@ export function _emailAskAbStep(result, name, args, c = getCtx(), { post = _mxPo
 // the one a cap wall exposed; the backend keeps the row only after that identity's exposure in the last 24 h.
 export function _emailAskAbCaptured(c, name, { post = _mxPost } = {}) {
   try {
-    if (!_EAB.emailAskAbOn() || !c || c.loopback_step || _isQaCaller(c) || isBotOrInternalCtx(c)) return [];
+    if ((!_EAB.emailAskAbOn() && !_MX.expOn(_MX.GENERIC_LIGHT_LIST)) || !c || c.loopback_step || _isQaCaller(c) || isBotOrInternalCtx(c)) return [];
     const ids = [_MX.identityOf({ ...c, api_key: '' }), _MX.identityOf(c)];
     return _MX.noteEmailCaptured(post, { identities: ids, tool: name, session_id: c.session_id || '' });
   } catch (_) { return []; }
@@ -43012,6 +43076,8 @@ app.post(MCP_PATHS, async (req, res) => {
     // X-PAYMENT HTTP header (x402 spec). Capture it and thread it through ctx so
     // the tool handler's x402 block can verify it. null when absent (the norm).
     const xPayment = req.headers['x-payment'] || null;
+    // Item 8 (DCHUB_GENERIC_LIGHT_LIST): who this request is, for the generic light-list arm (_genericLightArm).
+    req._dchubArmCaller = { api_key: apiKey || '', client_ip: clientIp || '' };
 
     // r-core-profile: /mcp/core is served here, after the same credential
     // resolution and challenges as every other path.
@@ -43124,6 +43190,9 @@ app.post(MCP_PATHS, async (req, res) => {
       // rejected BEFORE it reaches sessionMeta/ctx, so every downstream
       // `!!c.api_key` gate sees an anonymous caller. See _effectiveCallerKey.
       apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
+      req._dchubArmCaller = { api_key: apiKey || '', client_ip: clientIp || '' };   // item 8: the key the session keeps
+      // Item 8: this session's generic light-list arm, fixed here for every later request in it (null = not in the test).
+      const _gllArm = _genericLightArm(req);
 
       // (r-workos-consolidate 2026-06-21) Removed the duplicate 401 challenge that
       // lived here. It was unreachable in practice — the single challenge block
@@ -43166,7 +43235,10 @@ app.post(MCP_PATHS, async (req, res) => {
             // item-3 (real caller IP): persist the init-time XFF client IP so
             // every subsequent call in this session can stamp ip_address.
             client_ip: clientIp,
+            // Item 8 (DCHUB_GENERIC_LIGHT_LIST): present only while the flag is on; null = not in the test.
+            ...(_GLL.genericLightOn() ? { generic_light_arm: _gllArm } : {}),
           });
+          if (_gllArm) _genericLightExposure({ sid, apiKey, clientIp, platform, qaMarker: _qaMarker, userAgent });
           touchSession(sid);  // r41: track creation as activity
           // qa-0704: mcpServer is initialized by the time this hook fires
           // (during handleRequest, after connect) — safe to capture here.
@@ -43198,7 +43270,7 @@ app.post(MCP_PATHS, async (req, res) => {
           const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
           _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
           _instrRewrite.instrBudget = _CW.ACCESS_INSTR_BUDGET_COMPACT;   // the access line's fit (_accessFit)
-        } else if (_p && _p.light && _lightListInstructionsV2On()) {
+        } else if (_p && _p.light && (_lightListInstructionsV2On() || _p.generic)) {
           // A2 (DCHUB_LIGHT_LIST_INSTRUCTIONS_V2, default OFF): the "Tools:" line names only listed tools,
           // execute_plan first, and the count is stated once (lib/light-list-instructions.mjs).
           const _listed = _lightServedNames(_p);
