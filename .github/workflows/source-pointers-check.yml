@@ -1,0 +1,50 @@
+name: source-pointers-check
+# Grok spec item 7 (2026-11-24): HEAD-check (GET fallback) every URL in config/source-pointers.json once a week and
+# record the result in that file: checked_on moves on a pass, fail_count counts failed checks in a row. A pointer at
+# fail_count >= 2 is dropped from answers by lib/source-pointers.mjs (flag DCHUB_SOURCE_POINTERS_V1).
+# Same PR pattern as daily-manifest-sync.yml: main is PR-only, never pushed; a user PAT so the PR's checks run.
+on:
+  schedule:
+    - cron: '17 12 * * 1'     # weekly, Monday 12:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: source-pointers-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+      - name: Link-check the source pointers
+        run: node scripts/check-source-pointers.mjs
+      - name: Open a PR only if the file changed
+        env:
+          GH_TOKEN: ${{ secrets.REGISTRY_PR_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- config/source-pointers.json; then
+            echo "no change to config/source-pointers.json"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="bot/source-pointers-$(date -u +%Y%m%dT%H%M%SZ)"
+          git checkout -b "$BRANCH"
+          git add config/source-pointers.json
+          git commit -q -m "chore(source-pointers): weekly link check of config/source-pointers.json"
+          git push -q -u origin "$BRANCH"
+          PR_URL=$(gh pr create --base main --head "$BRANCH" \
+            --title "chore(source-pointers): weekly link check" \
+            --body "Automated by \`source-pointers-check.yml\`: HEAD (GET fallback) of every URL in \`config/source-pointers.json\`. A pass moves \`checked_on\`; a failure adds one to \`fail_count\` (2 in a row drops the pointer from answers). The run log lists each URL's result.")
+          echo "opened $PR_URL"
+          gh pr merge --auto --squash --delete-branch "$PR_URL"
