@@ -35,6 +35,9 @@ const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 // DEPTH_GATE is read at module scope, so the flag's two states are proven by
 // re-importing the module under each value with a cache-busting query.
 async function load(flag) {
+  // Hard gate = no network. server.mjs arms an 8 s DCPI-teaser refresh timer on import that calls API_BASE;
+  // this file imports it ~13 times and outlives 8 s in CI, so point the backend at a closed local port.
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';
   if (flag === undefined) delete process.env.DCHUB_DEPTH_GATE;
   else process.env.DCHUB_DEPTH_GATE = flag;
   return import('../server.mjs?depthgate=' + String(flag) + '-' + Math.random());
