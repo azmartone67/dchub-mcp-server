@@ -64,7 +64,7 @@ describe('the Dallas carrier-hotel plan', () => {
     expect(ia).toBeTruthy();
     expect(ia.kind).toBe('fiber');
     expect(ia.headline).toBe('Carrier hotels and facilities near Dallas-Fort Worth with the most networks on PeeringDB: '
-      + 'Facility A (210 networks, 9 IXs); Facility B (120 networks, 4 IXs); Facility C (64 networks, 2 IXs) (PeeringDB, read live on 2026-11-18).');
+      + 'Facility A (210 networks, 9 IXs); Facility B (120 networks, 4 IXs); Facility C (64 networks, 2 IXs) (PeeringDB, read live on 2026-11-17).');
     expect(ia.ranked_facilities.map((r) => r.name)).toEqual(['Facility A', 'Facility B', 'Facility C']);
     expect(ia.evidence).toContain(NETWORK_COUNT_NOTE);
     expect(ia.evidence.join(' ')).toMatch(/PeeringDB within about 56 km of 32\.7767, -96\.797: 50 facilities, 78 IX presences, 909 networks/);
@@ -73,7 +73,9 @@ describe('the Dallas carrier-hotel plan', () => {
     // "carriers" asked, networks answered: said, not blurred; the 50-row read cap is named
     expect(ia.not_established.join(' ')).toMatch(/count of fiber carriers per building is not in DC Hub/);
     expect(ia.not_established.join(' ')).toMatch(/stops at 50 facilities/);
-    expect(ia.as_of).toBe('2026-11-18');   // 5.41: the ranking is dated by its live PeeringDB read; the baseline keeps its date in evidence
+    // 5.41: the ranking is dated by its live PeeringDB read (served 03:47Z on 11-18 = 11-17 in America/Phoenix, Grok Brain
+    // 2026-11-24 item 10d); the baseline keeps its date in evidence.
+    expect(ia.as_of).toBe('2026-11-17');
     expect(ia.source).toMatch(/^Source: DC Hub \(dchub\.cloud/);
   });
 
@@ -87,7 +89,7 @@ describe('the Dallas carrier-hotel plan', () => {
     expect(JSON.stringify(ia)).not.toMatch(/\b(210|120|909|78)\b/);
     expect(ia.ranked_facilities).toEqual([{ name: 'Facility A', city: 'Dallas' }, { name: 'Facility B', city: 'Dallas' }]);
     expect(ia.headline).toBe('Carrier hotels and facilities near Dallas-Fort Worth that PeeringDB lists with the most networks, most first: '
-      + 'Facility A; Facility B (PeeringDB, read live on 2026-11-18; the per-facility network counts are withheld at this access level).');
+      + 'Facility A; Facility B (PeeringDB, read live on 2026-11-17; the per-facility network counts are withheld at this access level).');
     expect(ia.evidence).not.toContain(NETWORK_COUNT_NOTE);
     expect(ia.not_established.join(' ')).toMatch(/No network count for Facility A, Facility B/);
     expect(ia.not_established.join(' ')).toMatch(/3 more ranked facilities are in the full read/);
@@ -96,7 +98,7 @@ describe('the Dallas carrier-hotel plan', () => {
     const ex = executed();
     ex[1].result.connectivity.top_facilities = [];
     const ia = planOf(ex).intent_answer;
-    expect(ia.headline).toMatch(/^Key carrier hotels in Dallas-Fort Worth: Hotel Alpha, Hotel Beta, Hotel Gamma \(DC Hub curated profile, baseline as of 2026-03-17\)/);
+    expect(ia.headline).toMatch(/^Key carrier hotels in Dallas-Fort Worth: Hotel Alpha, Hotel Beta, Hotel Gamma \(DC Hub curated profile, curated metro baseline as of 2026-03-17\)/);
     expect(ia.headline).toMatch(/No per-facility carrier or network count was returned/);
   });
 

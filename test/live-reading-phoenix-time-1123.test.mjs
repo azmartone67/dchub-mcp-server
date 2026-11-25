@@ -33,7 +33,7 @@ describe('the real-time LMP line', () => {
     const f = lmpFact(s);
     expect(f.text).toBe('ERCOT HB_NORTH real-time LMP: $26.65/MWh (interval ending 2026-11-23 20:50 MST; ERCOT).');
     expect(f.text).not.toMatch(/T\d\d:|\dZ\b|2026-11-24/);
-    expect(f.as_of).toBe('2026-11-24');   // the machine field is unchanged
+    expect(f.as_of).toBe('2026-11-23');   // the reading's America/Phoenix day (Grok Brain 2026-11-24 item 5), as the line says it
   });
 });
 
