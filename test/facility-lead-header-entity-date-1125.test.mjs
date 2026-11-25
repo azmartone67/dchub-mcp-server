@@ -120,3 +120,15 @@ describe('D. a row update stamp is not said as as_of', () => {
     expect(t.text).toContain('(DC Hub, row as_of 2026-05-23).');
   });
 });
+
+describe('E. the lead says the headline once', () => {
+  it('an evidence line equal to the headline is not repeated; a different one still rides', () => {
+    on();
+    const once = planLeadText(plan());
+    expect(once.split('50 facilities in Ashburn in this read').length - 1).toBe(1);
+    const p2 = plan(); p2.intent_answer.evidence = ['PJM grid read ran for the same place.'];
+    const two = planLeadText(p2);
+    expect(two).toContain('50 facilities in Ashburn in this read');
+    expect(two).toContain('PJM grid read ran for the same place.');
+  });
+});
