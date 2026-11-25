@@ -312,6 +312,7 @@ test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/generate-site-analysis-keyless-preview.test.mjs
 test/generic-clientinfo-attribution.test.mjs
+test/generic-light-list-1125.test.mjs
 test/geography-arg-parity.test.mjs
 test/get-api-key-listed-1117.test.mjs
 test/get-iso-context-locked-sections-schema.test.mjs
