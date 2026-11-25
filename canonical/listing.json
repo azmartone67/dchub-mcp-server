@@ -1,6 +1,6 @@
 {
   "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. First live refresh 2026-10-09 (seed was Grok refresh-oct9 listing-copy.md; values were identical).",
-  "as_of": "2026-11-22T10:54:46Z",
+  "as_of": "2026-11-25T13:42:40Z",
   "auth": "None required to start (previews); get_api_key returns a key in one call; OAuth 2.0 supported",
   "canon_version": "1.0.0",
   "capacity_blurb": "Capacity Source by DC Hub: operators and brokers list available data-center capacity (a fee applies only if a deal closes); buyers and AI agents source it by size (kW or MW) and location with the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if the provider accepts.",
@@ -21,13 +21,13 @@
   "copy_source": {
     "path": "canonical/listing-copy.json",
     "repo": "azmartone67/dchub-mcp-server",
-    "sha256": "8cb217df65489a6bfc832d724346870f7c7c39091d5efa6eed3ca83a4fd5c2f4"
+    "sha256": "3222f623cff43dc0d9fcb2997e9c2b565a4179a4bdd5cf5339d603766d90aa17"
   },
-  "copy_updated_at": "2026-11-22",
+  "copy_updated_at": "2026-11-24",
   "endpoint": "https://dchub.cloud/mcp",
-  "glama_400": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for electricity prices, site selection and power grid questions. The Data Center Power Index (DCPI) scores where data centers can get grid power, market by market, daily. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start.",
+  "glama_400": "The orchestration layer for data center and energy intelligence: start with execute_plan for site selection, capacity, colocation, electricity, power grid, gas, fiber and interconnection. The Data Center Power Index (DCPI) scores markets daily. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. DCHUB_API_KEY is optional. Source: DC Hub (dchub.cloud), as of <date>.",
   "license": "CC-BY-4.0",
-  "long_description": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores markets daily. The Data Center Power Index (DCPI) is a daily score of where data centers can get grid power. Agents can query it and cite it. It covers mapped power, grid, gas and fiber assets and ISO interconnection queue snapshots, and carries live grid feeds from the seven US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), plus retail and wholesale electricity prices by state and ISO. Answers carry an as-of timestamp and a citation line. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. No key needed to start. Capacity Source adds a capacity marketplace: operators list data-center capacity at https://dchub.cloud/listings, and agents search it by size and location with source_capacity, then request an introduction with request_capacity_intro.",
+  "long_description": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores markets daily. The Data Center Power Index (DCPI) is a daily score of where data centers can get grid power. Agents can query it and cite it. It covers data center (datacenter) markets, colocation, electricity, gas, fiber, and ISO interconnection queue snapshots, and carries live grid feeds from the seven US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), plus retail and wholesale electricity prices by state and ISO. Answers carry an as-of timestamp and a citation line: Source: DC Hub (dchub.cloud), as of <date>. Connect at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. DCHUB_API_KEY is optional. Capacity Source adds a capacity marketplace: operators list data-center capacity at https://dchub.cloud/listings, and agents search it by size and location with source_capacity, then request an introduction with request_capacity_intro.",
   "name": "DC Hub Intelligence",
   "ok": true,
   "price_line": null,
