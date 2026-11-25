@@ -27411,7 +27411,8 @@ export function _planQuery(intent, context) {
     const open = (ids) => !top0 || top0.score <= 0 || ids.includes(top0.cls.id);
     const kind = held ? null : _fiberKind(text, d);
     d.__fiberText = text;   // 5.60: the default fiber recipe reads the text too (_fiberOverlapSequence)
-    if (kind === 'route' && open(['fiber', 'facility_search', 'site_analysis', 'fiber_power_pairing', 'colocation'])) {
+    // A fiber-and-power ask (fiber_power_pairing) or a site analysis keeps its class: a route plan reads no power.
+    if (kind === 'route' && open(['fiber', 'facility_search', 'colocation'])) {
       // Fiber 1124 (10c): "fiber routes and latency from Phoenix to Los Angeles" reads both ends and the pair's latency floor.
       d.__fiberRoute = _fiberRoutePair(text);
       d.__fiberKind = 'route'; d.__fiberText = text;
