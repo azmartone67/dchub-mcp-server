@@ -565,6 +565,7 @@ test/permitting-named-campus-1119.test.mjs
 test/permitting-named-campus-e2e-1119.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
+test/phoenix-day-remaining-paths-1124.test.mjs
 test/pipeline-mw-fact-1118.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
