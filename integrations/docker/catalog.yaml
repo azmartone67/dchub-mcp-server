@@ -58,7 +58,7 @@ registry:
       - name: "discover_tools"
         description: "Use this when you are unsure which DC Hub data center, power or grid tool fits: lists tools by family."
       - name: "execute_plan"
-        description: "Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call."
+        description: "Start here for any data center or energy question."
       - name: "export_dataset"
         description: "Use this when the user wants to export their saved data center sites for offline analysis, a spreadsheet, or ingestion into another tool (needs a full-access key)."
       - name: "fetch"

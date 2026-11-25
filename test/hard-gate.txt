@@ -31,6 +31,7 @@ test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/answer-blocks-profile-gate.test.mjs
 test/answer-blocks-stateless.test.mjs
+test/answer-composition-1124.test.mjs
 test/answer-guide-rejected-geo.test.mjs
 test/answer-markers.test.mjs
 test/answer-noniso-twin-ttp-1123.test.mjs
@@ -269,6 +270,8 @@ test/fetch-as-of.test.mjs
 test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fiber-email-ask.test.mjs
+test/fiber-routing-1124.test.mjs
+test/fiber-routing-e2e-1124.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/find-sites-market-anchor-e2e-1120.test.mjs
@@ -320,7 +323,9 @@ test/global-infra-unreadable-floor.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
+test/grid-constraints-ehv-upgrades-1124.test.mjs
 test/grid-constraints-pause-1124.test.mjs
+test/grid-constraints-phoenix-asof-1124.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
 test/grid-gating-one-rule.test.mjs
@@ -499,6 +504,7 @@ test/neutral-connect-plan-steps.test.mjs
 test/news-footer.test.mjs
 test/next-ask-args.test.mjs
 test/next-call.test.mjs
+test/no-advisory-client-names.test.mjs
 test/no-counts-docs-integrations-1122.test.mjs
 test/no-counts-docs-server-1122.test.mjs
 test/no-deal-count-1122.test.mjs
@@ -564,6 +570,7 @@ test/permitting-named-campus-1119.test.mjs
 test/permitting-named-campus-e2e-1119.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
+test/phoenix-day-remaining-paths-1124.test.mjs
 test/pipeline-mw-fact-1118.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
@@ -776,8 +783,10 @@ test/source-capacity-match.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
 test/stale-session-notify-1122.test.mjs
+test/stale-session-serve-two-replicas-1124.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
+test/starter-prompts-1124.test.mjs
 test/static-docs-no-free-1121.test.mjs
 test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs

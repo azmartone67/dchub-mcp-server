@@ -312,7 +312,8 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   namedCampusSequence as _namedCampusSequence, GAS_PRICE_RE as _GAS_PRICE_RE, gasPriceAsk as _gasPriceAsk,
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
-  fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
+  fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE,
+  ixAsk as _fiberIxAsk, routePair as _fiberRoutePair, fiberAddress as _fiberAddress } from './lib/plan-routing.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
@@ -402,7 +403,8 @@ import { powerRotationRoute as _powerRotationRoute, powerSupplySequence as _powe
   buildPowerSupplyAnswer as _buildPowerSupplyAnswer, buildGridConstraintsAnswer as _buildGridConstraintsAnswer,
   namedHub as _namedHub, largeLoadAsk as _largeLoadAsk } from './lib/power-rotation-1123.mjs';
 import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _buildGasPriceAnswer,
-  buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer } from './lib/energy-answers.mjs';
+  buildQueueWithdrawalsAnswer as _buildQueueWithdrawalsAnswer, buildQueueSliceAnswer as _buildQueueSliceAnswer,
+  trimWholesaleContext as _trimWholesaleContext } from './lib/energy-answers.mjs';
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
@@ -27405,22 +27407,39 @@ export function _planQuery(intent, context) {
     const zero = (id) => { const z = scored.find((s) => s.cls.id === id); if (z) { z.score = 0; z.hits = []; } };
     const top0 = best(['subsea_cables', 'point_infrastructure']);
     zero('subsea_cables'); zero('point_infrastructure');
-    const held = !!top0 && top0.score > 0 && ['colocation', 'pricing_out_of_scope', 'generation_mix', 'gas_price', 'named_campus'].includes(top0.cls.id);
+    // Fiber 1124 (Grok Brain note 2026-11-24, 10b): an internet-exchange / peering / carrier-hotel ask with no colocation-space
+    // wording (space, price, availability, kW) is a fiber ask; the colocation plan no longer holds it.
+    const ixAsk = _fiberIxAsk(text);
+    const held = !!top0 && top0.score > 0 && ['colocation', 'pricing_out_of_scope', 'generation_mix', 'gas_price', 'named_campus'].includes(top0.cls.id)
+      && !(ixAsk && top0.cls.id === 'colocation');
     const open = (ids) => !top0 || top0.score <= 0 || ids.includes(top0.cls.id);
     const kind = held ? null : _fiberKind(text, d);
     d.__fiberText = text;   // 5.60: the default fiber recipe reads the text too (_fiberOverlapSequence)
-    if (kind === 'subsea') {
+    // A fiber-and-power ask (fiber_power_pairing) or a site analysis keeps its class: a route plan reads no power.
+    if (kind === 'route' && open(['fiber', 'facility_search', 'colocation'])) {
+      // Fiber 1124 (10c): "fiber routes and latency from Phoenix to Los Angeles" reads both ends and the pair's latency floor.
+      d.__fiberRoute = _fiberRoutePair(text);
+      d.__fiberKind = 'route'; d.__fiberText = text;
+      win('fiber', 'a fiber route between ' + d.__fiberRoute.a.label + ' and ' + d.__fiberRoute.b.label);
+    } else if (kind === 'subsea') {
       d.__subsea = _subseaWhere(text, d);
       win('subsea_cables', 'a subsea cable / landing ask' + (d.__subsea && d.__subsea.label ? ' (' + d.__subsea.label + ')' : ''));
     } else if (!held && _pointInfraAsk(text, d) && open(['site_analysis', 'grid_headroom', 'power_timeline', 'price', 'facility_search', 'hosting_capacity', 'fiber_power_pairing'])) {
       win('point_infrastructure', 'infrastructure near a point');
-    } else if (kind === 'point' && open(['site_analysis', 'fiber', 'fiber_power_pairing'])) {
+    } else if (kind === 'point' && open(['site_analysis', 'fiber', 'fiber_power_pairing', ...(ixAsk ? ['colocation', 'facility_search'] : [])])) {
       d.__fiberKind = 'point'; d.__fiberText = text;
-      win('fiber', 'fiber at a point');
-    } else if (kind === 'metro' && open(['fiber'])) {
+      // Fiber 1124 (10a): a building the text names ("350 E Cermak, Chicago") is the point: the geocode pass marks the
+      // readiness and peering steps with it (basis 'address'), so they read the building, not the metro core.
+      if (!d.coords && !d.__address) {
+        const fa = _fiberAddress(text, d);
+        if (fa) d.__address = { query: fa.query, number: fa.label.split(/\s+/)[0], street: fa.label.split(/\s+/).slice(1).join(' '), city: fa.metro ? fa.metro.query : null, state: fa.state };
+      }
+      win('fiber', d.__address && !d.coords ? 'fiber at the address the question names' : 'fiber at a point');
+    } else if (kind === 'metro' && open(['fiber', ...(ixAsk ? ['colocation', 'facility_search'] : [])])) {
       // "Internet exchanges and peering in Chicago" matched no class (unknown); a fiber-scored ask keeps its score.
+      // Fiber 1124 (10b): an IX / peering / carrier-hotel ask wins over the facility search and colocation plans.
       d.__fiberKind = 'metro'; d.__fiberText = text;
-      if (!top0 || top0.score <= 0) win('fiber', 'a metro interconnection ask');
+      if (!top0 || top0.score <= 0 || (ixAsk && top0.cls.id !== 'fiber')) win('fiber', ixAsk ? 'an internet exchange / peering / carrier hotel ask' : 'a metro interconnection ask');
     }
   } catch (_e) { /* routing must never throw */ }
   // 5.39 (Grok cross-domain head-to-head): capacity + grid with no place named is capacity_grid (+1.5 over the best
@@ -35041,6 +35060,16 @@ export function _leanPromptsFor(req) {
 export function _staleSessionNotifyAcceptOn(env = process.env) {
   return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_NOTIFY_ACCEPT) || '').trim());
 }
+// DCHUB_STALE_SESSION_SERVE (default OFF, 2026-11-24): a request bearing a session id this process does not hold is
+// served from the one-shot stateless transport, exactly as tools/call already is (r-stateless-call), instead of the
+// spec's 404. Each replica holds its own in-memory session map and Railway has no sticky routing, so with 2 replicas a
+// prompts/list or resources/list after initialize 404'd whenever it landed on the other replica (4 of 12 follow-ups,
+// measured live 11-24). Nothing those methods answer depends on the in-process session: key and tier are re-resolved
+// per request and the funnel keys off the backend-stored session id, which is threaded through unchanged. What a
+// foreign replica cannot do is push server-to-client messages on that session, which it never could.
+export function _staleSessionServeOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String((env && env.DCHUB_STALE_SESSION_SERVE) || '').trim());
+}
 export function _isDefaultMcpPath(req) {
   return !!(req && req.path) && _normPath(req) === '/mcp';
 }
@@ -35168,7 +35197,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // silently drops the tool from the derived count (caught 2026-07-31 when
   // the count healed 82→81 across every registry surface).
   trackedTool(srv, 'execute_plan',
-    'Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer. Covers megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), and markets scored by the Data Center Power Index (DCPI). Each step is listed with its status, as_of and citation, at your own access level; single-tool questions should call that tool directly, and plan_query shows the plan without running it.',
+    'Start here for any data center or energy question. Answers any data center power, grid, interconnection queue, time-to-power, fiber or site question in one call. Pass the user\'s question unchanged as intent. Returns one dated, cited answer. Covers megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure (the Data Center Gas Index, DCGI), and markets scored by the Data Center Power Index (DCPI). Each step is listed with its status, as_of and citation, at your own access level; single-tool questions should call that tool directly, and plan_query shows the plan without running it.',
     { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "how soon can a 100 MW load get power in ERCOT" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "interconnection queue and energy prices in MISO for a 200 MW campus" · "gas economics for on-site generation in Texas" · "rank markets for a 200 MW AI campus" · "find 100 MW of buildable capacity near Ashburn"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict.'),
       // ★★★2026-08-19 [6]: these values were ALWAYS accepted — but only inside
@@ -35823,6 +35852,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : null));
       const _intentAnswer0 = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _mixAnswer || _coloAnswer || _energyAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class, place: _pl540,
+            // Fiber 1124 (10a): a point or geocoded address the caller gave leads the fiber answer (lib/fiber-answer.mjs).
+            point_given: !!(_sig && _sig.coords && !_sig.placeScope),
+            address: _addrGeo && !_addrGeo.miss ? _addrGeo.query : null,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
             deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null,
@@ -38560,13 +38592,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
   // from analyze_site's numeric score. Returns the structured summary + a signed
   // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
-  trackedTool(srv, 'generate_site_analysis', 'Use this when the user wants a shareable data center Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: "Make the Site Analysis PDF for this Carrier Mills parcel, 150 MW, for TON Infrastructure." — generate_site_analysis lat=37.694 lon=-88.65 capacity_mw=150 prepared_for="TON Infrastructure" prepared_by="Martone Advisors". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded 5-page PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.',
+  trackedTool(srv, 'generate_site_analysis', 'Use this when the user wants a shareable data center Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: "Make the Site Analysis PDF for this parcel, 150 MW, for Example Capital." — generate_site_analysis lat=39.04 lon=-77.48 capacity_mw=150 prepared_for="Example Capital" prepared_by="Your firm". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded DC Hub Land & Power Site Analysis PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 37.694'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -88.65'),
       ...COORD_ALIASES,
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 150 (typical 50-500)'),
-      prepared_for: S.describe('Client name printed on the report cover, e.g. "TON Infrastructure"'),
-      prepared_by: S.describe('Your firm name that brands the report; defaults to DC Hub, e.g. "Martone Advisors"'),
+      prepared_for: S.describe('Client name printed on the report cover, e.g. "Example Capital"'),
+      prepared_by: S.describe('Your firm name that brands the report; defaults to DC Hub, e.g. "Your firm"'),
       latency_target: S.describe('Optional metro to measure latency against; default = nearest real carrier hotel'),
       use_case: S.describe('Optional workload descriptor to tailor the report, e.g. "AI training campus"') },
     async (a) => {
@@ -38737,7 +38769,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
       hub: S.describe('Optional ISO pricing hub for wholesale_lmp, one of wholesale_lmp.hubs_available, e.g. HB_NORTH or HB_HOUSTON (ERCOT); omit for the ISO\'s default hub') },
     async (a) => {
-      const d = await callAPI('/api/v1/energy/summary', a);
+      // Grok Brain 2026-11-24 item 4: superseded PJM report figures (older auction years, the prior monitor report) are
+      // left out, so an answer's oldest input is a current report (lib/energy-answers.mjs trimWholesaleContext).
+      const d = _trimWholesaleContext(await callAPI('/api/v1/energy/summary', a));
       const e = _energyHubError(d, a);
       if (e) return { isError: true, content: [{ type: 'text', text: JSON.stringify(e) }], structuredContent: e };
       return { content: [{ type: 'text', text: JSON.stringify(d) }] };
@@ -40655,26 +40689,42 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
      { location: z.string().describe('Street address or "lat,lon"'),
        capacity_mw: z.string().optional().describe('Target load in MW, e.g. 100') },
      (a) => `Use the DC Hub MCP server to evaluate ${a.location} for a ${a.capacity_mw ? a.capacity_mw + ' MW ' : ''}data center. Call analyze_site (geocode the address first if it is not already lat,lon). Report grid headroom, nearest substation + voltage, fiber carrier count, water stress, tax incentives, and the BUILD/CAUTION/AVOID verdict. Attribute figures to DC Hub (dchub.cloud, CC-BY-4.0).`);
-  _P('pick-a-market', 'Pick a data-center market',
-     'Rank the best US markets to build a given load, with DCPI verdicts + time-to-power.',
-     { capacity_mw: z.string().describe('Target load in MW, e.g. 100'),
+  // 2026-11-24 (owner): four starter prompts on plain /mcp, each one execute_plan with the user's intent. The three
+  // below keep their names (prompts/get still resolves them, old arguments still accepted, none required now) and take
+  // the starter titles; dcpi-verdict is the fourth. The lean five (lib/lean-prompts.mjs) are unchanged.
+  const _EP_TAIL = ' Answer from its result and lead with the Data Center Power Index (DCPI) verdict when it carries one. '
+    + 'Quote each figure with its as_of date and cite "DC Hub (dchub.cloud)". Report any factor returned as unavailable as unknown; never estimate it.';
+  const _epText = (intent) => `Call the DC Hub execute_plan tool with intent set to: "${intent}".` + _EP_TAIL;
+  const _pq = (v) => String(v == null ? '' : v).replace(/"/g, "'").trim().slice(0, 200);
+  _P('pick-a-market', 'Rank markets for a 200 MW AI campus',
+     'Rank data center markets for an AI campus (200 MW unless you say otherwise) with each market\'s Data Center Power Index (DCPI) verdict and time to power. One execute_plan call.',
+     { capacity_mw: z.string().optional().describe('Target load in MW, default 200'),
        region: z.string().optional().describe('Optional region/state filter, e.g. TX or Midwest'),
        max_months: z.string().optional().describe('Max acceptable time-to-power in months') },
-     (a) => `Use DC Hub to recommend where to build ${a.capacity_mw} MW${a.region ? ' in ' + a.region : ''}${a.max_months ? ' within ' + a.max_months + ' months to power' : ''}. Call rank_markets (or site_selection_canvas) and return a ranked shortlist with each market's DCPI verdict, excess-power score, and time-to-power. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
-  _P('power-availability', 'Power availability in an ISO',
-     'How much headroom an ISO has and the time-to-power for a target load.',
-     { iso: z.string().describe('PJM | ERCOT | CAISO | MISO | SPP | NYISO | ISO-NE'),
-       capacity_mw: z.string().optional().describe('Target load in MW') },
-     (a) => `Use DC Hub get_grid_intelligence for ${a.iso}. Report current demand, fuel mix, renewable share, interconnection-queue depth, average time-to-power${a.capacity_mw ? ' for a ' + a.capacity_mw + ' MW load' : ''}, and stranded capacity. State plainly whether power is readily available and how long it takes. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
+     (a) => _epText(`rank markets for a ${_pq(a.capacity_mw) || '200'} MW AI campus${_pq(a.region) ? ' in ' + _pq(a.region) : ''}${_pq(a.max_months) ? ' with power within ' + _pq(a.max_months) + ' months' : ''}`));
+  _P('power-availability', 'How much power is available in ERCOT for a 100 MW data center',
+     'Grid headroom, interconnection queue and time to power for a data center load in one ISO (ERCOT and 100 MW unless you say otherwise). One execute_plan call.',
+     { iso: z.string().optional().describe('ERCOT (default) | PJM | CAISO | MISO | SPP | NYISO | ISO-NE'),
+       capacity_mw: z.string().optional().describe('Target load in MW, default 100') },
+     (a) => _epText(`how much power is available in ${_pq(a.iso) || 'ERCOT'} for a ${_pq(a.capacity_mw) || '100'} MW data center`));
   _P('site-report', 'Premium site intelligence report',
      'A full one-page site brief: power, gas, fiber, market, risk, verdict.',
      { location: z.string().describe('Address or "lat,lon"'),
        capacity_mw: z.string().optional().describe('Target load in MW') },
      (a) => `Build a DC Hub site-intelligence report for ${a.location}${a.capacity_mw ? ' (' + a.capacity_mw + ' MW)' : ''}. Combine analyze_site, get_market_dcpi_rank, get_grid_intelligence, get_gas_index, and get_fiber_intel into one brief with sections: Power, Gas, Fiber & Latency, Market (DCPI), Risk (water/climate), and a Bottom-Line BUILD/CAUTION/AVOID. Cite DC Hub (dchub.cloud, CC-BY-4.0) throughout.`);
-  _P('compare-markets', 'Compare data-center markets',
-     'Side-by-side of 2-4 markets on power, price, pipeline and DCPI verdict.',
-     { markets: z.string().describe('2-4 market slugs, comma-separated, e.g. northern-virginia,dallas,phoenix') },
-     (a) => `Use DC Hub to compare these markets head-to-head: ${a.markets}. Pull get_market_dcpi_rank for each and present a table of composite score, verdict, excess-power score, time-to-power, and retail price. End with a one-line recommendation. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
+  _P('compare-markets', 'Compare Dallas vs Phoenix for a GPU cluster',
+     'Compare data center markets (Dallas and Phoenix unless you name others) for a GPU cluster on Data Center Power Index (DCPI) verdict, power and time to power. One execute_plan call.',
+     { markets: z.string().optional().describe('2-4 markets, comma-separated, default dallas,phoenix') },
+     (a) => {
+       const ms = _pq(a.markets).split(',').map((m) => m.trim()).filter(Boolean);
+       return _epText(`compare ${ms.length ? ms.join(' vs ') : 'Dallas vs Phoenix'} for a GPU cluster`);
+     });
+  _P('dcpi-verdict', 'Data Center Power Index (DCPI) verdict for my market',
+     'The Data Center Power Index (DCPI) verdict (BUILD / CAUTION / AVOID), score and time to power for one data center market. One execute_plan call.',
+     { market: z.string().optional().describe('Market or metro, e.g. dallas or northern-virginia') },
+     (a) => (_pq(a.market)
+       ? _epText(`Data Center Power Index (DCPI) verdict for ${_pq(a.market)}`)
+       : 'Ask the user which data center market they mean, then call the DC Hub execute_plan tool with intent set to: "Data Center Power Index (DCPI) verdict for <that market>".' + _EP_TAIL));
   _P('fiber-plan', 'Plan diverse fibre routes',
      'N diverse road-following fibre lead-in routes from a site to a carrier hotel, with indicative cost.',
      { from: z.string().describe('Site address or "lat,lon"'),
@@ -43248,7 +43298,9 @@ app.post(MCP_PATHS, async (req, res) => {
     // process holds its own in-memory session map). A request that needs an answer keeps the
     // spec's 404 below (tools/call, tools/list and ping are already served statelessly above).
     if (sessionId && _isNotificationsOnly(_shape) && _staleSessionNotifyAcceptOn()) return res.status(202).end();
-    const _statelessOther = !sessionId && body?.method !== 'tools/call' && _isStatelessServable(_shape);
+    // A session id that reached this point is one this process does not hold (a held one routed above).
+    const _statelessOther = (!sessionId || _staleSessionServeOn())
+      && body?.method !== 'tools/call' && _isStatelessServable(_shape);
     if ((body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) || _statelessOther) {
       const _clientHdr = _sessionlessClientHeader(req, sessionId || _planLoopbackSid);   // 2026-11-10
@@ -43270,7 +43322,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
       const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey, leanPrompts: _leanPromptsFor(req) }) : createServer(_descOverrides);   // A3 leanPrompts
       await ephServer.connect(ephTransport);
-      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.

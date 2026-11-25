@@ -68,10 +68,16 @@ describe('gap 4: a carrier hotel / IX / metro fiber ask reads the metro fiber ma
     expect(p.intent_class).toBe('fiber');
     expect(args(p, 'get_peering_intel')[0]).toEqual({ lat: 41.853, lon: -87.618 });
   });
-  it('a colocation carrier-hotel ask keeps the colocation plan (5.32), which already reads metro fiber and peering', () => {
+  // Fiber 1124 (Grok Brain note 2026-11-24, 10b): an IX / carrier-hotel ask with no colocation-space wording is the
+  // fiber class now (it was colocation); a colocation-space ask at carrier hotels keeps the colocation plan.
+  it('a carrier-hotel / IX ask is the fiber class and reads metro fiber and peering', () => {
     const p = _planQuery('Which carrier hotels and internet exchanges are in Dallas?', {});
-    expect(p.intent_class).toBe('colocation');
+    expect(p.intent_class).toBe('fiber');
     expect(tools(p)).toEqual(expect.arrayContaining(['get_metro_fiber', 'get_peering_intel']));
+  });
+  it('a colocation-space ask at carrier hotels keeps the colocation plan (5.32)', () => {
+    const p = _planQuery('Carrier hotel colocation space available in Dallas?', {});
+    expect(p.intent_class).toBe('colocation');
   });
   it('a long-haul ask keeps the long-haul recipe', () => {
     expect(fiberKind('Zayo long-haul fiber routes into Dallas', {})).toBeNull();
