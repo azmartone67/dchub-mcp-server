@@ -41,11 +41,19 @@ const EMAIL_TOOL = ['get_market_intel', { market: 'dallas' }];          // a key
 const DIGEST_TOOLS = [['list_transactions', {}], ['get_grid_intelligence', { iso: 'ERCOT' }], ['get_interconnection_queue', { iso: 'ERCOT' }],
   ['get_energy_prices', { iso: 'ERCOT' }]];                              // digest-only walls (an email opens nothing)
 
-let H, O, SB, S, fence, why = '', mintMode = 'ok';
+let H, O, SB, S, fence, why = '', mintMode = 'ok', anonCount = 999;
 const mints = [];
 const exposures = [];
+const wallRows = [];   // quota_wall_hit rows (POST /api/v1/mcp/funnel-event): what the funnel's offers_shown reads
+// A free key with an email on file, in the treatment arm (the holdouts helper's own assignment).
+const BOUND_KEY = (() => {
+  for (let i = 0; i < 400; i++) { const k = 'dch_live_HWBOUND' + String(i).padStart(4, '0') + 'abcdef0123456789'; if (MX.armFor(MX.keyRef(k), MX.UPGRADE_BLOCK) === MX.TREATMENT) return k; }
+  throw new Error('no bound key in treatment');
+})();
 const routes = () => async (p, req, body) => {
-  if (p === '/api/v1/mcp/anon-usage') return { count: 999 };
+  if (p === '/api/v1/mcp/anon-usage') return { count: anonCount };
+  if (p === '/api/v1/keys/validate' && body && body.api_key === BOUND_KEY) return { valid: true, tier: 'free', developer_id: 'dev_bound', email: 'pat@example.com', tier_detail: { users_plan: 'free' } };
+  if (p === '/api/v1/mcp/funnel-event') { if (body && body.event === 'quota_wall_hit') wallRows.push(body); return undefined; }
   if (p === CW.MINT_PATH) {
     mints.push({ body, internal: req.headers['x-internal-key'] });
     if (mintMode === 'fail') return { status: 500, body: { error: 'down' } };
@@ -85,7 +93,7 @@ afterAll(async () => {
   if (fence) fence.restore();
   clearFlags();
 });
-afterEach(() => { clearFlags(); mintMode = 'ok'; });
+afterEach(() => { clearFlags(); mintMode = 'ok'; anonCount = 999; });
 
 let rid = 1, ipN = 1;
 function rpc(h, p, body, headers = {}) {
@@ -111,9 +119,9 @@ function rpc(h, p, body, headers = {}) {
   });
 }
 const nextIp = () => `198.51.131.${ipN++ % 250}`;
-async function call(h, p, name, args, { ip = nextIp(), headers = {} } = {}) {
+async function call(h, p, name, args, { ip = nextIp(), key = '', headers = {} } = {}) {
   const r = await rpc(h, p, { jsonrpc: '2.0', id: rid++, method: 'tools/call', params: { name, arguments: args } },
-    { 'x-dc-client-ip': ip, ...headers });
+    { 'x-dc-client-ip': ip, ...(key ? { 'x-api-key': key } : {}), ...headers });
   await new Promise((res) => setTimeout(res, 120));
   return { result: r.msg && r.msg.result, error: r.msg && r.msg.error, raw: r.raw };
 }
@@ -288,12 +296,24 @@ describe('DCHUB_HANDOFF_OVER_DIGEST: a digest-only wall that got a handoff link'
     }
   }, 120_000);
 
-  it.each(DIGEST_TOOLS)('flag on, treatment, %s: no digest offer, the handoff link is the offer, every other paragraph as it was', async (name, args) => {
+  // Both wall shapes: the anonymous hard wall (the IP is past its daily cap) and the preview (the digest paragraph
+  // rides in a block with other paragraphs, ahead of the human line).
+  const SHAPES = [...DIGEST_TOOLS.map((t) => [...t, 999]), ...DIGEST_TOOLS.slice(0, 2).map((t) => [...t, 0])];
+  const rowFor = async (name, n0) => {
+    await new Promise((r) => setTimeout(r, 150));
+    return wallRows.slice(n0).filter((r) => r.tool === name).at(-1);
+  };
+  it.each(SHAPES)('flag on, treatment, %s %j (anon calls today: %i): no digest offer, the handoff link is the offer, every other paragraph as it was', async (name, args, anon) => {
     PROD();
+    anonCount = anon;
+    let n0 = wallRows.length;
     const off = await call(H, '/mcp', name, args, { ip: ipIn(MX.TREATMENT) });
     expect(texts(off.result).join('\n'), 'control: the flag-off wall carries the digest offer').toMatch(DIGEST);
     expect(offersShown(withoutBlock(off.result))).toContain('digest');
+    const offRow = await rowFor(name, n0);
+    expect(offRow && offRow.offers_shown, 'control: the flag-off wall row says digest').toContain('digest');
     process.env[CW.HANDOFF_OVER_DIGEST_FLAG] = '1';
+    n0 = wallRows.length;
     const { result } = await call(H, '/mcp', name, args, { ip: ipIn(MX.TREATMENT) });
     expect(JSON.stringify(result)).not.toMatch(DIGEST);
     expect(offersShown(result)).not.toContain('digest');
@@ -305,6 +325,32 @@ describe('DCHUB_HANDOFF_OVER_DIGEST: a digest-only wall that got a handoff link'
     const want = texts(off.result).map((x) => x.split('\n\n').filter((p) => !DIGEST.test(p)).join('\n\n')).filter((x) => x.trim());
     expect(t.map((x) => norm(x))).toEqual(want.map((x) => norm(x)));
     expect(norm(result.structuredContent || null)).toBe(norm(off.result.structuredContent || null));
+    // the wall row the funnel reads no longer says the digest was offered; the rest of the row is unchanged
+    const row = await rowFor(name, n0);
+    expect(row, 'the wall row was sent').toBeTruthy();
+    expect(row.offers_shown).toEqual(offRow.offers_shown.filter((o) => o !== 'digest'));
+    expect(row.email_ask).toBe(offRow.email_ask);
+  }, 120_000);
+
+  it('flag on, a key with an email on file (the wall row is marked digest_line): the mark goes with the paragraph', async () => {
+    PROD();
+    const [name, args] = DIGEST_TOOLS[0];
+    expect(MX.armFor(MX.keyRef(BOUND_KEY), MX.UPGRADE_BLOCK), 'the fixture key is in the treatment arm').toBe(MX.TREATMENT);
+    let n0 = wallRows.length;
+    const off = await call(H, '/mcp', name, args, { key: BOUND_KEY });
+    expect(texts(off.result).join('\n')).toMatch(DIGEST);
+    const offRow = await rowFor(name, n0);
+    expect(offRow, 'control: the flag-off wall row').toMatchObject({ email_ask: 'digest_line' });
+    expect(offRow.offers_shown).toContain('digest');
+    process.env[CW.HANDOFF_OVER_DIGEST_FLAG] = '1';
+    n0 = wallRows.length;
+    const { result } = await call(H, '/mcp', name, args, { key: BOUND_KEY });
+    expect(JSON.stringify(result)).not.toMatch(DIGEST);
+    expect(JSON.stringify(result)).toContain('Access: partial');
+    const row = await rowFor(name, n0);
+    expect(row, 'the wall row was sent').toBeTruthy();
+    expect(row.email_ask).toBeUndefined();
+    expect(row.offers_shown).not.toContain('digest');
   }, 120_000);
 
   it('flag on, holdout: the digest offer stays and no block is attached', async () => {
