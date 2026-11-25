@@ -62,6 +62,12 @@ const ALL = { ...PROD, DCHUB_WALL_TO_KEY_V1: '1', ...Object.fromEntries(Object.v
 // #1594 (2026-11-23, lib/email-nudge-once.mjs): the get_api_key email nudge shows once per MCP session, or per client name
 // + IP /24 for 30 minutes with no session. The calls here are sessionless from one /24 and stand for separate callers, and
 // several compare against origin/main byte for byte, so the dedupe is off in this file; test/email-nudge-once-1123 pins it.
+// 2026-11-25 (owner): the licence-only wall line says what an email keeps (DCHUB_LICENCE_WALL_EMAIL_KEEPS). That is not a
+// wall-to-key change, and the suites below compare with origin/main byte for byte, so it is off in this file;
+// test/licence-wall-email-keeps-1125 pins it.
+let _keepsPrev;
+beforeAll(() => { _keepsPrev = process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS; process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS = '0'; });
+afterAll(() => { if (_keepsPrev === undefined) delete process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS; else process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS = _keepsPrev; });
 let _nudgeOncePrev;
 beforeAll(() => { _nudgeOncePrev = process.env.DCHUB_EMAIL_NUDGE_ONCE; process.env.DCHUB_EMAIL_NUDGE_ONCE = '0'; });
 afterAll(() => { if (_nudgeOncePrev === undefined) delete process.env.DCHUB_EMAIL_NUDGE_ONCE; else process.env.DCHUB_EMAIL_NUDGE_ONCE = _nudgeOncePrev; });
