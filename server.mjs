@@ -359,6 +359,7 @@ import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview 
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
+import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): followable next_call, DCHUB_NEXT_ASK_V2 (default OFF)
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
@@ -5114,6 +5115,23 @@ export function _pathPack(req) {
   }
   return MCP_PACKS.get(p) || null;
 }
+// DCHUB_NEXT_ASK_V2 (Grok item 5): the pack this request's tools/list is served from, on the ctx of a tools/call, so a
+// suggested next_call names only a tool the caller was shown. {} when the flag is off (the ctx is unchanged) or the
+// pack cannot be read (no list known: the step then stands down).
+function _listedPackCtx(req) {
+  try {
+    if (!_NAV2.nextAskV2On()) return {};
+    return { listed_pack_known: true, listed_pack: _pathPack(req) };
+  } catch (_) { return {}; }
+}
+// The tool names a ctx's caller was served, or null when unknown.
+export function _listedNamesFor(c) {
+  if (!c || c.listed_pack_known !== true) return null;
+  const def = c.listed_pack;
+  if (!def) return _CATALOG_TOOL_NAMES.size ? _CATALOG_TOOL_NAMES : null;
+  const names = def.spine ? packToolNames(def) : (Array.isArray(def.tools) ? def.tools : []);
+  return new Set(names.filter((n) => !_CATALOG_TOOL_NAMES.size || _CATALOG_TOOL_NAMES.has(n)));
+}
 
 // Project a canonical ListToolsResult onto a pack. Order follows the pack
 // declaration, not the catalog, so the tools a pack exists for read first.
@@ -5939,6 +5957,11 @@ export async function _expSaveKeyStep(result, name, c = getCtx(), { decide = _mx
     return _SKP.withSaveKeyLine(result);
   } catch (_) { return result; }
 }
+// DCHUB_NEXT_ASK_V2: the logged params say this call took the previous answer's next_ask; the outcome step reads it.
+function _noteFollowedNextAsk(c, params) {
+  try { if (c && params && typeof params === 'object' && params._via_next_ask) c._mxFollowedNextAsk = true; } catch (_) { /* ctx */ }
+  return params;
+}
 // Outcomes for the client tests, after every tool call (fire-and-forget): continued, returned_next_day, and a keyless
 // caller's key mint. A caller that minted a key is also looked up by its keyless identity, so a converted caller's
 // return is not lost to the identity change.
@@ -5953,8 +5976,12 @@ export function _expOutcomeStep(name, c, result, { post = _mxPost } = {}) {
       _MX.noteMint(post, { identity: ids[0], result, session_id: sid });
     }
     for (const identity of ids) _MX.noteCall(post, { identity, session_id: sid, tool: name, exposureCall: !!c._mxExposureCall });
+    // exp_next_ask_v2 (DCHUB_NEXT_ASK_V2): the call took the served next_ask; a successful save completed a workflow.
+    const followed = c._mxFollowedNextAsk === true && !c._mxExposureCall;
+    const saved = _MX.SAVE_TOOLS.has(name) && !!result && !result.isError && !_isFailureEnvelope(result);
+    if (followed || saved) for (const identity of ids) _MX.noteNextAskOutcome(post, { identity, session_id: sid, tool: name, followed, saved });
   } catch (_) { /* telemetry never breaks an answer */ } finally {
-    if (c) c._mxExposureCall = false;   // the exposure call itself is never its own "continued"
+    if (c) { c._mxExposureCall = false; c._mxFollowedNextAsk = false; }   // the exposure call itself is never its own "continued"
   }
 }
 // ── Agent Handoff P0-2 / P0-4 (lib/commercial-wall.mjs createRuntime; DRAFT, every flag OFF): the commercial wall
@@ -28068,11 +28095,53 @@ function _outreachStep(result, name, args) {
       siteFree: !c.api_key && _wfnSiteFullOn(),
     }) : result;
     // keyed (owner 2026-11-18, item 3): a keyed caller's site answer may offer save_site (lib/agent-outreach.mjs).
-    const out = stampOutreach(input, name, args, { nextAsk: !directory, citeUrl: !directory, keyed: !!c.api_key });
+    const stamped = stampOutreach(input, name, args, { nextAsk: !directory, citeUrl: !directory, keyed: !!c.api_key });
+    // Grok item 5 (DCHUB_NEXT_ASK_V2, default OFF): one followable follow-up in the treatment arm; never on a wall.
+    const out = (directory || walled) ? stamped : _nextAskV2Step(stamped, name, args, c);
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
     if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool, Date.now(), ask.args);
     return out;
   } catch (_e) { return result; }
+}
+
+// Grok spec item 5 (Nov 24; lib/next-ask-v2.mjs, DCHUB_NEXT_ASK_V2, default OFF). On a successful, non-walled answer
+// that already carries today's next_ask, for the Nov 22 tests' audience (_mxAudience: never /mcp/chatgpt or a ChatGPT
+// client, the directory / Claude / core profiles, a clean platform, a plan step, QA, internal or gateway traffic), and
+// only when this caller's tools/list is known: the choice is made the same way in both arms and, where it would change
+// the answer, an exposure is logged (once per identity per session per replica). The treatment arm's answer then
+// carries the chosen next_ask and, through withNextCall, the matching next_call {tool, arguments, why}; the holdout's
+// is untouched. A suggested tool must be in the caller's own list and opened by their key (_nextAskV2Usable).
+export function _nextAskV2Usable(c, tool) {
+  try {
+    const listed = _listedNamesFor(c);
+    if (!listed || !listed.has(tool)) return false;
+    const need = _tierRequiredFor(tool);
+    if (need === 'pro') return !!(c && c.api_key) && _tierRank(c.tier || 'free') >= _tierRank('pro');
+    if (!(c && c.api_key)) return need === 'anonymous' || need === 'developer_for_full';   // keyless: no key-only / email tool
+    return true;
+  } catch (_) { return false; }
+}
+export function _nextAskV2Step(result, name, args, c = getCtx(), { post = _mxPost } = {}) {
+  try {
+    if (!_NAV2.nextAskV2On() || !c || !result || typeof result !== 'object' || result.isError) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !sc.next_ask) return result;
+    if (!_mxAudience(c, name) || _listedNamesFor(c) === null) return result;
+    const identity = _MX.identityOf(c);
+    if (!identity) return result;
+    const choice = _NAV2.chooseNextCall(name, args, sc, { current: sc.next_ask, usable: (t) => _nextAskV2Usable(c, t) });
+    if (!choice) return result;   // today's follow-up already fits: nothing differs between the arms, no exposure
+    const sid = c.session_id || '';
+    if (_NAV2.exposureDue(identity, sid)) {
+      _MX.noteExposure(post, { test: _NAV2.TEST, identity, tool: name, session_id: sid, platform: c.platform || '' });
+      c._mxExposureCall = true;
+    }
+    if (!_NAV2.isTreatment(identity)) return result;   // holdout: unchanged
+    const ask = _NAV2.nextAskOf(choice);
+    const { next_ask: _old, ...rest } = sc;
+    c._nextCallV2 = _NAV2.nextCallOf(choice) || { none: true };   // withNextCall reads it; none: no follow-up at all
+    return { ...result, structuredContent: ask ? { ...rest, next_ask: ask } : rest };
+  } catch (_) { return result; }
 }
 
 // Item 8 (owner 2026-10-16): every FREE answer (keyless, free key, email key)
@@ -28238,8 +28307,10 @@ function _sourceLineCb(name, fn) {
       // a clean platform, or an execute_plan loopback step.
       // Item 2 (2026-11-11): the offer floor reads what lean left, so it runs after it (lib/wall-offer-floor.mjs).
       if (_wallIdV2On()) c._wallIdMarket = _wallIdMarketFrom(args, c._wallIdPlanMarket || '');   // lib/wall-identity-v2.mjs
+      // DCHUB_NEXT_ASK_V2 (default OFF): withNextCall's override is the treatment arm's chosen next_call (c._nextCallV2,
+      // set by _nextAskV2Step); null everywhere else, so nothing changes.
       const _floored = _wallOfferFloorStep(_done, name, c);
-      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args });
+      _final = (c.loopback_step || ownScrub || _isCleanPlatform()) ? _floored : withNextCall(_floored, name, { args, override: c._nextCallV2 || null });
       // Item 9 (2026-11-11): a preview / walled answer closes with the one identity line after its citation line.
       _final = _previewFooterStep(_final, name, c);
       // D1 (owner 2026-11-14): execute_plan carries provenance once, in the plan's own block; each step keeps a
@@ -31562,7 +31633,7 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
       const _trackRow = {
         timestamp:   new Date().toISOString(),
         tool:        name,
-        params:      _withKffArm(paramsForTrack(args, c.session_id, name), c.kff_arm),  // + _via_next_ask when this call took the last next_ask; + kff_arm (M2.2)
+        params:      _withKffArm(_noteFollowedNextAsk(c, paramsForTrack(args, c.session_id, name)), c.kff_arm),  // + _via_next_ask when this call took the last next_ask; + kff_arm (M2.2)
         platform:    c.platform || 'unknown',
         client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     c.api_key || null,
@@ -42970,6 +43041,7 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_unverified: _authUnverifiedFlag,   // r-auth-unverified: same per-request rule
         auth_demoted: _authDemotedFlag,   // r-auth-demoted: same per-request rule
         path: _normPath(req), source: _pathSource(req),   // r-source-path: rides EVERY request
+        ..._listedPackCtx(req),   // DCHUB_NEXT_ASK_V2: the tool list this caller was served (lib/next-ask-v2.mjs)
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body),
         lazy_auth: req._dchubLazyAuth || null }, async () => {   // DCHUB_LAZY_AUTH_V1 arm (lib/lazy-auth.mjs)
@@ -43324,6 +43396,7 @@ app.post(MCP_PATHS, async (req, res) => {
         ...(_legacyWallLoopback ? { legacy_wall_copy: true } : {}),
         auth_source: _authChannel, auth_oauth: _bearerResolved,
         path: _normPath(req),   // _answerBlocksAllowed() reads this: a stateless call without it got NO ranked/intent answer
+        ..._listedPackCtx(req),   // DCHUB_NEXT_ASK_V2: the tool list this caller was served (lib/next-ask-v2.mjs)
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
         auth_demoted: _authDemoted(_keyPresented, validation),   // r-auth-demoted
