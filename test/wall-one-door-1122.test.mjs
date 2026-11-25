@@ -62,6 +62,11 @@ const ON = { ...PROD, DCHUB_WALL_ONE_DOOR: '1' };
 // + IP /24 for 30 minutes with no session. The calls here are sessionless from one /24 and stand for separate callers, and
 // several compare against origin/main byte for byte, so the dedupe is off in this file; test/email-nudge-once-1123 pins it.
 let _nudgeOncePrev;
+// 2026-11-25 (owner): the licence-only wall line says what an email keeps (DCHUB_LICENCE_WALL_EMAIL_KEEPS); this file
+// compares with origin/main byte for byte, so it is off here. test/licence-wall-email-keeps-1125 pins it.
+let _keepsPrev;
+beforeAll(() => { _keepsPrev = process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS; process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS = '0'; });
+afterAll(() => { if (_keepsPrev === undefined) delete process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS; else process.env.DCHUB_LICENCE_WALL_EMAIL_KEEPS = _keepsPrev; });
 beforeAll(() => { _nudgeOncePrev = process.env.DCHUB_EMAIL_NUDGE_ONCE; process.env.DCHUB_EMAIL_NUDGE_ONCE = '0'; });
 afterAll(() => { if (_nudgeOncePrev === undefined) delete process.env.DCHUB_EMAIL_NUDGE_ONCE; else process.env.DCHUB_EMAIL_NUDGE_ONCE = _nudgeOncePrev; });
 beforeAll(async () => {
