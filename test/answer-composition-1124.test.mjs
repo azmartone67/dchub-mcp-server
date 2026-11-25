@@ -54,6 +54,13 @@ describe('item 3: one flood line per answer', () => {
     expect(fl[0].text).toMatch(/FEMA flood zone X/);
     expect(fl[0].text).not.toMatch(/no answer|did not answer/);
   });
+  it('the parcel read says no flood map covers the point, the disaster-risk read failed: the map answer is the one line', () => {
+    const r = siteScreenFacts([ex(1, 'get_disaster_risk', PT, DR_FAILED), ex(2, 'analyze_parcel', PT, PARCEL({ status: 'not_mapped' }))], null, ASK3);
+    const fl = floodLines(r);
+    expect(fl).toHaveLength(1);
+    expect(fl[0].text).toMatch(/FEMA maps no flood zone here/);
+    expect(fl[0].text).not.toMatch(/query failed/);
+  });
   it('neither served a zone: the one disaster-risk line says so (never invents a zone)', () => {
     const r = siteScreenFacts([ex(1, 'get_disaster_risk', PT, DR_FAILED), ex(2, 'analyze_parcel', PT, PARCEL({ status: 'unavailable' }))], null, ASK3);
     const fl = floodLines(r);
