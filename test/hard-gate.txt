@@ -197,6 +197,7 @@ test/daily-quota-gateway.test.mjs
 test/data-sources-odbl-117627.test.mjs
 test/dchub-identity.test.mjs
 test/dcpi-confidence-public.test.mjs
+test/dcpi-hold-links.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
 test/dcpi-market-alias-1123.test.mjs
 test/dcpi-markets-refresh.test.mjs
