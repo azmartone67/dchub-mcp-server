@@ -11635,6 +11635,8 @@ const FREE_FULL_TOOLS = new Set([
   // hook is worth more here than a teased one.
   'get_hosting_capacity',
   'get_agent_demand',      // the weekly Agent Demand Report: public aggregate, registered only while AGENT_DEMAND_PUBLIC is on (lib/agent-demand.mjs)
+  'get_site_context',      // 2026-11-25: gated IN the handler (_siteContextFor picks preview vs full from the caller, as analyze_site's
+                           // site_context); registered only while DCHUB_MCP_GET_SITE_CONTEXT is on. The anon trim must not cut the preview's blocks.
   'dchub_services',        // front desk (owner 2026-11-13): DC Hub's own service list, free and full for every caller
   'report_finding', 'request_enhancement',  // 2026-11-16: a filing receipt for any caller, key or none; never trimmed, never an offer
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
@@ -12399,6 +12401,51 @@ export function _siteContextLine(p) {
     + (ans.length ? ` (${ans.join(', ')})` : '')
     + (na.length ? `; not available here: ${na.join(', ')}` : '')
     + '. Their values are part of the full site analysis.';
+}
+// ── get_site_context (Brain 2026-11-25): the same body as a first-class tool ──
+// Registered only while DCHUB_MCP_GET_SITE_CONTEXT is on (default OFF), so tools/list,
+// the derived tool count and every plan stay byte-identical until it is turned on. The
+// answer is exactly what analyze_site embeds as `site_context` (_siteContextFor: the view
+// is chosen from the caller, the backend's ?view=preview below full access), so the gate
+// lives in the handler and the tool sits in FREE_FULL_TOOLS (no second trim on top).
+export const SITE_CONTEXT_TOOL = 'get_site_context';
+// The site-context kill switch (DCHUB_SITE_CONTEXT=0) takes the tool and its routing away with the read itself.
+export function _getSiteContextToolOn(env = process.env) {
+  return ['1', 'true', 'yes', 'on'].includes(String(env.DCHUB_MCP_GET_SITE_CONTEXT || '').trim().toLowerCase())
+    && _siteContextOn(env);
+}
+// No plan and no price: the agent-facing line beside a preview.
+export const SITE_CONTEXT_PREVIEW_NOTE = 'This lists which neighborhood blocks have an answer at this point and their sources; '
+  + 'the values themselves are withheld at this access level. This is context, not a score: analyze_site scores the point.';
+export function _siteContextToolResult(sc, lat, lon) {
+  if (!sc) {
+    const body = { available: false, lat, lon,
+      reason: 'Nearby site context did not answer for this point just now. Nothing was estimated; try again, or use analyze_site to score the point.' };
+    return { content: [{ type: 'text', text: JSON.stringify(body) }] };
+  }
+  const content = [{ type: 'text', text: JSON.stringify(sc) }];
+  if (_siteContextPreviewOnly(sc)) content.push({ type: 'text', text: SITE_CONTEXT_PREVIEW_NOTE });
+  return { content };
+}
+// execute_plan routing (flag on): "what is around this site / campus / point", "neighborhood", "nearby
+// infrastructure" -> get_site_context; a score / "should I build here" ask stays on analyze_site.
+export const _SITE_CONTEXT_ASK_RE = /\bwhat(?:['’]s|\s+is|\s+are|\s+else\s+is|\s+exists?)?\s+(?:around|near(?:by)?|close\s+(?:to|by)|surrounding)\b|\bneighbou?rhood\b|\bnearby\s+infrastructure\b|\binfrastructure\s+(?:is\s+|are\s+)?(?:near(?:by)?|around|close\s+to|surrounding)\b|\bsurroundings\b/i;
+export const _SITE_SCORE_ASK_RE = /\bscor(?:e|es|ed|ing)\b|\bshould\s+(?:i|we|you)\s+build\b|\bsuitab(?:le|ility)\b|\bverdict\b|\bviab(?:le|ility)\b|\bworth\s+building\b|\bbuild\s+(?:here|there)\b|\bgood\s+(?:site|spot|place|location)\b/i;
+const _SITE_CONTEXT_ROUTE_CLASSES = new Set(['site_analysis', 'point_infrastructure']);
+export function _siteContextRouteAsk(text, d, clsId, env = process.env) {
+  if (!_getSiteContextToolOn(env)) return false;
+  if (!_SITE_CONTEXT_ROUTE_CLASSES.has(clsId) || !d || d.candidateId) return false;
+  // A point the user gave (coordinates or a street address), never a corridor-table centroid: the
+  // neighborhood of a county's middle is not the neighborhood of their site.
+  const userPt = !!d.coords && !(d.placeScope && d.placeScope.basis === 'corridor_table');
+  if (!userPt && !d.__address) return false;
+  // A surface that does not list the tool (the ChatGPT and Claude directory profiles) keeps the plan it had:
+  // a step execute_plan would refuse there must not replace steps it runs.
+  let prof;
+  try { prof = (getCtx() || {}).profile; } catch (_e) { prof = undefined; }
+  if (!_execStepAllowed(SITE_CONTEXT_TOOL, prof)) return false;
+  const t = String(text || '');
+  return _SITE_CONTEXT_ASK_RE.test(t) && !_SITE_SCORE_ASK_RE.test(t);
 }
 // The keyless wall: the preview as structured data, plus one line for a text-only client.
 export function _withSiteContextPreview(result, sc) {
@@ -15825,6 +15872,9 @@ const _FACILITY_FREE_FIELDS = new Set([
   // Grok colocation note 2026-11-17 item 1 (owner: "Specs, no address"): one facility's specs for every tier, from
   // backend util/facility_specs.py. The street address stays off this list; power capacity stays a full-access field.
   'floor_space_sqft', 'tier_level', 'certifications', 'source_url', 'operator_url', 'specs_not_on_record',
+  // 2026-11-25 (backend DCHUB_FACILITY_OWNERSHIP_V1): the operator / owner / developer trio, each with its own
+  // status, source_url and as_of. The backend decides who gets it (util/facility_tier_gate); passed through untouched.
+  'ownership',
 ]);
 
 // r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_
@@ -20855,7 +20905,7 @@ export function _foldCoordArgs(args) {
 const COORD_REQUIRED_TOOLS = new Set([
   'save_site', 'get_composite_site_score', 'get_disaster_risk',
   'get_climate_intel', 'generate_site_analysis', 'get_infrastructure',
-  'get_fiber_readiness',
+  'get_fiber_readiness', 'get_site_context',
 ]);
 const _COORD_ALT_HINT = {
   analyze_site:   ' — or pass candidate_id from get_refined_queue, or location="ashburn" (a DC Hub market slug, resolved to that market\'s published centroid — NOT your parcel)',
@@ -24331,7 +24381,10 @@ const _EXEC_ALLOWED_SET = new Set(_EXEC_ALLOWED_TOOLS);
 export const _EXEC_NOT_ALLOWED_NOTE =
   'Not run: execute_plan only runs the read-only lookup tools listed in this app.';
 export function _execStepAllowed(tool, profile) {
-  if (!_EXEC_ALLOWED_SET.has(tool)) return false;
+  // get_site_context runs only while it is registered (DCHUB_MCP_GET_SITE_CONTEXT); the frozen list above stays
+  // the served-tools contract with the flag off. The profile checks below still apply to it.
+  if (tool === SITE_CONTEXT_TOOL) { if (!_getSiteContextToolOn()) return false; }
+  else if (!_EXEC_ALLOWED_SET.has(tool)) return false;
   if (profile === DIRECTORY_PROFILE) return !!_isDirectoryTool(tool);
   if (profile === CLAUDE_PROFILE) return !!_isClaudeTool(tool);
   return true;
@@ -28009,6 +28062,18 @@ export function _planQuery(intent, context) {
     seq.splice(0, seq.length, ..._country.seq);
     _capacityCountrySteps(seq, capStep);
   }
+  // get_site_context (DCHUB_MCP_GET_SITE_CONTEXT, default OFF): "what is around this point" is the neighborhood
+  // read, not a score. The point plan becomes that one read; a score / "should I build here" ask keeps analyze_site.
+  let _scRoute = false;
+  try {
+    if (_siteContextRouteAsk(text, d, top.cls.id)) {
+      seq.splice(0, seq.length, { step: 1, tool: SITE_CONTEXT_TOOL, depends_on: [], estimated_calls: 1,
+        why: 'The neighborhood around the point: substations, the nearest transmission line, fiber and internet exchanges, flood / seismic / wildfire, zoning and moratoriums, nearby campuses, each with its source and as_of or a stated gap. Context, not a score.',
+        args_hint: { lat: d.coords ? d.coords.lat : '<site lat>', lon: d.coords ? d.coords.lon : '<site lon>' } });
+      _scRoute = true;
+      _pairing = null;
+    }
+  } catch (_e) { /* routing must never throw */ }
   // 5.26: the stated size and deadline reach every step that takes them (_planBindIntentArgs).
   _planBindIntentArgs(seq, d);
   // 5.27: the window the intent names reaches the steps that take a date (_planBindWindowArgs).
@@ -28122,6 +28187,12 @@ export function _planQuery(intent, context) {
     sc.reason += `; non-US country named: ${_country.scope.name}. ${_country.scope.note}`;
     sc.alternatives = sc.alternatives.filter((a) => !_US_ONLY_TOOLS.has(a.tool));
     sc.geography_scope = _country.scope;
+  }
+  if (_scRoute) {
+    sc.reason += '; a neighborhood ask (what is around the point): get_site_context, not a score';
+    sc.alternatives = [{ tool: 'analyze_site', when: 'You want a 0-100 build verdict for the point, not its neighborhood.',
+      rejected_because: 'The question asked what is around the point, not whether to build there.' },
+    ...sc.alternatives.filter((a) => a && a.tool !== 'analyze_site')];
   }
   sc.replay = _planReplay(sc, d);
   return sc;
@@ -38705,6 +38776,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
+
+  // get_site_context (Brain 2026-11-25, DCHUB_MCP_GET_SITE_CONTEXT default OFF): the neighborhood around a point as
+  // its own tool, the same body analyze_site embeds as `site_context` (_siteContextFor, same view choice, same
+  // backend read). With the flag off it is not registered, so tools/list does not move.
+  if (_getSiteContextToolOn()) {
+    trackedTool(srv, SITE_CONTEXT_TOOL, 'Use this when the user asks what is around a point: the neighborhood of a lat/lon (nearest substations, the nearest transmission line, fiber, carriers and internet exchanges, flood, seismic and wildfire hazard, zoning and moratoriums, nearby data center campuses). Each block carries its source and as_of date, or states the gap (not covered here, or no answer in time). This is context, not a score: for a 0-100 build verdict on the point use analyze_site. Below full access the answer lists which blocks have an answer at the point and their sources, never their values. Ex: "What is around 39.04,-77.48?"',
+      { lat: N.describe('Point latitude in decimal degrees (-90 to 90, required), e.g. 39.04'),
+        lon: N.describe('Point longitude in decimal degrees (-180 to 180, required), e.g. -77.48'),
+        ...COORD_ALIASES },
+      async (a) => {
+        const { lat, lon } = _extractCoordArgs(a);
+        const la = Number(lat), lo = Number(lon);
+        if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) {
+          return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers in decimal degrees (lat -90 to 90, lon -180 to 180)' }) }] };
+        }
+        return _siteContextToolResult(await _siteContextFor(la, lo), la, lo);
+      });
+  }
 
   // 2026-07-08: the HONEST composite. Unlike analyze_site (full raw data + a
   // composite that silently includes placeholder factors), this scores ONLY over
