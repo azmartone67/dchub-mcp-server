@@ -102,6 +102,17 @@ describe('gating is unchanged: keyless gets the queue taste, rows withheld', () 
       expect((o.withheld || []).map((w) => w.section)).toContain('projects');
     });
   }
+  it('the keyless headline describes the match: count, ISO and file date, nothing withheld', async () => {
+    const hit = sc(await H.call('/mcp', 'get_interconnection_queue', { mode: 'project', queue_id: 'PJM-C01-1097' }, ANON()));
+    expect(hit.taste.headline.name).toBe('matched_queue_projects');
+    expect(hit.taste.headline.value).toBe(1);
+    expect(hit.taste.headline.text).toBe('1 queue project matched in PJM queue as of 2026-11-24');
+    expect(JSON.stringify(hit.taste.headline)).not.toMatch(/UNMEASURED|Homer|C01-1097|3000/);
+    const miss = sc(await H.call('/mcp', 'get_interconnection_queue', { mode: 'project', queue_id: 'PJM-ZZ9-999' }, ANON()));
+    expect(miss.taste.headline.text).toBe('0 queue projects matched in PJM queue as of 2026-11-24');
+    const pt = sc(await H.call('/mcp', 'get_interconnection_queue', { mode: 'project', lat: 39.1157, lon: -77.5636 }, ANON()));
+    expect(pt.taste.headline.text).toBe('1 queue project matched in PJM queue as of 2026-11-24');
+  });
   it('the same rule as iso=PJM today', async () => {
     const o = sc(await H.call('/mcp', 'get_interconnection_queue', { iso: 'PJM' }, ANON()));
     expect(JSON.stringify(o)).not.toContain('Homer City');
