@@ -24609,6 +24609,16 @@ function _submarketPlaces() {
   _SUBMARKET_PLACES = [...set];
   return _SUBMARKET_PLACES;
 }
+// `out.result` is the step as shown (slimmed to a row or two when large) and `out.full` the whole step the answer's
+// facts are built from. The scope counts are the full step's: a slimmed copy cut on its own reported kept 1 beside a
+// lead that counted 50 (live 2026-11-25, Ashburn). The shown copy carries the same block.
+function _submarketScopeOfFull(out, scope) {
+  if (scope && out && out.result && typeof out.result === 'object' && out.result !== out.full
+      && out.result.truncated === true && out.result.submarket_scope && typeof out.result.submarket_scope === 'object') {
+    out.result = { ...out.result, submarket_scope: scope };
+  }
+  return scope;
+}
 export function _execSubmarketOut(tool, out, sig, args = null) {
   // 5.32: a colocation ask that names only a METRO is searched by the metro query, so Reston and Sterling rows stay.
   // Grok midday note 2026-11-17, item 2 (owner-approved): a TOWN named inside the metro ("Ashburn 500 kW") is searched
@@ -24622,11 +24632,11 @@ export function _execSubmarketOut(tool, out, sig, args = null) {
       if (!out[k] || typeof out[k] !== 'object') continue;
       if (cs.city && args && args.city === cs.city) {
         const r = _cutRowsToSubmarket(tool, out[k], { city: cs.city }, _submarketPlaces());
-        if (r.scope) { out[k] = r.result; scope = scope || r.scope; }
+        if (r.scope) { out[k] = r.result; if (k === 'full' || !scope) scope = r.scope; }
       }
       if (cs.kw && args && args.min_capacity_mw != null) out[k] = _coloFitNotes(out[k], cs.kw);
     }
-    return scope;
+    return _submarketScopeOfFull(out, scope);
   }
   const sub = _planSubmarket(sig);
   if (!sub || !out || !(out.ok || out.gated)) return null;
@@ -24634,10 +24644,10 @@ export function _execSubmarketOut(tool, out, sig, args = null) {
   for (const k of ['result', 'full']) {
     if (out[k] && typeof out[k] === 'object') {
       const r = _cutRowsToSubmarket(tool, out[k], sub, _submarketPlaces());
-      if (r.scope) { out[k] = r.result; scope = scope || r.scope; }
+      if (r.scope) { out[k] = r.result; if (k === 'full' || !scope) scope = r.scope; }
     }
   }
-  return scope;
+  return _submarketScopeOfFull(out, scope);
 }
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
