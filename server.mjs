@@ -35590,6 +35590,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           }));
           for (const { s, args, out, geo, scope, subScope, widened } of results) {
             calls += 1;
+            // 2026-11-25: a limit wall (anon_hard_wall, ...) is not a preview: it carries limit_hit, and no depth.
+            const _lh = _planLimitHitOf(out.full || out.result, LIMIT_HIT_STATUSES);
             const entry = { step: s.step, tool: s.tool, args,
                             ...(s.pair_side ? { pair_side: s.pair_side } : {}),
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
@@ -35599,12 +35601,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
-                            // 2026-11-25: a limit wall (anon_hard_wall, ...) is not a preview: it carries limit_hit instead.
-                            ...((() => { const lh = _planLimitHitOf(out.full || out.result, LIMIT_HIT_STATUSES);
-                              return lh ? { limit_hit: lh } : (out.ok && _execStepPreview(out.full, c) ? { depth: 'preview' } : {}); })()),
+                            ...(out.ok && _execStepPreview(out.full, c) ? { depth: 'preview' } : {}),
+                            ...(_lh ? { limit_hit: _lh } : {}),
                             ms: out.ms, result: out.result };
             executed.push(entry);
             if (out.full) fullByEntry.set(entry, out.full);
+            if (entry.limit_hit) delete entry.depth;
             if (out.ok || out.gated) {
               const fresh = {};
               _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
@@ -35692,6 +35694,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
           const subScope2 = _execSubmarketOut(s.tool, out2, _sig, r2.args);
           calls += 1;
+          const _lh2 = _planLimitHitOf(out2.full || out2.result, LIMIT_HIT_STATUSES);
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
                            ...(geo2.length ? { geo_injected: geo2 } : {}),
                            ...(scope2 ? { state_scope: scope2 } : {}),
@@ -35699,14 +35702,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                            status: out2.ok ? 'executed'
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),
-                           ...((() => { const lh = _planLimitHitOf(out2.full || out2.result, LIMIT_HIT_STATUSES);
-                             return lh ? { limit_hit: lh } : (out2.ok && _execStepPreview(out2.full, c) ? { depth: 'preview' } : {}); })()),
+                           ...(out2.ok && _execStepPreview(out2.full, c) ? { depth: 'preview' } : {}),
+                           ...(_lh2 ? { limit_hit: _lh2 } : {}),
                            retried_after_wave: true, ms: out2.ms, result: out2.result };
           executed.push(entry2);
           // The retry path pushes a SECOND time with the same shape. Covering
           // only the wave path above would drop every retried step from the
           // brief while the envelope still showed it as executed.
           if (out2.full) fullByEntry.set(entry2, out2.full);
+          if (entry2.limit_hit) delete entry2.depth;
           if (out2.ok || out2.gated) {
             const fresh2 = {};
             _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
