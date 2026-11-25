@@ -116,6 +116,7 @@ test/cite-as-every-tool.test.mjs
 test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/cite-day-phoenix-1123.test.mjs
+test/cite-report-link-1125.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-client-snippet-lasting-key.test.mjs
 test/claim-email-has-key-paste-line.test.mjs
