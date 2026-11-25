@@ -69,7 +69,8 @@ describe('planner 5.44: the answer leads with the named market and the deadline'
 
   it('within the deadline says so', () => {
     const a = buildIntentAnswer(ctx(), [dcpi('dallas', 30.1), canvas()], null, NOW);
-    expect(a.headline).toContain('That is within the 36-month deadline asked.');
+    // QA 2026-11-24: "within" always carries the modeled-estimate caveat in the same sentence.
+    expect(a.headline).toContain("That is within the 36-month deadline asked on DC Hub's modeled estimate, which the serving utility has to confirm.");
   });
 
   it('a canvas that did not apply the cut is not called "within 36 months", and the answer says so', () => {

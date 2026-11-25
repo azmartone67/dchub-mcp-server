@@ -35,7 +35,7 @@ const NOW = Date.parse('2026-11-20T18:00:00Z');
 
 describe('deadline sentence says by how much', () => {
   it.each([[36, 37.9, 'past the 36-month deadline asked, by ~2 months.'], [18, 19.4, 'by ~1 month.'],
-    [36, 36.2, 'by ~1 month.'], [36, 30, 'That is within the 36-month deadline asked.']])('%s vs %s', (d, t, want) => {
+    [36, 36.2, 'by ~1 month.'], [36, 30, "That is within the 36-month deadline asked on DC Hub's modeled estimate, which the serving utility has to confirm."]])('%s vs %s', (d, t, want) => {
     expect(deadlineSentence(d, t)).toContain(want);
   });
 
