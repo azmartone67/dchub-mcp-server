@@ -46,6 +46,7 @@ describe('isHeldMarket mirrors util/dcpi_coverage.out_of_scope', () => {
     ['newmarket-az', { state: 'AZ' }, true],   // not in the catalog: the row's own state decides
     ['newmarket-x', { iso: 'ERCOT' }, true],
     ['newmarket-y', { state: 'OH', iso: 'PJM' }, false],
+    ['columbus', { state: 'AZ', iso: 'ERCOT' }, false],   // a catalog market keeps its own row, whatever encloses it
     ['phoenix-west', {}, true],       // name pattern (the state's DCPI anchor), as the backend
     ['ercot-north', {}, true],
   ])('%s %j -> %s', (slug, ctx, want) => {
@@ -105,6 +106,13 @@ describe('withHeldDcpiLinks', () => {
     expect(JSON.stringify(r)).toMatch(HELD_LINK);
     expect(s).not.toMatch(HELD_LINK);
     expect(s).toContain('https://dchub.cloud/markets/tucson');
+  });
+  it('the cite_url_template points at /markets/{market_slug} when the answer names a held market, not otherwise', () => {
+    const tpl = 'https://dchub.cloud/dcpi/{market_slug}';
+    const held = H.withHeldDcpiLinks({ structuredContent: { market_slug: 'gilbert', provenance: { cite_url_template: tpl } } }, { env: {} });
+    expect(held.structuredContent.provenance.cite_url_template).toBe('https://dchub.cloud/markets/{market_slug}');
+    const open = { structuredContent: { market_slug: 'columbus', provenance: { cite_url_template: tpl } } };
+    expect(H.withHeldDcpiLinks(open, { env: {} })).toBe(open);
   });
   it('never throws on odd input', () => {
     const cyc = { a: 1 }; cyc.self = cyc;
