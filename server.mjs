@@ -319,6 +319,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
+import { limitHitOf as _planLimitHitOf, limitBlocker as _planLimitBlocker, limitSkip as _planLimitSkip } from './lib/plan-limit-hit.mjs';   // 2026-11-25: a step stopped by a caller limit
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark, askedForEmailInProse as _askedForEmailInProse } from './lib/offers-shown.mjs';
@@ -365,6 +366,7 @@ import * as _qpm from './lib/queue-project-mode.mjs';   // DCHUB_QUEUE_PROJECT_M
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): followable next_call, DCHUB_NEXT_ASK_V2 (default OFF)
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
+import { PLAN_HANDOFF_LINK_HEADER, mintPlanHandoffLinkToken, consumePlanHandoffLinkToken } from './lib/plan-handoff-link.mjs';   // a plan step keeps its caller's handoff lift
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
@@ -35588,6 +35590,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           }));
           for (const { s, args, out, geo, scope, subScope, widened } of results) {
             calls += 1;
+            // 2026-11-25: a limit wall (anon_hard_wall, ...) is not a preview: it carries limit_hit, and no depth.
+            const _lh = _planLimitHitOf(out.full || out.result, LIMIT_HIT_STATUSES);
             const entry = { step: s.step, tool: s.tool, args,
                             ...(s.pair_side ? { pair_side: s.pair_side } : {}),
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
@@ -35598,9 +35602,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
                             ...(out.ok && _execStepPreview(out.full, c) ? { depth: 'preview' } : {}),
+                            ...(_lh ? { limit_hit: _lh } : {}),
                             ms: out.ms, result: out.result };
             executed.push(entry);
             if (out.full) fullByEntry.set(entry, out.full);
+            if (entry.limit_hit) delete entry.depth;
             if (out.ok || out.gated) {
               const fresh = {};
               _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
@@ -35661,9 +35667,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           }
           const r2 = _execResolveArgs(s.args_hint || {}, minted, userCtx, false);
           if (r2.unresolved) {
+            // 2026-11-25: a dependency stopped by the caller's limit produced nothing to mint; say so, not "no step minted".
+            const _lb = _planLimitBlocker(s, executed);
+            const _lbFull = _lb ? (fullByEntry.get(_lb) || _lb.result) : null;
+            const _ls = _lb ? _planLimitSkip(_lb, r2.unresolved, _lbFull && typeof _lbFull.resets_at === 'string' ? _lbFull.resets_at : '') : null;
             executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
                             missing: r2.unresolved,
-                            note: 'no earlier or sibling step minted <' + r2.unresolved + '> — run it manually with a concrete value' });
+                            note: _ls ? _ls.note : 'no earlier or sibling step minted <' + r2.unresolved + '> — run it manually with a concrete value',
+                            ...(_ls ? { blocked_by: _ls.blocked_by } : {}) });
             continue;
           }
           const _fg2 = _facilitySlugGuard(s.tool, r2.args) || _marketSlugGuardFor(s.tool, r2.args, _KNOWN_MARKET_SLUGS());
@@ -35683,6 +35694,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
           const subScope2 = _execSubmarketOut(s.tool, out2, _sig, r2.args);
           calls += 1;
+          const _lh2 = _planLimitHitOf(out2.full || out2.result, LIMIT_HIT_STATUSES);
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
                            ...(geo2.length ? { geo_injected: geo2 } : {}),
                            ...(scope2 ? { state_scope: scope2 } : {}),
@@ -35691,12 +35703,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),
                            ...(out2.ok && _execStepPreview(out2.full, c) ? { depth: 'preview' } : {}),
+                           ...(_lh2 ? { limit_hit: _lh2 } : {}),
                            retried_after_wave: true, ms: out2.ms, result: out2.result };
           executed.push(entry2);
           // The retry path pushes a SECOND time with the same shape. Covering
           // only the wave path above would drop every retried step from the
           // brief while the envelope still showed it as executed.
           if (out2.full) fullByEntry.set(entry2, out2.full);
+          if (entry2.limit_hit) delete entry2.depth;
           if (out2.ok || out2.gated) {
             const fresh2 = {};
             _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
@@ -38282,6 +38296,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
+      // 2026-11-25: a handoff-linked keyless caller's step keeps the caller's lifted tier (lib/plan-handoff-link.mjs).
+      // Kill switch DCHUB_PLAN_HANDOFF_LINK=0 (the steps run as anonymous again).
+      if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') { const _phl = mintPlanHandoffLinkToken(String(c.tier || ''), c.linked_token); if (_phl) headers[PLAN_HANDOFF_LINK_HEADER] = _phl; }
       // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
       if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken(Date.now(), c.kff_arm || null);
       const r = await fetch('http://127.0.0.1:' + _servedPort + '/mcp', {
@@ -42361,6 +42378,10 @@ app.post(MCP_PATHS, async (req, res) => {
     const _planCallerIpTok = req.headers[PLAN_CALLER_IP_HEADER];
     delete req.headers[PLAN_CALLER_IP_HEADER];
     const _planLoopbackIp = _isLoopbackPeer(req) ? consumePlanCallerIpToken(_planCallerIpTok) : null;
+    // And the caller's agent-handoff lift (lib/plan-handoff-link.mjs), the same single-use way.
+    const _planHandoffTok = req.headers[PLAN_HANDOFF_LINK_HEADER];
+    delete req.headers[PLAN_HANDOFF_LINK_HEADER];
+    const _planHandoffLink = _isLoopbackPeer(req) ? consumePlanHandoffLinkToken(_planHandoffTok) : null;
     // And the plan's wall sink (lib/plan-wall-sink.mjs), the same single-use way.
     const _planWallSinkTok = req.headers[PLAN_WALL_SINK_HEADER];
     delete req.headers[PLAN_WALL_SINK_HEADER];
@@ -43531,6 +43552,7 @@ app.post(MCP_PATHS, async (req, res) => {
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid) || _clientHdr || null,
         loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         plan_wall_sink: _planWallSinkId,   // an execute_plan step: its wall row waits for the plan's ask
+        ...(_planHandoffLink ? { plan_handoff_link: _planHandoffLink } : {}),   // the plan caller's handoff lift (applied in handoffResolveEnter)
         ...(_planFirstFull ? { plan_first_full: true } : {}),   // a step of a first-full plan (lib/keyless-first-full.mjs)
         ...(_planFirstFull && _planFirstFullArm ? { kff_arm: _planFirstFullArm } : {}),   // its depth-test arm (M2.2)
         referer: req.headers.referer || req.headers.referrer || null,
