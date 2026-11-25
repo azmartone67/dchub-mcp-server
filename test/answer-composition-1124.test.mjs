@@ -132,6 +132,9 @@ describe('item 4: PJM wholesale clause and a current as_of', () => {
   it('the withheld note says the live LMP is what is not served', () => {
     const a = xdb(EP_PJM(PJM_CTX));
     expect(a.not_established.join(' ')).toMatch(/PJM live wholesale LMP is not served \(the LMP figures quoted are published report averages\)/);
+    // capacity figures only: no LMP average is quoted, so the note keeps its plain form
+    const capOnly = { ...PJM_CTX, figures: PJM_CTX.figures.filter((g) => /MW-day/.test(g.unit)) };
+    expect(xdb(EP_PJM(capOnly)).not_established.join(' ')).toMatch(/PJM wholesale LMP is not served: /);
   });
 });
 
