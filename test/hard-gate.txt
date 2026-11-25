@@ -270,6 +270,8 @@ test/fetch-as-of.test.mjs
 test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fiber-email-ask.test.mjs
+test/fiber-routing-1124.test.mjs
+test/fiber-routing-e2e-1124.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/find-sites-market-anchor-e2e-1120.test.mjs

@@ -312,7 +312,8 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
   namedCampusSequence as _namedCampusSequence, GAS_PRICE_RE as _GAS_PRICE_RE, gasPriceAsk as _gasPriceAsk,
   gasPriceSequence as _gasPriceSequence, gasAlsoAsksElectricity as _gasAlsoAsksElectricity } from './lib/plan-entities.mjs';
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
-  fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE } from './lib/plan-routing.mjs';
+  fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE,
+  ixAsk as _fiberIxAsk, routePair as _fiberRoutePair, fiberAddress as _fiberAddress } from './lib/plan-routing.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
@@ -27403,22 +27404,39 @@ export function _planQuery(intent, context) {
     const zero = (id) => { const z = scored.find((s) => s.cls.id === id); if (z) { z.score = 0; z.hits = []; } };
     const top0 = best(['subsea_cables', 'point_infrastructure']);
     zero('subsea_cables'); zero('point_infrastructure');
-    const held = !!top0 && top0.score > 0 && ['colocation', 'pricing_out_of_scope', 'generation_mix', 'gas_price', 'named_campus'].includes(top0.cls.id);
+    // Fiber 1124 (Grok Brain note 2026-11-24, 10b): an internet-exchange / peering / carrier-hotel ask with no colocation-space
+    // wording (space, price, availability, kW) is a fiber ask; the colocation plan no longer holds it.
+    const ixAsk = _fiberIxAsk(text);
+    const held = !!top0 && top0.score > 0 && ['colocation', 'pricing_out_of_scope', 'generation_mix', 'gas_price', 'named_campus'].includes(top0.cls.id)
+      && !(ixAsk && top0.cls.id === 'colocation');
     const open = (ids) => !top0 || top0.score <= 0 || ids.includes(top0.cls.id);
     const kind = held ? null : _fiberKind(text, d);
     d.__fiberText = text;   // 5.60: the default fiber recipe reads the text too (_fiberOverlapSequence)
-    if (kind === 'subsea') {
+    // A fiber-and-power ask (fiber_power_pairing) or a site analysis keeps its class: a route plan reads no power.
+    if (kind === 'route' && open(['fiber', 'facility_search', 'colocation'])) {
+      // Fiber 1124 (10c): "fiber routes and latency from Phoenix to Los Angeles" reads both ends and the pair's latency floor.
+      d.__fiberRoute = _fiberRoutePair(text);
+      d.__fiberKind = 'route'; d.__fiberText = text;
+      win('fiber', 'a fiber route between ' + d.__fiberRoute.a.label + ' and ' + d.__fiberRoute.b.label);
+    } else if (kind === 'subsea') {
       d.__subsea = _subseaWhere(text, d);
       win('subsea_cables', 'a subsea cable / landing ask' + (d.__subsea && d.__subsea.label ? ' (' + d.__subsea.label + ')' : ''));
     } else if (!held && _pointInfraAsk(text, d) && open(['site_analysis', 'grid_headroom', 'power_timeline', 'price', 'facility_search', 'hosting_capacity', 'fiber_power_pairing'])) {
       win('point_infrastructure', 'infrastructure near a point');
-    } else if (kind === 'point' && open(['site_analysis', 'fiber', 'fiber_power_pairing'])) {
+    } else if (kind === 'point' && open(['site_analysis', 'fiber', 'fiber_power_pairing', ...(ixAsk ? ['colocation', 'facility_search'] : [])])) {
       d.__fiberKind = 'point'; d.__fiberText = text;
-      win('fiber', 'fiber at a point');
-    } else if (kind === 'metro' && open(['fiber'])) {
+      // Fiber 1124 (10a): a building the text names ("350 E Cermak, Chicago") is the point: the geocode pass marks the
+      // readiness and peering steps with it (basis 'address'), so they read the building, not the metro core.
+      if (!d.coords && !d.__address) {
+        const fa = _fiberAddress(text, d);
+        if (fa) d.__address = { query: fa.query, number: fa.label.split(/\s+/)[0], street: fa.label.split(/\s+/).slice(1).join(' '), city: fa.metro ? fa.metro.query : null, state: fa.state };
+      }
+      win('fiber', d.__address && !d.coords ? 'fiber at the address the question names' : 'fiber at a point');
+    } else if (kind === 'metro' && open(['fiber', ...(ixAsk ? ['colocation', 'facility_search'] : [])])) {
       // "Internet exchanges and peering in Chicago" matched no class (unknown); a fiber-scored ask keeps its score.
+      // Fiber 1124 (10b): an IX / peering / carrier-hotel ask wins over the facility search and colocation plans.
       d.__fiberKind = 'metro'; d.__fiberText = text;
-      if (!top0 || top0.score <= 0) win('fiber', 'a metro interconnection ask');
+      if (!top0 || top0.score <= 0 || (ixAsk && top0.cls.id !== 'fiber')) win('fiber', ixAsk ? 'an internet exchange / peering / carrier hotel ask' : 'a metro interconnection ask');
     }
   } catch (_e) { /* routing must never throw */ }
   // 5.39 (Grok cross-domain head-to-head): capacity + grid with no place named is capacity_grid (+1.5 over the best
@@ -35826,6 +35844,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             : null));
       const _intentAnswer0 = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _mixAnswer || _coloAnswer || _energyAnswer || buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class, place: _pl540,
+            // Fiber 1124 (10a): a point or geocoded address the caller gave leads the fiber answer (lib/fiber-answer.mjs).
+            point_given: !!(_sig && _sig.coords && !_sig.placeScope),
+            address: _addrGeo && !_addrGeo.miss ? _addrGeo.query : null,
             constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap,
             requested_mw: _sig && _sig.mw,
             deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null,
