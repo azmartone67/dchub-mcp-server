@@ -324,6 +324,7 @@ import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskM
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
 import { PACK_PRICE, PACK_NAME, PRO_NAME, PRO_PRICE } from './lib/wall-upgrade-offer.mjs';
 import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
+import { stampServingGrid as _stampServingGrid } from './lib/state-queue-coverage.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites, cutResultNearPoint as _cutResultNearPoint, NEAR_CUT_TOOLS as _NEAR_CUT_TOOLS } from './lib/siting-scope.mjs';
 import { cutRowsToSubmarket as _cutRowsToSubmarket } from './lib/submarket-scope.mjs';
@@ -17005,7 +17006,9 @@ const _DCPI_PROSE_RULES = [
   [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
   // 5.44: the deadline comparison beside a market's time to power (lib/intent-answers.mjs deadlineSentence) says
   // which side of the deadline the withheld figure falls; it goes with the figure.
-  [/\bThat is (?:past|within) the (\d+)-month deadline asked(?:, by ~\d+ months?)?\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.51)
+  // QA 2026-11-24: "within" carries the modeled-estimate caveat (lib/intent-answers.mjs DEADLINE_WITHIN_CAVEAT), and off
+  // an ISO/RTO a parenthesis naming the utility territory; the scrub takes the whole sentence.
+  [/\bThat is (?:past|within) the (\d+)-month deadline asked(?:, by ~\d+ months?| on DC Hub's modeled estimate, which the serving utility has to confirm(?: \([A-Z0-9 -]+ is a utility territory, not an ISO\/RTO queue\))?)?\./g, (_m, n) => `The ${n}-month deadline check is withheld at this access level.`],   // = deadlineWithheld (5.51)
   // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
   [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
 ];
@@ -35649,6 +35652,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // and the lead leads with the honest scope line instead (lib/plan-lead-text.mjs).
       try { if (sc.geography_scope) _planSuppressNullGridSteps(executed, fullByEntry); } catch (_e) { /* additive */ }
       try { _planNearMarketCut(executed, fullByEntry, _sig); } catch (_e) { /* additive */ }
+      // QA 2026-11-24 (Charlotte, SERC): the timeline's state queue rows are read for the named market's own grid.
+      try {
+        _stampServingGrid(executed, fullByEntry, { named: _sig && _sig.__namedMarkets, citySlug: _sig && _sig.__citySlug,
+          constraintIso: [...constraintIsoSet] });
+      } catch (_e) { /* additive */ }
       const replay = _planReplay(sc, _sig);
       // 5.62 (P4): a facility step that widened from the named town says so in the plan's replay.
       try {

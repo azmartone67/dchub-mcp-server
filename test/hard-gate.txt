@@ -745,6 +745,7 @@ test/scoreboard-freshness.test.mjs
 test/sdk-compose.test.mjs
 test/search-facilities-unreadable-filters.test.mjs
 test/selection-triggers.test.mjs
+test/serc-charlotte-1124.test.mjs
 test/server-json-npm-package.test.mjs
 test/server-json-route.test.mjs
 test/session-init-event.test.mjs
