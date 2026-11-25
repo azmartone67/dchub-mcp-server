@@ -780,6 +780,8 @@ test/smithery-gated-tools.test.mjs
 test/smithery-reclaim-terms.test.mjs
 test/snapshot-repairs-missing-keys.test.mjs
 test/source-capacity-match.test.mjs
+test/source-pointers-1124.test.mjs
+test/source-pointers-e2e-1124.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
 test/stale-session-notify-1122.test.mjs
