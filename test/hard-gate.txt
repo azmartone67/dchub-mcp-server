@@ -320,6 +320,7 @@ test/global-infra-unreadable-floor.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
+test/grid-constraints-ehv-upgrades-1124.test.mjs
 test/grid-constraints-pause-1124.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
