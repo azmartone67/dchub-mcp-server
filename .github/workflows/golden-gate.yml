@@ -1,0 +1,101 @@
+name: golden-gate
+
+# Golden set gate (Grok spec item 3 part B, 2026-11-24). Asks the questions in test/golden/agent-intents.json of
+# the PR's own server and of its base branch's server, both spawned on localhost in this job, in the same minutes,
+# and fails when the PR answers worse (scripts/golden-compare.mjs: NO DATA or ERROR count up, failed steps per plan
+# up, a FULL answer loses its dated Source line, p95 latency +25% and +500 ms, a question routed out of its expected
+# class).
+#
+# Why local servers and not live: the PR's code is not deployed, and comparing it with live would mix a code change
+# with whatever the backend did today. Both local servers read the LIVE backend (DCHUB_API_BASE default), so a
+# backend wobble hits base and head alike; the two runs go in parallel to keep them in the same minutes.
+#
+# Two stages:
+#   1. routing (always, no secret): plan_query for every question on base and head. plan_query plans without
+#      reading data, so it makes no backend data call; this catches a misroute (the Loudoun-to-coordinates class).
+#   2. answers (only when the DCHUB_GOLDEN_INTERNAL_KEY secret is set): execute_plan for every question, keyless,
+#      and keyed when DCHUB_GOLDEN_KEY is set. Without the internal key the spawned server calls the backend as an
+#      anonymous IP and is rate limited (HTTP 429) within one run, so this stage SKIPS with a notice instead of
+#      reporting noise. Secrets are not given to fork PRs, so a fork PR runs stage 1 only.
+#
+# Every call carries X-DCHub-QA: 1 and the dchub-qa-readonly User-Agent: excluded from the funnel. No outside LLM
+# API is called. This is not a required check (that is a repository setting).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server.mjs'
+      - 'lib/**'
+      - 'scripts/golden-*.mjs'
+      - 'test/golden/**'
+      - '.github/workflows/golden-gate.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: golden-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Scope (planner, composer or citation code touched?)
+        id: scope
+        run: |
+          BASE="origin/${{ github.base_ref || 'main' }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; echo "run=true (manual)"; exit 0; fi
+          node scripts/golden-scope.mjs "$BASE"
+
+      - name: Install (head and base)
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          npm ci --no-audit --no-fund
+          git worktree add --detach ../golden-base "origin/${{ github.base_ref || 'main' }}"
+          (cd ../golden-base && npm ci --no-audit --no-fund)
+
+      # The HEAD's intents and scripts drive both runs, so a question added in this PR is asked of the base too.
+      - name: Stage 1, routing (plan_query, no secret)
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          mkdir -p golden-out
+          node scripts/golden-run.mjs --tool plan_query --local ../golden-base --out golden-out/plan-base.json & B=$!
+          node scripts/golden-run.mjs --tool plan_query --local . --out golden-out/plan-head.json & H=$!
+          RB=0; wait $B || RB=$?; RH=0; wait $H || RH=$?
+          [ $RB -eq 0 ] && [ $RH -eq 0 ] || { echo "::error::a golden run did not finish (base rc=$RB, head rc=$RH)"; exit 1; }
+          node scripts/golden-compare.mjs golden-out/plan-base.json golden-out/plan-head.json
+
+      - name: Stage 2, answers (execute_plan)
+        if: steps.scope.outputs.run == 'true'
+        env:
+          DCHUB_INTERNAL_KEY: ${{ secrets.DCHUB_GOLDEN_INTERNAL_KEY }}
+          DCHUB_GOLDEN_KEY: ${{ secrets.DCHUB_GOLDEN_KEY }}
+        run: |
+          if [ -z "$DCHUB_INTERNAL_KEY" ]; then
+            echo "::notice::DCHUB_GOLDEN_INTERNAL_KEY is not set: the answer stage is skipped (stage 1 routing ran). Without it the local servers are rate limited by the backend."
+            exit 0
+          fi
+          node scripts/golden-run.mjs --local ../golden-base --concurrency 2 --out golden-out/answer-base.json & B=$!
+          node scripts/golden-run.mjs --local . --concurrency 2 --out golden-out/answer-head.json & H=$!
+          RB=0; wait $B || RB=$?; RH=0; wait $H || RH=$?
+          [ $RB -eq 0 ] && [ $RH -eq 0 ] || { echo "::error::a golden run did not finish (base rc=$RB, head rc=$RH)"; exit 1; }
+          node scripts/golden-compare.mjs golden-out/answer-base.json golden-out/answer-head.json
+
+      - name: Upload runs
+        if: always() && steps.scope.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: golden-runs
+          path: golden-out/
+          if-no-files-found: ignore
