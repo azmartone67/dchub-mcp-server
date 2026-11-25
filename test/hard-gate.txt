@@ -504,6 +504,7 @@ test/neutral-connect-option-a.test.mjs
 test/neutral-connect-plan-steps.test.mjs
 test/news-footer.test.mjs
 test/next-ask-args.test.mjs
+test/next-ask-v2-1125.test.mjs
 test/next-call.test.mjs
 test/no-advisory-client-names.test.mjs
 test/no-counts-docs-integrations-1122.test.mjs
