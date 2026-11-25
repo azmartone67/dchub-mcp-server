@@ -781,6 +781,9 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     expect(canvasHit && canvasHit.linked).toBe(LINKED_TOKEN);
     expect(canvasHit.apiKey).toBe('');
     expect(JSON.stringify(o)).not.toContain(LINKED_TOKEN);
+    // the note says the depth the linked steps ran at, not "steps returned preview depth"
+    expect(o.totals && o.totals.tier_note, st).toMatch(/^no key \u2014 linked DC Hub access \(agent handoff\): steps ran at full depth/);
+    expect(o.totals.tier_note).not.toMatch(/steps returned preview depth/);
     // control: kill switch DCHUB_PLAN_HANDOFF_LINK=0 is the pre-fix server (the plan lifted, its steps anonymous on a
     // walled IP): the canvas step is walled and says so, and its dependants say the limit stopped them, not missing data.
     process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
@@ -800,6 +803,7 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
         expect(e.note).toMatch(/hit this caller's DC Hub limit \(anon_hard_wall\).*not missing data/);
       }
       expect(JSON.stringify(u.next_tools || [])).not.toMatch(/coverage_gap/);
+      expect(u.totals && u.totals.tier_note, ust).not.toMatch(/linked DC Hub access/);
     }
     linked = null; linkedToken = '';
     delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
