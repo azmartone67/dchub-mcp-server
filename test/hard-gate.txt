@@ -596,6 +596,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-handoff-link-1125.test.mjs
 test/plan-header-phoenix-1124.test.mjs
 test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs
