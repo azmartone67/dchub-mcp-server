@@ -260,6 +260,7 @@ test/execute-plan-geo-bind.test.mjs
 test/execute-plan-invariants.test.mjs
 test/execute-plan-nevada-geo.test.mjs
 test/execute-plan-planned-tools-allowed-1123.test.mjs
+test/execute-plan-price-not-used-1125.test.mjs
 test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-lead-total-scope-preview-1125.test.mjs

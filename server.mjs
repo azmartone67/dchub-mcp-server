@@ -394,6 +394,7 @@ import { pairStepFor as _pairStepFor, pairHeldBack as _pairHeldBack, pairHeldNot
 // one answer that names both sides with figures from facts[].
 import { capacityGridAsk as _capacityGridAsk, powerMarketsAsk as _powerMarketsAsk, capacityGridSequence as _capacityGridSequence,
   energyPriceStep as _energyPriceStep, wholesaleAsked as _wholesaleAsked, WHOLESALE_SCOPE_NOTE as _WHOLESALE_SCOPE_NOTE,
+  priceNotUsed as _priceNotUsed,
   buildCrossDomainAnswer as _buildCrossDomainAnswer } from './lib/cross-domain-answer.mjs';
 import { dcPowerPlaceAsk as _dcPowerPlaceAsk, dcPowerPlaceSequence as _dcPowerPlaceSequence, hostingPoint as _dcHostingPoint,
   dcPowerPlaceTakes as _dcPowerPlaceTakes, DC_POWER_PLACE_MAX_STEPS as _DC_POWER_PLACE_MAX_STEPS,
@@ -26014,9 +26015,9 @@ export function _execDroppedFilters(executed, fullByEntry, place = null) {
 }
 export function _execDroppedSentence(items) {
   if (!Array.isArray(items) || !items.length) return '';
-  return 'DROPPED — ' + items.map((x) => `step ${x.step} ${x.tool}: `
+  return 'DROPPED — ' + items.map((x) => (x.kind === 'not_used' ? x.reason.replace(/\.$/, '') : `step ${x.step} ${x.tool}: `
     + (x.kind === 'coverage' ? x.reason
-      : `${x.param}${x.asked != null ? '=' + x.asked : ''} was not applied (${x.reason})`)).join('; ')
+      : `${x.param}${x.asked != null ? '=' + x.asked : ''} was not applied (${x.reason})`))).join('; ')
     + '. Say this plainly in the answer: those results are not cut to what was asked.';
 }
 
@@ -35925,6 +35926,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const _undated = [_execUndatedSentence(_powerEvidence), _execCollectedSentence(_powerEvidence)].filter(Boolean).join(' ');
       // 5.25: what a step did not apply, with its own reason (_execDroppedFilters); named after UNDATED.
       const _dropped = _execDroppedFilters(executed, fullByEntry, _sig && _sig.__outlook ? _sig.__outlook : null);
+      // Grok -> Brain 2026-11-25: a price question ("where is power cheapest") with no price step says so.
+      const _priceGap = _priceNotUsed(sc.intent, executed);
+      if (_priceGap) _dropped.push(_priceGap);
       const _droppedLine = _execDroppedSentence(_dropped);
       // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
       let _findingNext = null;
@@ -36156,7 +36160,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         ...(() => { const _ra = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
-        ...(_intentAnswer ? { intent_answer: _withNotListings(_intentAnswer, _capNotListed) } : {}),
+        ...(_intentAnswer ? { intent_answer: _withNotListings(_withNotListings(_intentAnswer, _capNotListed), _priceGap ? _priceGap.reason : null) } : {}),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
         // converged ask). Static intent_class→recipe map; measurable because
