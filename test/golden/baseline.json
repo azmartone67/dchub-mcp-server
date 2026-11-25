@@ -1,0 +1,755 @@
+{
+  "_about": "Written by scripts/golden-run.mjs. Compare two runs with scripts/golden-compare.mjs. 2026-11-25: 10 rows of this run were answered by the anonymous per-IP call limit (this Mac had used its keyless allowance on earlier golden runs), not by the planner; they were first recorded as FULL and are relabelled WALLED here (no executed[], no intent_class, a quota envelope: checked by hand on one of them). Re-run with DCHUB_GOLDEN_KEY set, or after UTC midnight, for a clean reference.",
+  "label": "live https://dchub.cloud/mcp, keyless (no DCHUB_GOLDEN_KEY on this Mac), 2026-11-25",
+  "tool": "execute_plan",
+  "target": "https://dchub.cloud/mcp",
+  "started_at": "2026-11-25T04:52:27.929Z",
+  "finished_at": "2026-11-25T04:52:42.422Z",
+  "modes": [
+    "keyless"
+  ],
+  "skipped_modes": [
+    "keyed (DCHUB_GOLDEN_KEY not set)"
+  ],
+  "intents_file": 1,
+  "summary": {
+    "keyless": {
+      "intents": 26,
+      "PLANNED": 0,
+      "FULL": 0,
+      "PARTIAL": 16,
+      "NO DATA": 0,
+      "ERROR": 0,
+      "WALLED": 10,
+      "failed_steps": 1,
+      "class_mismatch": 2,
+      "source_line": 7,
+      "dated_cite": 16,
+      "p50_ms": 1037,
+      "p95_ms": 2266
+    }
+  },
+  "results": [
+    {
+      "id": "power-ashburn-100mw",
+      "topic": "power",
+      "mode": "keyless",
+      "ms": 2090,
+      "status": "PARTIAL",
+      "intent_class": "capacity_search",
+      "class_ok": false,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_retirement_headroom",
+        "get_refined_queue",
+        "get_market_dcpi_rank"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 200 shown, as of 2026-11-24"
+    },
+    {
+      "id": "power-columbus-headroom",
+      "topic": "power",
+      "mode": "keyless",
+      "ms": 2409,
+      "status": "PARTIAL",
+      "intent_class": "dc_power_place",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 5,
+      "steps": {
+        "executed": 5,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_market_intel",
+        "get_grid_intelligence",
+        "get_refined_queue",
+        "get_hosting_capacity",
+        "get_power_availability_timeline"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 175 shown, as of 2026-11-24"
+    },
+    {
+      "id": "power-charlotte-ttp",
+      "topic": "power",
+      "mode": "keyless",
+      "ms": 1974,
+      "status": "PARTIAL",
+      "intent_class": "grid_headroom",
+      "class_ok": false,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_power_availability_timeline",
+        "get_refined_queue",
+        "get_market_intel"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 31 shown, as of 2026-11-24"
+    },
+    {
+      "id": "power-loudoun-dominion",
+      "topic": "power",
+      "mode": "keyless",
+      "ms": 523,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "queue-pjm-va",
+      "topic": "queue",
+      "mode": "keyless",
+      "ms": 247,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "queue-ohio-large-load",
+      "topic": "queue",
+      "mode": "keyless",
+      "ms": 278,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "queue-nc-duke",
+      "topic": "queue",
+      "mode": "keyless",
+      "ms": 2138,
+      "status": "PARTIAL",
+      "intent_class": "interconnection_queue",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 1
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_interconnection_queue",
+        "get_refined_queue",
+        "get_market_intel",
+        "analyze_site"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 31 shown, as of 2026-11-24"
+    },
+    {
+      "id": "moratorium-loudoun",
+      "topic": "permitting",
+      "mode": "keyless",
+      "ms": 191,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "permitting-loudoun-zoning",
+      "topic": "permitting",
+      "mode": "keyless",
+      "ms": 834,
+      "status": "PARTIAL",
+      "intent_class": "permitting",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_permitting_intel",
+        "get_permitting_intel",
+        "get_permitting_intel"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 11 shown, as of 2026-10-23"
+    },
+    {
+      "id": "permitting-ohio",
+      "topic": "permitting",
+      "mode": "keyless",
+      "ms": 179,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "colo-ashburn-2mw",
+      "topic": "colocation",
+      "mode": "keyless",
+      "ms": 1922,
+      "status": "PARTIAL",
+      "intent_class": "capacity_search",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 4,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_retirement_headroom",
+        "get_refined_queue",
+        "get_market_dcpi_rank",
+        "source_capacity"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 200 shown, as of 2026-11-24"
+    },
+    {
+      "id": "colo-columbus-cage",
+      "topic": "colocation",
+      "mode": "keyless",
+      "ms": 2266,
+      "status": "PARTIAL",
+      "intent_class": "colocation",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 4,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_market_dcpi_rank",
+        "search_facilities",
+        "get_grid_intelligence",
+        "get_facility"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 5 shown, as of 2026-11-24"
+    },
+    {
+      "id": "colo-charlotte",
+      "topic": "colocation",
+      "mode": "keyless",
+      "ms": 2259,
+      "status": "PARTIAL",
+      "intent_class": "colocation",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 4,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_market_dcpi_rank",
+        "search_facilities",
+        "get_power_availability_timeline",
+        "get_facility"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 14 shown, as of 2026-11-24"
+    },
+    {
+      "id": "campus-digital-dulles",
+      "topic": "named_campus",
+      "mode": "keyless",
+      "ms": 1459,
+      "status": "PARTIAL",
+      "intent_class": "named_campus",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 4,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_pipeline",
+        "search_facilities",
+        "semantic_search",
+        "get_market_dcpi_rank"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 14 shown, as of 2026-11-24"
+    },
+    {
+      "id": "campus-new-albany",
+      "topic": "named_campus",
+      "mode": "keyless",
+      "ms": 190,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "changes-ashburn-week",
+      "topic": "changes",
+      "mode": "keyless",
+      "ms": 187,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "changes-columbus-week",
+      "topic": "changes",
+      "mode": "keyless",
+      "ms": 987,
+      "status": "PARTIAL",
+      "intent_class": "changes_delta",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 4,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 1,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 1,
+      "failed_tools": [
+        "list_saved_sites:failed"
+      ],
+      "tools": [
+        "get_changes",
+        "list_saved_sites",
+        "get_news",
+        "get_facility_risk_delta"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 25 shown, as of 2026-11-24"
+    },
+    {
+      "id": "fiber-ashburn",
+      "topic": "fiber",
+      "mode": "keyless",
+      "ms": 1207,
+      "status": "PARTIAL",
+      "intent_class": "fiber",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_metro_fiber",
+        "get_peering_intel",
+        "get_fiber_intel"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 155 shown, as of 2026-11-24"
+    },
+    {
+      "id": "fiber-columbus-route",
+      "topic": "fiber",
+      "mode": "keyless",
+      "ms": 1380,
+      "status": "PARTIAL",
+      "intent_class": "fiber",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 2,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 1
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_fiber_intel",
+        "get_fiber_readiness",
+        "plan_fiber_leadin"
+      ],
+      "source_line": true,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 153 shown, as of 2026-03-15"
+    },
+    {
+      "id": "flood-loudoun",
+      "topic": "hazard",
+      "mode": "keyless",
+      "ms": 1204,
+      "status": "PARTIAL",
+      "intent_class": "water_climate",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 3,
+      "steps": {
+        "executed": 3,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_water_risk",
+        "get_climate_intel",
+        "get_disaster_risk"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview, 3 of 4 shown (plan run 2026-11-24; no source date stated), as of 2026-11-24"
+    },
+    {
+      "id": "hazard-charlotte-water",
+      "topic": "hazard",
+      "mode": "keyless",
+      "ms": 174,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "price-pjm-va",
+      "topic": "energy_prices",
+      "mode": "keyless",
+      "ms": 156,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "price-pjm-wholesale",
+      "topic": "energy_prices",
+      "mode": "keyless",
+      "ms": 328,
+      "status": "WALLED",
+      "intent_class": null,
+      "class_ok": null,
+      "planner_version": null,
+      "steps_total": 0,
+      "steps": {
+        "executed": 0,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [],
+      "source_line": false,
+      "dated_cite": false,
+      "cite_as": null
+    },
+    {
+      "id": "incentives-virginia",
+      "topic": "incentives",
+      "mode": "keyless",
+      "ms": 1226,
+      "status": "PARTIAL",
+      "intent_class": "incentives_tax",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 2,
+      "steps": {
+        "executed": 2,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_tax_incentives",
+        "get_energy_prices"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview (not the full dataset), as of 2026-11-24"
+    },
+    {
+      "id": "incentives-ohio",
+      "topic": "incentives",
+      "mode": "keyless",
+      "ms": 1037,
+      "status": "PARTIAL",
+      "intent_class": "incentives_tax",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 2,
+      "steps": {
+        "executed": 2,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_tax_incentives",
+        "get_energy_prices"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview (not the full dataset), as of 2026-11-24"
+    },
+    {
+      "id": "incentives-nc",
+      "topic": "incentives",
+      "mode": "keyless",
+      "ms": 1060,
+      "status": "PARTIAL",
+      "intent_class": "incentives_tax",
+      "class_ok": true,
+      "planner_version": "5.64",
+      "steps_total": 2,
+      "steps": {
+        "executed": 2,
+        "gated_preview": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "not_run": 0,
+        "skipped_unresolved": 0
+      },
+      "failed_steps": 0,
+      "failed_tools": [],
+      "tools": [
+        "get_tax_incentives",
+        "get_energy_prices"
+      ],
+      "source_line": false,
+      "dated_cite": true,
+      "cite_as": "DC Hub (dchub.cloud) — PARTIAL preview (not the full dataset), as of 2026-11-24"
+    }
+  ]
+}
