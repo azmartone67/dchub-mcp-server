@@ -1,0 +1,32 @@
+{
+  "_about": "Golden set of agent questions for execute_plan. Gate for PRs touching the planner, the answer composer or the citation code (scripts/golden-run.mjs, scripts/golden-compare.mjs, .github/workflows/golden-gate.yml). PJM and SERC places only (Ashburn, Loudoun, Columbus OH, Charlotte): no ERCOT, MISO or AZ question here (DCPI hold). Written 2026-11-24 by hand: the Grok head-to-head folders are not on this Mac; the one local note (brain-to-grok-2026-11-18-h2h-remaining-gaps) gave the PJM wholesale and the VA queue-with-a-size-floor questions. expect_class lists the planner classes that answer the question correctly; the gate fails when an intent that matched in the base run no longer does.",
+  "version": 1,
+  "intents": [
+    { "id": "power-ashburn-100mw", "topic": "power", "intent": "How soon can a 100 MW data center load get power in Ashburn, Virginia?", "expect_class": ["power_timeline", "dc_power_place", "grid_headroom", "siting_search"] },
+    { "id": "power-columbus-headroom", "topic": "power", "intent": "Is there grid headroom for a 200 MW AI training campus near Columbus, Ohio?", "expect_class": ["grid_headroom", "dc_power_place", "power_timeline"] },
+    { "id": "power-charlotte-ttp", "topic": "power", "intent": "What is the time to power for 50 MW in Charlotte, North Carolina?", "expect_class": ["power_timeline", "dc_power_place", "siting_search"] },
+    { "id": "power-loudoun-dominion", "topic": "power", "intent": "Can Dominion Energy serve a new 300 MW data center in Loudoun County, and how long would it take?", "expect_class": ["power_timeline", "dc_power_place", "grid_headroom", "siting_search"] },
+    { "id": "queue-pjm-va", "topic": "queue", "intent": "How many projects are in the PJM interconnection queue in Virginia over 100 MW?", "expect_class": ["interconnection_queue"] },
+    { "id": "queue-ohio-large-load", "topic": "queue", "intent": "What does the interconnection queue look like for large loads in Ohio around Columbus?", "expect_class": ["interconnection_queue", "dc_power_place", "grid_headroom"] },
+    { "id": "queue-nc-duke", "topic": "queue", "intent": "Show the interconnection queue for North Carolina near Charlotte.", "expect_class": ["interconnection_queue", "dc_power_place"] },
+    { "id": "moratorium-loudoun", "topic": "permitting", "intent": "Is there a data center moratorium in Loudoun County?", "expect_class": ["permitting"] },
+    { "id": "permitting-loudoun-zoning", "topic": "permitting", "intent": "What zoning restrictions apply to new data centers in Loudoun County, Virginia?", "expect_class": ["permitting"] },
+    { "id": "permitting-ohio", "topic": "permitting", "intent": "Are there any data center moratoriums or bans in Ohio?", "expect_class": ["permitting"] },
+    { "id": "colo-ashburn-2mw", "topic": "colocation", "intent": "Where can I get 2 MW of colocation in Ashburn?", "expect_class": ["colocation", "capacity_search"] },
+    { "id": "colo-columbus-cage", "topic": "colocation", "intent": "Which colocation providers in Columbus, Ohio can offer a 500 kW cage?", "expect_class": ["colocation"] },
+    { "id": "colo-charlotte", "topic": "colocation", "intent": "List colocation data centers in Charlotte with available space.", "expect_class": ["colocation", "facility_search"] },
+    { "id": "campus-digital-dulles", "topic": "named_campus", "intent": "Tell me about the Digital Dulles campus in Ashburn.", "expect_class": ["named_campus", "facility_search"] },
+    { "id": "campus-new-albany", "topic": "named_campus", "intent": "What is the status of the Google New Albany data center campus near Columbus, Ohio?", "expect_class": ["named_campus", "facility_search"] },
+    { "id": "changes-ashburn-week", "topic": "changes", "intent": "What changed this week in the Ashburn data center market?", "expect_class": ["changes_delta"] },
+    { "id": "changes-columbus-week", "topic": "changes", "intent": "What changed this week for data centers in Columbus, Ohio?", "expect_class": ["changes_delta"] },
+    { "id": "fiber-ashburn", "topic": "fiber", "intent": "How many fiber carriers and internet exchanges are in Ashburn?", "expect_class": ["fiber"] },
+    { "id": "fiber-columbus-route", "topic": "fiber", "intent": "What fiber routes connect Columbus, Ohio to Ashburn, Virginia?", "expect_class": ["fiber"] },
+    { "id": "flood-loudoun", "topic": "hazard", "intent": "What is the flood and climate risk for a data center site in Loudoun County?", "expect_class": ["water_climate"] },
+    { "id": "hazard-charlotte-water", "topic": "hazard", "intent": "What are the water stress and natural hazard risks for data centers in Charlotte, NC?", "expect_class": ["water_climate"] },
+    { "id": "price-pjm-va", "topic": "energy_prices", "intent": "What is the current industrial electricity price in Virginia for a data center?", "expect_class": ["price", "price_now"] },
+    { "id": "price-pjm-wholesale", "topic": "energy_prices", "intent": "What are PJM wholesale power prices right now for a data center in northern Virginia?", "expect_class": ["price_now", "price"] },
+    { "id": "incentives-virginia", "topic": "incentives", "intent": "What data center tax incentives does Virginia offer?", "expect_class": ["incentives_tax"] },
+    { "id": "incentives-ohio", "topic": "incentives", "intent": "Does Ohio have a sales tax exemption for data center equipment?", "expect_class": ["incentives_tax"] },
+    { "id": "incentives-nc", "topic": "incentives", "intent": "What tax incentives are available for a data center in North Carolina near Charlotte?", "expect_class": ["incentives_tax"] }
+  ]
+}

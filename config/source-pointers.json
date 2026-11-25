@@ -1,0 +1,26 @@
+[
+  {
+    "topic": "flood",
+    "label": "FEMA National Flood Hazard Layer",
+    "url": "https://msc.fema.gov/portal/search",
+    "publisher": "FEMA",
+    "checked_on": "2026-11-25",
+    "fail_count": 0
+  },
+  {
+    "topic": "broadband",
+    "label": "FCC National Broadband Map",
+    "url": "https://broadbandmap.fcc.gov/",
+    "publisher": "FCC",
+    "checked_on": "2026-11-25",
+    "fail_count": 0
+  },
+  {
+    "topic": "water",
+    "label": "USGS Water Data for the Nation",
+    "url": "https://waterdata.usgs.gov/",
+    "publisher": "USGS",
+    "checked_on": "2026-11-25",
+    "fail_count": 0
+  }
+]

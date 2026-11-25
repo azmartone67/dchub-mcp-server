@@ -360,6 +360,7 @@ import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview 
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
 import * as _GLL from './lib/generic-light-list.mjs';   // item 8: light list for unnamed /mcp clients, 50/50 (default OFF)
+import * as _qpm from './lib/queue-project-mode.mjs';   // DCHUB_QUEUE_PROJECT_MODE (default OFF): get_interconnection_queue mode=project
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
@@ -23262,7 +23263,7 @@ export const _PLAN_CLASSES = [
       [/\bqueue\s+depth\b/i, 3], [/\blarge[-\s]load\b/i, 2], [/\bqueued\s+capacity\b/i, 3],
     ],
     rationale: 'The queue snapshot and the server-side refined reduction take the same filters and run in parallel; only the per-survivor site read must wait for the candidate_ids the reduction mints.',
-    sequence: (d) => [
+    sequence: (d) => (d.__queueProject && _qpm.queueProjectModeOn()) ? _qpm.queueProjectSequence(d.__queueProject, d.iso) : [
       { step: 1, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
         why: 'ISO-level queue snapshot — queued GW by ISO/fuel/status (recipe grid_and_queue).',
         args_hint: d.iso ? { iso: d.iso } : {} },
@@ -27558,7 +27559,13 @@ export function _planQuery(intent, context) {
     const win = (id, why) => { const w = scored.find((s) => s.cls.id === id); if (!w) return; w.score = Math.max(top0 ? top0.score : 0, 2) + 1.5; w.hits = [why]; };
     let place = null;
     try { place = _pairPlace(d, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META, usMarketState: _planUsMarketState, stateScope: _planStateScope }); } catch (_e) { place = null; }
-    if (_queueWithdrawalsAsk(text) && ['interconnection_queue', 'grid_headroom', 'unknown', 'capacity_search', 'power_timeline'].includes(topId)) {
+    // Grok spec 2026-11-24 item 6B (DCHUB_QUEUE_PROJECT_MODE, default OFF): "status of queue project X" /
+    // "queue projects near <point>" read get_interconnection_queue mode=project (lib/queue-project-mode.mjs).
+    const _qpAsk = _qpm.queueProjectModeOn() ? _qpm.queueProjectAsk(text, d.coords || null) : null;
+    if (_qpAsk && ['interconnection_queue', 'grid_headroom', 'unknown', 'capacity_search', 'power_timeline', 'site_analysis', 'point_infrastructure'].includes(topId)) {
+      d.__queueProject = _qpAsk;
+      win('interconnection_queue', 'a queue project lookup (' + Object.keys(_qpAsk).join(', ') + ')');
+    } else if (_queueWithdrawalsAsk(text) && ['interconnection_queue', 'grid_headroom', 'unknown', 'capacity_search', 'power_timeline'].includes(topId)) {
       d.__dcPlace = place;
       win('queue_withdrawals', 'a queue withdrawals ask');
     } else if (_priceNowAsk(text, d) && ['grid_headroom', 'price', 'interconnection_queue', 'power_timeline', 'unknown', 'capacity_search'].includes(topId)) {
@@ -37571,10 +37578,21 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Below full access: a trimmed preview; DCHUB_API_KEY is optional. Ex: "How deep is ERCOT\'s queue?"',
-    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE, or NESO for Great Britain (the NESO TEC Register: generation and demand connections together, not a generation-only queue); omit for the all-ISO snapshot') },
+    'Use this when the user asks about grid interconnection queues: how congested an ISO\'s queue is or how much data-center load is waiting. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don\'t publish one. iso=NESO returns Great Britain\'s NESO TEC Register (Transmission Entry Capacity): generation and demand connections together under queued_connections_gw, not a generation queue. Can be scoped to a data center market or site: execute_plan pairs the queue with that place\'s facilities and its Data Center Power Index (DCPI) verdict. Below full access: a trimmed preview; DCHUB_API_KEY is optional. Ex: "How deep is ERCOT\'s queue?"'
+      + (_qpm.queueProjectModeOn() ? _qpm.QUEUE_PROJECT_DESCRIPTION : ''),
+    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE, or NESO for Great Britain (the NESO TEC Register: generation and demand connections together, not a generation-only queue); omit for the all-ISO snapshot'),
+      // Grok spec 2026-11-24 item 6B: per-project lookup, only while DCHUB_QUEUE_PROJECT_MODE is on at startup
+      // (lib/queue-project-mode.mjs). Off: the schema is exactly the one above.
+      ...(_qpm.queueProjectModeOn() ? _qpm.queueProjectSchema(z, S, N) : {}) },
     async (a) => {
       if (a.iso && !_queueIsoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
+      const _qpq = _qpm.queueProjectModeOn() ? _qpm.queueProjectQuery(a) : null;
+      if (_qpq) {
+        // Same gate as every queue answer (trackedTool): the body keeps a string iso and a projects array,
+        // so a non-paid seat gets the labelled taste with the rows withheld, as on by-iso.
+        const _pb = _qpm.shapeQueueProjectBody(await callAPI('/api/v1/interconnection-queue/by-iso', _qpq));
+        return { content: [{ type: 'text', text: JSON.stringify(_pb) }], structuredContent: _pb };
+      }
       a = _foldQueueIsoArg(a);
       const data = await _withLargeLoad(
         await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);

@@ -323,6 +323,7 @@ test/glama-placement-probe.test.mjs
 test/global-infra-unreadable-floor.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
+test/golden-gate.test.mjs
 test/grid-ba-coverage-note.test.mjs
 test/grid-constraints-ehv-upgrades-1124.test.mjs
 test/grid-constraints-pause-1124.test.mjs
@@ -671,6 +672,8 @@ test/qa-p3-cleanups-1123.test.mjs
 test/qa-probe-markers.test.mjs
 test/qa-sweep-1114-fixes.test.mjs
 test/queue-collected-date.test.mjs
+test/queue-project-mode-1125.test.mjs
+test/queue-project-mode-off-1125.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/quota-one-statement-1120.test.mjs
@@ -781,6 +784,8 @@ test/smithery-gated-tools.test.mjs
 test/smithery-reclaim-terms.test.mjs
 test/snapshot-repairs-missing-keys.test.mjs
 test/source-capacity-match.test.mjs
+test/source-pointers-1124.test.mjs
+test/source-pointers-e2e-1124.test.mjs
 test/spent-cap-link-line.test.mjs
 test/spreadsheet-functions.test.mjs
 test/stale-session-notify-1122.test.mjs
