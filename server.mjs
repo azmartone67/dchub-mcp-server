@@ -366,7 +366,7 @@ import * as _qpm from './lib/queue-project-mode.mjs';   // DCHUB_QUEUE_PROJECT_M
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): followable next_call, DCHUB_NEXT_ASK_V2 (default OFF)
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
-import { PLAN_HANDOFF_LINK_HEADER, mintPlanHandoffLinkToken, consumePlanHandoffLinkToken } from './lib/plan-handoff-link.mjs';   // a plan step keeps its caller's handoff lift
+import { PLAN_HANDOFF_LINK_HEADER, mintPlanHandoffLinkToken, consumePlanHandoffLinkToken, linkedPlanTierNote as _linkedPlanTierNote } from './lib/plan-handoff-link.mjs';   // a plan step keeps its caller's handoff lift
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
@@ -36080,6 +36080,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (!_kffDepths.full.length && _kffDepths.held.length) c._kffPlanHeld = true;
         }
       } catch (_e) { _kffDepths = null; }
+      // 2026-11-25: a handoff-linked keyless caller's steps run under its linked access (lib/plan-handoff-link.mjs),
+      // so its tier_note says the depth they came back at, not "steps returned preview depth". A step stopped by a
+      // caller limit (limit_hit) counts as held back. DCHUB_PLAN_HANDOFF_LINK=0 (steps run anonymous) keeps the old note.
+      let _linkedNote = null;
+      try {
+        if (c && c.loopback_step !== true && _CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+          _linkedNote = _linkedPlanTierNote(executed, (e) => fullByEntry.get(e));
+        }
+      } catch (_e) { _linkedNote = null; }
       const out = {
         ...(_dcpiLead ? { dcpi_verdict: _dcpiLead } : {}),
         _entity: 'plan_execution', ok: true,
@@ -36120,6 +36129,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key && !c.plan_steps_keyless ? 'steps ran under your key (normal quota + tier depth)'
                     : (c && c.api_key ? 'steps ran keyless (this key\'s siting preview seat): preview depth'
+                      : _linkedNote ? _linkedNote
                       // 2026-11-16 (owner, Grok Note K): a keyless plan that took today's first full answer ran its
                       // steps at full depth (c._kffPlan, lib/keyless-first-full.mjs); it said "preview depth" anyway.
                       // Grok re-run 2026-11-17 (option A): the allowance clauses ("the first keyless plan each UTC day is
