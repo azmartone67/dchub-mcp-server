@@ -48,6 +48,7 @@ Every tool returns the same top-level fields, in both text and structuredContent
 
 | field | meaning |
 |---|---|
+| `summary` | One short plain-ASCII string (at most 600 characters) a host model can quote: the entities and headline figures this result carries, what is withheld or was not served, the `as_of` and up to three sources. It is built only from values in the same result, so a figure that is null here is never written, and it names no plan. Error results carry one too. |
 | `as_of`, `as_of_status` | Taken from the source's own provenance. When there are several sections, this is the oldest `as_of` among them. It is null with `not_provided_by_source` when the source gives none. |
 | `sources`, `source_status`, `license` | Upstream sources named by the source. `platform_only` means the source only named DC Hub itself. |
 | `headline`, `headline_status` | Fixed headline fields that are always present. Each null value has a status: `withheld`, `null_in_source` or `not_provided`. |
@@ -62,6 +63,17 @@ Delegated output passes through an outermost scrub (`coreScrub`), followed by a 
 - key material and trial keys;
 - session plumbing;
 - sentences that point at tools this profile does not list.
+
+## grid_power partial results
+
+When a single-grid result is partial, the source publishes one demand reading, one generation share and the two
+DCPI band words, and withholds the scores, queue, reserve and price figures. `grid_power` copies the published
+readings into the top-level headline (`demand_mw` with `demand_period` and `demand_as_of`, `renewable_share_pct`
+or `gas_share_pct` with `generation_mix_period` and `generation_share_as_of`, `constraint_band`,
+`excess_power_band`). The list is fixed (`promoteGridTaste`): a withheld figure stays null with
+`headline_status` `withheld` and is named in `access.withheld_fields`.
+
+A caller past its daily request limit gets section status `rate_limited` and a summary that says so.
 
 ## evaluate_site without a key
 
@@ -102,7 +114,7 @@ metadata and to the token audience configuration.
 ## Testing
 
 ```bash
-npx vitest run test/core-profile.test.mjs
+npx vitest run test/core-profile.test.mjs test/core-summary-headline.test.mjs
 
 curl -s -X POST https://<host>/mcp/core -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \

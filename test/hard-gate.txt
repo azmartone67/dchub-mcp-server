@@ -184,6 +184,7 @@ test/core-no-upgrade-prompts.test.mjs
 test/core-open-world-hints.test.mjs
 test/core-profile.test.mjs
 test/core-soft-defaults.test.mjs
+test/core-summary-headline.test.mjs
 test/country-scope-e2e.test.mjs
 test/country-scope-geography.test.mjs
 test/coverage-counts-not-masked.test.mjs

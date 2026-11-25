@@ -138,6 +138,16 @@ beforeAll(async () => {
         });
       }
       if (u.pathname.startsWith('/api/v1/dcpi/scores/')) return send(res, 404, { error: 'not found' });
+      // A real-shaped grid read for PJM (2026-11-25), so the canonical handler serves its own partial result.
+      if (u.pathname === '/api/v1/grid/intelligence/PJM') {
+        return send(res, 200, { iso: 'PJM', demand_mw: 91234, demand_period: '2026-09-24T04',
+          generation_mix: { NG: 40000, NUC: 30000, WND: 6000, SUN: 0, WAT: 1500, COL: 12000 }, generation_mix_period: '2026-09-23T05' });
+      }
+      if (u.pathname === '/api/v1/dcpi/iso-comparison') {
+        return send(res, 200, { isos: [{ iso: 'PJM', iso_name: 'PJM Interconnection', avg_constraint: 61.3, avg_excess: 44.7,
+          avg_time_to_power_months: 48.5, avg_queue_wait_months: 52, avg_reserve_margin_pct: 17.2, avg_kwh_cents: 12.4, market_count: 64, build_count: 0 }] });
+      }
+      if (u.pathname === '/api/v1/interconnection-queue/snapshot') return send(res, 200, { by_iso: [] });
       if (/track|usage|trial|credit|claim|session|mint|beat|telemetry|opt-in|redeem|optin|listings|testimonials|canon|summary|identity|deal-desk/i.test(u.pathname)) {
         return send(res, 200, {});
       }
@@ -180,6 +190,25 @@ function textProblems(label, text) {
   if (COMPETITOR.test(text)) out.push(`${label}: company name "${text.match(COMPETITOR)[0]}"`);
   const sh = shouting(text);
   if (sh.length) out.push(`${label}: all-caps ${sh.join(',')}`);
+  return out;
+}
+
+// The top-level summary: a non-empty plain-ASCII string, short, with nothing the scrub would remove, no plan
+// wording, and no figure that the rest of the same result does not carry.
+const SUMMARY_PLAN_WORDS = /\b(free|paid|pro|developer plan|enterprise plan|upgrade|pricing|subscription|sign ?up|key|keyless|trial)\b/i;
+const numbersIn = (t) => (String(t).match(/\d+(?:\.\d+)?/g) || []);
+function summaryProblems(env) {
+  const out = [];
+  const s = env && env.summary;
+  if (typeof s !== 'string' || !s.trim()) return ['summary is missing or empty'];
+  if (!/^[\x20-\x7E]*$/.test(s)) out.push('non-ASCII');
+  if (s.length > C.CORE_SUMMARY_MAX) out.push(`longer than ${C.CORE_SUMMARY_MAX}`);
+  if (SUMMARY_PLAN_WORDS.test(s)) out.push(`plan wording "${s.match(SUMMARY_PLAN_WORDS)[0]}"`);
+  if (C.scrubText(s) !== s) out.push('the scrub would change it');
+  const { summary, ...rest } = env;
+  const have = new Set(numbersIn(JSON.stringify(rest)));
+  const stray = numbersIn(s).filter((n) => !have.has(n));
+  if (stray.length) out.push(`figures not in the result: ${stray.join(', ')}`);
   return out;
 }
 
@@ -301,8 +330,40 @@ describe('/mcp/core tools/call responses', () => {
         if (v === null) expect(r.env.headline_status[k], `${name}.headline.${k} is null without a status`).toMatch(/withheld|null_in_source|not_provided|not_computed/);
       }
       expect(r.result.structuredContent).toEqual(r.env);
+      // 2026-11-25 (M365 recertification): one short quotable sentence at the top of every result.
+      expect(summaryProblems(r.env), `${name} summary: ${r.env.summary}`).toEqual([]);
     }, 30_000);
   }
+
+  // The five tools Microsoft's certification run named, called the way Copilot calls them: no arguments.
+  for (const name of ['plan_and_answer', 'find_sites', 'rank_markets', 'grid_power', 'facility_lookup']) {
+    it(`${name} {} still soft-defaults and leads with a summary`, async () => {
+      const r = await callCore(name, {});
+      expect(r.status).toBe(200);
+      expect(r.result.isError).not.toBe(true);
+      expect(r.env.error).toBeUndefined();
+      expect(summaryProblems(r.env), `${name} summary: ${r.env.summary}`).toEqual([]);
+      expect(Object.keys(r.env)[1]).toBe('summary');
+    }, 30_000);
+  }
+
+  it('grid_power {} without credentials shows the demand figure the result publishes in the top-level headline', async () => {
+    const r = await callCore('grid_power', {});
+    const d = r.env.sections[0].data;
+    // The stub backend answers every grid read, so the canonical handler serves its partial shape here.
+    expect(d.taste && d.taste.headline && d.taste.headline.name, JSON.stringify(d).slice(0, 400)).toBe('demand_mw');
+    expect(typeof d.taste.headline.value).toBe('number');
+    expect(r.env.access.level).toBe('preview');
+    expect(r.env.headline.demand_mw).toBe(d.taste.headline.value);
+    expect(r.env.headline_status.demand_mw).toBe('provided');
+    expect(r.env.summary).toContain(String(d.taste.headline.value));
+    // Scores stay out: null, marked withheld, named in access.withheld_fields.
+    for (const k of ['excess_power_score', 'constraint_score']) {
+      expect(r.env.headline[k], k).toBeNull();
+      expect(r.env.headline_status[k], k).toBe('withheld');
+      expect(r.env.access.withheld_fields).toContain(k);
+    }
+  }, 30_000);
 
   it('lifts as_of and specific sources from the delegated result', async () => {
     const r = await callCore('rank_markets', { criteria: 'ai_ready', limit: 5 });
