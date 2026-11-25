@@ -229,13 +229,22 @@ export async function startHarness(opts = {}) {
   for (const [k, v] of Object.entries(env)) { prev[k] = process.env[k]; process.env[k] = v; }
   // execute_plan's steps loop back to http://127.0.0.1:<PORT>/mcp, and PORT is
   // read once at import: pick a free port first and serve on exactly it.
-  const port = await new Promise((resolve) => {
-    const t = createServer(); t.listen(0, '127.0.0.1', () => { const q = t.address().port; t.close(() => resolve(q)); });
-  });
+  // The picker HOLDS the port until server.mjs is imported. The import takes seconds, and CI runs one vitest worker
+  // per file: released first, the port was handed to another process in between and app.listen died with EADDRINUSE,
+  // which nothing caught, so beforeAll sat out its 60 s hook timeout (smoke run 45608807788, 2026-11-25).
+  const holder = createServer();
+  await new Promise((resolve, reject) => { holder.once('error', reject); holder.listen(0, '127.0.0.1', resolve); });
+  const port = holder.address().port;
   prev.PORT = process.env.PORT; process.env.PORT = String(port);
   // opts.serverUrl: another copy of server.mjs (a git-ref sandbox) to serve instead.
-  const S = await import(opts.serverUrl || '../../server.mjs');
-  const httpServer = await new Promise((resolve) => { const h = S.app.listen(port, '127.0.0.1', () => resolve(h)); });
+  let S;
+  try { S = await import(opts.serverUrl || '../../server.mjs'); }
+  finally { await new Promise((resolve) => holder.close(resolve)); }
+  // A listen error rejects (and fails the hook with its real reason) instead of leaving the promise pending.
+  const httpServer = await new Promise((resolve, reject) => {
+    const h = S.app.listen(port, '127.0.0.1', () => resolve(h));
+    h.once('error', reject);
+  });
   const PORT = httpServer.address().port;
   let rpcId = 1000;
 
