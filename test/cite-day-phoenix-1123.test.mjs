@@ -52,8 +52,9 @@ describe('stampOutreach: no cite an agent can quote carries a time of day', () =
       citations: [{ cite_as: 'DC Hub, dchub.cloud — PARTIAL preview (not the full dataset) (as of 2026-11-23T15:00Z)' }],
     } }, 'execute_plan', {});
     const sc = r.structuredContent;
-    expect(sc.cite_as).toBe('DC Hub (dchub.cloud), as of 2026-11-22');
-    expect(sc.citation.cite_as).toBe('DC Hub, dchub.cloud (as of 2026-11-23)');
+    // gdl 2026-11-25 item A: an execute_plan answer is cited by the owner line, top level and citation alike
+    expect(sc.cite_as).toBe('Source: DC Hub (dchub.cloud), as of 2026-11-22');
+    expect(sc.citation.cite_as).toBe('Source: DC Hub (dchub.cloud), as of 2026-11-22');
     expect(sc.citations[0].cite_as).toMatch(/\(as of 2026-11-23\)$/);
     expect(JSON.stringify(r)).not.toMatch(/as of \d{4}-\d{2}-\d{2}T/);
   });

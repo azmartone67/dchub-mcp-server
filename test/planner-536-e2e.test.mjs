@@ -20,7 +20,7 @@ describe('execute_plan 5.36: western Pennsylvania (real server.mjs on loopback)'
     expect(o.intent_class, steps(o)).toBe('siting_search');
     const by = Object.fromEntries(o.executed.map((e) => [e.tool, e]));
     expect(Object.keys(by).sort(), steps(o)).toEqual(['find_sites', 'get_market_dcpi_rank',
-      'get_power_availability_timeline', 'site_selection_canvas']);
+      'get_permitting_intel', 'get_power_availability_timeline', 'site_selection_canvas']);
     expect(String(by.get_market_dcpi_rank.args.market_slug)).toMatch(/^pittsburgh/);
     expect(by.find_sites.args).toMatchObject({ lat: 40.7, lon: -79.7, radius_km: 150 });
     expect(by.get_power_availability_timeline.args.state).toBe('PA');

@@ -99,15 +99,17 @@ const xdb = (ep) => {
 };
 
 describe('item 4: PJM wholesale clause and a current as_of', () => {
-  it('superseded figures are dropped: the latest two auction years, the latest monitor report', () => {
-    const { kept, omitted } = currentWholesaleFigures(PJM_CTX.figures);
-    expect(omitted).toBe(6);
-    expect(kept.map((g) => g.published).sort()[0]).toBe('2025-12-17');
-    expect(kept.filter((g) => /Base Residual/.test(g.name)).map((g) => g.period)).toEqual(['2028/2029 delivery year', '2027/2028 delivery year']);
+  // gdl 2026-11-25 item D: the served trim keeps the delivery year in force (June 1 to May 31) and the next two; it
+  // was "the latest two auction years", which dropped 2026/27 while it was the delivery year in force.
+  it('superseded figures are dropped: the delivery year in force and the next two, the latest monitor report', () => {
+    const { kept, omitted } = currentWholesaleFigures(PJM_CTX.figures, { now: Date.parse('2026-11-24T12:00:00Z') });
+    expect(omitted).toBe(5);
+    expect(kept.map((g) => g.published).sort()[0]).toBe('2025-07-22');
+    expect(kept.filter((g) => /Base Residual/.test(g.name)).map((g) => g.period)).toEqual(['2028/2029 delivery year', '2027/2028 delivery year', '2026/2027 delivery year']);
     expect(kept.filter((g) => /LMP/.test(g.name)).every((g) => g.published === '2026-11-12')).toBe(true);
-    const t = trimWholesaleContext({ wholesale_context: PJM_CTX });
-    expect(t.wholesale_context.figures).toHaveLength(4);
-    expect(t.wholesale_context.superseded_figures_omitted).toBe(6);
+    const t = trimWholesaleContext({ wholesale_context: PJM_CTX }, Date.parse('2026-11-24T12:00:00Z'));
+    expect(t.wholesale_context.figures).toHaveLength(5);
+    expect(t.wholesale_context.superseded_figures_omitted).toBe(5);
     expect(trimWholesaleContext(null)).toBe(null);
   });
   it('the headline carries a $/MWh figure with its period and source, built from the served values', () => {
@@ -118,12 +120,14 @@ describe('item 4: PJM wholesale clause and a current as_of', () => {
     const moved = { ...PJM_CTX, figures: PJM_CTX.figures.map((g) => (g.value === 74.98 ? { ...g, value: 81.5 } : g)) };
     expect(xdb(EP_PJM(moved)).headline).toMatch(/\$81\.5\/MWh/);
   });
-  it('as_of is the oldest input and is no older than the 2027/28 auction report', () => {
-    const a = xdb(EP_PJM(trimWholesaleContext({ wholesale_context: PJM_CTX }).wholesale_context));
-    expect(a.as_of >= '2025-12-17').toBe(true);
+  // gdl 2026-11-25 item D: the 2026/27 auction (published 2025-07-22) is now served, so the floor is 2025-01-01
+  // (the owner's bound), not the 2027/28 report date; the 2025/26 rows stay out.
+  it('as_of is the oldest input and is no older than 2025', () => {
+    const a = xdb(EP_PJM(trimWholesaleContext({ wholesale_context: PJM_CTX }, Date.parse('2026-11-24T12:00:00Z')).wholesale_context));
+    expect(a.as_of >= '2025-01-01').toBe(true);
     const untrimmed = xdb(EP_PJM(PJM_CTX));
-    expect(untrimmed.as_of >= '2025-12-17').toBe(true);
-    expect(untrimmed.evidence.join(' ')).not.toMatch(/2025\/2026 delivery year|2026\/2027 delivery year/);
+    expect(untrimmed.as_of >= '2025-01-01').toBe(true);
+    expect(untrimmed.evidence.join(' ')).not.toMatch(/2025\/2026 delivery year/);
   });
   it('the capacity range spans the current delivery years', () => {
     const l = wholesaleContextLead({ args: { iso: 'PJM' }, p: { wholesale_context: PJM_CTX } });

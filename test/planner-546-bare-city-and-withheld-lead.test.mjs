@@ -27,7 +27,7 @@ describe('planner 5.46: a bare city with a deadline and a speed superlative is a
   ])('%s: Dallas card, the TX canvas, TX search areas and the TX timeline', (t) => {
     const p = _planQuery(t, {});
     expect(p.intent_class, show(p)).toBe('siting_search');
-    expect(tools(p), show(p)).toEqual(['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites', 'get_power_availability_timeline']);
+    expect(tools(p), show(p)).toEqual(['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites', 'get_power_availability_timeline', 'get_permitting_intel']);
     expect(p.recommended_sequence[0].args_hint.market_slug).toBe('dallas');
     expect(p.recommended_sequence[1].args_hint).toMatchObject({ region: 'TX', capacity_mw: 300, max_months: 18 });
     expect(p.recommended_sequence[2].args_hint).toMatchObject({ state: 'TX' });

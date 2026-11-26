@@ -418,6 +418,7 @@ import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _bu
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
+import { permitCheckStep as _permitCheckStep, permitCheckLine as _permitCheckLine, withPermitLine as _withPermitLine } from './lib/plan-permit-check.mjs';
 import { nearMetroSlug as _nearMetroSlug, nearMetroRadiusKm as _nearMetroRadiusKm } from './lib/metro-anchor.mjs';
 import { siteHuntAsk as _siteHuntAsk } from './lib/site-hunt.mjs';
 import { landSearchExtras as _landSearchExtras, potentialLandOn as _potentialLandOn, potentialLandCall as _potentialLandCall,
@@ -27991,6 +27992,13 @@ export function _planQuery(intent, context) {
       }
     }
   } catch (_e) { /* routing must never throw */ }
+  // Grok head-to-head 2026-11-25 (L2, lib/plan-permit-check.mjs): a plan that names a restriction, moratorium, zoning or
+  // a permit, or that runs find_sites, reads the state's permitting records once, in the same wave.
+  // After the facility read, so it never takes a step budget slot a facility read had before.
+  try {
+    const pc = _permitCheckStep(text, seq, top && top.cls ? top.cls.id : null, _planLeadState(d));
+    if (pc) seq.push({ ...pc, step: seq.length + 1 });
+  } catch (_e) { /* routing must never throw */ }
   // 5.42 (Grok LAND L1): a site screen that names the parcel or transmission reads them (lib/site-screen-facts.mjs).
   try {
     // 5.45: at a street address the point is geocoded at execution, so the screen steps wait on it.
@@ -36142,17 +36150,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                 deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl }, executed, fullByEntry); })();
       // 5.42 (Grok LAND L2): a land search leads with the areas find_sites named, or says none matched.
       const _landStep = (sc.recommended_sequence || []).find((x) => x && x.land_search);
-      const _intentAnswer1 = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
-        ? _withLandLead(_intentAnswer0, _landSearchLead(executed, fullByEntry, _landStep.land_label)) : _intentAnswer0;
+      const _landLead = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
+        ? _landSearchLead(executed, fullByEntry, _landStep.land_label) : null;
+      const _intentAnswer1 = _landLead ? _withLandLead(_intentAnswer0, _landLead) : _intentAnswer0;
       // 5.45: a street address that could not be located is said as such, with no site figure under it.
       const _intentAnswer2 = (_addrGeo && _addrGeo.miss && !_isCleanPlatform() && _answerBlocksAllowed())
         ? _addressMissAnswer(_addrGeo.query, _intentAnswer1) : _intentAnswer1;
       // 5.55 (Grok QA 2026-11-20 P2): a find_sites area far from the named metro, or an AVOID metro's areas, never
       // reach the answer without one plain line saying so (lib/siting-caveat.mjs).
-      const _intentAnswer = (!_isCleanPlatform() && _answerBlocksAllowed())
+      // Grok head-to-head 2026-11-25 (L2): a land answer names its search areas first, then the caveat.
+      const _intentAnswer3 = (!_isCleanPlatform() && _answerBlocksAllowed())
         ? _withSitingCaveat(_intentAnswer2, _sitingCaveat(executed, fullByEntry, {
           namedMarkets: (_sig && Array.isArray(_sig.__namedMarkets) && _sig.__namedMarkets.length) ? _sig.__namedMarkets
-            : (_sig && _sig.__citySlug ? [_sig.__citySlug] : []) })) : _intentAnswer2;
+            : (_sig && _sig.__citySlug ? [_sig.__citySlug] : []) }), { after: _landLead && _landLead.headline }) : _intentAnswer2;
+      // Grok head-to-head 2026-11-25 (L2): the local-restriction read a siting plan carries (lib/plan-permit-check.mjs)
+      // says what is on file for the state, or that nothing is.
+      const _intentAnswer = (!_isCleanPlatform() && _answerBlocksAllowed()
+          && (sc.recommended_sequence || []).some((x) => x && x.permit_check))
+        ? _withPermitLine(_intentAnswer3, _permitCheckLine(executed, fullByEntry)) : _intentAnswer3;
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).

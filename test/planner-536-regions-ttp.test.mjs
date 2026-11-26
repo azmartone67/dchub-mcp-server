@@ -34,7 +34,7 @@ describe('planner 5.36: regions and time to power', () => {
     const p = _planQuery(WPA, {});
     expect(p.intent_class, show(p)).toBe('siting_search');
     expect(tools(p), show(p)).toEqual(['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites',
-      'get_power_availability_timeline']);
+      'get_power_availability_timeline', 'get_permitting_intel']);
     expect(p.recommended_sequence[0].args_hint).toEqual({ market_slug: 'pittsburgh-pa' });
     expect(p.recommended_sequence.find((s) => s.tool === 'site_selection_canvas').args_hint.region).toBe('PA');
     expect(p.recommended_sequence.find((s) => s.tool === 'find_sites').args_hint).toEqual({ lat: 40.7, lon: -79.7, radius_km: 150 });
