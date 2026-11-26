@@ -115,10 +115,10 @@ async function post(headers, body, path = '/mcp') {
 
 let ipN = 1;
 let rpcId = 100;
-async function open({ ip, key = null, path = '/mcp' } = {}) {
-  const h0 = { 'x-forwarded-for': ip || `198.51.100.${ipN++ % 200 + 1}`, ...(key ? { 'x-api-key': key } : {}) };
+async function open({ ip, key = null, path = '/mcp', ua = null, client = 'claim-handoff-test' } = {}) {
+  const h0 = { 'x-forwarded-for': ip || `198.51.100.${ipN++ % 200 + 1}`, ...(key ? { 'x-api-key': key } : {}), ...(ua ? { 'user-agent': ua } : {}) };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
-    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claim-handoff-test', version: '1.0' } } }, path);
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: client, version: '1.0' } } }, path);
   const sid = init.headers.get('mcp-session-id');
   expect(sid).toBeTruthy();
   const h = { ...h0, 'mcp-session-id': sid };
@@ -255,6 +255,22 @@ describe('keyless limit: anon_daily_cap', () => {
     expect(iClaim).toBeLessThan(iNudge);
     // the JSON's own instruction is untouched (named by the listed name, lib/key-tool-name.mjs)
     expect(r.sc._upgrade && r.sc._upgrade.next_tool).toBe('get_api_key');
+  });
+
+  it('a keyless caller linked to a plan without the backend token passes the cap; the kill switch caps it again (2026-11-26)', async () => {
+    process.env.DCHUB_AGENT_HANDOFF_RESOLVE = '1';
+    let looks = 0; S._setHandoffResolveLookupForTest(async () => { looks++; return { linked: true, tier: 'pro' }; });   // no linked_token
+    try {
+      const r = await call(await open({ ip: CAPPED_IP, ua: 'claude-code/2.0.1', client: 'claude-code' }), 'search_facilities', { state: 'VA' });
+      expect(r.status, 'lookups ' + looks + ' ' + JSON.stringify(r.tracked)).not.toBe('anon_daily_cap');
+      expect(r.all).not.toMatch(/anon_ip_daily|today's anonymous allowance/);
+      process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+      const k = await call(await open({ ip: CAPPED_IP, ua: 'claude-code/2.0.1', client: 'claude-code' }), 'search_facilities', { state: 'VA' });
+      expect(k.status).toBe('anon_daily_cap');
+    } finally {
+      delete process.env.DCHUB_PLAN_HANDOFF_LINK; delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
+      S._setHandoffResolveLookupForTest(async () => null);
+    }
   });
 
   it('names it once in prose', async () => {

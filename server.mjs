@@ -374,6 +374,9 @@ import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P
 // A keyless caller linked to a plan through the agent handoff, with or without the backend's linked token. Key nudges
 // skip both: a key is not what either one is missing.
 const _linkedAny = (c) => !!(c && !c.api_key && c.handoff_linked === true);
+// The per-IP walls (anon_hard_wall, anon_daily_cap) let a linked caller through with or without the token (2026-11-26).
+// The token path is unchanged; the tokenless path has kill switch DCHUB_PLAN_HANDOFF_LINK=0.
+const _linkedPastIpWall = (c) => _CW.handoffLinked(c) || (_linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0');
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
 import * as _W2K from './lib/wall-to-key.mjs';      // DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_* sub-flags (all default OFF)
@@ -29373,7 +29376,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
       // credential on this call) is not walled either -- _anonWallPaidCall, which
       // only runs once the IP is already past the wall.
-      if (!c.api_key && !_CW.handoffLinked(c) && c.kff_full_depth !== true && c.kff_email_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+      if (!c.api_key && !_linkedPastIpWall(c) && c.kff_full_depth !== true && c.kff_email_depth !== true && !ANON_WALL_EXEMPT_TOOLS.has(name) && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall'; _limitHit(c, status);
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
@@ -30969,7 +30972,7 @@ ${_chatgptFrozenCopy('Your current access', 'Free tier', c)} still covers: \`sea
       // write tools ...) skip it. Measured at count 25 of 20: discover_tools walled as a plan step, and the
       // wall rewrote the terms link in request_capacity_intro / accept_capacity_terms and the licence link in
       // summarize_for_citation to the wall's own link.
-      if (!c.api_key && !_CW.handoffLinked(c) && gate.keyless_full_trial !== true && c.kff_full_depth !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
+      if (!c.api_key && !_linkedPastIpWall(c) && gate.keyless_full_trial !== true && c.kff_full_depth !== true && !QUOTA_EXEMPT_TOOLS.has(name) && await _anonOverCap(c.client_ip)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -38427,8 +38430,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // 5.18: the step is counted against the caller's IP, not 127.0.0.1 (lib/plan-caller-ip.mjs).
       { const _pit = mintPlanCallerIpToken(c && c.client_ip); if (_pit) headers[PLAN_CALLER_IP_HEADER] = _pit; }
       // 2026-11-25: a handoff-linked keyless caller's step keeps the caller's lifted tier (lib/plan-handoff-link.mjs).
-      // Kill switch DCHUB_PLAN_HANDOFF_LINK=0 (the steps run as anonymous again).
-      if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') { const _phl = mintPlanHandoffLinkToken(String(c.tier || ''), c.linked_token); if (_phl) headers[PLAN_HANDOFF_LINK_HEADER] = _phl; }
+      // Kill switch DCHUB_PLAN_HANDOFF_LINK=0 (the steps run as anonymous again). A link without the backend's token
+      // hands its steps the tier alone (2026-11-26), so they pass the per-IP wall like the plan's own call.
+      if (_linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') { const _phl = mintPlanHandoffLinkToken(String(c.tier || ''), c.linked_token || ''); if (_phl) headers[PLAN_HANDOFF_LINK_HEADER] = _phl; }
       // The plan is its caller's first full answer of the day: the step takes the same depth (lib/keyless-first-full.mjs).
       if (c && c._kffPlan === true) headers[KEYLESS_FIRST_FULL_PLAN_HEADER] = mintPlanFirstFullToken(Date.now(), c.kff_arm || null);
       const r = await fetch('http://127.0.0.1:' + _servedPort + '/mcp', {

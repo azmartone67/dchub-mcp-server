@@ -764,6 +764,32 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
     expect(dataHits.slice(n).every((h) => !h.linked)).toBe(true);
   }, 90_000);
+  it('a linked keyless caller without the backend token passes the per-IP hard wall (2026-11-26)', async () => {
+    const lim = (r) => { const j = JSON.stringify(r && r.result); return /anon_hard_wall|anon_daily_cap|anon_ip_daily|remaining_today\\?":0/.test(j); };
+    process.env.DCHUB_AGENT_HANDOFF_RESOLVE = '1';
+    for (const cnt of [999]) {   // past the hard wall (20 x 10); the daily cap: test/claim-handoff-keyless-walls.test.mjs
+      anonCount = cnt;
+      // control: no link, the IP is limited
+      linked = null; linkedToken = '';
+      S._setHandoffResolveLookupForTest(null);
+      { const u0 = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() }); expect(lim(u0), 'unlinked ' + cnt + ' ' + JSON.stringify(u0.result).slice(0, 1500)).toBe(true); }
+      // a link without a token: not limited, nothing forwarded
+      linked = 'pro';
+      S._setHandoffResolveLookupForTest(null);
+      const n = dataHits.length;
+      const r = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
+      expect(lim(r), 'tokenless ' + cnt + ' ' + JSON.stringify(r.result).slice(0, 300)).toBe(false);
+      expect(dataHits.slice(n).every((h) => !h.linked && !h.apiKey)).toBe(true);
+      // kill switch DCHUB_PLAN_HANDOFF_LINK=0: limited again
+      process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+      S._setHandoffResolveLookupForTest(null);
+      const k = await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
+      delete process.env.DCHUB_PLAN_HANDOFF_LINK;
+      expect(lim(k), 'kill switch ' + cnt).toBe(true);
+    }
+    linked = null; linkedToken = ''; anonCount = 999;
+    delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
+  }, 90_000);
   it('execute_plan: a linked keyless caller past the per-IP wall gets its plan steps at its tier (2026-11-25)', async () => {
     // Live 2026-11-25: the plan itself was lifted, but its steps (loopback calls) re-entered as anonymous on the same IP,
     // so site_selection_canvas hit anon_hard_wall and the queue and grid steps were skipped for want of an ISO.
@@ -822,13 +848,25 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
       expect(JSON.stringify(u.next_tools || [])).not.toMatch(/coverage_gap/);
       expect(u.totals && u.totals.tier_note, ust).not.toMatch(/linked DC Hub access/);
     }
-    // a link without a token (the backend's linked-token flag off) gets no get_api_key nudge either (2026-11-26)
-    // (under the per-IP wall: the wall's linked exemption needs the token, so a walled tokenless plan never runs)
-    linkedToken = ''; anonCount = 0;
+    // a link without a token (the backend's linked-token flag off) on the same walled IP: the plan and its steps pass the
+    // per-IP wall too (2026-11-26), nothing is forwarded, and there is no get_api_key nudge
+    linkedToken = ''; anonCount = 999;
     S._setHandoffResolveLookupForTest(null);
+    n = dataHits.length;
     const t = await plan();
-    expect(t.error).toBeUndefined();
+    const tst = JSON.stringify((t.executed || []).map((e) => [e.step, e.tool, e.status, e.limit_hit || null]));
+    expect(t.error, tst).toBeUndefined();
+    expect((t.executed || []).length, tst).toBeGreaterThan(0);
+    expect((t.executed || []).some((e) => e.limit_hit), tst).toBe(false);
+    expect(dataHits.slice(n).length).toBeGreaterThan(0);
+    expect(dataHits.slice(n).every((h) => !h.linked && !h.apiKey)).toBe(true);
     expect((t.next_tools || []).some((e) => e && (e.tool === 'get_api_key' || e.tool === 'claim_free_key')), JSON.stringify(t.next_tools)).toBe(false);
+    // control: the kill switch walls the tokenless link again
+    process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+    S._setHandoffResolveLookupForTest(null);
+    const tk = await plan();
+    delete process.env.DCHUB_PLAN_HANDOFF_LINK;
+    expect(JSON.stringify(tk)).toMatch(/anon_hard_wall/);
     linked = null; linkedToken = '';
     delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
     anonCount = 999;
