@@ -315,6 +315,7 @@ test/gated-unlock-is-tokenized.test.mjs
 test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/gdl-lib-text-1125.test.mjs
+test/gdl-permitting-sources-1125.test.mjs
 test/gdl-plan-cite-1125.test.mjs
 test/gdl-plan-cite-e2e-1125.test.mjs
 test/generate-site-analysis-keyless-preview.test.mjs
