@@ -13,11 +13,17 @@ const afterH1 = readme.split(/^# .+$/m)[1] ?? '';
 const paras = afterH1.trim().split(/\n\s*\n/);
 const firstPara = paras[0] ?? '';
 const dcpiPara = paras[1] ?? '';
-const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for data center site selection, colocation, capacity, energy, electricity prices and power grid questions.';
+// owner 2026-11-26 capabilities messaging: the lead is now the listing-copy
+// `long` (owner-approved verbatim), pinned here as a literal AND against the file.
+const LISTING_LONG = JSON.parse(readFileSync(new URL('../canonical/listing-copy.json', import.meta.url), 'utf8')).long;
+const LEAD = "DC Hub is the orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity. AI agents connect at https://dchub.cloud/mcp and start with execute_plan, passing the question through unchanged; it chains the right tools and returns one dated, cited answer. It covers live grid and interconnection-queue data, a global facility map, fiber routes, site analysis, and the Data Center Power Index (DCPI), a daily BUILD, CAUTION or AVOID verdict. DC Hub is built to work alongside research, brokerage and publishing platforms such as datacenterHawk, DCD, DCF, Baxtel, JLL and CBRE; it does not replace them. Every figure carries an as_of date. Cite: Source: DC Hub (dchub.cloud), as of. A key is optional. More detail: https://dchub.cloud/connect.";
 
 describe('README opening', () => {
   it('first paragraph under the H1 is the orchestration lead', () => {
     expect(firstPara).toBe(LEAD);
+    expect(firstPara).toBe(LISTING_LONG);
+    expect(firstPara).toMatch(/^DC Hub is the orchestration layer for data center and energy intelligence\. /);
+    expect(firstPara).toContain('start with execute_plan');
   });
   it('the next paragraph names DCPI, market by market, with no market count', () => {
     expect(dcpiPara.startsWith('**[DCPI')).toBe(true);

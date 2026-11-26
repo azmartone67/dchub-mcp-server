@@ -7,8 +7,8 @@
 // auto-sync) pastes or pushes FROM it; nothing writes a listing from memory.
 //
 // Fields:
-//   tagline     the owner-approved DC Hub tagline (2026-10-09; the 2026-09-29
-//               "agentic procurement endpoint" line is retired), exact wording,
+//   tagline     the owner-approved DC Hub tagline (2026-11-26; the 2026-10-09 and
+//               2026-09-29 lines are retired), exact wording,
 //               no superlative ever added. TAGLINE below is the pinned value.
 //   short       one-sentence summary
 //   long        the Long description. Byte-equal to scripts/smithery_description.txt
@@ -21,9 +21,8 @@
 //               chars: DCPI lead + the MCP URL. cursor_directory caps at 280, so
 //               it got `short` (no URL), plus the backend Capacity Source line
 //               (118) on the submitter path. TIGHT_MAX leaves room for that line.
-//   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
-//               Kept for our own surfaces; not pasted into third-party directory
-//               description text.
+//   (tool_count was removed 2026-11-26: a published count went stale across
+//               surfaces. The served count lives in canonical/listing.json.)
 //   endpoints   exactly endpointsLine(); our-surface field only, no tool count (owner 2026-11-22)
 //   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
 //               price-free, and it names source_capacity and dchub.cloud/listings
@@ -63,12 +62,12 @@ export const TIGHT_MAX = 160;
 // page (owner, MCP Ecosystem PR review 2026-11-14); test/listing-copy.test.mjs holds every text field to it.
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'endpoints', 'capacity_blurb', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live', 'updated_at'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'endpoints', 'capacity_blurb', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live', 'updated_at'];
 export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'endpoints', 'capacity_blurb', 'glama_live', 'glama_setup_restrictions', 'mcpmarket_live'];
 
-/** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
+/** The owner-approved tagline, character for character (Jonathan, 2026-11-26; replaces the 2026-10-09 line).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
-export const TAGLINE = 'Live data center, power, grid, fiber and deal data for AI agents and site selection.';
+export const TAGLINE = 'The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.';
 
 /** Words that may never be bolted onto the tagline ("the only", "first", ...). */
 export const TAGLINE_SUPERLATIVE = /\b(?:the only|only|first|on the planet|world'?s|largest|leading|best|number one|premier|ultimate)\b|#1/i;

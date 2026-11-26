@@ -78,14 +78,21 @@ function pyList(name) {
 // 09-28 copy, measured by ~/dchub-smithery-watch/rank100.py). It is fenced again.
 // 2026-10-19 (Grok D17): `energy` re-added in the first sentence ("the power, grid and
 // energy infrastructure behind it"), so it leaves this list and is fenced again.
-const DROPPED_BY_OWNER_0928 = ['natural gas', 'hyperscale'];
+// owner 2026-11-26 capabilities messaging: the owner-approved copy (verbatim)
+// names no ISO and no "electricity"; PJM, ERCOT, CAISO, MISO and electricity
+// join the owner-dropped set. Any OTHER RECLAIM term dropped still fails, and
+// re-adding one of these fails until it is removed from this list.
+const DROPPED_BY_OWNER_0928 = ['natural gas', 'hyperscale',
+  'PJM', 'ERCOT', 'CAISO', 'MISO', 'electricity'];
 
 describe('smithery canonical description keeps the terms we reclaim with it', () => {
-  it('the first sentence carries energy and power wording (Grok D17, query "energy")', () => {
-    const first = DESC.split(/(?<=[.!?])\s+/)[0].toLowerCase();
-    expect(first).toMatch(/\benergy\b/);
-    expect(first).toMatch(/\bpower\b/);
-    expect(first).toContain('site selection');
+  // owner 2026-11-26 capabilities messaging: sentence 1 is the orchestration
+  // lead (energy), sentence 2 is the tagline's "Find power."; "site selection"
+  // is no longer in the copy, by owner choice.
+  it('the opening carries energy (sentence 1) and power (sentence 2) wording (Grok D17, query "energy")', () => {
+    const sentences = DESC.split(/(?<=[.!?])\s+/).map((x) => x.toLowerCase());
+    expect(sentences[0]).toMatch(/\benergy\b/);
+    expect(sentences[1]).toMatch(/\bpower\b/);
   });
 
   it('every RECLAIM term appears in the canonical description (except the owner-dropped set)', () => {
@@ -95,15 +102,19 @@ describe('smithery canonical description keeps the terms we reclaim with it', ()
       .toEqual(DROPPED_BY_OWNER_0928.filter(t => pyList('RECLAIM').includes(t)));
   });
 
-  it('electricity survives the 1000-char search truncation', () => {
+  it('every RECLAIM term the copy carries survives the 1000-char search truncation', () => {
     // Was ['electricity', 'utility']. `utility` left RECLAIM on 2026-09-03 — see the
     // header: its rank is not reachable from this file, so pinning its POSITION here
     // would assert that moving the word matters, which is the claim we refuted. It is
     // still IN the description and still tracked (WATCH); it is just no longer fenced
     // as though copy were its remedy. `electricity` stays: still RECLAIM, still the one
     // of the three holding a decodable list position.
+    // owner 2026-11-26 capabilities messaging: electricity is owner-dropped, so
+    // this now fences every RECLAIM term still carried (non-empty: energy).
     const head = DESC.slice(0, SEARCH_TRUNCATION).toLowerCase();
-    for (const t of ['electricity'].filter(x => !DROPPED_BY_OWNER_0928.includes(x))) {
+    const carried = pyList('RECLAIM').filter(x => !DROPPED_BY_OWNER_0928.includes(x));
+    expect(carried.length, 'no RECLAIM term left to fence; this check would be vacuous').toBeGreaterThan(0);
+    for (const t of carried) {
       expect(head.includes(t), `"${t}" must appear within the first ${SEARCH_TRUNCATION} chars — Smithery's search API shows no more than that`).toBe(true);
     }
   });

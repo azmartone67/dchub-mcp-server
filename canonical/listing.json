@@ -34,7 +34,7 @@
   "registry_name": "cloud.dchub/mcp-server",
   "short_description": "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores markets daily.",
   "source_repo": "https://github.com/azmartone67/dchub-mcp-server",
-  "tagline": "Live data center, power, grid, fiber and deal data for AI agents and site selection.",
+  "tagline": "The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.",
   "tight": "DC Hub is the orchestration layer for data center and energy intelligence. Data Center Power Index (DCPI): scored daily. MCP: https://dchub.cloud/mcp",
   "tool_count": 98,
   "tool_counts": {

@@ -114,15 +114,16 @@ describe('copy rules', () => {
   });
 
   // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): listing copy names no plan, no free tier
-  // and no pricing page. The price_line field is retired; long and glama_400 say "DCHUB_API_KEY is optional."
+  // and no pricing page. The price_line field is retired. Owner 2026-11-26 capabilities messaging: long
+  // says "A key is optional." (no env-var name); the Glama setup field keeps "DCHUB_API_KEY is optional."
   it('names no plan, no free tier and no pricing page; price_line is retired', () => {
     expect(COPY).not.toHaveProperty('price_line');
     expect(FIELDS).not.toContain('price_line');
     const PLAN = /\bfree[- ]tiers?\b|\bpaid (?:plans?|tiers?|keys?)\b|\/pricing\b|\bpricing page\b/i;
     for (const k of TEXT_FIELDS) expect(COPY[k], k).not.toMatch(PLAN);
     expect(SMITHERY_DESC).not.toMatch(PLAN);
-    expect(COPY.long).toContain('DCHUB_API_KEY is optional.');
-    expect(COPY.glama_400).toContain('DCHUB_API_KEY is optional.');
+    expect(COPY.long).toContain('A key is optional.');
+    expect(COPY.glama_setup_restrictions).toBe('DCHUB_API_KEY is optional.');
   });
 
   it('no field names a price (no dollar sign anywhere)', () => {
@@ -131,13 +132,14 @@ describe('copy rules', () => {
     expect(SERVER_JSON.description).not.toMatch(/\$/);
   });
 
-  it('DCPI appears in sentence 1 or 2 of short, long, glama_400 and the GitHub description', () => {
-    const early = (t) => t.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-    // server.json is the official-registry card (100-char cap). As of 2026-11-13
-    // it describes DC Hub as the orchestration layer for data center and energy
-    // intelligence and does not mention DCPI; do not require DCPI there.
-    for (const t of [COPY.short, COPY.long, COPY.glama_400, COPY.tight, read('canonical/github_description.txt')]) {
-      expect(early(t)).toMatch(/DCPI/);
+  // Owner 2026-11-26 capabilities messaging: short and tight lead with the
+  // tagline and carry no DCPI; long, glama_400 and the GitHub description still
+  // name the index in full. server.json (100-char cap) does not mention DCPI.
+  it('short and tight lead with the tagline; long, glama_400 and the GitHub description name DCPI in full', () => {
+    expect(COPY.short).toBe(COPY.tagline);
+    expect(COPY.tight.startsWith(`DC Hub is the ${COPY.tagline.slice(4)}`)).toBe(true);
+    for (const t of [COPY.long, COPY.glama_400, read('canonical/github_description.txt')]) {
+      expect(t).toMatch(/Data Center Power Index \(DCPI\)/);
     }
   });
 
@@ -145,10 +147,12 @@ describe('copy rules', () => {
     expect(COPY.endpoints).toBe(endpointsLine());
     // Owner 2026-11-22: no tool count.
     expect(COPY.endpoints).toBe('The full MCP tool catalog at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1');
+    // Owner 2026-11-26 capabilities messaging: long and glama_400 carry the MCP
+    // URL and /connect, and no longer the REST URL.
     expect(COPY.long).toContain(MCP_URL);
-    expect(COPY.long).toContain('https://dchub.cloud/api/v1');
+    expect(COPY.long).toContain('https://dchub.cloud/connect');
     expect(COPY.glama_400).toContain(MCP_URL);
-    expect(COPY.glama_400).toContain('https://dchub.cloud/api/v1');
+    expect(COPY.glama_400).toContain('https://dchub.cloud/connect');
     expect(COPY.long).not.toContain(COPY.endpoints);
     expect(COPY.glama_400).not.toContain(COPY.endpoints);
   });
@@ -204,32 +208,14 @@ describe('copy rules', () => {
   });
 });
 
-describe('tool_count is the served count', () => {
-  const served = servedToolNames(SERVER_SRC);
-
-  it('the served set was actually found', () => {
-    expect(served.length).toBeGreaterThan(50);
+describe('listing copy carries no tool count (2026-11-26)', () => {
+  it('has no tool_count field, so a published count cannot go stale', () => {
+    expect(Object.keys(COPY)).not.toContain('tool_count');
   });
 
-  it('equals the /mcp tools/list registrations in server.mjs', () => {
-    expect(COPY.tool_count).toBe(served.length);
-  });
-
-  it('equals the canon snapshot', () => {
-    expect(COPY.tool_count).toBe(Number(CANON.tools));
-  });
-
-  it('equals the registry manifests', () => {
-    expect(COPY.tool_count).toBe(MCP_SERVER_JSON.tools.length);
-    expect(COPY.tool_count)
-      .toBe(SERVER_JSON._meta['io.modelcontextprotocol.registry/publisher-provided'].toolCount);
-  });
-
-  it('every "N tools" phrase in the copy says tool_count', () => {
+  it('no text field states a tool count', () => {
     for (const k of TEXT_FIELDS) {
-      for (const m of COPY[k].matchAll(/\b(\d+)(?: live| MCP| read-only)* tools\b/g)) {
-        expect(Number(m[1]), `${k}: "${m[0]}"`).toBe(COPY.tool_count);
-      }
+      expect(COPY[k], k).not.toMatch(/\b\d+(?: live| MCP| read-only)* tools\b/);
     }
   });
 });
@@ -239,17 +225,20 @@ describe('the Smithery description cannot drift from it', () => {
     expect(COPY.long).toBe(SMITHERY_DESC.trim());
   });
 
-  it('short is the opening of long', () => {
-    expect(COPY.long.startsWith(COPY.short)).toBe(true);
+  // Owner 2026-11-26 capabilities messaging: long opens "DC Hub is the ..."
+  // followed by the tagline, so short (== tagline) is long's opening after "DC Hub is".
+  it('short is the opening of long (after "DC Hub is")', () => {
+    expect(COPY.long.startsWith(`DC Hub is the ${COPY.short.slice(4)}`)).toBe(true);
+    expect(COPY.long.startsWith('DC Hub is the orchestration layer for data center and energy intelligence. '
+      + 'Find power. Find land. Find fiber. Find capacity. ')).toBe(true);
   });
 
-  // Owner request 2026-09-29: the Capacity Source line rides at the end of
-  // `long` (so Smithery carries it too), worded exactly as given.
-  it('long ends with the Capacity Source marketplace sentence', () => {
-    expect(COPY.long.endsWith(' Capacity Source adds a capacity marketplace: operators list '
-      + 'data-center capacity at https://dchub.cloud/listings, and agents search it by size and '
-      + 'location with source_capacity, then request an introduction with request_capacity_intro.'))
-      .toBe(true);
+  // Owner 2026-11-26 capabilities messaging replaced the Capacity Source closing
+  // sentence (2026-09-29) with the citation line, the optional key and /connect.
+  it('long carries the cite line and ends with the optional key and /connect', () => {
+    expect(COPY.long).toContain(' Cite: Source: DC Hub (dchub.cloud), as of. ');
+    expect(COPY.long).toContain('built to work alongside');
+    expect(COPY.long.endsWith(' A key is optional. More detail: https://dchub.cloud/connect.')).toBe(true);
   });
 });
 
@@ -268,10 +257,10 @@ describe('capacity_blurb', () => {
   });
 });
 
-describe('tagline (owner, 2026-10-09)', () => {
+describe('tagline (owner, 2026-11-26)', () => {
   // The literal is repeated here on purpose: a test that only compared the
   // JSON to the module constant would pass if both drifted together.
-  const OWNER_TEXT = 'Live data center, power, grid, fiber and deal data for AI agents and site selection.';
+  const OWNER_TEXT = 'The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.';
   // Retired 2026-10-09 (owner): the old tagline may not appear anywhere.
   const RETIRED = /agentic\s+procurement\s+endpoint|data\s+center\s+knowledge\s+hub/i;
 
@@ -368,25 +357,29 @@ describe('read-back fingerprints', () => {
     expect(fps).toContain(COPY.tight.toLowerCase().slice(0, FINGERPRINT_CHARS));
   });
 
-  it('include the tagline, the Capacity Source sentence of long, and capacity_blurb', () => {
+  // Owner 2026-11-26: long no longer carries a Capacity Source sentence, so
+  // listingFingerprints derives none from it; the tagline and capacity_blurb remain.
+  it('include the tagline and capacity_blurb (long has no Capacity Source sentence since 2026-11-26)', () => {
     expect(fps).toContain(TAGLINE_FP);
-    expect(fps.some((f) => f.startsWith('capacity source adds a capacity marketplace'))).toBe(true);
+    expect(fps.some((f) => f.startsWith('capacity source adds a capacity marketplace'))).toBe(false);
     expect(fps.some((f) => f.startsWith('capacity source by dc hub:'))).toBe(true);
   });
 
   // Grok's 2026-09-29 directory edits: the listing LEADS with the tagline and
   // the Capacity Source sentence, and the rest of the text may be truncated.
   it('a tagline-led listing carrying current copy reads as current, and breaks no rule', () => {
-    const at = COPY.long.indexOf('Capacity Source adds');
-    const lobe = `<div class="desc">${COPY.tagline} ${COPY.long.slice(at).replace(/&/g, '&amp;')}</div>`;
+    const lobe = `<div class="desc">${COPY.tagline} ${COPY.capacity_blurb.replace(/&/g, '&amp;')}</div>`;
     const truncated = `${COPY.tagline}\n  ${COPY.capacity_blurb.slice(0, 90)}…`;
     for (const page of [lobe, truncated, `${COPY.tagline} ${COPY.short}`]) {
       expect(showsCurrentCopy(page, fps), page).toBe(true);
       expect(copyRuleViolations(page), page).toEqual([]);
     }
-    // Without the new fingerprints the same listing was drift.
-    const legacy = copyFingerprints({ short: COPY.short, glama_400: COPY.glama_400, long: COPY.long.slice(0, 60) });
-    expect(showsCurrentCopy(truncated, legacy)).toBe(false);
+    // The capacity_blurb fingerprint is load-bearing: a blurb-only listing
+    // matches with it and is drift without it.
+    const blurbOnly = `${COPY.capacity_blurb.slice(0, 90)}…`;
+    expect(showsCurrentCopy(blurbOnly, fps)).toBe(true);
+    const legacy = copyFingerprints({ ...COPY, capacity_blurb: '' });
+    expect(showsCurrentCopy(blurbOnly, legacy)).toBe(false);
   });
 
   it('a tagline-led listing with old copy still fails the copy rules', () => {

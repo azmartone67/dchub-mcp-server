@@ -204,7 +204,9 @@ describe('scripts/smithery_description.txt is the single origin the daily check 
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
     expect(txt, 'markets').not.toContain(canon.markets);
     expect(txt).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
-    expect(txt).toContain('DCPI scores markets daily');
+    // ★2026-11-26 (owner, capabilities messaging): "DCPI scores markets daily"
+    // became "the Data Center Power Index (DCPI), a daily BUILD, CAUTION or AVOID verdict".
+    expect(txt).toContain('the Data Center Power Index (DCPI), a daily BUILD, CAUTION or AVOID verdict');
   });
   it('carries no facility count (withdrawn, owner decision 2026-09-27)', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
@@ -214,12 +216,14 @@ describe('scripts/smithery_description.txt is the single origin the daily check 
   it('never states a tracked-feed COUNT (the deadman count moves; the sentence must not rot)', () => {
     expect(/\b\d+ tracked feeds\b/.test(txt)).toBe(false);
   });
-  it('leads with the orchestration-layer sentence and keeps "site selection" (2026-11-19; term kept since 2026-10-03)', () => {
+  it('leads with the orchestration-layer sentence and names site analysis (2026-11-19; "site selection" dropped by owner 2026-11-26)', () => {
     // 2026-10-03 (owner): #621's "siting" dropped Smithery's top buyer search
     // term — "site selection" fell #1 -> #17 (rank100.py, 09-29 vs 10-03).
     // 2026-11-19 (owner): third-party copy leads with the orchestration layer
     // and execute_plan, and stays count-free, but must still say "site selection".
+    // 2026-11-26 (owner, capabilities messaging): the new copy drops the
+    // "site selection" term by choice; it names "site analysis" instead.
     expect(txt).toMatch(/^DC Hub is the orchestration layer for data center and energy intelligence\b/);
-    expect(txt).toMatch(/site selection/);
+    expect(txt).toMatch(/site analysis/);
   });
 });

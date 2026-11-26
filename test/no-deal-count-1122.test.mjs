@@ -51,7 +51,11 @@ describe('no deal count in agent/registry copy (owner 2026-11-22)', () => {
     expect(read('integrations/chatgpt/openapi.json')).toContain('fiber routes, and tracked M&A deals.');
     expect(read('integrations/chatgpt/instructions.txt')).toContain('- Tracked M&A transactions');
     expect(read('mcp-server.json')).toContain('verdicts, tracked M&A deals, AI Capacity Index');
-    expect(read('canonical/github_description.txt')).toContain('a global facility map and tracked M&A deals.');
+    // owner 2026-11-26 capabilities messaging: the About text no longer names
+    // deals at all (so it cannot carry a deal count); it names its coverage as
+    // grid, interconnection, fiber, site and market data. The no-count check
+    // above still runs on it.
+    expect(read('canonical/github_description.txt')).toContain('Live grid, interconnection, fiber, site and market data for AI agents');
   });
 
   it('the listing copy rule rejects a deal count and allows the new phrasing', () => {

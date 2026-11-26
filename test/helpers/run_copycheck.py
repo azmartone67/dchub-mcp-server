@@ -19,10 +19,12 @@ WANT = open("scripts/smithery_description.txt", encoding="utf-8").read()
 #   that cannot build its scenario must fail loudly, not assert against nothing.
 # ★2026-11-19: third-party Smithery copy is count-free, so the stale-marker
 #   swap is derived from a phrase that remains in the description.
-_m = re.search(r"DCHUB_API_KEY is optional\.", WANT)
+# ★2026-11-26 (owner, capabilities messaging): the description now says
+#   "A key is optional." instead of "DCHUB_API_KEY is optional."
+_m = re.search(r"A key is optional\.", WANT)
 if not _m:
     raise SystemExit(
-        "run_copycheck fixture: no 'DCHUB_API_KEY is optional.' phrase in "
+        "run_copycheck fixture: no 'A key is optional.' phrase in "
         "scripts/smithery_description.txt — the stale scenario cannot be built, "
         "and injecting nothing would make the test assert against an empty case.")
 _TOOLS_PHRASE = _m.group(0)

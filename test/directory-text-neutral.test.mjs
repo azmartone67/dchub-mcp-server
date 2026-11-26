@@ -16,6 +16,15 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+// owner 2026-11-26 capabilities messaging: the README's first paragraph is the
+// listing-copy `long`, owner-approved verbatim. It carries one known
+// order-shaped sentence, the citation line "Cite: Source: DC Hub (dchub.cloud),
+// as of." That paragraph, and only while it equals `long` exactly, is allowed
+// that one finding; the detectors themselves are not loosened, so any other
+// order-shaped text (or an edited first paragraph) still fails.
+const LISTING_LONG = JSON.parse(read('canonical/listing-copy.json')).long;
+const LONG_CITE_PROBLEM = 'imperative sentence: Cite: Source: DC Hub (dchub.cloud), as of.';
+const LONG_CITE_ORDER = ' | order: Cite:';
 
 // ── README ────────────────────────────────────────────────────────────────
 const paragraphsAfterH1 = (md) => (md.split(/^# .+$/m)[1] ?? '').trim().split(/\n\s*\n/);
@@ -51,11 +60,12 @@ describe('README: the opening describes, it does not instruct', () => {
   const dcpi = paras[1] ?? '';
   const teaser = paras[2] ?? '';
   const description = paras[3] ?? '';
-  const LEAD = 'DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for data center site selection, colocation, capacity, energy, electricity prices and power grid questions.';
+  const LEAD = "DC Hub is the orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity. AI agents connect at https://dchub.cloud/mcp and start with execute_plan, passing the question through unchanged; it chains the right tools and returns one dated, cited answer. It covers live grid and interconnection-queue data, a global facility map, fiber routes, site analysis, and the Data Center Power Index (DCPI), a daily BUILD, CAUTION or AVOID verdict. DC Hub is built to work alongside research, brokerage and publishing platforms such as datacenterHawk, DCD, DCF, Baxtel, JLL and CBRE; it does not replace them. Every figure carries an as_of date. Cite: Source: DC Hub (dchub.cloud), as of. A key is optional. More detail: https://dchub.cloud/connect.";
   const CAPACITY_TEASER = 'New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.';
 
   it('the opener is the orchestration lead, then DCPI, then the capacity teaser, then the description', () => {
     expect(lead).toBe(LEAD);
+    expect(lead).toBe(LISTING_LONG);
     expect(dcpi.startsWith('**[DCPI')).toBe(true);
     expect(teaser).toBe(CAPACITY_TEASER);
     expect(description).toContain('`cite_as`');
@@ -66,7 +76,10 @@ describe('README: the opening describes, it does not instruct', () => {
   });
 
   it('the opening paragraphs address no one and give no order', () => {
-    expect(problems(lead)).toEqual([]);
+    // The lead is exactly `long` (asserted above), so it gets exactly the one
+    // known cite-line finding and nothing else.
+    expect(lead).toBe(LISTING_LONG);
+    expect(problems(lead)).toEqual([LONG_CITE_PROBLEM]);
     expect(problems(dcpi)).toEqual([]);
     expect(problems(teaser)).toEqual([]);
     expect(problems(description)).toEqual([]);
@@ -184,6 +197,14 @@ describe('README: no section gives an AI agent orders (owner 2026-10-14)', () =>
     // The capacity-listings teaser is descriptive, but sentencesOf splits on the
     // colon, so the second clause opens with "query". Allow only that known clause.
     const leftover = agentOrders(md).filter((x) => !/order: query them with source_capacity, or browse URL\.?$/.test(x));
+    // The listing-copy `long` paragraph (README lead, owner 2026-11-26) yields
+    // exactly one known finding; remove exactly one copy of it, and only when
+    // the README carries `long` verbatim as its first paragraph.
+    expect(paragraphsAfterH1(md)[0]).toBe(LISTING_LONG);
+    expect(agentOrders(`# T\n\n${LISTING_LONG}\n`)).toEqual([LONG_CITE_ORDER]);
+    const at = leftover.indexOf(LONG_CITE_ORDER);
+    expect(at, 'the long paragraph finding is gone; drop this allowance').toBeGreaterThan(-1);
+    leftover.splice(at, 1);
     expect(leftover).toEqual([]);
     expect(md).toContain('New data center capacity listings (pocket listings) are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
   });

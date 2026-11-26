@@ -1,6 +1,6 @@
 # DC Hub (dchub.cloud)
 
-Live data center, power, grid, fiber and deal data for AI agents and site selection.
+The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.
 
 DC Hub is the orchestration layer for data center and energy intelligence.
 The `dchub` MCP server connects to the remote server at https://dchub.cloud/mcp.
