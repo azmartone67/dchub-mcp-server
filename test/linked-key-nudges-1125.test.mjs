@@ -33,10 +33,18 @@ describe('identity.means', () => {
     expect(id.means).toMatch(/linked DC Hub access \(agent handoff\)/);
     expect(id.means).not.toMatch(/ANONYMOUSLY|claim_free_key|get_api_key/);
   });
-  it('a plain anonymous caller, or a link without a token, keeps the anonymous wording', () => {
+  it('a plain anonymous caller keeps the anonymous wording', () => {
     expect(S._identitySource(anon()).means).toMatch(/ANONYMOUSLY/);
-    const noTok = { ...linked(), linked_token: '' };
-    expect(S._identitySource(noTok).linked_access).toBeUndefined();
-    expect(S._identitySource(noTok).means).toMatch(/ANONYMOUSLY/);
+    expect(S._identitySource(anon()).linked_tier_only).toBeUndefined();
+  });
+  it('a link without a token: not anonymous, no claim-a-key advice, says fields may still be a preview', () => {
+    const id = S._identitySource({ ...linked(), linked_token: '' });
+    expect(id.linked_access).toBeUndefined();
+    expect(id.linked_tier_only).toBe(true);
+    expect(id.means).toMatch(/linked to a DC Hub plan \(agent handoff\)/);
+    expect(id.means).toMatch(/may still come back as a preview/);
+    expect(id.means).not.toMatch(/ANONYMOUSLY|claim_free_key|get_api_key/);
+    process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+    expect(S._identitySource({ ...linked(), linked_token: '' }).means).toMatch(/ANONYMOUSLY/);
   });
 });
