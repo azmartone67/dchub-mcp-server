@@ -4,6 +4,10 @@
 // v13 (owner 2026-10-10): that response names no plan (Grok rule: no price or plan names in tool text).
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { _ctxALS, _unlockMoreDataEnvelope, _noteProWall, _proTriggerTool } from '../server.mjs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 
 let saved;
 beforeEach(() => { saved = process.env.DCHUB_INTERNAL_KEY; process.env.DCHUB_INTERNAL_KEY = 'test-internal-key-not-a-real-secret'; });

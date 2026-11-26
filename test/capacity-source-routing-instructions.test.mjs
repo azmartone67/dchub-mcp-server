@@ -19,10 +19,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 
-// Option A (owner 2026-11-16): the routing sentence is now the Capacity Source teaser only (no listing fee, no
-// list-capacity link, no register prompt); it keeps its place, right after the lead.
+// Option A (owner 2026-11-16): the routing sentence is the Capacity Source teaser only (no listing fee, no
+// list-capacity link, no register prompt). Capabilities messaging (2026-11-26): it is the teaser sentence of the
+// approved capabilities paragraph (lib/capabilities-instructions.mjs), before the freshness rule.
 export const ROUTING =
-  'New data center capacity listings are coming soon: query them with source_capacity, or browse '
+  'Capacity to buy or lease is coming: query it with source_capacity, or browse '
   + 'https://dchub.cloud/listings.';
 
 const CARRY = ['/mcp', '/mcp/anthropic', '/mcp/registry', '/mcp/grok'];

@@ -142,15 +142,17 @@ describe('F3 coding-CLI starter', () => {
       const hs = await handshake(c);
       const before = base[label(c)];
       expect(hs.status, label(c)).toBe(200);
-      expect(hs.instructions.startsWith(L.CLI_STARTER_EXAMPLE), label(c)).toBe(false);
-      expect(hs.instructions.indexOf(L.CLI_STARTER_EXAMPLE), label(c)).toBeGreaterThan(0);
-      expect(hs.instructions.startsWith('DC Hub is the neutral orchestration layer'), label(c)).toBe(true);
+      // Capabilities messaging (2026-11-26): the handshake is the approved paragraph, which does not open with the canon
+      // sentence, so the starter rewrite leaves it alone; the paragraph carries its own first-call line
+      // ('Pass the question as asked: execute_plan(intent="...")'). The starter tool ORDER still applies.
+      expect(hs.instructions, label(c)).toBe(before.instructions);
+      expect(hs.instructions.startsWith('DC Hub is the orchestration layer for data center and energy intelligence.'), label(c)).toBe(true);
+      expect(hs.instructions, label(c)).toContain('Pass the question as asked: execute_plan(intent="<the user\'s question, unchanged>").');
       expect(hs.instructions.length, label(c)).toBeLessThanOrEqual(MAX_INSTR);
-      expect(toolsLine(hs.instructions), label(c)).toEqual(L.CLI_STARTER_TOOLS.slice());
       expect(hs.tools.slice(0, 5), label(c)).toEqual(L.CLI_STARTER_TOOLS.slice());
       for (const n of before.tools) expect(hs.tools, label(c) + ' lost ' + n).toContain(n);
       expect(hs.listBytes, label(c) + ' tools/list bytes').toBeLessThan(P.LIGHT_TOOLS_LIST_MAX_BYTES);
-      for (const n of toolsLine(hs.instructions)) expect(hs.tools, label(c)).toContain(n);
+      for (const n of (toolsLine(hs.instructions) || [])) expect(hs.tools, label(c)).toContain(n);
       expect(hs.instructions).not.toMatch(/\bfree\b|\btrial\b|credits?\b|calls\/day|\$\d|\b\d+ tools\b/i);
     }
     delete process.env.DCHUB_LIGHT_LIST_INSTRUCTIONS_V2;
@@ -158,14 +160,14 @@ describe('F3 coding-CLI starter', () => {
 
   // A2 off, the light handshake is already over 2,048 (2,130 measured 2026-11-21, pre-existing; A2 is on live). Here the
   // starter may only add the example less the dropped sentence, never more.
-  it('A2 off too: the starter handshake still leads with the example and grows by at most the example', async () => {
+  it('A2 off too: the starter order applies and the capabilities handshake is unchanged', async () => {
     for (const c of SIX.slice(0, 3)) {
       const off = await handshake(c);
       process.env[FLAG] = '1';
       const hs = await handshake(c);
       delete process.env[FLAG];
-      expect(hs.instructions.indexOf(L.CLI_STARTER_EXAMPLE), label(c)).toBeGreaterThan(0);
-      expect(hs.instructions.length, label(c)).toBeLessThanOrEqual(off.instructions.length + L.CLI_STARTER_EXAMPLE.length + 1);
+      // Capabilities messaging (2026-11-26): no canon-sentence lead to follow, so the handshake is unchanged.
+      expect(hs.instructions, label(c)).toBe(off.instructions);
       expect(hs.tools.slice(0, 5), label(c)).toEqual(L.CLI_STARTER_TOOLS.slice());
     }
   });

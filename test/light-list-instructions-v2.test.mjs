@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 
 const foreign = [];
 const realConnect = net.Socket.prototype.connect;
@@ -108,6 +109,16 @@ function toolsLine(ins) {
   return m ? m[1].split(', ') : null;
 }
 
+// Capabilities messaging (2026-11-26): the shared handshake is the owner-approved capabilities paragraph, verbatim
+// (lib/capabilities-instructions.mjs). It has no "Tools:" line for the light-list rewrite to narrow, and it names these
+// tools; the ones a ten-tool light list does not carry are reachable by name (the ENDPOINT SCOPE tail says so). The pin
+// below fails if the paragraph starts naming another tool the light list lacks.
+const PARAGRAPH_TOOLS = ['execute_plan', 'summarize_for_citation', 'dchub_services', 'why_dchub', 'source_capacity',
+  'get_changes', 'get_api_key', 'recover_my_key', 'report_finding', 'request_enhancement'];
+const PARAGRAPH_UNLISTED_ON_LIGHT = ['summarize_for_citation', 'dchub_services', 'why_dchub', 'get_api_key',
+  'recover_my_key', 'report_finding', 'request_enhancement'];
+const paragraphNotListed = (hs) => PARAGRAPH_TOOLS.filter((n) => !hs.tools.includes(n));
+
 // The acceptance check: what the "Tools:" line names that this client's tools/list does not.
 function notListed(hs) {
   const named = toolsLine(hs.instructions) || [];
@@ -130,10 +141,13 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
       expect(hs.sid, label(c)).toBeTruthy();
       expect(hs.tools.length, label(c)).toBeGreaterThan(0);
       expect(hs.tools.length, label(c)).toBeLessThan(20);
-      const named = toolsLine(hs.instructions);
-      expect(named, label(c) + ': no Tools: line').not.toBeNull();
-      expect(named[0], label(c)).toBe('execute_plan');
-      expect(notListed(hs), label(c)).toEqual([]);
+      expect(hs.instructions.startsWith(CAPABILITIES_INSTRUCTIONS), label(c)).toBe(true);
+      expect(toolsLine(hs.instructions), label(c) + ': the paragraph has no Tools: line').toBeNull();
+      expect(hs.tools[0], label(c)).toBe('execute_plan');
+      for (const n of PARAGRAPH_TOOLS) expect(hs.instructions, label(c) + ' names ' + n).toContain(n);
+      expect(paragraphNotListed(hs), label(c)).toEqual(PARAGRAPH_UNLISTED_ON_LIGHT.filter((n) => !hs.tools.includes(n)));
+      expect(paragraphNotListed(hs).every((n) => PARAGRAPH_UNLISTED_ON_LIGHT.includes(n)), label(c)).toBe(true);
+      expect(hs.instructions, label(c)).toContain('tools/call accepts any DC Hub tool by name');
     }
   });
 
@@ -141,14 +155,14 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     process.env[FLAG] = '1';
     for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
       const hs = await handshake(c);
-      expect(hs.instructions, label(c)).toMatch(/Tools: execute_plan(?:, [a-z_]+)*\. discover_tools lists the rest\. /);
+      expect(hs.instructions, label(c)).toMatch(/discover_tools lists the rest\./);
       expect(hs.tools.length).toBe(10);
       expect(hs.instructions, label(c)).not.toMatch(/DC Hub: \d+ tools/);
       expect((hs.instructions.match(/\b\d+ (DC Hub )?tools\b/g) || []).length, label(c)).toBe(0);   // owner 2026-11-22: no count
       expect((hs.instructions.match(/discover_tools lists the rest/g) || []).length, label(c)).toBe(1);
       expect(hs.instructions).toContain('a listing scope, not a permission scope');
       expect(hs.instructions).toContain('tools/call accepts any DC Hub tool by name');
-      expect(hs.instructions).toContain('call execute_plan first');
+      expect(hs.instructions).toContain('Call execute_plan first');
       expect(hs.instructions).toContain('get_api_key included');
       // Owner 2026-11-22 ("trim it too"): 2,045 live before the trim, 3 under the cap; 2,003 here after it.
       // Held at 2,020 so a later addition has to find room instead of eating the last of the headroom.
@@ -171,11 +185,13 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     process.env[FLAG] = '1';
     const hs = await handshake({ name: 'light-v2-test' }, '/mcp/light');
     expect(hs.tools.length).toBe(10);
-    expect(notListed(hs)).toEqual([]);
-    expect(hs.instructions).toMatch(/Tools: execute_plan(?:, [a-z_]+)*\. discover_tools lists the rest\. /);
+    expect(paragraphNotListed(hs)).toEqual(PARAGRAPH_UNLISTED_ON_LIGHT);
+    expect(hs.instructions).toMatch(/discover_tools lists the rest\./);
     expect(hs.instructions).toContain('ENDPOINT SCOPE: /mcp/light is a listing scope');
     // Owner 2026-11-22 ("trim it too"): /mcp/light measured 2,059 live, over the 2,048 clients keep; 2,017 after it.
-    expect(hs.instructions.length, '/mcp/light measured ' + hs.instructions.length).toBeLessThanOrEqual(2020);
+    // Capabilities messaging (2026-11-26): the approved paragraph (1,797 characters, verbatim) puts /mcp/light at 2,024;
+    // the held headroom moves to 2,030, still under the 2,048 clients keep (test/initialize-instructions-length).
+    expect(hs.instructions.length, '/mcp/light measured ' + hs.instructions.length).toBeLessThanOrEqual(2030);
   });
 
   it('full-list clients are unchanged byte for byte with the flag on', async () => {
@@ -193,7 +209,8 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
     delete process.env[FLAG];
     for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
       const hs = await handshake(c);
-      expect(notListed(hs), label(c)).toEqual(expect.arrayContaining(['get_grid_data', 'get_market_intel']));
+      // Capabilities messaging (2026-11-26): flag off, the same paragraph names the same unlisted tools.
+      expect(paragraphNotListed(hs), label(c)).toEqual(PARAGRAPH_UNLISTED_ON_LIGHT);
       // ★2026-11-22 (owner): the shared text no longer says "DC Hub: N tools."
       expect(hs.instructions).not.toMatch(/DC Hub: \d+ tools/);
       expect(hs.instructions).toMatch(/this client's \/mcp list shows a subset of DC Hub tools/);

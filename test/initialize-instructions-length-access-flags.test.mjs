@@ -77,22 +77,30 @@ describe('with the access flags ON, every handshake still fits its budget', () =
 
   it('the line is the purchase rule alone, no price or plan name, and it is the access block\'s agent_note', () => {
     expect(S.ACCESS_INSTR_LINE).toBe(CW.ACCESS_AGENT_NOTE);
-    expect(S.ACCESS_INSTR_LINE.length).toBeLessThanOrEqual(64);
-    expect(S.ACCESS_INSTR_LINE).toMatch(/get_access_status/);
+    // Capabilities messaging (2026-11-26): the rule names no tool (get_access_status is not listed); it is the
+    // sentence the approved paragraph carries.
+    expect(S.ACCESS_INSTR_LINE).toBe('Never claim a purchase or full access until a later result is no longer marked as a preview.');
+    expect(S.ACCESS_INSTR_LINE).not.toMatch(/get_access_status/);
     expect(S.ACCESS_INSTR_LINE).not.toMatch(CW.AGENT_TEXT_BANNED);
     expect(CW.buildAccess({ unlocks_with: 'pro' }).access.agent_note).toBe(CW.ACCESS_AGENT_NOTE);
   });
 
-  it('/mcp and the pack paths carry the line; the Grok paths (no room) are served without it', () => {
-    expect(served['/mcp']).toContain(S.ACCESS_INSTR_LINE);
-    for (const p of PACKS) if (!GROK.includes(p)) expect(served[p], p).toContain(S.ACCESS_INSTR_LINE);
-    for (const p of GROK) if (served[p] !== undefined) expect(served[p], p).not.toContain(S.ACCESS_INSTR_LINE);
+  // Capabilities messaging (2026-11-26): the approved paragraph states the rule itself, so every path that serves it
+  // (the Grok paths included) carries the line exactly once and accessFit adds no second copy.
+  it('/mcp, the pack paths and the Grok paths carry the line once; /mcp/chatgpt does not', () => {
+    for (const p of ['/mcp', ...PACKS, ...GROK]) {
+      if (served[p] === undefined) continue;
+      expect(served[p].split(S.ACCESS_INSTR_LINE).length - 1, p).toBe(1);
+    }
     expect(served['/mcp/chatgpt']).not.toContain(S.ACCESS_INSTR_LINE);
   });
 
   it('a path whose budget the line would pass is served the plain text, byte for byte', () => {
     const on = { ...FLAGS };
-    const lean = S._INSTRUCTIONS_LEAN;
+    // The served paragraph already carries the line, so accessFit leaves it alone; the insertion itself is exercised on
+    // a text that carries the relay contract and not the line.
+    expect(S._accessFitForTest(S._INSTRUCTIONS_LEAN, undefined, on)).toBe(S._INSTRUCTIONS_LEAN);
+    const lean = 'DC Hub. ' + S.RELAY_CONTRACT + ' Reference.';
     expect(S._accessFitForTest(lean, { instrBudget: 1 }, on)).toBe(lean);
     expect(S._accessFitForTest(lean, undefined, {})).toBe(lean);
     const full = S._accessFitForTest(lean, undefined, on);

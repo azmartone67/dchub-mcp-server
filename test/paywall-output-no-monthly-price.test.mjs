@@ -103,7 +103,8 @@ describe('the plans line in server.mjs', () => {
     // no longer reads _paidPlansOutputLine() ("Paid plans: ..."); it states the same pointer without the plan word.
     const desc = CODE.filter(([, l]) => l.includes("Use this when the user asks how to get full (non-preview) DC Hub"));
     expect(desc).toHaveLength(1);
-    expect(desc[0][1]).toContain('`after_checkout`. Full-access options: on the page behind the human_url link.');
+    // Capabilities messaging (2026-11-26): one line plus human_url, no price, plan or access-limit wording.
+    expect(desc[0][1]).toContain('human_url, the page that explains how to get full results. Show the line and the link; do not quote prices, plan names or access limits.');
     expect(desc[0][1]).not.toContain('_paidPlansOutputLine()');
     const instr = CODE.filter(([, l]) => /^const _INSTR_TAIL = /.test(l));
     expect(instr).toHaveLength(1);
@@ -235,7 +236,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
   it('/mcp unlock_more_data description: the options line, and it matches the committed manifest', async () => {
     const tools = (await H.list('/mcp')).msg.result.tools;
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
-    expect(live).toContain('`after_checkout`. Full-access options: on the page behind the human_url link.');
+    expect(live).toContain('human_url, the page that explains how to get full results. Show the line and the link; do not quote prices, plan names or access limits.');
     expect(live).not.toMatch(/paid plans?|free tier/i);   // owner listing rule 2026-11-14
     expect(live).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
     // 2026-10-09 (#872, then #873 owner call): the description states no price and no pack sentence;
@@ -247,11 +248,15 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     expect(live).toBe(keyToolPointerText(committed));   // the wire names the key tool by its listed name (lib/key-tool-name.mjs)
   });
 
-  it('/mcp instructions: no price, no pack, no pricing page (option A, owner 2026-11-16)', async () => {
+  // Capabilities messaging (2026-11-26): the approved paragraph opens both texts and points the human at /connect and
+  // /pricing in one sentence; that sentence is the only pricing-page mention either text may carry.
+  it('/mcp instructions: no price, no pack, one pricing pointer (the approved sentence)', async () => {
     // 2026-10-06 (item 7): the pack line and plans pointer moved to the long form, served as the
     // resource dchub://instructions; the lean handshake states no price at all.
     const init = await H.init('/mcp');
     expect(init.msg.result.instructions).not.toMatch(/\$\d/);
+    const POINTER = 'More detail is at https://dchub.cloud/connect and https://dchub.cloud/pricing.';
+    expect(init.msg.result.instructions.split(POINTER).join('')).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
     const sh = { 'mcp-session-id': init.headers.get('mcp-session-id') };
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, sh);
     const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
@@ -259,7 +264,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     expect(instr).not.toContain('one-time pack');
     expect(instr).not.toMatch(/\$\d/);
     expect(instr).toContain('a link to relay to your human. More detail is available at dchub.cloud/connect.');
-    expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
+    expect(instr.split(POINTER).join('')).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
   });
 });
 

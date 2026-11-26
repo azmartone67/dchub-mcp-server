@@ -133,7 +133,10 @@ async function session(ip) {
   await rpc(H, '/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, { 'mcp-session-id': sid, 'x-dc-client-ip': ip });
   return sid;
 }
+// Capabilities messaging (2026-11-26) reworded the access block's agent_note (lib/commercial-wall.mjs ACCESS_AGENT_NOTE);
+// origin/main still says the old sentence, so the comparison reads both as the new one. Nothing else is folded.
 const norm = (r) => JSON.stringify(r)
+  .replace(/Never claim a purchase until get_access_status confirms it\./g, 'Never claim a purchase or full access until a later result is no longer marked as a preview.')
   .replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^"\s\\]*)?/g, 'RELAY')
   .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, 'TS')
   .replace(/(\\?")(ms|elapsed_ms|duration_ms|took_ms|latency_ms)(\\?"):\d+/g, '$1$2$3:0')

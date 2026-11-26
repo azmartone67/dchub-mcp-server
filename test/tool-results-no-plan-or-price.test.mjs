@@ -243,7 +243,11 @@ const isPreview = (r) => {
 
 // Option A (owner 2026-11-16): the handshake and the full text carry the neutral connect line in place of the two
 // free offers (lib/neutral-connect.mjs); the canon phrases themselves are unchanged.
-const CONNECT_LINE = 'More detail is available at dchub.cloud/connect.';
+// Capabilities messaging (2026-11-26): the initialize text is the owner-approved capabilities paragraph. Its connect
+// pointer names /connect and /pricing in one sentence, the only pricing-page mention the handshake may carry; the scan
+// below drops exactly that sentence and still fails on any other /pricing, plan name or price.
+const CONNECT_LINE = 'More detail is at https://dchub.cloud/connect and https://dchub.cloud/pricing.';
+const initText = (t) => ({ content: [{ type: 'text', text: String(t).split(CONNECT_LINE).join('') }] });
 describe('initialize instructions: the neutral connect line, no offers, no tier label, no plan, no price', () => {
   it('every path is served (non-vacuous)', () => {
     expect(PACKS.length).toBeGreaterThanOrEqual(5);
@@ -265,7 +269,7 @@ describe('initialize instructions: the neutral connect line, no offers, no tier 
       expect(t).not.toContain(FREE_OFFER_EMAIL);
       expect(t).not.toContain(FREE_OFFER_LAND_POWER);
       expect(t).not.toMatch(/FREE TIER/);
-      expect(resultOffenders({ content: [{ type: 'text', text: t }] })).toEqual([]);
+      expect(resultOffenders(initText(t))).toEqual([]);
     });
   }
   it('every pack path: the connect line, no offers, nothing banned', () => {
@@ -273,14 +277,16 @@ describe('initialize instructions: the neutral connect line, no offers, no tier 
     for (const p of PACKS) {
       if (!INIT[p].includes(CONNECT_LINE)) bad.push(p + ': connect line missing');
       if (INIT[p].includes(FREE_OFFER_EMAIL)) bad.push(p + ': offer still there');
-      for (const h of resultOffenders({ content: [{ type: 'text', text: INIT[p] }] })) bad.push(p + ' ' + h);
+      for (const h of resultOffenders(initText(INIT[p]))) bad.push(p + ' ' + h);
     }
     expect(bad).toEqual([]);
   });
   it('dchub://instructions (the full text): the connect line, no offers, nothing banned', () => {
     expect(FULL_TEXT).toContain(CONNECT_LINE);
     expect(FULL_TEXT).not.toContain(FREE_OFFER_EMAIL);
-    expect(resultOffenders({ content: [{ type: 'text', text: FULL_TEXT }] })).toEqual([]);
+    expect(resultOffenders(initText(FULL_TEXT))).toEqual([]);
+    // the strip is exact: a second pricing mention is still caught
+    expect(resultOffenders(initText(FULL_TEXT + ' See https://dchub.cloud/pricing.')).length).toBeGreaterThan(0);
   });
 });
 

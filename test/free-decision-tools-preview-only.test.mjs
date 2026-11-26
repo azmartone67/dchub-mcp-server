@@ -638,7 +638,8 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     expect(S._INSTR_FREE_TIER.trim()).toBe(OFFERS);
     for (const t of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
       expect(t).not.toContain(OFFERS);
-      expect(t).toContain('More detail is available at dchub.cloud/connect.');
+      // Capabilities messaging (2026-11-26): the connect line in the approved paragraph's wording.
+      expect(t).toContain('More detail is at https://dchub.cloud/connect');
       expect(t).not.toContain(CLAUSE);
       expect(t).not.toContain('FREE TIER');
     }

@@ -108,7 +108,9 @@ describe('/mcp/grok initialize instructions state no tool count', () => {
     // Owner 2026-11-21: /mcp names no other connector URL, so no /mcp/core suggestion is appended.
     expect(instr).toBe(_listedKeyName(S._withWelcome(S._INSTRUCTIONS_LEAN)));
     expect(instr).not.toMatch(/dchub\.cloud\/mcp\/(?:core|oauth)/);
-    expect(instr).not.toBe(S._INSTRUCTIONS_LEAN);
+    // Capabilities messaging (2026-11-26): the approved paragraph already names dchub_services and the listed key tool,
+    // so the welcome and the key-name rewrite leave it unchanged: /mcp serves the lean text byte for byte.
+    expect(instr).toBe(S._INSTRUCTIONS_LEAN);
   });
 
   it('grokServedCount counts only names the catalog carries (serves short, never long)', () => {

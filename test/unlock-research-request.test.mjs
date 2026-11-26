@@ -7,6 +7,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { _ctxALS, _unlockMoreDataEnvelope, _noteSessionWallForTest, _sessionWallsFor, _parkQuotaWallHit } from '../server.mjs';
 import { RELAY_ASK_MESSAGE, buildResearchRequest, createSessionWallLog } from '../lib/research-request.mjs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 
 let saved;
 beforeEach(() => {

@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { CANON_SENTENCE } from '../lib/dchub-identity.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 
 const KEY = 'dch_live_' + 'a1b2c3d4'.repeat(4);
 let S, stub, srv, PORT;
@@ -62,16 +63,18 @@ describe('initialize instructions', () => {
     expect(instructions.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
     // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became 'TOOL CHOICE' and tool leads say "Use this when".
     // Item 9 (owner 2026-11-11): the TOOL CHOICE line is folded into the canon sentence that opens the text.
-    expect(instructions.startsWith(CANON_SENTENCE + ' ')).toBe(true);
+    // Capabilities messaging (2026-11-26): the handshake is the approved capabilities paragraph.
+    expect(instructions.startsWith(CAPABILITIES_INSTRUCTIONS)).toBe(true);
     expect(instructions).not.toContain('TOOL CHOICE');
     // Owner decision 2026-11-15: the free offers in plain words replace the labelled "FREE TIER" block.
     expect(instructions).not.toContain('FREE TIER');
     // Option A (owner 2026-11-16): the free offers are the neutral connect line.
-    for (const need of ['execute_plan', 'get_api_key', 'for_your_human', 'human_url', 'source_capacity', 'More detail is available at dchub.cloud/connect.', 'dchub://instructions']) {
+    for (const need of ['execute_plan', 'get_api_key', 'for_your_human', 'human_message', 'source_capacity', 'More detail is at https://dchub.cloud/connect', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
-    expect(instructions).toContain('A gated result carries `human_url` and `human_message`. When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+    expect(instructions).toContain('If a result is partial, show your user its human_message (or for_your_human) and its link.');
+    expect(instructions).toContain('Do not invent withheld numbers.');
     expect(instructions).not.toMatch(/When results are partial, show the user human_message/);   // #919 shortened wording
     expect(instructions).not.toMatch(/First line of your answer|Then stop/);
     expect(instructions).not.toMatch(/\b(Pro|Developer|Starter)\b/);

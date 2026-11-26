@@ -151,8 +151,9 @@ describe('initialize instructions and tools/list descriptions carry none of it',
   }, 30000);
   it('the key line is the continuity line and the tool names stay', async () => {
     const { instructions } = await listTools('/mcp');
-    expect(instructions).toContain('`get_api_key`: the key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions');
-    expect(instructions).toContain('`recover_my_key` re-sends a lost one');
+    // Capabilities messaging (2026-11-26): the continuity line in the approved paragraph's wording.
+    expect(instructions).toContain('A key keeps saved shortlists, alerts and tracked changes (get_changes) across sessions.');
+    expect(instructions).toContain('recover_my_key re-sends a lost one');
     expect(instructions).not.toContain('Both are free');
   }, 30000);
 });

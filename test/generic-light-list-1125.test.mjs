@@ -199,15 +199,16 @@ describe('through the handler', () => {
       const i = await rpc('/mcp', INIT('mcp'), { 'x-dc-client-ip': ip });
       const ins = i.msg.result.instructions;
       const listed = names(await rpc('/mcp', LIST(), { 'x-dc-client-ip': ip, 'mcp-session-id': i.sid }));
-      const named = toolsLine(ins);
-      expect(named, arm).toBeTruthy();
-      expect(named[0], arm).toBe('execute_plan');
+      // Capabilities messaging (2026-11-26): the shared handshake is the approved paragraph, which has no "Tools:"
+      // line; a Tools: line, if any rewrite adds one, still names only listed tools.
+      const named = toolsLine(ins) || [];
+      expect(ins.startsWith('DC Hub is the orchestration layer for data center and energy intelligence. Find power.'), arm).toBe(true);
+      expect(listed[0], arm).toBe('execute_plan');
       for (const n of named) expect(listed, `${arm}: Tools: names ${n}`).toContain(n);
       if (arm === 'treatment') {
         expect(listed).toEqual(TEN);
         expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name/);
-        // The shared text names get_grid_data and get_market_intel, neither of which is in the ten.
-        expect(ins).not.toMatch(/Tools: [^.]*\b(get_grid_data|get_market_intel)\b/);
+        expect(ins).not.toMatch(/\b(get_grid_data|get_market_intel)\b/);
       }
     }
   }, 60_000);

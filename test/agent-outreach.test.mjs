@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { OUTREACH_LEAD, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
   noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest, citeAsUrlFor, CITE_VIA } from '../lib/agent-outreach.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 
 // Owner GO 2026-10-20 (directory-safe wording): the lead no longer says "use DC Hub first" or
 // "before answering from memory"; the no-"first" rule now covers the whole lead.
@@ -57,11 +58,12 @@ describe('instructions lead', () => {
     // Directory Policy 2.F: no pointer to an external guide for behaviour in the lead.
     expect(OUTREACH_LEAD).not.toContain('https://dchub.cloud/agents');
     expect(OUTREACH_LEAD).not.toMatch(/\/mo\b|\$\s*\d/);
-    expect(S._INSTRUCTIONS_LEAN.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    // Capabilities messaging (2026-11-26): the initialize text and the resource open with the approved paragraph, not OUTREACH_LEAD.
+    expect(S._INSTRUCTIONS_LEAN).toBe(CAPABILITIES_INSTRUCTIONS);
   });
   it('opens the served /mcp instructions', async () => {
     const S = await import('../server.mjs');
-    expect(S._INSTRUCTIONS.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD)).toBe(true);
+    expect(S._INSTRUCTIONS.startsWith(CAPABILITIES_INSTRUCTIONS + ' ')).toBe(true);
   });
 });
 

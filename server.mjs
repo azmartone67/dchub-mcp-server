@@ -149,6 +149,7 @@ import { wallConnectTagStep as _wallConnectTagStep } from './lib/wall-connect-ta
 import { planOneLinkStep as _planOneLinkStep } from './lib/plan-one-link.mjs';
 import { previewScopeStep as _previewScopeStep, isPreviewAnswer as _isPreviewAnswerSc } from './lib/preview-scope.mjs';
 import { planCompactStep as _planCompactStep, planDetailRequested as _planDetailRequested } from './lib/plan-compact.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from './lib/capabilities-instructions.mjs';
 import { neutralConnectStep as _neutralConnectStep, NEUTRAL_CONNECT_SKIP_TOOLS as _NEUTRAL_CONNECT_SKIP_TOOLS, INSTR_CONNECT_LINE } from './lib/neutral-connect.mjs';
 import { keylessPlanWordingStep as _keylessPlanWordingStep } from './lib/keyless-plan-wording.mjs';
 import { neutralCanvasTeaser as _neutralCanvasTeaser } from './lib/canvas-teaser-copy.mjs';
@@ -1776,7 +1777,29 @@ function _unlockKeyLine() {
 const _UNLOCK_WHAT_UNLOCKS = 'A paid DC Hub plan for agents: full grid intelligence (all ISOs/grids, not 1), full fiber depth and complete '
   + 'result sets (not partial previews) on every tool outside the paid-plan tools. The DC Hub plan with every tool adds the '
   + 'paid-plan tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export. ' + INSTR_CONNECT_LINE;
+// Capabilities messaging (2026-11-26): unlock_more_data names no plan, price, credit, trial or allowance. The
+// agent-visible payload is one line for the human, the page that explains how to get full results (human_url), and
+// a one-sentence what_unlocks: no plans array, plan ids, recommended-plan fields or free_alternative. A ChatGPT
+// frozen seat (_chatgptFrozenSeat) keeps the ladder below unchanged. Kill switch DCHUB_UNLOCK_NEUTRAL=0.
+export const UNLOCK_HUMAN_URL = 'https://dchub.cloud/pricing';
+export const UNLOCK_HUMAN_MESSAGE = 'Some DC Hub answers are previews. Open https://dchub.cloud/pricing to see how to get the full results. You can also start at https://dchub.cloud/connect.';
+export const UNLOCK_WHAT_UNLOCKS = 'The page at https://dchub.cloud/pricing explains how to get full results in place of previews.';
+export function _unlockNeutralOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String((env && env.DCHUB_UNLOCK_NEUTRAL) || '').trim());
+}
+export function _unlockNeutralEnvelope() {
+  return {
+    content: [{ type: 'text', text: UNLOCK_HUMAN_MESSAGE }],
+    structuredContent: {
+      human_message: UNLOCK_HUMAN_MESSAGE,
+      relay_to_human: UNLOCK_HUMAN_MESSAGE,
+      human_url: UNLOCK_HUMAN_URL,
+      what_unlocks: UNLOCK_WHAT_UNLOCKS,
+    },
+  };
+}
 export function _unlockMoreDataEnvelope(a) {
+  if (_unlockNeutralOn() && !_chatgptFrozenSeat()) return _unlockNeutralEnvelope();
   const _ctx = getCtx();
   const _sid = (_ctx && _ctx.session_id) || '';
   const credits   = _packCheckoutUrl(_sid);
@@ -34745,8 +34768,12 @@ export const _INSTRUCTIONS = (() => {
   // _INSTR_FREE_TIER no longer feeds the /mcp/builders page either (Grok 2026-11-19 item 9); it and
   // _analyzeSiteFreeSentence stay exported for their tests.
   // Item 9 (owner 2026-11-11): the canon sentence opens every non-frozen text (lib/dchub-identity.mjs).
-  return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + ' ' + INSTR_CONNECT_LINE
-    + ' ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' ' + INSTR_FEEDBACK_LINE + _composeScopeSection(_TAXONOMY);
+  // Capabilities messaging (2026-11-26): the resource opens with the same paragraph the initialize text is
+  // (lib/capabilities-instructions.mjs), so both say the same thing; the long-form reference (coverage, provenance,
+  // liveness, keys and sign-in, scope) follows it. The connect / daily / last-session / feedback lines that used to
+  // close this text are inside that paragraph.
+  return CAPABILITIES_INSTRUCTIONS + ' ' + _composeInstructions(_overlayCanonPhrases(facts), Date.now()).replace(/^\s+/, '')
+    + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
@@ -35012,51 +35039,11 @@ export const ACCESS_INSTR_LINE = _CW.ACCESS_AGENT_NOTE;
 export const _accessInstr = (text, env = process.env) => _CW.accessInstr(text, RELAY_CONTRACT, env);
 const _accessFit = (text, rewrite, env = process.env) => _CW.accessFit(text, RELAY_CONTRACT, rewrite && rewrite.instrBudget, env);
 export { _accessFit as _accessFitForTest };
-export const _INSTRUCTIONS_LEAN = (() => {
-  const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
-  // Option A (owner 2026-11-16): the Capacity Source copy is the teaser only (lib/capacity-source-summary.mjs
-  // CAPACITY_TEASER_LINE), the same sentence the full text opens its tail with
-  // (test/capacity-source-routing-instructions.test.mjs pins it, near the top).
-  const routing = CAPACITY_TEASER_LINE;
-  // OUTREACH_LEAD first, as in the full text: clients truncate long instructions (lib/agent-outreach.mjs).
-  // v14 (owner 2026-10-10): every surface's handshake stays under the 2,048 characters clients keep
-  // (test/initialize-instructions-length.test.mjs). /mcp/grok adds its count rewrite and the ENDPOINT
-  // SCOPE tail, so the shared text loses its repeats: the domain list (OUTREACH_LEAD names it), the
-  // "from memory" rule (OUTREACH_LEAD), the human_url description (RELAY_CONTRACT says what to do with it).
-  // 2026-10-17 (owner): /mcp/grok measured 2,063 after the siting clause (mcp#1001) and the citation
-  // aside (mcp#1002); "whose description says" -> "marked" and "on every result" -> "per result" bring it under.
-  // Owner GO 2026-10-20 (directory-safe): "MUST CALL (FRONT DOOR)" and "never reuse a figure from
-  // memory" are gone. execute_plan stays the RECOMMENDED entry for a multi-part question, stated as a
-  // recommendation; the freshness fact (data moves daily) replaces the order.
-  return CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD
-    // Owner 2026-11-22 ("fix the 98 tools count too"): no tool count here (was "DC Hub: N tools. ").
-    + (routing ? routing + ' ' : '')
-    // Item 9 (owner 2026-11-11): the TOOL CHOICE line ("a multi-part question fits execute_plan (recommended); one fact fits
-    // the tool whose description starts Use this when") is gone. The canon sentence that now opens this text says when to call
-    // execute_plan, and a second, different rule beside it would contradict it; the 162 characters pay for the sentence
-    // under the /mcp/grok budget (test/initialize-instructions-length). The freshness fact stays.
-    + 'Data moves daily: re-query. ' + DAILY_CHECKIN_LINE + ' ' + LAST_SESSION_LINE + ' '
-    // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
-    // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
-    // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
-    // Onboarding item 1 (owner 2026-10-20): the handshake is the first text every agent reads, and it
-    // said "(no email)", so 189 of 191 claims in 30d came without one (2 at claim, 0 later). It now asks
-    // for the email first (the tool takes it; its description says the no-email claim still works).
-    // /mcp/grok sits near its 2,000 headroom line, so the line is only 4 chars longer than before.
-    // Note F / option A (owner 2026-11-17): the key line says what the key KEEPS (continuity), in the
-    // lib/continuity-ask.mjs wording, not what it unlocks.
-    + _KEYS_INSTR_LINE + ' '
-    // Option A (owner 2026-11-16): no allowance, credit or price wording; the free-offer block and "Past that,
-    // previews." are replaced by the neutral connect line (lib/neutral-connect.mjs).
-    // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
-    + INSTR_CONNECT_LINE + ' '
-    + 'A gated result carries `human_url` and `human_message`. ' + RELAY_CONTRACT + ' '
-    // 2026-11-16 (owner "Let's do both"): the feedback line, on every handshake that lists the two tools.
-    + INSTR_FEEDBACK_LINE + ' '
-    // Energy-first lead (owner 2026-11-11, item 3) took 37 more characters; the llms.txt URL gives them back (the
-    // resource carries the full text, and llms.txt is linked from it and from every public page).
-    + 'Reference: resource `' + INSTRUCTIONS_RESOURCE_URI + '`.';
-})();
+// Capabilities messaging (2026-11-26): the initialize text is the approved capabilities paragraph, verbatim
+// (lib/capabilities-instructions.mjs). It names no price, plan, credit, trial or tool count, does not ask the agent for
+// an email, and states the purchase rule itself, so _accessFit finds it present and adds nothing. The capacity live
+// clause and the front-desk welcome find no anchor in it and leave it unchanged; the per-path tails still follow it.
+export const _INSTRUCTIONS_LEAN = CAPABILITIES_INSTRUCTIONS;
 
 // ── Tool registrations (all wrapped) ─────────────────────────────
 // descOverrides: optional { tool_name: description } map from the per-platform
@@ -40995,9 +40982,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // it via trackedTool makes the call itself a tracked upgrade-intent signal we
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
+  // Capabilities messaging (2026-11-26): no price, plan, credit, trial or tool count; the page carries the details.
   trackedTool(srv, 'unlock_more_data',
-    'Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. DCHUB_API_KEY is optional; claim_free_key mints a key that keeps ' + _KEY_KEEPS + ' across sessions. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
-    { reason: S.describe('Optional text describing what you were trying to do, so your human sees why an upgrade matters') },
+    'Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns one line to show your human and human_url, the page that explains how to get full results. Show the line and the link; do not quote prices, plan names or access limits. Param: reason (optional: what you were trying to do). Returns {human_message, human_url, what_unlocks}.',
+    { reason: S.describe('Optional text describing what you were trying to do') },
     async (a) => _unlockMoreDataEnvelope(a));
 
   // ── MCP prompts + resources (r91) ───────────────────────────────────────────

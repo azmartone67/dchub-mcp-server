@@ -155,7 +155,8 @@ describe('instructions name get_api_key', () => {
   it('initialize on /mcp: KEYS line names get_api_key', async () => {
     const r = await rpc('/mcp', 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'vitest', version: '0' } });
     const ins = r.body.result.instructions;
-    expect(ins).toContain('then `get_api_key`');
+    // Capabilities messaging (2026-11-26): the approved paragraph names get_api_key and asks for no email.
+    expect(ins).toContain('Call get_api_key only if the user asks for a key');
     expect(ins).not.toMatch(/\bclaim_free_key\b/);
   });
 });

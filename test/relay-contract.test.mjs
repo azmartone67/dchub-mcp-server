@@ -61,7 +61,11 @@ async function call(name, args, seat) {
   return S._ctxALS.run(seat, () => T.handler(parsed.data, { signal: new AbortController().signal }));
 }
 const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
-const stripContract = (t) => t.split(S.RELAY_CONTRACT).join('');
+// Capabilities messaging (2026-11-26, owner-approved paragraph): the initialize text points the human at /connect and
+// /pricing in this one sentence. It is the only pricing-page mention allowed; any other still trips BANNED.
+const CAPABILITIES_POINTER = 'More detail is at https://dchub.cloud/connect and https://dchub.cloud/pricing.';
+const CAPABILITIES_RELAY = 'If a result is partial, show your user its human_message (or for_your_human) and its link.';
+const stripContract = (t) => t.split(S.RELAY_CONTRACT).join('').split(CAPABILITIES_POINTER).join('');
 // 2026-10-11 (owner): the commanding contract is retired. RETIRED holds its fragments; none may reach an
 // agent on any surface (results, instructions, descriptions, llms.txt). Matched case-insensitively.
 // The owner's exact sentence (2026-10-11, restated by the owner after #919: the "(or for_your_human)" parenthetical stays).
@@ -164,8 +168,11 @@ describe('retired relay wording is on no surface an agent is handed (2026-10-11)
   const LLMS = fs.readFileSync(new URL('../llms.txt', import.meta.url), 'utf8');
   const MAN = JSON.parse(fs.readFileSync(new URL('../mcp-server.json', import.meta.url), 'utf8'));
   it('handshake instructions (full and lean) carry the polite line and no retired phrase', () => {
+    // Capabilities messaging (2026-11-26): the lean text says the relay rule in the approved paragraph's words; the
+    // long form keeps the contract sentence as well.
+    expect(S._INSTRUCTIONS).toContain(NEW_LINE);
     for (const [label, t] of [['full', S._INSTRUCTIONS], ['lean', S._INSTRUCTIONS_LEAN]]) {
-      expect(t, label).toContain(NEW_LINE);
+      expect(t, label).toContain(CAPABILITIES_RELAY);
       expect(retiredHits(t), label).toEqual([]);
     }
   });
@@ -175,7 +182,8 @@ describe('retired relay wording is on no surface an agent is handed (2026-10-11)
     for (const t of MAN.tools) if (retiredHits(t.description || '').length) bad.push('mcp-server.json:' + t.name);
     expect(bad).toEqual([]);
     const d = TOOLS.unlock_more_data.description;
-    expect(d).toMatch(/that link is the one to share/);
+    // Capabilities messaging (2026-11-26): the description says to show the line and the link (human_url).
+    expect(d).toMatch(/Show the line and the link/);
     expect(d).not.toMatch(/first line of your/i);
     expect(retiredHits(d + ' ' + OLD_CONTRACT).length, 'control').toBeGreaterThan(0);
   });
@@ -228,8 +236,9 @@ describe('EXPERIMENT: /plans no longer appears in what an agent is handed (2026-
     expect(all).toMatch(/dchub\.cloud\/(upgrade\/h|u)\//);
     expect(all).not.toMatch(/\/plans/);
     expect(all).not.toMatch(/Do not substitute/);
+    expect(S._INSTRUCTIONS).toContain(S.RELAY_CONTRACT);
     for (const instr of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
-      expect(instr).toContain(S.RELAY_CONTRACT);
+      expect(instr).toContain(CAPABILITIES_RELAY);
       expect(instr).not.toMatch(/\/plans/);
     }
   });
@@ -400,10 +409,10 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
 
 describe('gate sections never name a pricing page, and never make unlock_more_data THE step', () => {
   it('handshake instructions (lean) and the long form', () => {
-    expect(S._INSTRUCTIONS_LEAN).toContain(S.RELAY_CONTRACT);
-    // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became the neutral 'TOOL CHOICE' line; item 9 (2026-11-11)
-    // folded it into the canon sentence that opens the handshake.
-    expect(S._INSTRUCTIONS_LEAN.startsWith('DC Hub is the neutral orchestration layer for data center and energy intelligence: call execute_plan first')).toBe(true);
+    expect(S._INSTRUCTIONS_LEAN).toContain(CAPABILITIES_RELAY);
+    // Capabilities messaging (2026-11-26): the approved paragraph opens the handshake and names execute_plan first.
+    expect(S._INSTRUCTIONS_LEAN.startsWith('DC Hub is the orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity. Call execute_plan first')).toBe(true);
+    expect(S._INSTRUCTIONS_LEAN.split('dchub.cloud/pricing').length - 1, 'one pricing pointer, the approved sentence').toBe(1);
     expect(S._INSTRUCTIONS_LEAN).not.toContain('MUST CALL');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('unlock_more_data');
     for (const t of [S._INSTRUCTIONS_LEAN, S._INSTRUCTIONS]) {

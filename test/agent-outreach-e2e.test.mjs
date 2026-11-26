@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -77,7 +78,8 @@ describe('agent outreach over the real /mcp handler', () => {
     const h0 = { 'x-forwarded-for': '203.0.113.77', 'user-agent': 'Mozilla/5.0 Safari/605' };
     const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'cursor', version: '1.0' } } });
-    expect(JSON.parse(init.body).result.instructions).toMatch(/^DC Hub is the neutral orchestration layer for data center and energy intelligence: /);   // item 9, owner 2026-11-11
+    // Capabilities messaging (2026-11-26): the handshake is the approved capabilities paragraph.
+    expect(JSON.parse(init.body).result.instructions.startsWith(CAPABILITIES_INSTRUCTIONS)).toBe(true);
     const sid = init.headers.get('mcp-session-id');
     const h = { ...h0, 'mcp-session-id': sid };
     await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });

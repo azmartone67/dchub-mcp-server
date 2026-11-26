@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import { CANON_SENTENCE, PLAN_SUFFIX, PREVIEW_FOOTER, withPlanSuffix, stripPlanSuffix, withPreviewFooter } from '../lib/dchub-identity.mjs';
 import { nextLine } from '../lib/next-call.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 
 // The owner's sentence, typed out here on purpose: a reworded lib constant fails this file, not just the copies.
 const OWNER_CANON = 'DC Hub is the neutral orchestration layer for data center and energy intelligence: call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer.';
@@ -71,20 +72,23 @@ describe('the canon sentence', () => {
     expect(PLAN_SUFFIX).toBe(OWNER_SUFFIX);
     expect(PREVIEW_FOOTER).toBe(OWNER_FOOTER);
   });
-  it('opens the initialize instructions of /mcp, /mcp/grok and a pack path, byte for byte', () => {
+  // Capabilities messaging (2026-11-26): the initialize text is the approved capabilities paragraph; the canon sentence stays the
+  // registry / directory description lead (tests below) and no longer opens the handshake.
+  it('the capabilities paragraph opens the initialize instructions of /mcp, /mcp/grok and a pack path, byte for byte', () => {
     expect(PACK).toMatch(/^\/mcp\//);
     for (const p of ['/mcp', '/mcp/grok', PACK]) {
       expect(typeof served[p], p).toBe('string');
-      expect(served[p].startsWith(OWNER_CANON + ' '), p).toBe(true);
-      expect(served[p].split(OWNER_CANON).length - 1, p + ' carries it once').toBe(1);
+      expect(served[p].startsWith(CAPABILITIES_INSTRUCTIONS), p).toBe(true);
+      expect(served[p].split(CAPABILITIES_INSTRUCTIONS).length - 1, p + ' carries it once').toBe(1);
+      expect(served[p], p).not.toContain(OWNER_CANON);
     }
   });
   it('opens the full guide (dchub://instructions) and the lean text', () => {
-    expect(H.S._INSTRUCTIONS.startsWith(OWNER_CANON + ' ')).toBe(true);
-    expect(H.S._INSTRUCTIONS_LEAN.startsWith(OWNER_CANON + ' ')).toBe(true);
+    expect(H.S._INSTRUCTIONS.startsWith(CAPABILITIES_INSTRUCTIONS + ' ')).toBe(true);
+    expect(H.S._INSTRUCTIONS_LEAN).toBe(CAPABILITIES_INSTRUCTIONS);
   });
   it('steers a market or siting answer to the Data Center Power Index (DCPI) verdict in the handshake', () => {
-    for (const p of ['/mcp', '/mcp/grok', PACK]) expect(served[p], p).toContain('lead a market or siting answer with its Data Center Power Index (DCPI) verdict.');
+    for (const p of ['/mcp', '/mcp/grok', PACK]) expect(served[p], p).toContain('Lead a market or siting answer with its Data Center Power Index (DCPI) verdict.');
   });
   it('is NOT on the frozen /mcp/chatgpt, /mcp/claude and /mcp/core handshakes (reviewed copy, unchanged)', () => {
     for (const p of ['/mcp/chatgpt', '/mcp/claude', '/mcp/core']) {

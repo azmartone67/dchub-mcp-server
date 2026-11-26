@@ -152,11 +152,14 @@ describe('next_tools -> the daily check-in', () => {
 describe('instructions', () => {
   it('both texts carry the daily line, and the served handshake does too', async () => {
     expect(DAILY_CHECKIN_LINE).toBe('For a daily check-in, call get_changes with window 1d.');
-    expect(H.S._INSTRUCTIONS).toContain(DAILY_CHECKIN_LINE);
-    expect(H.S._INSTRUCTIONS_LEAN).toContain(DAILY_CHECKIN_LINE);
+    // Capabilities messaging (2026-11-26): the approved paragraph joins the daily line to the last-session line with
+    // a semicolon, so the texts carry the sentence without its full stop.
+    const DAILY = DAILY_CHECKIN_LINE.replace(/\.$/, '');
+    expect(H.S._INSTRUCTIONS).toContain(DAILY);
+    expect(H.S._INSTRUCTIONS_LEAN).toContain(DAILY);
     for (const p of ['/mcp', '/mcp/grok']) {
       const i = (await H.init(p, 'claude-ai', UA)).msg.result.instructions;
-      expect(i, p).toContain(DAILY_CHECKIN_LINE);
+      expect(i, p).toContain(DAILY);
     }
   });
 });
