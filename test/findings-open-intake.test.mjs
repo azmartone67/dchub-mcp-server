@@ -64,6 +64,7 @@ beforeAll(async () => {
         if (u.pathname === '/api/v1/site-selection/canvas') {
           const base = { ok: true, matched: 3, shortlist: [{ market: 'Dallas', verdict: 'BUILD' }] };
           if (canvasMode === 'gap') base.constraint_coverage = { max_months: { applied: false, status: 'not_tracked', reason: 'no time-to-power estimate for markets in this region' } };
+          if (canvasMode === 'capmw') base.constraint_coverage = { capacity_mw: { applied: false, status: 'unavailable', reason: 'The shortlist is NOT sized to this target.' } };
           if (canvasMode === 'locked') base.constraint_coverage = { max_months: { applied: false, status: 'locked', reason: 'needs a full-access key' } };
           if (canvasMode === 'access') base.constraint_coverage = { max_months: { applied: false, status: 'not_applied', reason: 'a full-access key reads this filter' } };
           res.end(JSON.stringify(base)); return;
@@ -341,7 +342,7 @@ describe('next_tools -> report_finding: gap answers only', () => {
     expect(b.next_tools[0].args.summary.length).toBeLessThanOrEqual(280);
   });
   it('site_selection_canvas: a clean answer, a locked filter or an access reason -> none', async () => {
-    for (const mode of ['clean', 'locked', 'access']) {
+    for (const mode of ['clean', 'locked', 'access', 'capmw']) {
       canvasMode = mode;
       const r = (await call(await open('/mcp'), 'site_selection_canvas', { capacity_mw: 100, region: 'TX', max_months: 24 })).msg.result;
       expect(body(r).next_tools, mode).toBeUndefined();

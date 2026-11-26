@@ -738,6 +738,14 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     const blob = JSON.stringify(after.result);
     expect(blob).not.toContain(LINKED_TOKEN);
     expect(blob).not.toContain('e'.repeat(64));
+    // 2026-11-25: a linked caller is not told it was served anonymously or to claim a key (identity.means, quota)
+    const sc = after.result.structuredContent || JSON.parse(after.result.content[0].text);
+    expect(sc.identity.linked_access).toBe(true);
+    expect(sc.identity.means).toMatch(/linked DC Hub access \(agent handoff\)/);
+    expect(blob).not.toMatch(/ANONYMOUSLY|NOT YET APPLICABLE at an anonymous seat/);
+    expect(blob).not.toMatch(/(call|Call) `?(get_api_key|claim_free_key)/);
+    // the lift without a token is not linked access: it keeps the anonymous wording
+    expect(JSON.stringify(liftOnly.result)).not.toMatch(/"linked_access":true/);
     // flag off on this server: no lookup, no header, even with a token on offer
     delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
     linkedToken = LINKED_TOKEN;
