@@ -361,7 +361,8 @@ import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligibl
 import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
-import * as _GLL from './lib/generic-light-list.mjs';   // item 8: light list for unnamed /mcp clients, 50/50 (default OFF)
+import * as _GLL from './lib/generic-light-list.mjs';
+import { mintSessionId as _mintSessionId, clientNameFromSid as _clientNameFromSid } from './lib/session-client-tag.mjs';   // client name carried in the sid (any replica)   // item 8: light list for unnamed /mcp clients, 50/50 (default OFF)
 import * as _qpm from './lib/queue-project-mode.mjs';   // DCHUB_QUEUE_PROJECT_MODE (default OFF): get_interconnection_queue mode=project
 import * as _MX from './lib/monetization-experiments.mjs';   // Nov 22 monetization tests, shared 80/20 (default OFF)
 import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): followable next_call, DCHUB_NEXT_ASK_V2 (default OFF)
@@ -41449,9 +41450,11 @@ export function _recallClientName(sid) {
     if ((process.env.DCHUB_PLATFORM_RECALL || '') === '0') return null;
     if (!sid) return null;
     const hit = _PLATFORM_RECALL.get(String(sid));
-    if (!hit) return null;
-    if (Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) { _PLATFORM_RECALL.delete(String(sid)); return null; }
-    return hit.clientName || null;
+    // 2026-11-25: a session initialized on another replica (or before a redeploy) is not in this map; its id may still
+    // carry the client's name (lib/session-client-tag.mjs). Fills an absent name only.
+    if (!hit) return _clientNameFromSid(sid);
+    if (Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) { _PLATFORM_RECALL.delete(String(sid)); return _clientNameFromSid(sid); }
+    return hit.clientName || _clientNameFromSid(sid);
   } catch (_e) { return null; }
 }
 
@@ -41460,8 +41463,14 @@ export function _recallPlatform(sid) {
     if ((process.env.DCHUB_PLATFORM_RECALL || '') === '0') return null;
     if (!sid) return null;
     const hit = _PLATFORM_RECALL.get(String(sid));
-    if (!hit) return null;
-    if (Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) { _PLATFORM_RECALL.delete(String(sid)); return null; }
+    if (!hit || Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) {
+      if (hit) _PLATFORM_RECALL.delete(String(sid));
+      // 2026-11-25: the platform of a client named in the id (lib/session-client-tag.mjs), as the initialize would give it.
+      const n = _clientNameFromSid(sid);
+      if (!n) return null;
+      const p = detectPlatformFromInit({ params: { clientInfo: { name: n } } }, '', '', '');
+      return (p && p !== 'mcp') ? p : null;
+    }
     return hit.platform || null;
   } catch (_e) { return null; }
 }
@@ -43341,7 +43350,9 @@ app.post(MCP_PATHS, async (req, res) => {
       // collision; this is now the one and only OAuth challenge path.
 
       const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
+        // 2026-11-25: a known client's name rides in the id (lib/session-client-tag.mjs), so a request on another
+        // replica still gets that client's tool list. Unknown names get a plain randomUUID().
+        sessionIdGenerator: () => _mintSessionId((body?.params?.clientInfo?.name || '').toString()),
         onsessioninitialized: (sid) => {
           sessions.set(sid, transport);
           // ★ Remember the platform against the SERVER-minted session id.
