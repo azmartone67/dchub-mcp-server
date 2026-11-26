@@ -15,8 +15,8 @@ const ALL = JSON.parse(fs.readFileSync(path.join(ROOT, 'toolspec.json'), 'utf8')
 const CLASSES = ['pro', 'email', 'developer_for_full', 'free_key', 'anonymous'];
 
 describe('tier_required on the access tag', () => {
-  it('covers the whole registered population (98 tools)', () => {
-    expect(ALL.length).toBe(98);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
+  it('covers the whole registered population (99 tools)', () => {
+    expect(ALL.length).toBe(99);   // 99 on 2026-11-26: get_site_context (mcp#1757, live since its flag went ON 11-26 00:20Z); 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
     for (const n of ALL) {
       const tag = _accessTagFor(n);
       expect(CLASSES, n).toContain(tag.tier_required);

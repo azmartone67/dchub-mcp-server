@@ -26,7 +26,7 @@
 // never overwrite a good snapshot with a degraded one).
 // =============================================================================
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { ARG_ALIASES } from '../server.mjs';
 
 const spec = JSON.parse(readFileSync(new URL('../toolspec.json', import.meta.url), 'utf8'));
@@ -34,9 +34,28 @@ const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
 // Same derivation sync-tools-manifest.mjs uses: server.mjs is the only place
 // tools are defined.
+// A tool can be registered under a named constant (trackedTool(srv, SITE_CONTEXT_TOOL, ...)), not a literal.
+// Resolve each constant against its `const NAME = 'tool_name'` in server.mjs or lib/, so a tool registered that
+// way is recognised as registered instead of reading as "extra" in toolspec.json (mcp#1757, 2026-11-26). An
+// identifier that resolves to nothing fails below, so a new constant can never be silently dropped.
+const libSrc = readdirSync(new URL('../lib/', import.meta.url))
+  .filter((f) => f.endsWith('.mjs'))
+  .map((f) => readFileSync(new URL(`../lib/${f}`, import.meta.url), 'utf8'))
+  .join('\n');
+const constValue = (id) => {
+  const m = new RegExp(`\\bconst\\s+${id}\\s*=\\s*'([a-z_]+)'`).exec(src + '\n' + libSrc);
+  return m ? m[1] : null;
+};
+const viaConst = [...src.matchAll(/trackedTool\(\s*srv\s*,\s*([A-Z][A-Z0-9_]*)\s*,/g)].map((m) => m[1]);
+const unresolved = viaConst.filter((id) => !constValue(id));
 const registered = new Set(
   [...src.matchAll(/trackedTool\(\s*srv\s*,\s*'([a-z_]+)'/g)].map((m) => m[1]),
 );
+// The constant-registered tools are the flag-gated ones today (get_site_context behind DCHUB_MCP_GET_SITE_CONTEXT,
+// get_agent_demand behind its own flag), and toolspec.json is a snapshot of the LIVE tools/list. So each may be in
+// toolspec.json or not, whichever its flag says on live; it is never "missing" and never "extra". A toolspec name
+// with no registration at all is still extra, and a literal registration absent from toolspec is still missing.
+const registeredMaybe = new Set(viaConst.map(constValue).filter(Boolean));
 const props = (t) => Object.keys((t.inputSchema || {}).properties || {});
 const byName = Object.fromEntries(spec.map((t) => [t.name, t]));
 
@@ -58,10 +77,15 @@ describe('toolspec.json is a real schema snapshot', () => {
     ).toBeGreaterThan(spec.length / 2);
   });
 
+  it('resolves every tool registered under a named constant', () => {
+    expect(viaConst.length).toBeGreaterThan(0);
+    expect(unresolved, 'trackedTool(srv, CONST, ...) with no const CONST = \'tool\' in server.mjs or lib/').toEqual([]);
+  });
+
   it('lists exactly the tools server.mjs registers', () => {
     const inSpec = new Set(spec.map((t) => t.name));
-    const missing = [...registered].filter((n) => !inSpec.has(n)).sort();
-    const extra = [...inSpec].filter((n) => !registered.has(n)).sort();
+    const missing = [...registered].filter((n) => !inSpec.has(n) && !registeredMaybe.has(n)).sort();
+    const extra = [...inSpec].filter((n) => !registered.has(n) && !registeredMaybe.has(n)).sort();
     expect(
       { missing, extra },
       'toolspec.json has drifted from server.mjs. Run: node scripts/refresh-toolspec.mjs',

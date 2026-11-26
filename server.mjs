@@ -24503,6 +24503,9 @@ export const _EXEC_GEO_ARGS = {
   get_climate_intel:            { point: true, radius: true },
   get_composite_site_score:     { point: true, state: 'state' },
   get_disaster_risk:            { point: true },
+  // 2026-11-26: get_site_context (mcp#1757) takes the same lat/lon as analyze_site; a neighborhood step
+  // waiting on a point gets the plan's point the same way.
+  get_site_context:             { point: true },
   get_fiber_readiness:          { point: true, radius: true },
   get_hosting_capacity:         { point: true, radius: true },
   get_infrastructure:           { point: true, radius: true },
