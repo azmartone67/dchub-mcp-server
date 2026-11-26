@@ -320,6 +320,8 @@ import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/co
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
 import { limitHitOf as _planLimitHitOf, limitBlocker as _planLimitBlocker, limitSkip as _planLimitSkip } from './lib/plan-limit-hit.mjs';   // 2026-11-25: a step stopped by a caller limit
+// 2026-11-25 (owner): the canvas never sizes its shortlist to MW, so capacity_mw not applied is a known limit, not a gap.
+const _CANVAS_KNOWN_LIMITS = ['capacity_mw'];
 import { resultGaps as _findingResultGaps, planGaps as _findingPlanGaps, findingNextTool as _findingNextTool, attachFindingNext as _attachFindingNext } from './lib/finding-nudge.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { offersShown as _offersShown, offersShownOn as _offersShownOn, finalAskMark as _finalAskMark, askedForEmailInProse as _askedForEmailInProse } from './lib/offers-shown.mjs';
@@ -18998,6 +19000,7 @@ async function _maybeEmbedValueClaim(result, name, c) {
     if (!INCONTEXT_CLAIM || !CLAIM_VALUE_TOOLS.has(name)) return result;
     if (!c || !c.session_id || isBotOrInternalCtx(c)) return result;
     if (c.tier === 'paid' || c.tier === 'enterprise') return result;
+    if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') return result;   // linked access: no key to claim
     trackPaidHit(c.session_id, name).catch(() => {});   // count the value-moment hit
     const claim = await shouldMintClaim(c.session_id, name);
     if (!claim || !claim.claim_url) return result;       // below threshold / bot / error → unchanged
@@ -19219,6 +19222,14 @@ function _buildQuotaHint(toolName) {
       tier: _canonicalTier(c, _durable),
       resets_at: 'next 00:00 UTC',
     };
+    if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+      // A handoff-linked caller is served at its linked tier with no key on this connection: the anonymous-seat
+      // "claim a key to open the budget" line does not apply to it, and no per-tool meter is charged here.
+      q.full_answers_cap_today = null;
+      q.full_answers_remaining_today = null;
+      q.full_answers_basis = 'linked DC Hub access (agent handoff): no per-tool full-answer meter is charged on this connection';
+      return q;
+    }
     if (_emailFullDecisionTool(toolName) && _emailFullSeat(c)) {
       // Item 3: the email-bound grid/queue allowance IS charged (per key, applyTierGate email_full),
       // so its meter is real. Same buckets the dispatch reads.
@@ -32716,7 +32727,13 @@ export function _identitySource(ctxLike) {
   // Absent unless a known gateway self-identified — see _connectionShape.
   const conn = _connectionShape(c.platform);
   if (conn) out.connection = conn;
-  if (src === 'none') {
+  if (src === 'none' && _CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+    // No credential arrived, but the identity is linked to a DC Hub plan through an agent handoff: the call was served
+    // at that linked tier, so "served ANONYMOUSLY ... claim a key" would be wrong advice.
+    out.linked_access = true;
+    out.means = 'No key was sent on this connection; this call was served with linked DC Hub access (agent handoff) '
+      + 'at the tier shown.';
+  } else if (src === 'none') {
     // Actionable: a caller that believes it is authenticated is not.
     out.means = 'This call was served ANONYMOUSLY — no credential reached DC Hub. '
       + 'If you believed you were authenticated, the credential did not arrive: a '
@@ -39657,7 +39674,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const data = _neutralCanvasTeaser(_canvasData, { skip: !!(getCtx() || {}).profile });
       // 2026-11-16 (findings item 4): a gap answer points at report_finding; a clean one carries nothing.
       try {
-        if (_findingNudgeAllowed()) _attachFindingNext(data, _findingNextTool('site_selection_canvas', _findingResultGaps(data, a)));
+        if (_findingNudgeAllowed()) _attachFindingNext(data, _findingNextTool('site_selection_canvas', _findingResultGaps(data, a, _CANVAS_KNOWN_LIMITS)));
       } catch (_e) { /* never blocks the answer */ }
       return { content: [{ type: 'text', text: JSON.stringify(data) }] };
     });
