@@ -18,6 +18,11 @@ describe('quota stamp', () => {
     const a = S._ctxALS.run(anon(), () => S._buildQuotaHint('get_grid_intelligence'));
     expect(JSON.stringify(a)).not.toMatch(/linked DC Hub access/);
   });
+  it('a link without a token: no claim-a-key line either, and the basis says fields may be a preview', () => {
+    const q = S._ctxALS.run({ ...linked(), linked_token: '' }, () => S._buildQuotaHint('get_grid_intelligence'));
+    expect(q.full_answers_unavailable_reason).toBeUndefined();
+    expect(q.full_answers_basis).toMatch(/linked to a DC Hub plan \(agent handoff\).*may still come back as a preview/);
+  });
   it('kill switch DCHUB_PLAN_HANDOFF_LINK=0: the linked branch is off', () => {
     process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
     const q = S._ctxALS.run(linked(), () => S._buildQuotaHint('get_grid_intelligence'));

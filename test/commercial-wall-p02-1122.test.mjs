@@ -822,6 +822,13 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
       expect(JSON.stringify(u.next_tools || [])).not.toMatch(/coverage_gap/);
       expect(u.totals && u.totals.tier_note, ust).not.toMatch(/linked DC Hub access/);
     }
+    // a link without a token (the backend's linked-token flag off) gets no get_api_key nudge either (2026-11-26)
+    // (under the per-IP wall: the wall's linked exemption needs the token, so a walled tokenless plan never runs)
+    linkedToken = ''; anonCount = 0;
+    S._setHandoffResolveLookupForTest(null);
+    const t = await plan();
+    expect(t.error).toBeUndefined();
+    expect((t.next_tools || []).some((e) => e && (e.tool === 'get_api_key' || e.tool === 'claim_free_key')), JSON.stringify(t.next_tools)).toBe(false);
     linked = null; linkedToken = '';
     delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
     anonCount = 999;
