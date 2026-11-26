@@ -14,14 +14,19 @@ describe('plan handoff-link token', () => {
     expect(consumePlanHandoffLinkToken(t)).toEqual({ tier: 'pro', linked_token: TOK });
     expect(consumePlanHandoffLinkToken(t)).toBeNull();   // single use
   });
-  it('is refused when expired, unknown or empty, and never minted without a tier and token', () => {
+  it('is refused when expired, unknown or empty, and never minted without a tier', () => {
     const now = 1_000_000;
     const t = mintPlanHandoffLinkToken('developer', TOK, now);
     expect(consumePlanHandoffLinkToken(t, now + 120_001)).toBeNull();
     expect(consumePlanHandoffLinkToken('x'.repeat(72))).toBeNull();
     expect(consumePlanHandoffLinkToken('')).toBeNull();
     expect(mintPlanHandoffLinkToken('', TOK)).toBeNull();
-    expect(mintPlanHandoffLinkToken('pro', '')).toBeNull();
+    expect(mintPlanHandoffLinkToken('pro', 'x'.repeat(513))).toBeNull();
+  });
+  it('carries the tier alone for a link without the backend token (2026-11-26)', () => {
+    const t = mintPlanHandoffLinkToken('pro', '');
+    expect(typeof t).toBe('string');
+    expect(consumePlanHandoffLinkToken(t)).toEqual({ tier: 'pro', linked_token: '' });
   });
 });
 
