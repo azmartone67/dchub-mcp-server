@@ -27963,12 +27963,6 @@ export function _planQuery(intent, context) {
       }
     }
   } catch (_e) { /* routing must never throw */ }
-  // Grok head-to-head 2026-11-25 (L2, lib/plan-permit-check.mjs): a plan that names a restriction, moratorium, zoning or
-  // a permit, or that runs find_sites, reads the state's permitting records once, in the same wave.
-  try {
-    const pc = _permitCheckStep(text, seq, top && top.cls ? top.cls.id : null, _planLeadState(d));
-    if (pc) seq.push({ ...pc, step: seq.length + 1 });
-  } catch (_e) { /* routing must never throw */ }
   // 5.62 (Grok answer-quality note 2026-11-23, P7; lib/facility-join.mjs): a question that asks for facilities gets a
   // facility read, held to the place it named, in the same wave (no dependency). A site plan that names a place gets
   // one as context when it fits the default step budget. When the plan is already at the budget, the facility read
@@ -27997,6 +27991,13 @@ export function _planQuery(intent, context) {
         }
       }
     }
+  } catch (_e) { /* routing must never throw */ }
+  // Grok head-to-head 2026-11-25 (L2, lib/plan-permit-check.mjs): a plan that names a restriction, moratorium, zoning or
+  // a permit, or that runs find_sites, reads the state's permitting records once, in the same wave.
+  // After the facility read, so it never takes a step budget slot a facility read had before.
+  try {
+    const pc = _permitCheckStep(text, seq, top && top.cls ? top.cls.id : null, _planLeadState(d));
+    if (pc) seq.push({ ...pc, step: seq.length + 1 });
   } catch (_e) { /* routing must never throw */ }
   // 5.42 (Grok LAND L1): a site screen that names the parcel or transmission reads them (lib/site-screen-facts.mjs).
   try {
