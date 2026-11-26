@@ -107,7 +107,8 @@ describe('the answer for (a), keyless', () => {
     expect(ia.headline).toContain('Headroom figures withheld at this access level.');
     for (const e of ia.evidence.slice(0, 3)) expect(e).toMatch(/Queue: .*GW.*Headroom: /);
     expect(ia.evidence[3]).toMatch(/^DC Hub Capacity Source has no live listing/);
-    expect(ia.evidence[0]).toContain('live demand was 52,574 MW (EIA-930 hourly, as of 2026-11-18), a load reading, not headroom');
+    // The reading is 2026-11-18T03:00Z, 20:00 on 2026-11-17 in Phoenix: said as its America/Phoenix day (GDL 2026-11-25 item 5).
+    expect(ia.evidence[0]).toContain('live demand was 52,574 MW (EIA-930 hourly, as of 2026-11-17), a load reading, not headroom');
   });
   it('says the 24-month cut was not applied and the shortlist is not sized in MW', () => {
     expect(ia.not_established.join(' ')).toMatch(/"under 24 months" was not applied/);
