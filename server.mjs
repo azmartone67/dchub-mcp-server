@@ -32733,6 +32733,13 @@ export function _identitySource(ctxLike) {
     out.linked_access = true;
     out.means = 'No key was sent on this connection; this call was served with linked DC Hub access (agent handoff) '
       + 'at the tier shown.';
+  } else if (src === 'none' && c.handoff_linked === true && !c.api_key && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+    // A link with no token (the backend handed none back): this server reads the call at the linked tier, but the data
+    // service answers it keyless, so some fields can still be withheld. Not anonymous, and a key is not the fix.
+    out.linked_tier_only = true;
+    out.means = 'No key was sent on this connection. This identity is linked to a DC Hub plan (agent handoff), so this '
+      + 'server read the call at the tier shown, but the link did not reach DC Hub\u2019s data service on this call, so '
+      + 'some fields may still come back as a preview.';
   } else if (src === 'none') {
     // Actionable: a caller that believes it is authenticated is not.
     out.means = 'This call was served ANONYMOUSLY — no credential reached DC Hub. '
