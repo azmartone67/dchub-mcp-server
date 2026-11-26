@@ -1,0 +1,67 @@
+# Update armed auto-merge PRs that main has moved past (2026-11-26).
+#
+# The same lane dchub-backend and dchub-frontend run; scripts/update_behind_prs.py
+# is a byte-for-byte copy of theirs (keep it that way: fix it in all three).
+#
+# What it buys here: main is NOT strict in this repo, so a green PR never waits
+# BEHIND. The lane that matters is RED BUT STALE: a PR failing a required check
+# that main has since fixed stays red until someone clicks "Update branch", since
+# GitHub re-runs nothing. The script updates up to 2 such PRs per run, and the
+# same PR again only after 240 min, so a PR whose own change is the failure
+# gets one fresh run per window. The behind-and-green lane is a near no-op
+# here: an armed green PR merges before it is ever behind long enough to matter.
+#
+# ★ IT NEEDS A PAT, AND THIS REPO HAS NONE (re-checked 2026-11-26). The update
+# must be pushed with a PAT: GitHub starts no workflow runs for a push made with
+# GITHUB_TOKEN, so an updated PR would wait at "Expected" for `check`,
+# `dchub-checks` and `smoke` forever. That is worse than not updating it.
+# PR_SUBMIT_TOKEN / GH_PAT / BACKEND_PAT do not exist in this repo's secrets,
+# which is also why auto-enable-automerge.yml logs "no PAT available, auto-merge
+# not armed" on every PR here. Until one is added, the step below says so and
+# exits 0, and nothing is updated. Adding PR_SUBMIT_TOKEN turns on both lanes.
+name: update-behind-automerge-prs
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '4-59/15 * * * *'   # :04/:19/:34/:49, off every other cron here
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  # Checks are read with this run's GITHUB_TOKEN (GH_READ_TOKEN): a PAT cannot
+  # read statusCheckRollup (dchub-backend, 2026-10-24).
+  pull-requests: read
+  checks: read
+  statuses: read
+  actions: read
+
+concurrency:
+  group: update-behind-automerge-prs
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # The PAT is passed to the script; a persisted GITHUB_TOKEN header
+          # would win over it and make every update start no checks.
+          persist-credentials: false
+      - name: Update armed auto-merge PRs that main has moved past
+        env:
+          GH_TOKEN: ${{ secrets.PR_SUBMIT_TOKEN || secrets.GH_PAT || secrets.BACKEND_PAT }}
+          GH_READ_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::no PAT secret (PR_SUBMIT_TOKEN / GH_PAT / BACKEND_PAT) in this repo: nothing updated. A GITHUB_TOKEN push would start no checks, so this lane waits for a PAT."
+            # Show what it WOULD update. A dry run only reads, so the read-only
+            # run token is enough (gh refuses an empty GH_TOKEN outright).
+            GH_TOKEN="$GH_READ_TOKEN" python3 scripts/update_behind_prs.py --dry-run || true
+            exit 0
+          fi
+          python3 scripts/update_behind_prs.py
