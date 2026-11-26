@@ -13083,10 +13083,15 @@ export function _descFollowsSwitches(name, description) {
   // states it with the keyless wall's own sentence (lib/tier-canon.mjs), at the cap as it runs; ''
   // when the lane is off or the cap is 0, so it never promises runs the gate does not serve.
   const daily = _analyzeSiteDescDailySentence();
-  const served = daily ? access + ' ' + daily : access;
+  // QA 2026-11-26 (P2): the keyless wall tells a caller the lane does not seat (lib/keyless-wall.mjs
+  // KEYLESS_SITE_NOT_SEATED) that those daily runs do not cover its network or client; the description now
+  // says the same, in one clause after the daily sentence (kept whole: the wall's quota_basis quotes it).
+  const served = daily ? access + ' ' + daily + ' ' + ANALYZE_SITE_DAILY_EXCEPTION : access;
   const d = description.split(ANALYZE_SITE_ACCESS_B2).join(served);
   return _gatedPreviewOnImpl() ? d.split(served).join(served + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
 }
+export const ANALYZE_SITE_DAILY_EXCEPTION = 'Those daily runs do not cover every network or client '
+  + '(automated, test or shared-infrastructure traffic gets the preview).';
 export function _analyzeSiteDescDailySentence(env = process.env) {
   try { return _wfnSiteFullOn(env) ? _analyzeSiteKeylessDailySentence(_keylessSiteFullCap(env)) : ''; } catch (_) { return ''; }
 }
