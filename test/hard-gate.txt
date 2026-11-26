@@ -444,6 +444,7 @@ test/license-per-layer-envelope.test.mjs
 test/light-list-instructions-v2.test.mjs
 test/light-on-source-paths-1122.test.mjs
 test/light-profile.test.mjs
+test/light-sid-tag-1125.test.mjs
 test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/list-transactions-no-deal-floor.test.mjs
