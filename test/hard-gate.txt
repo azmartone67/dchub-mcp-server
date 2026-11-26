@@ -853,6 +853,7 @@ test/ttp-block-anon-trim.test.mjs
 test/typed-iso-is-scope.test.mjs
 test/typed-preview-rank-markets.test.mjs
 test/uncovered-constraints.test.mjs
+test/unlock-keyless-one-link-1126.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/unlock-line-ratchet.test.mjs
 test/unlock-more-data-no-price.test.mjs
