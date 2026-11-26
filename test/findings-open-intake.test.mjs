@@ -409,6 +409,16 @@ describe('finding-nudge (pure)', () => {
     executed[0].status = 'executed';
     expect(planGaps(executed, null, [], null)).toEqual(['step 2 get_market_dcpi_rank skipped (no market_slug resolved)']);
   });
+  it('the canvas capacity_mw not_applied is a known limit, not a gap; the same drop on another tool still is (2026-11-25)', () => {
+    const executed = [{ step: 1, tool: 'site_selection_canvas', status: 'executed', result: { ok: true } }];
+    const canvas = { step: 1, tool: 'site_selection_canvas', param: 'capacity_mw', kind: 'not_applied', reason: 'The shortlist is NOT sized to this target.' };
+    expect(planGaps(executed, null, [canvas], null)).toEqual([]);
+    expect(findingNextTool('execute_plan', planGaps(executed, null, [canvas], null))).toBeNull();
+    const other = { ...canvas, tool: 'find_sites' };
+    expect(planGaps(executed, null, [other], null)).toEqual(['step 1 find_sites: capacity_mw not applied (The shortlist is NOT sized to this target.)']);
+    const otherParam = { ...canvas, param: 'region' };
+    expect(planGaps(executed, null, [otherParam], null)).toEqual(['step 1 site_selection_canvas: region not applied (The shortlist is NOT sized to this target.)']);
+  });
   it('a clean plan has no gaps and no entry', () => {
     const executed = [{ step: 1, tool: 'rank_markets', status: 'executed', result: { ok: true } },
       { step: 2, tool: 'plan_query', status: 'skipped_meta' }, { step: 3, tool: 'x', status: 'gated_preview', result: {} }];

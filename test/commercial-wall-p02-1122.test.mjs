@@ -70,7 +70,9 @@ const routes = () => async (p, req, body, u) => {
   // 2026-11-25: the capacity_grid plan's first step; each row names its grid, which the queue and grid steps take.
   if (p === '/api/v1/site-selection/canvas') {
     dataHits.push({ path: p, apiKey: req.headers['x-api-key'] || '', linked: req.headers['x-dchub-linked-key'] || '', callerTier: req.headers['x-dchub-caller-tier'] || '' });
-    return { ok: true, matched: 2, applied_filters: { region: 'us' }, shortlist: [
+    return { ok: true, matched: 2, applied_filters: { region: 'us' },
+      constraint_coverage: { capacity_mw: { applied: false, status: 'not_supported', reason: 'The shortlist is NOT sized to this target. Market rows carry excess_power_score (a 0-100 index), not megawatts.' } },
+      shortlist: [
       { market: 'Midland–Odessa', slug: 'midland-tx', state: 'TX', iso: 'ERCOT', verdict: 'BUILD' },
       { market: 'Upper Peninsula MI', slug: 'upper-michigan', state: 'MI', iso: 'MISO', verdict: 'BUILD' }] };
   }
@@ -781,6 +783,9 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     expect(canvasHit && canvasHit.linked).toBe(LINKED_TOKEN);
     expect(canvasHit.apiKey).toBe('');
     expect(JSON.stringify(o)).not.toContain(LINKED_TOKEN);
+    // the canvas is not sized to MW by design: its capacity_mw not_applied is not a coverage gap (2026-11-25)
+    expect((o.dropped_filters || []).some((d) => d.param === 'capacity_mw' && d.tool === 'site_selection_canvas'), JSON.stringify(o.dropped_filters)).toBe(true);
+    expect(JSON.stringify(o.next_tools || [])).not.toMatch(/coverage_gap/);
     // the note says the depth the linked steps ran at, not "steps returned preview depth"
     expect(o.totals && o.totals.tier_note, st).toMatch(/^no key \u2014 linked DC Hub access \(agent handoff\): steps ran at full depth/);
     expect(o.totals.tier_note).not.toMatch(/steps returned preview depth/);
