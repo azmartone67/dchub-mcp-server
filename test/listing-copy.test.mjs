@@ -204,32 +204,14 @@ describe('copy rules', () => {
   });
 });
 
-describe('tool_count is the served count', () => {
-  const served = servedToolNames(SERVER_SRC);
-
-  it('the served set was actually found', () => {
-    expect(served.length).toBeGreaterThan(50);
+describe('listing copy carries no tool count (2026-11-26)', () => {
+  it('has no tool_count field, so a published count cannot go stale', () => {
+    expect(Object.keys(COPY)).not.toContain('tool_count');
   });
 
-  it('equals the /mcp tools/list registrations in server.mjs', () => {
-    expect(COPY.tool_count).toBe(served.length);
-  });
-
-  it('equals the canon snapshot', () => {
-    expect(COPY.tool_count).toBe(Number(CANON.tools));
-  });
-
-  it('equals the registry manifests', () => {
-    expect(COPY.tool_count).toBe(MCP_SERVER_JSON.tools.length);
-    expect(COPY.tool_count)
-      .toBe(SERVER_JSON._meta['io.modelcontextprotocol.registry/publisher-provided'].toolCount);
-  });
-
-  it('every "N tools" phrase in the copy says tool_count', () => {
+  it('no text field states a tool count', () => {
     for (const k of TEXT_FIELDS) {
-      for (const m of COPY[k].matchAll(/\b(\d+)(?: live| MCP| read-only)* tools\b/g)) {
-        expect(Number(m[1]), `${k}: "${m[0]}"`).toBe(COPY.tool_count);
-      }
+      expect(COPY[k], k).not.toMatch(/\b\d+(?: live| MCP| read-only)* tools\b/);
     }
   });
 });
@@ -268,10 +250,10 @@ describe('capacity_blurb', () => {
   });
 });
 
-describe('tagline (owner, 2026-10-09)', () => {
+describe('tagline (owner, 2026-11-26)', () => {
   // The literal is repeated here on purpose: a test that only compared the
   // JSON to the module constant would pass if both drifted together.
-  const OWNER_TEXT = 'Live data center, power, grid, fiber and deal data for AI agents and site selection.';
+  const OWNER_TEXT = 'The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.';
   // Retired 2026-10-09 (owner): the old tagline may not appear anywhere.
   const RETIRED = /agentic\s+procurement\s+endpoint|data\s+center\s+knowledge\s+hub/i;
 
