@@ -40,7 +40,7 @@ describe('planner 5.44: routing', () => {
   it('the Dallas prompt reads Dallas, the TX canvas at 300 MW / 36 months, search areas and the timeline', () => {
     const p = _planQuery(DAL, {});
     expect(p.intent_class, show(p)).toBe('siting_search');
-    expect(tools(p)).toEqual(['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites', 'get_power_availability_timeline']);
+    expect(tools(p)).toEqual(['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites', 'get_power_availability_timeline', 'get_permitting_intel']);
     expect(p.recommended_sequence[0].args_hint.market_slug).toBe('dallas');
     const c = p.recommended_sequence.find((s) => s.tool === 'site_selection_canvas');
     expect(c.args_hint).toMatchObject({ region: 'TX', capacity_mw: 300, max_months: 36 });

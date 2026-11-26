@@ -21,10 +21,10 @@ describe('planner 5.30: one state, time to power', () => {
     const dcpi = p.recommended_sequence.filter((s) => s.tool === 'get_market_dcpi_rank').map((s) => s.args_hint.market_slug);
     expect(dcpi, show(p)).toEqual(['eagle-mountain', 'salt-lake-city']);
     expect(tools(p)).toEqual(['get_market_dcpi_rank', 'get_market_dcpi_rank', 'site_selection_canvas', 'find_sites',
-      'get_power_availability_timeline']);
+      'get_power_availability_timeline', 'get_permitting_intel']);
     const canvas = p.recommended_sequence.find((s) => s.tool === 'site_selection_canvas');
     expect(canvas.args_hint.region).toBe('UT');
-    expect(p.recommended_sequence.map((s) => s.step)).toEqual([1, 2, 3, 4, 5]);
+    expect(p.recommended_sequence.map((s) => s.step)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(tools(p)).not.toContain('get_retirement_headroom');
   });
 

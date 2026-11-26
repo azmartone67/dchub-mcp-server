@@ -98,7 +98,10 @@ describe('named-constraint routing (#211)', () => {
     // not overflow: its class already covers two of the four).
     const sc = _planQuery('compare phoenix vs columbus for fiber, tax, permitting and flood risk', {});
     expect(sc.recommended_sequence.filter((s) => s.constraint)).toHaveLength(_CONSTRAINT_LEAD_CAP);
-    expect(uncovered(sc)).toEqual(['permitting', 'hazard']);
+    // gdl 2026-11-25 item E: an ask naming a permit reads get_permitting_intel (lib/plan-permit-check.mjs), so
+    // permitting is covered past the cap; hazard still overflows and H4 still names it.
+    expect(sc.recommended_sequence.some((s) => s.tool === 'get_permitting_intel' && s.permit_check)).toBe(true);
+    expect(uncovered(sc)).toEqual(['hazard']);
   });
 
   it('does nothing when the intent names no constraint', () => {

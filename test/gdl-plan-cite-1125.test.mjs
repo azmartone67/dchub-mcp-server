@@ -156,6 +156,9 @@ describe('E: a siting plan reads the state\'s permitting records', () => {
     expect(a.headline).toBe(`${lead} ${cav.line} Siting read for 100 MW, PJM (ISO).`);
     // with no land lead the caveat still leads, as before
     expect(withSitingCaveat({ headline: 'Other.' }, cav).headline.startsWith(cav.line)).toBe(true);
+    // a caveat about a metro the question named still leads (planner 5.58: "areas near Chicago")
+    const named = { ...cav, metro: { name: 'Chicago', slug: 'chicago', verdict: 'AVOID' } };
+    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, named, { after: lead }).headline.startsWith(cav.line)).toBe(true);
   });
 });
 
