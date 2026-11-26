@@ -8,7 +8,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
 - **Auth:** none required (previews, no key needed). Optionally,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
-- **Tools exposed:** 98 (facility search, market intelligence, grid + interconnection,
+- **Tools exposed:** 99 (facility search, market intelligence, grid + interconnection,
   site analysis and site-risk scoring, M&A deals, infrastructure).
 
 ## What it does

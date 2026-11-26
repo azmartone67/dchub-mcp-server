@@ -2266,6 +2266,40 @@
     }
   },
   {
+    "name": "get_site_context",
+    "description": "Use this when the user asks what is around a point: the neighborhood of a lat/lon (nearest substations, the nearest transmission line, fiber, carriers and internet exchanges, flood, seismic and wildfire hazard, zoning and moratoriums, nearby data center campuses). Each block carries its source and as_of date, or states the gap (not covered here, or no answer in time). This is context, not a score: for a 0-100 build verdict on the point use analyze_site. Below full access the answer lists which blocks have an answer at the point and their sources, never their values. Ex: \"What is around 39.04,-77.48?\" For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "description": "Point latitude in decimal degrees (-90 to 90, required), e.g. 39.04",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Point longitude in decimal degrees (-180 to 180, required), e.g. -77.48",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  {
     "name": "get_subsea_cables",
     "description": "Use this when the user asks about subsea (submarine) cable landings near a site, or the cable catalogue. The physical internet crossing an ocean lands at a finite number of points, and distance to one is a real siting factor for anything latency- or transit-sensitive. Pass lat+lon (+radius_km) for LANDING POINTS near a site — each with name, coordinates and distance_km. Omit coordinates for the CATALOGUE of tracked cables (712 tracked; each with cable_id, name, owners, length_km, rfs_year, is_planned — sparse fields are null, not guessed). ★ READ field_coverage AND connectivity_note BEFORE DRAWING A CONCLUSION: cable_count per landing point is NOT populated — the ingest writes the column but the upstream TeleGeography feed does not supply what it derives from, so every row carries the default 0. Answers \"which subsea cables land near this Virginia site\" and \"how far is the nearest cable landing from my campus\". Try: get_subsea_cables lat=36.85 lon=-75.98 radius_km=200 — or get_subsea_cables (no args) for the catalogue. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {

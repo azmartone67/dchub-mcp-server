@@ -7,7 +7,7 @@
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 98 tools, all registered in
+# Tool list reflects the live tools/list: 99 tools, all registered in
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
@@ -113,7 +113,7 @@ headers:
   X-API-Key: "{{apiKey}}"
 
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
-# 98 tools, all registered in server.mjs.
+# 99 tools, all registered in server.mjs.
 tools:
   - search
   - fetch
@@ -162,6 +162,7 @@ tools:
   - export_dataset
   - find_sites
   - analyze_site
+  - get_site_context
   - get_composite_site_score
   - get_disaster_risk
   - get_climate_intel
