@@ -55,7 +55,10 @@ async function jwt(aud, opts = {}) {
     .sign(privateKey);
 }
 
-const strip = (s) => s.replace(/"(retrieved_at|as_of|timestamp|generated_at|served_at)":"[^"]*"/g, '"$1":"T"')
+// The identity block names the channel the key came in on (lib/claude-directory.mjs withClaudeIdentity, 2026-11-26),
+// so that one value differs between the header and the query forms on purpose. It is normalised here and
+// asserted per channel in the test below; every other byte must still match.
+const strip = (s) => s.replace(/"credential_source":"(header|query)"/g, '"credential_source":"C"').replace(/"(retrieved_at|as_of|timestamp|generated_at|served_at)":"[^"]*"/g, '"$1":"T"')
   .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'T').replace(/"id":\d+\}$/, '"id":0}');
 const keyedHits = (from) => H.hits.slice(from).filter((h) => h.apiKey === PRO_KEY && !h.path.startsWith('/api/v1/mcp/') && !h.path.startsWith('/api/v1/keys/'));
 
@@ -66,12 +69,14 @@ describe('?api_key= on /mcp/claude authenticates exactly like the header', () =>
     // so the comparison is between steady-state answers.
     await H.call(DIR, 'analyze_site', args, { 'x-api-key': PRO_KEY });
     const viaHeader = await H.call(DIR, 'analyze_site', args, { 'x-api-key': PRO_KEY });
+    expect(viaHeader.msg.result.structuredContent.identity).toMatchObject({ credential_source: 'header', tier: 'pro' });
     const out = [];
     for (const q of ['api_key', 'apiKey', 'key']) {
       const before = H.hits.length;
       const r = await H.call(`${DIR}?${q}=${PRO_KEY}`, 'analyze_site', args);
       expect(keyedHits(before).length, q).toBeGreaterThan(0);          // the key reached the backend
       expect(r.raw).not.toContain('dchub.cloud/plans');                 // not a gated preview
+      expect(r.msg.result.structuredContent.identity).toMatchObject({ credential_source: 'query', tier: 'pro' });
       out.push(strip(r.body));
     }
     for (const o of out) {
