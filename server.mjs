@@ -186,6 +186,7 @@ import * as _PR from './lib/plan-report.mjs';
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
+import { mintSessionId as _mintLightSid, sidLightClass as _sidLightClass } from './lib/light-sid-tag.mjs';
 import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
 import { lightListInstructionsV2On as _lightListInstructionsV2On, lightListInstructions as _lightListInstructions, lightListTail as _lightListTail } from './lib/light-list-instructions.mjs';
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
@@ -5118,7 +5119,13 @@ export function _pathPack(req) {
   if (p === LIGHT_PATH) return _lk(LIGHT_PACK);
   if (_slimForRequest({ path: p, req })) return SLIM_PACK;   // an explicit ask wins over the implicit light list
   if (_lightEligiblePath(p)) {   // bare /mcp; the client arrival paths too with DCHUB_LIGHT_ON_SOURCE_PATHS (off)
-    const _id = _lightIdentityFromReq(req);
+    let _id = _lightIdentityFromReq(req);
+    // 2026-11-25 (lib/light-sid-tag.mjs): a request on a replica that never saw this session's initialize has no
+    // client name; the light class the session id carries stands in for it. Never overrides a name it has.
+    if (!String(_id.clientName || '').trim()) {
+      const _cls = _sidLightClass(req && req.headers ? req.headers['mcp-session-id'] : null);
+      if (_cls) _id = { userAgent: _id.userAgent, clientName: _cls.clientName };
+    }
     if (_lightForRequest({ path: p, ..._id, fullCatalog: _wantsFullCatalog(req) })) {
       return _lk((_cliStarterOn() && _isCliStarterIdentity(_id)) ? LIGHT_PACK_STARTER : LIGHT_PACK_IMPLICIT);
     }
@@ -43251,8 +43258,11 @@ app.post(MCP_PATHS, async (req, res) => {
       // blocks (with two different WWW-Authenticate targets) was the parallel-edit
       // collision; this is now the one and only OAuth challenge path.
 
+      // 2026-11-25 (lib/light-sid-tag.mjs): a client the light rules name gets a session id every replica can read
+      // the light class from, so a later tools/list on another replica serves the same list. Plain UUID otherwise.
+      const _lightSidIdentity = _lightIdentityFromReq(req);
       const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
+        sessionIdGenerator: () => _mintLightSid(_lightSidIdentity),
         onsessioninitialized: (sid) => {
           sessions.set(sid, transport);
           // ★ Remember the platform against the SERVER-minted session id.
