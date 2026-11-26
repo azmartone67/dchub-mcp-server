@@ -372,6 +372,7 @@ test/handoff-wider-reach-1125.test.mjs
 test/handshake-is-lean.test.mjs
 test/hard-gate-no-network.test.mjs
 test/hard-wall-completeness.test.mjs
+test/harness-port-held-during-import.test.mjs
 test/headline-preview-1120.test.mjs
 test/held-key-persists.test.mjs
 test/henry-hub-bare-ask-1120.test.mjs
@@ -597,6 +598,7 @@ test/plan-email-ask.test.mjs
 test/plan-envelope-once.test.mjs
 test/plan-fact-header.test.mjs
 test/plan-free-fields.test.mjs
+test/plan-handoff-link-1125.test.mjs
 test/plan-header-phoenix-1124.test.mjs
 test/plan-loopback-port-1123.test.mjs
 test/plan-neutral-cta.test.mjs

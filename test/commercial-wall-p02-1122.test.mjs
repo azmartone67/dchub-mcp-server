@@ -67,6 +67,13 @@ const routes = () => async (p, req, body, u) => {
       base_tier: 'free_key', linked_via: 'handoff', price: '$49/month', plan_name: 'Developer' };
   }
   if (p === '/api/v1/relay/short') return { ok: true, url: 'https://dchub.cloud/u/abcdef' };
+  // 2026-11-25: the capacity_grid plan's first step; each row names its grid, which the queue and grid steps take.
+  if (p === '/api/v1/site-selection/canvas') {
+    dataHits.push({ path: p, apiKey: req.headers['x-api-key'] || '', linked: req.headers['x-dchub-linked-key'] || '', callerTier: req.headers['x-dchub-caller-tier'] || '' });
+    return { ok: true, matched: 2, applied_filters: { region: 'us' }, shortlist: [
+      { market: 'Midland–Odessa', slug: 'midland-tx', state: 'TX', iso: 'ERCOT', verdict: 'BUILD' },
+      { market: 'Upper Peninsula MI', slug: 'upper-michigan', state: 'MI', iso: 'MISO', verdict: 'BUILD' }] };
+  }
   if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/keys/') || p.startsWith('/api/v1/sources/')) return undefined;
   dataHits.push({ path: p, apiKey: req.headers['x-api-key'] || '', linked: req.headers['x-dchub-linked-key'] || '',
     callerTier: req.headers['x-dchub-caller-tier'] || '' });
@@ -745,4 +752,61 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     await call(H, '/mcp', 'get_market_intel', { market: 'dallas' }, { ip: nextIp() });
     expect(dataHits.slice(n).every((h) => !h.linked)).toBe(true);
   }, 90_000);
+  it('execute_plan: a linked keyless caller past the per-IP wall gets its plan steps at its tier (2026-11-25)', async () => {
+    // Live 2026-11-25: the plan itself was lifted, but its steps (loopback calls) re-entered as anonymous on the same IP,
+    // so site_selection_canvas hit anon_hard_wall and the queue and grid steps were skipped for want of an ISO.
+    const Q = 'Which US markets have the most available power and the shortest time to power for a 120 MW sovereign AI cluster?';
+    const plan = async () => {
+      const r = await call(H, '/mcp', 'execute_plan', { intent: Q }, { ip: nextIp() });
+      return r.result.structuredContent || JSON.parse(r.result.content[0].text);
+    };
+    anonCount = 999;   // the caller's IP is past the hard wall (cap 20 x 10)
+    process.env.DCHUB_AGENT_HANDOFF_RESOLVE = '1';
+    linked = 'pro'; linkedToken = LINKED_TOKEN;
+    S._setHandoffResolveLookupForTest(null);
+    let n = dataHits.length;
+    const o = await plan();
+    const by = (t) => (o.executed || []).filter((e) => e.tool === t);
+    const st = JSON.stringify((o.executed || []).map((e) => [e.step, e.tool, e.status, e.limit_hit || null]));
+    expect(o.error, st).toBeUndefined();
+    expect(by('site_selection_canvas')[0], st).toMatchObject({ status: 'executed' });
+    expect(by('site_selection_canvas')[0].limit_hit, st).toBeUndefined();
+    for (const t of ['get_interconnection_queue', 'get_grid_intelligence']) {
+      expect(by(t).length, st).toBeGreaterThan(0);
+      expect(by(t).every((e) => e.status !== 'skipped_unresolved'), st).toBe(true);
+    }
+    expect(by('get_interconnection_queue').map((e) => e.args && e.args.iso).sort(), st).toEqual(['ERCOT', 'MISO']);
+    // the step's backend read carries the linked token (never X-API-Key)
+    const canvasHit = dataHits.slice(n).find((h) => h.path === '/api/v1/site-selection/canvas');
+    expect(canvasHit && canvasHit.linked).toBe(LINKED_TOKEN);
+    expect(canvasHit.apiKey).toBe('');
+    expect(JSON.stringify(o)).not.toContain(LINKED_TOKEN);
+    // the note says the depth the linked steps ran at, not "steps returned preview depth"
+    expect(o.totals && o.totals.tier_note, st).toMatch(/^no key \u2014 linked DC Hub access \(agent handoff\): steps ran at full depth/);
+    expect(o.totals.tier_note).not.toMatch(/steps returned preview depth/);
+    // control: kill switch DCHUB_PLAN_HANDOFF_LINK=0 is the pre-fix server (the plan lifted, its steps anonymous on a
+    // walled IP): the canvas step is walled and says so, and its dependants say the limit stopped them, not missing data.
+    process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+    S._setHandoffResolveLookupForTest(null);
+    const u = await plan();
+    delete process.env.DCHUB_PLAN_HANDOFF_LINK;
+    const ust = JSON.stringify((u.executed || []).map((e) => [e.step, e.tool, e.status, e.limit_hit || null]));
+    expect(u.error, ust).toBeUndefined();
+    {
+      const cv = (u.executed || []).find((e) => e.tool === 'site_selection_canvas');
+      expect(cv && cv.limit_hit, ust).toBe('anon_hard_wall');
+      expect(cv.depth, ust).toBeUndefined();
+      const sk = (u.executed || []).filter((e) => e.status === 'skipped_unresolved');
+      expect(sk.length, ust).toBeGreaterThan(0);
+      for (const e of sk) {
+        expect(e.blocked_by, ust).toMatchObject({ step: cv.step, tool: 'site_selection_canvas', limit: 'anon_hard_wall' });
+        expect(e.note).toMatch(/hit this caller's DC Hub limit \(anon_hard_wall\).*not missing data/);
+      }
+      expect(JSON.stringify(u.next_tools || [])).not.toMatch(/coverage_gap/);
+      expect(u.totals && u.totals.tier_note, ust).not.toMatch(/linked DC Hub access/);
+    }
+    linked = null; linkedToken = '';
+    delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
+    anonCount = 999;
+  }, 120_000);
 });
