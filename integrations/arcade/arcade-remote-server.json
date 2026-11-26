@@ -119,6 +119,7 @@
         "get_refined_queue",
         "get_renewable_energy",
         "get_retirement_headroom",
+        "get_site_context",
         "get_subsea_cables",
         "get_tax_incentives",
         "get_water_risk",
