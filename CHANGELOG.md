@@ -10,6 +10,10 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.64 (2026-11-26)
+
+- Tool catalog and listing metadata sync; no behaviour change.
+
 ## 2.12.63 (2026-11-23)
 
 - `get_backup_status` description says what it returns: the latest database backup (a pg_dump in Cloudflare R2: time, age, size, health) and the latest restore test (when, which dump, passed or failed), plus the per-feed freshness rows. Same tool name and output; 98 tools.

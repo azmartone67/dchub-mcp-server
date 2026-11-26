@@ -12,7 +12,7 @@ registry:
     name: "dchub"
     type: "remote"
     title: "DC Hub"
-    description: "DC Hub is the orchestration layer for data center and energy intelligence: start with execute_plan for site selection and power. DCPI scores markets daily."
+    description: "The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity."
     icon: "https://dchub.cloud/icons/icon-192.png"
     readme: "https://github.com/azmartone67/dchub-mcp-server/blob/main/integrations/docker/README.md"
     remote:

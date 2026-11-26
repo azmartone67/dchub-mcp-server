@@ -50,7 +50,8 @@ describe('server.json packages: the npm launcher', () => {
     expect(SJ.title).toBe('DC Hub: Data Center & Energy Intelligence');
     expect(SJ.title.length).toBeLessThanOrEqual(100);
     expect(SJ.description.length).toBeLessThanOrEqual(100);
-    expect(SJ.description).toBe('Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.');
+    // owner 2026-11-26 capabilities messaging (owner-approved, 99 chars).
+    expect(SJ.description).toBe('The orchestration layer for data center and energy intelligence. Find power, land, fiber, capacity.');
     expect(SJ.description.length).toBe(99);
     expect(SJ.description).not.toMatch(/\$|\bpro\b|\bpricing\b|\bfree tier\b/i);
   });
