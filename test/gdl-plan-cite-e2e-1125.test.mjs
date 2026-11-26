@@ -36,7 +36,8 @@ beforeAll(async () => {
       return { ok: true, filter: { iso: 'PJM' }, as_of: '2026-08-31', wholesale_lmp: null, wholesale_context: PJM_CTX };
     }
     if (p === '/api/v1/land-power/site-context') {
-      return { ok: true, view: u.searchParams.get('view') || 'full', lat: 39.04, lng: -77.48, as_of: SC_AS_OF, errors: {},
+      // the backend's full body carries no `view` key (_siteContextShape drops a full body that does)
+      return { ok: true, lat: 39.04, lng: -77.48, as_of: SC_AS_OF, errors: {},
         substation: { name: 'TEST SUB', voltage: '230 kV', distance_km: 2, source: 'HIFLD', as_of: SC_AS_OF } };
     }
     return undefined;
@@ -86,6 +87,9 @@ describe('C: get_site_context is cited with the Phoenix day of its as_of', () =>
   it('citation and provenance carry the dated cite_as, 2026-11-25 for an as_of of 00:44Z on the 26th', async () => {
     const r = await H.call('/mcp', 'get_site_context', { lat: 39.04, lon: -77.48 }, PRO);
     const o = sc(r);
+    // the answer carries the site data (not "did not answer"): a cite off the serve clock matches on the 25th only
+    expect(o.available, JSON.stringify(o).slice(0, 400)).not.toBe(false);
+    expect(JSON.stringify(o)).toContain('TEST SUB');
     expect(o.cite_as).toBe('DC Hub (dchub.cloud), as of 2026-11-25');
     expect(o.citation.cite_as).toBe(o.cite_as);
     expect(o.provenance.cite_as).toBe(o.cite_as);
