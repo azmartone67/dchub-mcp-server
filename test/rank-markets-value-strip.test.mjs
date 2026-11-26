@@ -52,6 +52,13 @@ const HIDDEN = {
   most_operators: [],
 };
 
+// ISO timestamps (provenance.retrieved_at, served at call time) are struck
+// before every hidden-figure check: 13.04 matched '11:03:13.044Z' on the main
+// run of 2026-11-26 11:03:13Z and failed a correct strip. A call lands on second
+// :13.04x about once in 6,000. The figures still have to be absent everywhere
+// else, in both channels.
+const ISO_TS = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g;
+const noTs = (s) => s.replace(ISO_TS, '<ts>');
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 beforeAll(async () => {
@@ -111,8 +118,8 @@ describe.each(Object.keys(FREE_SEATS))('%s', (label) => {
       expect(rows.map((r) => r.value)).toEqual(WANT[criteria].slice(0, rows.length));
     }
     for (const fig of HIDDEN[criteria]) {
-      expect(text, `text channel still carries ${fig}`).not.toContain(fig);
-      expect(sc, `structuredContent still carries ${fig}`).not.toContain(fig);
+      expect(noTs(text), `text channel still carries ${fig}`).not.toContain(fig);
+      expect(noTs(sc), `structuredContent still carries ${fig}`).not.toContain(fig);
     }
   });
 });
@@ -139,8 +146,8 @@ describe('paid callers', () => {
         }
       }
       for (const fig of HIDDEN[criteria]) {
-        expect(text, `${tier} ${criteria}: text channel still carries ${fig}`).not.toContain(fig);
-        expect(sc, `${tier} ${criteria}: structuredContent still carries ${fig}`).not.toContain(fig);
+        expect(noTs(text), `${tier} ${criteria}: text channel still carries ${fig}`).not.toContain(fig);
+        expect(noTs(sc), `${tier} ${criteria}: structuredContent still carries ${fig}`).not.toContain(fig);
       }
     }
   });

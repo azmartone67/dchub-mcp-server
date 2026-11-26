@@ -28,8 +28,13 @@ const MANIFEST = JSON.parse(read('mcp-server.json'));
 const SERVER_JSON = JSON.parse(read('server.json'));
 
 describe('the GitHub About text (Glama re-derives its listing from it)', () => {
-  it('names the tool that reaches Capacity Source', () => {
-    expect(ABOUT).toContain('source_capacity');
+  // ★2026-11-26 (owner, capabilities messaging): the About text no longer
+  // names source_capacity; it names capacity through the tagline and points
+  // agents at execute_plan on the remote MCP URL.
+  it('names capacity (tagline), execute_plan and the MCP URL', () => {
+    expect(ABOUT).toContain('Find capacity.');
+    expect(ABOUT).toContain('execute_plan');
+    expect(ABOUT).toContain('https://dchub.cloud/mcp');
   });
 
   it('still fits the 350-char ceiling the push step refuses past', () => {
@@ -48,11 +53,13 @@ describe('the Smithery listing body', () => {
   // canon endpoint sentence and the one price the owner allows (the $10 pack).
   it('states the canon endpoints without a tool count, and no retired price wording', () => {
     // Owner 2026-11-19: third-party Smithery body is count-free. URLs stay.
+    // Owner 2026-11-26 (capabilities messaging): the REST URL is gone; /connect replaces it.
     expect(SMITHERY).toContain('https://dchub.cloud/mcp');
-    expect(SMITHERY).toContain('https://dchub.cloud/api/v1');
+    expect(SMITHERY).toContain('https://dchub.cloud/connect');
     expect(SMITHERY).not.toMatch(/\b\d+ MCP tools\b/);
     // 2026-11-15 (owner, MCP Ecosystem PR review 2026-11-14): no plan, free tier or pricing page either.
-    expect(SMITHERY).toContain('DCHUB_API_KEY is optional.');
+    // Owner 2026-11-26: "A key is optional." replaces "DCHUB_API_KEY is optional."
+    expect(SMITHERY).toContain('A key is optional.');
     expect(SMITHERY).not.toMatch(/free[- ]tier|paid plans|dchub\.cloud\/pricing/i);
     expect(SMITHERY).not.toMatch(/\$\d/);
     expect(SMITHERY).not.toMatch(/REST API at https:\/\/dchub\.cloud\/mcp/);
@@ -140,7 +147,9 @@ describe('the manifests the registries ingest', () => {
 
 describe('the canonical floors survive in the copy that carries them', () => {
   // The Capacity Source line must not have been paid for by dropping a floor.
-  it('the About text still states tools, the facility map (no count), DCPI (no market count) and deals (no count)', () => {
+  // ★2026-11-26 (owner, capabilities messaging): the About text no longer names
+  // the facility map or M&A deals; the count bans on both stay.
+  it('the About text states market data and DCPI, and no tool, facility, market or deal count', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
     // ★2026-09-23: the TOOL count is not a canon phrase here. sync-tools-manifest
     // heals every tool count from the trackedTool() set in server.mjs, while
@@ -156,13 +165,13 @@ describe('the canonical floors survive in the copy that carries them', () => {
     expect(ABOUT).not.toMatch(/\b\d+\+?\s+(?:MCP\s+)?tools?\b/i);
     // The facility count is withdrawn (owner decision 2026-09-27): the map, no number.
     expect(ABOUT).not.toContain(canon.facilities);
-    expect(ABOUT).toMatch(/global facility map/i);
+    expect(ABOUT).not.toMatch(/\b\d[\d,]*\+?\s+(?:data[- ]center\s+)?facilit(?:y|ies)\b/i);
+    expect(ABOUT).toMatch(/market data/);
     // Owner 2026-11-21: no market count in listing copy.
     expect(ABOUT).not.toContain(canon.markets);
     expect(ABOUT).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
     expect(ABOUT).toMatch(/Data Center Power Index/);
-    // Owner 2026-11-22: no deal count either; the coverage is still named.
+    // Owner 2026-11-22: no deal count either.
     expect(ABOUT).not.toMatch(/\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(?:deals?|transactions?)\b/i);
-    expect(ABOUT).toMatch(/tracked M&A deals/);
   });
 });

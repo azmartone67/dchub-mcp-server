@@ -74,11 +74,13 @@ describe('the healed content matches canon', () => {
   // ★2026-09-27 the facility COUNT is withdrawn (owner decision) until a
   // corroborated "r3" count lands: the About text names the map, not a number,
   // whatever canon's numeric `facilities` says.
-  it('carries no facility count — the map, with no number (count withdrawn 2026-09-27)', () => {
+  // owner 2026-11-26 capabilities messaging: the About text no longer names the
+  // facility map; it names site and market data. The facility-count ban stays.
+  it('carries no facility count (count withdrawn 2026-09-27)', () => {
     expect(CANON.facilities).toBeTruthy();
     expect(DESC).not.toContain(CANON.facilities);
     expect(findFacilityFloors(DESC)).toEqual([]);
-    expect(DESC).toMatch(/global facility map/i);
+    expect(DESC).toMatch(/fiber, site and market data/);
   });
 
   it('carries no market count and no deal count', () => {
@@ -87,11 +89,13 @@ describe('the healed content matches canon', () => {
     // Owner 2026-11-21: listing copy names no market count ("market by market").
     expect(DESC).not.toContain(CANON.markets);
     expect(DESC).not.toMatch(/\b\d[\d,]*\+?\s+(?:(?:DC\s+Hub|DCPI|metro|scored)\s+)?markets?\b/i);
-    expect(DESC).toMatch(/market by market/);
+    // owner 2026-11-26 capabilities messaging: "market by market" became "market data".
+    expect(DESC).toMatch(/market data/);
     // Owner 2026-11-22: no deal count either ("tracked M&A deals").
     expect(DESC).not.toContain(`${CANON.deals} tracked`);
     expect(DESC).not.toMatch(/\b\d[\d,]*\+?\s+(?:tracked\s+)?(?:M&A\s+)?(?:deals?|transactions?)\b/i);
-    expect(DESC).toMatch(/tracked M&A deals/);
+    // owner 2026-11-26 capabilities messaging: the About text no longer names deals.
+    expect(DESC).not.toMatch(/\bdeals?\b/i);
   });
 
   it('carries no tool count (owner 2026-11-22)', () => {

@@ -1,6 +1,6 @@
 # DC Hub power for Kiro
 
-Live data center, power, grid, fiber and deal data for AI agents and site selection.
+The orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity.
 
 This directory is a [Kiro power](https://kiro.dev/docs/powers/) in the
 [Agent Plugins](https://agent-plugins.org) format. It connects Kiro to the

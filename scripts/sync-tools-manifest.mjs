@@ -1187,22 +1187,13 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   }
 }
 
-// ---- canonical/listing-copy.json tool_count --------------------------------
-// ★2026-09-28 / 2026-11-19: third-party description prose in this file is
-// count-free and is not healed by the loop above. The numeric `tool_count`
-// field (our-surface) is healed here. Anchored on the one `"tool_count": N`
-// line; a missing anchor is a PROBLEM, never a no-op.
+// ---- canonical/listing-copy.json carries no tool_count ----------------------
+// 2026-11-26: the field was removed so a published count cannot go stale in
+// listing copy. The served count lives in canonical/listing.json. A tool_count
+// written back into listing-copy.json is a PROBLEM.
 {
   const LC = 'canonical/listing-copy.json';
-  const lc = readCur(LC);
-  const LCRX = /^(  "tool_count": )(\d+)(,?)$/m;
-  const lm = LCRX.exec(lc);
-  if (!lm) {
-    problems.push(`${LC}: \`"tool_count": N\` line NOT FOUND — re-anchor this heal`);
-  } else if (Number(lm[2]) !== COUNT) {
-    problems.push(`${LC} tool_count ${lm[2]} != ${COUNT}`);
-    if (FIX) pend(LC, lc.replace(LCRX, `$1${COUNT}$3`));
-  }
+  if (/^\s*"tool_count"\s*:/m.test(readCur(LC))) problems.push(`${LC}: has a tool_count field; listing copy carries no tool count`);
 }
 
 // ---- canonical/listing-copy.json endpoints (our-surface field only) ---------
@@ -1329,8 +1320,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // search-term title and the "query and cite" / "capacity to buy or lease"
   // lead stay on surfaces that are not capped at 100 characters
   // (mcp-server.json, smithery.yaml).
-  if (sjDesc !== 'Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.')
-    problems.push('server.json: description lost canonical positioning (must be "Orchestration layer for data center and energy intelligence. execute_plan, DCPI, power grid, fiber.")');
+  if (sjDesc !== 'The orchestration layer for data center and energy intelligence. Find power, land, fiber, capacity.')
+    problems.push('server.json: description lost canonical positioning (must be "The orchestration layer for data center and energy intelligence. Find power, land, fiber, capacity.")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans

@@ -861,12 +861,23 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     expect(dataHits.slice(n).length).toBeGreaterThan(0);
     expect(dataHits.slice(n).every((h) => !h.linked && !h.apiKey)).toBe(true);
     expect((t.next_tools || []).some((e) => e && (e.tool === 'get_api_key' || e.tool === 'claim_free_key')), JSON.stringify(t.next_tools)).toBe(false);
+    // its note names the linked access and says the depth each step came back at (2026-11-26)
+    expect(t.totals && t.totals.tier_note, tst).toMatch(/^no key \u2014 linked DC Hub access \(agent handoff\): /);
     // control: the kill switch walls the tokenless link again
     process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
     S._setHandoffResolveLookupForTest(null);
     const tk = await plan();
     delete process.env.DCHUB_PLAN_HANDOFF_LINK;
     expect(JSON.stringify(tk)).toMatch(/anon_hard_wall/);
+    // and under the wall, the kill switch also brings the get_api_key suggestion back (a fresh session, so the
+    // ask-once memory is clear): the key-path skip has the same switch as the rest of the linked branch (2026-11-26)
+    anonCount = 0;
+    process.env.DCHUB_PLAN_HANDOFF_LINK = '0';
+    S._setHandoffResolveLookupForTest(null);
+    const tk2 = await plan();
+    delete process.env.DCHUB_PLAN_HANDOFF_LINK;
+    expect((tk2.next_tools || []).some((e) => e && e.tool === 'get_api_key'), JSON.stringify(tk2.next_tools)).toBe(true);
+    expect(tk2.totals && tk2.totals.tier_note).not.toMatch(/linked DC Hub access/);
     linked = null; linkedToken = '';
     delete process.env.DCHUB_AGENT_HANDOFF_RESOLVE;
     anonCount = 999;

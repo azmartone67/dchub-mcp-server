@@ -127,8 +127,12 @@ function run(script, env = {}) {
 //   figure left to substitute — the same no-op this note warns about.
 //   ★2026-11-22: the deal count is withdrawn too (owner), so STALE now ADDS an
 //   old deal figure to the count-free phrase — still a live/canon difference.
-const DEALS_RE = /(?<![\d,]\+ )tracked M&A deals/;
-const STALE = CANON.replace(DEALS_RE, '1,100+ tracked M&A deals');
+//   ★2026-11-26 (owner, capabilities messaging): the About text no longer names
+//   deals, so the old anchor matched nothing. STALE now anchors on a phrase the
+//   new text carries and splices the retired pre-11-26 wording (facility map
+//   plus a deal count) back in — a live copy that missed the 11-26 rewrite.
+const ANCHOR_RE = /site and market data/;
+const STALE = CANON.replace(ANCHOR_RE, 'site and market data, a global facility map and 1,100+ tracked M&A deals');
 
 describe('the extraction is pointed at the real step', () => {
   it('found a script, not an empty string', () => {
@@ -139,7 +143,8 @@ describe('the extraction is pointed at the real step', () => {
     // Without this, a fixture that stops substituting turns every drift test
     // below into a test of the no-drift path — which is how nine of them came
     // to fail at once with no indication that the fixture was the cause.
-    expect(CANON).toMatch(DEALS_RE);
+    expect(CANON).toMatch(ANCHOR_RE);
+    expect(CANON).not.toMatch(/tracked M&A deals/);
     expect(STALE).not.toBe(CANON);
     expect(STALE).toContain('1,100+ tracked M&A deals');
   });
@@ -195,7 +200,9 @@ describe('the read no longer depends on a PAT being alive', () => {
     //   this went red while the script was behaving correctly. Assert against
     //   canon's CURRENT figure, so the test tracks the thing it is about (the
     //   run prints what it WANTS) instead of a number that expires.
-    expect(out).toContain(CANON.match(DEALS_RE)[0]);
+    // ★2026-11-26: canon carries no figure at all now, so assert the whole
+    //   current canon text is what the run says it WANTS.
+    expect(out).toContain(`want: ${CANON.trim()}`);
   });
 
   it('detects drift even when every PAT is dead', () => {
