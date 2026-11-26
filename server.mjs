@@ -371,6 +371,9 @@ import * as _NAV2 from './lib/next-ask-v2.mjs';   // Grok item 5 (Nov 24): follo
 import * as _EAB from './lib/email-ask-ab.mjs';   // F4 email-ask A/B, shared 50/50 (DCHUB_EMAIL_ASK_AB, default OFF)
 import { PLAN_HANDOFF_LINK_HEADER, mintPlanHandoffLinkToken, consumePlanHandoffLinkToken, linkedPlanTierNote as _linkedPlanTierNote } from './lib/plan-handoff-link.mjs';   // a plan step keeps its caller's handoff lift
 import * as _CW from './lib/commercial-wall.mjs';             // Agent Handoff P0-2 access block (default OFF)
+// A keyless caller linked to a plan through the agent handoff, with or without the backend's linked token. Key nudges
+// skip both: a key is not what either one is missing.
+const _linkedAny = (c) => !!(c && !c.api_key && c.handoff_linked === true);
 import * as _SKP from './lib/save-key-prompt.mjs';           // Test B, DCHUB_EXP_SAVE_KEY_PROMPT (default OFF)
 import * as _WOD from './lib/wall-one-door.mjs';   // DCHUB_WALL_ONE_DOOR A/B (default OFF)
 import * as _W2K from './lib/wall-to-key.mjs';      // DCHUB_WALL_TO_KEY_V1 + DCHUB_W2K_* sub-flags (all default OFF)
@@ -19001,7 +19004,7 @@ async function _maybeEmbedValueClaim(result, name, c) {
     if (!INCONTEXT_CLAIM || !CLAIM_VALUE_TOOLS.has(name)) return result;
     if (!c || !c.session_id || isBotOrInternalCtx(c)) return result;
     if (c.tier === 'paid' || c.tier === 'enterprise') return result;
-    if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') return result;   // linked access: no key to claim
+    if (_linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') return result;   // linked (with or without a token): no key to claim
     trackPaidHit(c.session_id, name).catch(() => {});   // count the value-moment hit
     const claim = await shouldMintClaim(c.session_id, name);
     if (!claim || !claim.claim_url) return result;       // below threshold / bot / error → unchanged
@@ -19223,12 +19226,16 @@ function _buildQuotaHint(toolName) {
       tier: _canonicalTier(c, _durable),
       resets_at: 'next 00:00 UTC',
     };
-    if (_CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+    if (_linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
       // A handoff-linked caller is served at its linked tier with no key on this connection: the anonymous-seat
-      // "claim a key to open the budget" line does not apply to it, and no per-tool meter is charged here.
+      // "claim a key to open the budget" line does not apply to it, and no per-tool meter is charged here. A link
+      // without a token says so: the data service still answers it keyless, so fields can come back as a preview.
       q.full_answers_cap_today = null;
       q.full_answers_remaining_today = null;
-      q.full_answers_basis = 'linked DC Hub access (agent handoff): no per-tool full-answer meter is charged on this connection';
+      q.full_answers_basis = _CW.handoffLinked(c)
+        ? 'linked DC Hub access (agent handoff): no per-tool full-answer meter is charged on this connection'
+        : 'linked to a DC Hub plan (agent handoff): no per-tool full-answer meter is charged on this connection; '
+          + 'some fields may still come back as a preview';
       return q;
     }
     if (_emailFullDecisionTool(toolName) && _emailFullSeat(c)) {
@@ -36331,7 +36338,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       try {
         // 2026-11-26 (owner): a handoff-linked caller already has paid access through the handoff; no key nudge. Checked
         // before the once-per-session memo, so a linked answer does not spend the session's one nudge.
-        if (_keyPathNextOn() && c && !c.api_key && !_CW.handoffLinked(c) && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
+        if (_keyPathNextOn() && c && !c.api_key && !_linkedAny(c) && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
         // DCHUB_WALL_IDENTITY_V2: the plan's resolved market rides the key entry's args and its say line (one call
         // mints, binds and follows it; lib/daily-habit.mjs). Flag off: untouched.
         if (_wallIdV2On() && c) {
