@@ -786,6 +786,8 @@ describe('DCHUB_AGENT_HANDOFF_RESOLVE: a handoff-linked keyless identity is serv
     // the canvas is not sized to MW by design: its capacity_mw not_applied is not a coverage gap (2026-11-25)
     expect((o.dropped_filters || []).some((d) => d.param === 'capacity_mw' && d.tool === 'site_selection_canvas'), JSON.stringify(o.dropped_filters)).toBe(true);
     expect(JSON.stringify(o.next_tools || [])).not.toMatch(/coverage_gap/);
+    // a linked caller already has paid access: no get_api_key nudge (2026-11-26)
+    expect((o.next_tools || []).some((e) => e && (e.tool === 'get_api_key' || e.tool === 'claim_free_key')), JSON.stringify(o.next_tools)).toBe(false);
     // the note says the depth the linked steps ran at, not "steps returned preview depth"
     expect(o.totals && o.totals.tier_note, st).toMatch(/^no key \u2014 linked DC Hub access \(agent handoff\): steps ran at full depth/);
     expect(o.totals.tier_note).not.toMatch(/steps returned preview depth/);

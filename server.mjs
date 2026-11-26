@@ -36290,7 +36290,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // Grok cold-start note 2026-11-20 fix 2 (lib/key-path-next.mjs): a keyless answer names the key tool, last, at most
       // once per session, on the same surfaces.
       try {
-        if (_keyPathNextOn() && c && !c.api_key && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
+        // 2026-11-26 (owner): a handoff-linked caller already has paid access through the handoff; no key nudge. Checked
+        // before the once-per-session memo, so a linked answer does not spend the session's one nudge.
+        if (_keyPathNextOn() && c && !c.api_key && !_CW.handoffLinked(c) && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
         // DCHUB_WALL_IDENTITY_V2: the plan's resolved market rides the key entry's args and its say line (one call
         // mints, binds and follows it; lib/daily-habit.mjs). Flag off: untouched.
         if (_wallIdV2On() && c) {
