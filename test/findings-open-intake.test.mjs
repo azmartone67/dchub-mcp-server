@@ -309,7 +309,9 @@ describe('discovery', () => {
   it('the instructions line rides /mcp, /mcp/grok and /mcp/claude, not /mcp/chatgpt', async () => {
     // Note F / option A (owner 2026-11-17): "Both are free." is dropped from the owner-approved line.
     expect(S.INSTR_FEEDBACK_LINE).toBe("If data looks wrong or missing, call report_finding; if your human wants something DC Hub doesn't do, call request_enhancement.");
-    for (const p of ['/mcp', '/mcp/grok']) expect((await open(p)).instructions, p).toContain(S.INSTR_FEEDBACK_LINE);
+    // Capabilities messaging (2026-11-26): the approved paragraph says the same line with "does not".
+    const FEEDBACK = 'If data looks wrong or missing, call report_finding; if your human wants something DC Hub does not do, call request_enhancement.';
+    for (const p of ['/mcp', '/mcp/grok']) expect((await open(p)).instructions, p).toContain(FEEDBACK);
     // /mcp/claude says the same in its own plain words (no "your human" on that profile)
     const ci = (await open('/mcp/claude', {}, 'claude-ai')).instructions;
     expect(ci).toBe(CLAUDE_INSTRUCTIONS);
@@ -318,7 +320,7 @@ describe('discovery', () => {
     expect((await open('/mcp/chatgpt', {}, 'openai-mcp')).instructions).not.toContain('report_finding');
     // keyed sessions carry it once, and the partner tail no longer restates report_finding
     const keyed = (await open('/mcp', { 'x-api-key': PARTNER })).instructions;
-    expect(keyed.split(S.INSTR_FEEDBACK_LINE).length).toBe(2);
+    expect(keyed.split(FEEDBACK).length).toBe(2);
     expect(S._INSTR_TAIL_INBOX).not.toContain('report_finding');
   });
   it('discover_tools carries the front_door line and the feedback family', async () => {

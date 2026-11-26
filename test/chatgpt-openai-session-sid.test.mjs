@@ -15,6 +15,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
 import net from 'node:net';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 
 // ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
 // server.mjs, so nothing it starts slips past: every socket connect to a host other

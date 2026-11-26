@@ -104,6 +104,10 @@ import {
   _ctxALS, buildDepthTease, _unlockMoreDataEnvelope,
   withFrontDoorNudge, withStarterPack, withBindHint,
 } from '../server.mjs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 
 const SECRET = 'test-internal-key-not-a-real-secret';
 const SID = '1aa6536d-b1d4-24b4-74a8-e89ba266e781';

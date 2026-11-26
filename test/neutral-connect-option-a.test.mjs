@@ -51,18 +51,23 @@ describe('server instructions (option A)', () => {
     for (const [name, t] of [['lean', S._INSTRUCTIONS_LEAN], ['full', S._INSTRUCTIONS]]) {
       expect(typeof t).toBe('string');
       expect(hits(t), name).toEqual([]);
-      expect(t, name).toContain(NEUTRAL_CONNECT_LINE);
+      // Capabilities messaging (2026-11-26): the approved paragraph says it as "More detail is at .../connect".
+      expect(t, name).toContain('More detail is at https://dchub.cloud/connect');
       expect(t, name).not.toMatch(/Past that, previews|listings#list-capacity|request_capacity_intro|one-time pack/);
     }
   });
   it('Capacity Source copy is the teaser only', () => {
-    expect(S._INSTRUCTIONS_LEAN).toContain(CAPACITY_TEASER_LINE);
+    // Capabilities messaging (2026-11-26): the lean text carries the paragraph's own teaser sentence.
+    const TEASER = 'Capacity to buy or lease is coming: query it with source_capacity, or browse https://dchub.cloud/listings.';
+    expect(S._INSTRUCTIONS_LEAN).toContain(TEASER);
+    expect(S._INSTRUCTIONS).toContain(TEASER);
     expect(S._INSTRUCTIONS).toContain(CAPACITY_TEASER_LINE);
     expect(S._INSTRUCTIONS).not.toMatch(/CAPACITY SOURCE(?: ROUTING)?:/);
   });
-  it('the tool names stay: claim_free_key and recover_my_key are still named', () => {
-    expect(S._INSTRUCTIONS_LEAN).toContain('`claim_free_key`');
-    expect(S._INSTRUCTIONS_LEAN).toContain('`recover_my_key`');
+  // Capabilities messaging (2026-11-26): the paragraph names the listed key tool, get_api_key (an alias of claim_free_key).
+  it('the tool names stay: get_api_key and recover_my_key are still named', () => {
+    expect(S._INSTRUCTIONS_LEAN).toContain('Call get_api_key only if the user asks for a key');
+    expect(S._INSTRUCTIONS_LEAN).toContain('recover_my_key re-sends a lost one');
   });
 });
 

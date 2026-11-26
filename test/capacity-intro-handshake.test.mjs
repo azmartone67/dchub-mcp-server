@@ -49,8 +49,9 @@ describe('/mcp handshake: Capacity Source teaser only, neutral connect line (opt
   it.each(['/mcp', '/mcp/grok', '/mcp/site'])('%s: teaser, no register clause, no banned wording, under the 2,048 budget', (p) => {
     const t = served[p];
     expect(typeof t).toBe('string');
-    expect(t).toContain('New data center capacity listings are coming soon: query them with source_capacity, or browse https://dchub.cloud/listings.');
-    expect(t).toContain('More detail is available at dchub.cloud/connect.');
+    // Capabilities messaging (2026-11-26): the teaser and connect line in the approved paragraph's wording.
+    expect(t).toContain('Capacity to buy or lease is coming: query it with source_capacity, or browse https://dchub.cloud/listings.');
+    expect(t).toContain('More detail is at https://dchub.cloud/connect');
     expect(t).not.toMatch(/request_capacity_intro|listings#list-capacity|CAPACITY SOURCE ROUTING/);
     expect(BANNED.filter((re) => re.test(t)).map(String)).toEqual([]);
     expect(t.length).toBeLessThanOrEqual(2048);

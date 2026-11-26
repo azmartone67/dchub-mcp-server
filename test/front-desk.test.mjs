@@ -24,6 +24,7 @@ import { agentReferralIntent } from '../lib/capacity-source-summary.mjs';
 import { capToolResultText } from '../lib/grok-profile.mjs';
 import { PREVIEW_FOOTER, CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { OUTREACH_LEAD } from '../lib/agent-outreach.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 
 // The owner's copy, typed out here so a reworded constant fails this file, not just its copies.
 const WELCOME = 'Welcome: start with execute_plan; dchub_services lists what else DC Hub offers, one link each.';
@@ -141,7 +142,9 @@ describe('dchub_services (item 1)', () => {
     expect(DCHUB_SERVICES.find((s) => s.id === 'full_depth').name).toBe('Full-depth answers');
     expect(DCHUB_SERVICES.find((s) => s.id === 'advisory').link).toMatch(/^https:\/\/dchub\.cloud\/advisory\?/);
     expect(JSON.stringify(servicesFor())).not.toMatch(NO_PRICE_OR_PLAN);
-    expect(JSON.stringify(DCHUB_SERVICES.find((s) => s.id === 'capacity_source'))).toMatch(/request_capacity_intro[^.]*only after your human approves/);
+    // Capabilities messaging (2026-11-26): the capacity row is a teaser; how_to_use still carries the intro rule.
+    expect(DCHUB_SERVICES.find((s) => s.id === 'capacity_source').what).toBe('Capacity to buy or lease is coming. Agents can query listings with source_capacity; humans can browse the listings at the link.');
+    expect(servicesFor().how_to_use).toMatch(/request_capacity_intro only after your human approves/);
   });
   it('need ranks the fitting service first; an unmatched need returns the default order and says so', () => {
     expect(servicesFor('we want to lease 20 MW in Dallas').services[0].id).toBe('capacity_source');
@@ -390,8 +393,11 @@ describe('telemetry: the parked row (item 5)', () => {
 describe('the /mcp welcome (item 4), and every handshake in budget', () => {
   it('/mcp says it right after its lead (canon sentence + OUTREACH_LEAD); within 2,048', async () => {
     const t = (await session('/mcp')).init.msg.result.instructions;
-    expect(t.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ' + OUTREACH_LEAD + WELCOME + ' ')).toBe(true);
-    expect(t.split(WELCOME).length - 1).toBe(1);
+    // Capabilities messaging (2026-11-26): /mcp serves the approved paragraph, which names dchub_services itself
+    // ("dchub_services lists what else DC Hub offers, one link each."); the separate welcome line finds no lead to follow.
+    expect(t.startsWith(CAPABILITIES_INSTRUCTIONS)).toBe(true);
+    expect(t.split('dchub_services lists what else DC Hub offers, one link each.').length - 1).toBe(1);
+    expect(t).not.toContain(WELCOME);
     expect(t.length, 'measured ' + t.length).toBeLessThanOrEqual(2048);
   });
   it('/mcp/grok, the packs and the frozen profiles do not carry it, and stay in budget', async () => {

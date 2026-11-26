@@ -5,6 +5,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { _unlockMoreDataEnvelope, _ctxALS } from '../server.mjs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 
 const desc = (file) => {
   const j = JSON.parse(readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
@@ -18,7 +22,8 @@ describe('unlock_more_data description is price-free', () => {
       expect(d).not.toMatch(/\$\d/);
       expect(d).not.toMatch(/1,000 API credits/);
       // 2026-11-15 (owner listing rule 2026-11-14): no plan wording either.
-      expect(d).toContain('Full-access options:');
+      // Capabilities messaging (2026-11-26): the description points at human_url and names no plan, price or limit.
+      expect(d).toContain('human_url, the page that explains how to get full results');
       expect(d).not.toMatch(/paid plans?|free tier/i);
     });
   }

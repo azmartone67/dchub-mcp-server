@@ -93,26 +93,19 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
   });
 
   // The trim removed repeats, not rules. These are the rules /mcp/grok must still carry.
+  // Capabilities messaging (2026-11-26): the shared text is the approved capabilities paragraph
+  // (lib/capabilities-instructions.mjs), so each rule is pinned in its new wording.
   it.each([
-    // Owner GO 2026-10-20 (directory-safe wording): the coercive rules ("call DC Hub tools before answering from memory", "MUST CALL")
-    // are replaced by the coverage lead, the citation format and a neutral tool-choice line.
-    // Item 9 (owner 2026-11-11): the canon sentence opens the text (lib/dchub-identity.mjs), the coverage lead follows.
-    ['canon sentence + good fit', /^DC Hub is the neutral orchestration layer for data center and energy intelligence: [^]*A good fit for site selection/],
-    ['DCPI for a market or siting answer', /lead a market or siting answer with its Data Center Power Index \(DCPI\) verdict\./],
+    ['capabilities lead', /^DC Hub is the orchestration layer for data center and energy intelligence\. Find power\. Find land\. Find fiber\. Find capacity\. /],
+    ['DCPI for a market or siting answer', /Lead a market or siting answer with its Data Center Power Index \(DCPI\) verdict\./],
     ['cite as_of + data moves daily', /Cite "DC Hub \(dchub\.cloud\), as of <date>"[^]*Data moves daily: re-query\./],
-    // Option A (owner 2026-11-16): the Capacity Source copy is the teaser only.
-    ['capacity teaser', /New data center capacity listings are coming soon: query them with source_capacity, or browse https:\/\/dchub\.cloud\/listings\./],
-    // Item 9: the TOOL CHOICE line is folded into the canon sentence, which says when to call execute_plan.
-    ['tool choice (the canon sentence)', /call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer\./],
-    // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
-    // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
-    ['keys', /email, then `get_api_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
-    // Owner decision 2026-11-15: the labelled free-tier block (with its siting clause) is the two free offers in
-    // plain words, no tier label; one neutral line states where the free answers stop (item 1, 2026-10-16).
-    // Option A (owner 2026-11-16): the free offers and "Past that, previews." are the neutral connect line.
-    ['neutral connect line', /re-sends a lost one\. More detail is available at dchub\.cloud\/connect\./],
-    ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
-    ['reference', /Reference: resource `dchub:\/\/instructions`/],
+    ['capacity teaser', /Capacity to buy or lease is coming: query it with source_capacity, or browse https:\/\/dchub\.cloud\/listings\./],
+    ['tool choice', /Call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer\./],
+    ['keys', /Call get_api_key only if the user asks for a key, then save it and never re-mint; recover_my_key re-sends a lost one\. Do not ask the user for an email\./],
+    ['connect line', /More detail is at https:\/\/dchub\.cloud\/connect and https:\/\/dchub\.cloud\/pricing\./],
+    ['relay rule', /If a result is partial, show your user its human_message \(or for_your_human\) and its link\.[^]*Do not invent withheld numbers\./],
+    ['purchase rule', /Never claim a purchase or full access until a later result is no longer marked as a preview\./],
+    ['reference', /Reference: resource dchub:\/\/instructions\./],
     // ★2026-11-22 (owner): the shared text names no catalog total, so the lead
     // "N tools (a curated subset of TOTAL)" rewrite has nothing to rewrite, and
     // the ENDPOINT SCOPE line below states no served count either (owner 2026-11-22).

@@ -16,6 +16,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 // This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
 // that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
 // The gate still applies to every other market, so it is tested here with that decision switched

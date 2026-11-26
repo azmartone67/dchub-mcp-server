@@ -19,6 +19,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { isGatedResult } from '../lib/paywall-contract.mjs';
+// Capabilities messaging (2026-11-26): unlock_more_data now answers every non-ChatGPT seat with the neutral
+// envelope (one human line, human_url /pricing; test/capabilities-instructions-1126.test.mjs). This file pins the
+// legacy ladder, which a ChatGPT frozen seat and DCHUB_UNLOCK_NEUTRAL=0 still serve.
+process.env.DCHUB_UNLOCK_NEUTRAL = '0';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.

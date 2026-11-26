@@ -266,7 +266,8 @@ describe('what every client reads before it calls anything', () => {
     const instructions = JSON.parse(json).result?.instructions || '';
     expect(instructions.length, 'initialize returned no instructions to scan').toBeGreaterThan(500);
     // r-relay-contract (2026-10-06): the handshake hands out the relay contract, not a tool to call.
-    expect(instructions).toContain('human_url');
+    // Capabilities messaging (2026-11-26): the approved paragraph's relay line is the non-vacuity anchor.
+    expect(instructions).toContain('show your user its human_message (or for_your_human) and its link');
     expect(starterOffers({ instructions })).toEqual([]);
   });
 
@@ -278,7 +279,8 @@ describe('what every client reads before it calls anything', () => {
     // ★2026-10-02: the description names no plan price any more (owner rule
     // 09-27); the non-vacuity anchor is the options line it points at instead.
     // 2026-11-15 (owner listing rule 2026-11-14): that line names no plan either.
-    expect(tool.description).toContain('Full-access options: on the page behind the human_url link');
+    // Capabilities messaging (2026-11-26): the description points at human_url, the page that explains how.
+    expect(tool.description).toContain('human_url, the page that explains how to get full results');
     expect(starterOffers(tool)).toEqual([]);
   });
 });

@@ -318,7 +318,8 @@ describe('E) the published clause', () => {
     expect(S._INSTRUCTIONS).not.toContain(clause);
     // Option A (owner 2026-11-16): the offers are the neutral connect line.
     expect(S._INSTRUCTIONS_LEAN).not.toContain('1 free Land & Power map search a month');
-    expect(S._INSTRUCTIONS_LEAN).toContain('More detail is available at dchub.cloud/connect.');
+    // Capabilities messaging (2026-11-26): the connect pointer in the approved paragraph's wording.
+    expect(S._INSTRUCTIONS_LEAN).toContain('More detail is at https://dchub.cloud/connect');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('need a paid DC Hub plan');
     expect(S._sitingFreeClause({ DCHUB_NOEMAIL_PREVIEW_ONLY: '0' })).toBe('');
   });

@@ -251,14 +251,15 @@ describe('initialize instructions name no plan for the paid tools', () => {
       // Item 1 (owner 2026-10-16): the PAID line is replaced by one neutral line, no plan named.
       expect(served[path], path).not.toContain('need a paid DC Hub plan');
       // Option A (owner 2026-11-16): "Past that, previews." is replaced by the neutral connect line.
-      expect(served[path], path).toMatch(/More detail is available at dchub\.cloud\/connect\. A gated result carries `human_url` and `human_message`\. When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\. /);
+      // Capabilities messaging (2026-11-26): the relay and connect lines of the approved paragraph.
+      expect(served[path], path).toMatch(/If a result is partial, show your user its human_message \(or for_your_human\) and its link\. More detail is at https:\/\/dchub\.cloud\/connect and https:\/\/dchub\.cloud\/pricing\. Do not invent withheld numbers\. /);
     }
   });
 
   it('/mcp carries the neutral connect line, no free offers, plan name or tier label', () => {
     // Owner decision 2026-11-15 put the two free offers here in plain words; option A (owner 2026-11-16) replaces
     // them with the neutral connect line (no allowance, credit or price wording).
-    expect(served['/mcp']).toContain('More detail is available at dchub.cloud/connect.');
+    expect(served['/mcp']).toContain('More detail is at https://dchub.cloud/connect');   // capabilities paragraph, 2026-11-26
     expect(served['/mcp']).not.toContain('50 MCP calls/day with an email');
     expect(served['/mcp']).not.toMatch(/FREE TIER|previews on free/);
   });

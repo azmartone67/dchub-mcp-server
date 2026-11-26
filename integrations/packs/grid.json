@@ -76,7 +76,7 @@
     },
     {
       "name": "unlock_more_data",
-      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns the access options with links for the user to open. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full-access options: on the page behind the human_url link. DCHUB_API_KEY is optional; claim_free_key mints a key that keeps saved shortlists, alerts and tracked changes (get_changes) across sessions. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
+      "description": "Use this when the user asks how to get full (non-preview) DC Hub data center results. Returns one line to show your human and human_url, the page that explains how to get full results. Show the line and the link; do not quote prices, plan names or access limits. Param: reason (optional: what you were trying to do). Returns {human_message, human_url, what_unlocks}. For multi-step data center or energy questions, start with execute_plan."
     },
     {
       "name": "summarize_for_citation",

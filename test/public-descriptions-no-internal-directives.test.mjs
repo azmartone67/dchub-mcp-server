@@ -113,9 +113,10 @@ export const AGENT_SURFACES = [
   { path: 'canonical/skill.md', why: 'source the Agent Skill copies are rendered from', pick: (f) => [f] },
   { path: 'GEMINI.md', why: 'Gemini CLI context file: addressed to the model by design', pick: (f) => [f] },
   {
-    path: 'server.mjs',
-    why: 'the MCP initialize `instructions` are composed here ("MUST CALL (FRONT DOOR)", "Do not invent withheld numbers"); an agent reads them, a directory page does not',
-    pick: (f) => f.split('\n').filter((l) => l.includes('MUST CALL (FRONT DOOR)')),
+    // Capabilities messaging (2026-11-26): the initialize text moved to its own module.
+    path: 'lib/capabilities-instructions.mjs',
+    why: 'the MCP initialize `instructions` paragraph ("Do not ask the user for an email", "Do not invent withheld numbers"); an agent reads it, a directory page does not',
+    pick: (f) => f.split('\n').filter((l) => l.includes('export const CAPABILITIES_INSTRUCTIONS')),
   },
   {
     path: 'mcp-server.json',

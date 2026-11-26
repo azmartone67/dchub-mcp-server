@@ -86,7 +86,8 @@ describe('directory-safe copy (owner GO 2026-10-20)', () => {
   // Item 9 (owner 2026-11-11): the handshake opens with the owner's canon sentence, which names execute_plan as the
   // entry among DC Hub's own tools (no order about other sources; the banned list above still holds for it).
   it('execute_plan stays the entry: the canon sentence in the handshake, a recommendation in the full guide', () => {
-    expect(S._INSTRUCTIONS_LEAN.startsWith('DC Hub is the neutral orchestration layer for data center and energy intelligence: call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer.')).toBe(true);
+    // Capabilities messaging (2026-11-26): the approved paragraph names execute_plan as the first call.
+    expect(S._INSTRUCTIONS_LEAN.startsWith('DC Hub is the orchestration layer for data center and energy intelligence. Find power. Find land. Find fiber. Find capacity. Call execute_plan first for any question about power, grid, interconnection queues, capacity, fiber, sites or markets; it chains the right tools and returns one dated, cited answer.')).toBe(true);
     expect(S._INSTRUCTIONS).toMatch(/`execute_plan` is the recommended starting point/);
   });
 

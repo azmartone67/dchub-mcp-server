@@ -166,7 +166,7 @@ describe('flag on: the opt-in core list', () => {
     // so the tail no longer repeats "start with execute_plan").
     expect(ins).toMatch(/ENDPOINT SCOPE: this \/mcp list \(tools=core\) is a listing scope, not a permission scope/);
     expect(ins).toMatch(/tools\/call accepts any DC Hub tool by name; dchub_services lists DC Hub's services; the full list is at /);
-    expect(ins).toMatch(/call execute_plan first/);
+    expect(ins).toMatch(/Call execute_plan first/);   // capabilities paragraph, 2026-11-26
     expect(ins.length).toBeLessThanOrEqual(2048);
     expect(ins).not.toMatch(/\/mcp\/(oauth|core|light)\b/);
   });

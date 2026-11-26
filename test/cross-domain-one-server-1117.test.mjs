@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createServer } from 'node:http';
 import { CANON_SENTENCE, CROSS_DOMAIN_SENTENCE } from '../lib/dchub-identity.mjs';
 import { ROUTING_LINES } from '../lib/agent-outreach.mjs';
+import { CAPABILITIES_INSTRUCTIONS } from '../lib/capabilities-instructions.mjs';
 // Note F / option A: no prices, plan names, free tier, credits or calls-per-day wording in agent-facing text.
 const NOTE_F_WORDS = /\$\s?\d|\bfree\b|\bpro\b|\bplans?\b|\bpricing\b|\bcredits?\b|\btrial\b|\bper day\b|\ba day\b|calls?\s*(?:\/|per|a)\s*day/i;
 
@@ -44,9 +45,10 @@ describe('the handshake says both domains, second', () => {
     expect(CROSS_DOMAIN_SENTENCE).not.toMatch(/wholesale|LMP/i);
     expect(CROSS_DOMAIN_SENTENCE).not.toMatch(/\bonly\b|\bfirst\b|#1\b|\blargest\b|\bbest\b|partner/i);
   });
-  it('full and lean /mcp instructions open canon sentence, then this one', () => {
+  // Capabilities messaging (2026-11-26): the /mcp texts open with the approved paragraph instead of these two sentences.
+  it('full and lean /mcp instructions open with the capabilities paragraph', () => {
     for (const text of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
-      expect(text.startsWith(CANON_SENTENCE + ' ' + CROSS_DOMAIN_SENTENCE + ' ')).toBe(true);
+      expect(text.startsWith(CAPABILITIES_INSTRUCTIONS)).toBe(true);
     }
   });
 });
