@@ -19002,7 +19002,7 @@ const _NEXT_SESSION = {
 const INCONTEXT_CLAIM = ['1', 'true', 'on', 'yes'].includes(
   String(process.env.DCHUB_INCONTEXT_CLAIM || '').trim().toLowerCase());
 const CLAIM_VALUE_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel']);
-async function _maybeEmbedValueClaim(result, name, c) {
+export async function _maybeEmbedValueClaim(result, name, c) {
   try {
     if (!INCONTEXT_CLAIM || !CLAIM_VALUE_TOOLS.has(name)) return result;
     if (!c || !c.session_id || isBotOrInternalCtx(c)) return result;
@@ -36206,7 +36206,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // caller limit (limit_hit) counts as held back. DCHUB_PLAN_HANDOFF_LINK=0 (steps run anonymous) keeps the old note.
       let _linkedNote = null;
       try {
-        if (c && c.loopback_step !== true && _CW.handoffLinked(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
+        // 2026-11-26: a link without the backend's token too; the note says the depth each step actually came back at.
+        if (c && c.loopback_step !== true && _linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') {
           _linkedNote = _linkedPlanTierNote(executed, (e) => fullByEntry.get(e));
         }
       } catch (_e) { _linkedNote = null; }
@@ -36341,7 +36342,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       try {
         // 2026-11-26 (owner): a handoff-linked caller already has paid access through the handoff; no key nudge. Checked
         // before the once-per-session memo, so a linked answer does not spend the session's one nudge.
-        if (_keyPathNextOn() && c && !c.api_key && !_linkedAny(c) && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
+        if (_keyPathNextOn() && c && !c.api_key && !(_linkedAny(c) && process.env.DCHUB_PLAN_HANDOFF_LINK !== '0') && _findingNudgeAllowed() && !_askOnceSeen(c.session_id, 'keypath', 'execute_plan')) _attachKeyPathNext(out);
         // DCHUB_WALL_IDENTITY_V2: the plan's resolved market rides the key entry's args and its say line (one call
         // mints, binds and follows it; lib/daily-habit.mjs). Flag off: untouched.
         if (_wallIdV2On() && c) {
@@ -42019,8 +42020,8 @@ app.get('/internal/sessions', (req, res) => {
 //
 //   The flip to enforcement is therefore a DECISION ON EVIDENCE — flip only once
 //   /internal/edge-key shows `missing` at zero for a full traffic day — not a
-//   deploy-and-hope. Both MCP services (resourceful-essence and zonal-liberation)
-//   need the same variable before either flip.
+//   deploy-and-hope. The MCP service (resourceful-essence; the second MCP service is
+//   retired) needs the variable before the flip.
 //
 // ★★★ 403, DELIBERATELY, NOT 401. In MCP a 401 + WWW-Authenticate is the signal
 //   that STARTS the OAuth flow (see the r-workos-challenge block above). Answering

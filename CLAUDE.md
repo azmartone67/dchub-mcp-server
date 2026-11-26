@@ -2,8 +2,8 @@
 
 The DC Hub MCP server. `main` deploys; land changes by pull request, never push to main. Gate: `npx vitest run`.
 
-## Two Railway services
-The same `main` deploys to TWO services, resourceful-essence and zonal-liberation. An env flag must be set on both, and resourceful-essence may not redeploy on a variable set: after `set-variables`, confirm each service actually started a deploy and redeploy by hand if it did not.
+## One Railway service
+`main` deploys to one service: `dchub-mcp-server` in the Railway project resourceful-essence, which serves live `/mcp`. Set an env flag on this service only: the old zonal-liberation project no longer exists. A variable set may not start a redeploy: after `set-variables`, confirm a deploy actually started and redeploy by hand if it did not.
 
 ## Tier and field gating
 - A free-tier gate on a tool that is not paywalled must read the pack credit balance (`_getCredits`), or it downgrades someone who paid for a pack.
