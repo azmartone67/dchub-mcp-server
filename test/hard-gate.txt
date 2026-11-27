@@ -326,6 +326,7 @@ test/generic-clientinfo-attribution.test.mjs
 test/generic-light-list-1125.test.mjs
 test/geography-arg-parity.test.mjs
 test/get-api-key-listed-1117.test.mjs
+test/get-infrastructure-nearest-1126.test.mjs
 test/get-iso-context-locked-sections-schema.test.mjs
 test/get-site-context-tool.test.mjs
 test/github-description-canon.test.mjs
