@@ -4075,7 +4075,7 @@ export function _gasPipelineCapacityBlock(body, st) {
   const codes = new Set(feats.map((p) => p.pipeline));
   const pipelines = (Array.isArray(body.pipelines) ? body.pipelines : []).filter((p) => p && codes.has(p.code))
     .map((p) => ({ code: p.code, name: p.name, operator: p.operator, gas_day: p.gas_day, cycle: p.cycle,
-      posted_at: p.posted_at, stale: p.stale, source_url: p.source_url, terms_url: p.terms_url }));
+      posted_at: p.posted_at, fetched_at: p.fetched_at, stale: p.stale, source_url: p.source_url, terms_url: p.terms_url }));
   const out = {
     state: st,
     locations_in_state: feats.length,

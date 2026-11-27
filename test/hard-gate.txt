@@ -311,6 +311,7 @@ test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
 test/full-cap-enforce.test.mjs
 test/funnel-invariants.test.mjs
+test/gas-block-fetched-at-1127.test.mjs
 test/gas-hosting-no-hardcoded-figures.test.mjs
 test/gas-index-as-of-lifted.test.mjs
 test/gas-index-dcgi-paid-set.test.mjs
