@@ -58,3 +58,40 @@ describe('the answer guide leads with the shortlist, not the markets the deadlin
     expect(g).not.toContain('Commack');
   });
 });
+
+describe('a verdict with no market does not take a lead slot', () => {
+  const v = (market, verdict, composite_score) => ({ market, verdict, ...(composite_score != null ? { composite_score } : {}) });
+  // xd-a live 2026-11-27 10:01Z: the step result is slimmed to its first shortlist row; synthesis carries the overall
+  // verdict (no market) and the alternatives.
+  const result = {
+    shortlist: [v('Midland–Odessa', 'BUILD', 80.6)],
+    synthesis: { verdict: 'BUILD', alternatives: [v('Upper Peninsula MI', 'BUILD'), v('Williston, ND', 'BUILD'), v('Cheyenne', 'BUILD')] },
+  };
+  const run = (r) => [{ step: 1, tool: 'site_selection_canvas', status: 'executed', result: r }];
+
+  it('named verdicts fill the three slots; the bare one is left out', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    expect(_execAnswerGuide(run(result))).toMatch(
+      /LEAD WITH THE VERDICT — this run returned: Midland–Odessa: BUILD \(80\.6\) · Upper Peninsula MI: BUILD · Williston, ND: BUILD\. /);
+  });
+
+  it('a market read twice is led with once, with its score', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    const dup = { shortlist: [v('Midland–Odessa', 'BUILD', 80.6)], synthesis: { alternatives: [v('Midland–Odessa', 'BUILD')] } };
+    expect(_execAnswerGuide(run(dup))).toMatch(/this run returned: Midland–Odessa: BUILD \(80\.6\)\. /);
+  });
+
+  it('with no named verdict, the bare one still leads', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    expect(_execAnswerGuide(run({ synthesis: { verdict: 'AVOID' } }))).toMatch(/this run returned: AVOID\. /);
+  });
+});
+
+describe('two reads that disagree on a market both stay', () => {
+  it('an AVOID is never deduplicated behind a BUILD', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    const result = { shortlist: [{ market: 'Ashburn', verdict: 'BUILD', composite_score: 70 }], dcpi: { market: 'Ashburn', verdict: 'AVOID' } };
+    const g = _execAnswerGuide([{ step: 1, tool: 'site_selection_canvas', status: 'executed', result }]);
+    expect(g).toMatch(/Ashburn: BUILD \(70\) · Ashburn: AVOID/);
+  });
+});
