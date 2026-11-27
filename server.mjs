@@ -33124,6 +33124,8 @@ const _KEY_HELP_PATHS = {
 };
 // Every path above and the fallback were read live 2026-09-27: 200 with a
 // "Get a durable free key in this URL" flow (/connect is the generic setup page).
+// The words just before the key page link in the notice; _oneLinkProse keeps the link that follows them.
+export const KEY_NOTICE_LEAD = 'Get a new key at ';
 export function _keyHelpUrl(platform) {
   const p = String(platform || '').trim().toLowerCase();
   return 'https://dchub.cloud' + (_KEY_HELP_PATHS[p] || '/connect');
@@ -33161,7 +33163,7 @@ export function _keyNoticeLine(ctxLike) {
   const url = _keyHelpUrl(c.platform);
   if (status === 'invalid' && !c.api_key) {
     return `${_keyWhere(c.auth_source)} isn't valid, so you're getting keyless results. `
-      + `Get a new key at ${url}`;
+      + KEY_NOTICE_LEAD + url;
   }
   if (status === 'unverified') {
     return `DC Hub couldn't verify ${_keyWhere(c.auth_source, false)} `
@@ -33982,8 +33984,12 @@ function _oneLinkProse(t, human, seen) {
   // now points at sells by wall kind (the pack on a capacity wall, Developer + Pro on a
   // depth wall), so the label is the paid-sell-line canon wording, which is true of both.
   out = out.replace(_ONE_LINK_PACK_RUNG_RE_G, (seg, u) => (keep(u) ? seg : _ONE_LINK_PLANS_LABEL + give()));
-  return out.replace(_ONE_LINK_RE_G, (u) => (keep(u) ? u : give()));
+  // The invalid-key notice (_keyNoticeLine) names the public key page, the same one initialize names:
+  // that link is the fix for a bad key, not a wall pointer, so it never gives way to the wall's link.
+  return out.replace(_ONE_LINK_RE_G, (u, at, str) => (keep(u) || _isKeyNoticeLink(str, at) ? u : give()));
 }
+const _isKeyNoticeLink = (str, at) => typeof str === 'string' && at >= KEY_NOTICE_LEAD.length
+  && str.slice(at - KEY_NOTICE_LEAD.length, at) === KEY_NOTICE_LEAD;
 // `seen` is passed for a text block (one copy of the link in the text); structuredContent
 // passes none, so its fields carry the link itself.
 function _oneLinkValue(v, human, key, depth, seen) {

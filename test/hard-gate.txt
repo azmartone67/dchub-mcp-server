@@ -420,6 +420,7 @@ test/interconnection-queue-shape.test.mjs
 test/internal-challenge-state.test.mjs
 test/invalid-bearer.test.mjs
 test/invalid-key-anon.test.mjs
+test/invalid-key-notice-public-link-1127.test.mjs
 test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
 test/item1-wall-neutral-line.test.mjs
