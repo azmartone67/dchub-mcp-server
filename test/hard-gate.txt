@@ -471,6 +471,7 @@ test/live-handshakes-unit.test.mjs
 test/live-reading-phoenix-time-1123.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs
+test/log-acct-tag.test.mjs
 test/log-redaction.test.mjs
 test/lp-free-monthly-runs.test.mjs
 test/lp-preview-labels-and-layer-cite.test.mjs
