@@ -16142,13 +16142,21 @@ export function _coarsenFindSites(payload, dp = 1) {
     // and the distance to the market centre (it would place the exact anchor) are not.
     // be#9111 (Grok 2026-11-20 P1): market.distance_note states the same km in prose; a preview keeps the
     // caveat in the backend's own below-Pro wording and drops the figure.
+    // Stability P3 (2026-11-27): a withheld distance says so, as the backend's own preview does (be#9472:
+    // _distance_km_withheld / _verdict_market_distance_km_withheld, the _time_to_power_months_withheld pattern),
+    // so a null reads as withheld, not unknown. Only where there was a distance to withhold: a null that was
+    // already null (no market in range) gets no marker.
     if (cand.market && typeof cand.market === 'object' && !Array.isArray(cand.market)) {
-      c2.market = { ...cand.market, distance_km: null };
+      c2.market = { ...cand.market, distance_km: null,
+        ...(cand.market.distance_km != null ? { _distance_km_withheld: true } : {}) };
       if (typeof cand.market.distance_note === 'string') c2.market.distance_note = _previewDistanceNote(cand.market.distance_note);
     }
     // be#9314 (2026-11-23) names the verdict's market on the row with its distance; that is the same figure as
     // market.distance_km, so a preview withholds it too.
-    if (Object.prototype.hasOwnProperty.call(cand, 'verdict_market_distance_km')) c2.verdict_market_distance_km = null;
+    if (Object.prototype.hasOwnProperty.call(cand, 'verdict_market_distance_km')) {
+      c2.verdict_market_distance_km = null;
+      if (cand.verdict_market_distance_km != null) c2._verdict_market_distance_km_withheld = true;
+    }
     if (cand.time_to_power && typeof cand.time_to_power === 'object' && !Array.isArray(cand.time_to_power)) {
       const t = cand.time_to_power;
       c2.time_to_power = { ...t, time_to_power_months: null,
