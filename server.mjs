@@ -368,7 +368,7 @@ import { withOauthLeadLine as _withOauthLeadLine } from './lib/wall-oauth-lead.m
 import { wallIdentityV2On as _wallIdV2On, signInEligible as _wallIdSignInEligible, withSignInLine as _wallIdWithSignIn,
   withEmailAsk as _wallIdWithEmailAsk, emailAskLine as _wallIdEmailAskLine, emailAskCall as _wallIdEmailAskCall,
   wallMarketFrom as _wallIdMarketFrom } from './lib/wall-identity-v2.mjs';
-import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview } from './lib/wall-copy-v2.mjs';
+import { wallCopyV2On as _wallCopyV2On, wallCopyV2 as _wallCopyV2, looksPreview as _wallCopyLooksPreview, KEY_NOTICE_LEAD } from './lib/wall-copy-v2.mjs';
 import * as _WPL from './lib/wall-paid-line.mjs';   // DCHUB_WALL_PAID_LINE A/B (default OFF)
 import * as _WPF from './lib/wall-pack-first.mjs';   // DCHUB_WALL_PACK_FIRST (default OFF)
 import * as _GLL from './lib/generic-light-list.mjs';
@@ -33174,7 +33174,7 @@ const _KEY_HELP_PATHS = {
 // Every path above and the fallback were read live 2026-09-27: 200 with a
 // "Get a durable free key in this URL" flow (/connect is the generic setup page).
 // The words just before the key page link in the notice; _oneLinkProse keeps the link that follows them.
-export const KEY_NOTICE_LEAD = 'Get a new key at ';
+export { KEY_NOTICE_LEAD };
 export function _keyHelpUrl(platform) {
   const p = String(platform || '').trim().toLowerCase();
   return 'https://dchub.cloud' + (_KEY_HELP_PATHS[p] || '/connect');
