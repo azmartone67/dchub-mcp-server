@@ -10924,7 +10924,7 @@ async function resolveWorkosBearer(token, opts) {
   // across replicas and restarts, so it is deliberately not used.)
   if (idn.created === true) _chStage('identity_created');
   _workosTokenCache.set(_cacheKey, out);
-  console.log(`[oauth] workos bearer → durable key ${_keyKind(idn.api_key)} acct=${_logId(String(idn.api_key || ''))} tier=${out.tier}`
+  console.log(`[oauth] workos bearer → durable key ${_keyKind(idn.api_key)}${idn.developer_id ? ` acct=${_logId(String(idn.developer_id))}` : ''} tier=${out.tier}`
     + (_isAgentReg ? ` agent_registration=${_actSub ? 'claimed' : 'anonymous'} email=${_email ? 'yes' : 'no'}` : ''));
   return out;
 }
@@ -43455,7 +43455,7 @@ app.post(MCP_PATHS, async (req, res) => {
           // qa-0704: mcpServer is initialized by the time this hook fires
           // (during handleRequest, after connect) — safe to capture here.
           sessionSrv.set(sid, mcpServer);
-          console.log(`[MCP] init sid=${_logId(sid)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${apiKey ? ` acct=${_logId(String(apiKey))}` : ''} active=${sessions.size}`);
+          console.log(`[MCP] init sid=${_logId(sid)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''} active=${sessions.size}`);
         },
       });
       transport.onclose = () => {
@@ -43696,8 +43696,8 @@ app.post(MCP_PATHS, async (req, res) => {
       // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
       const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey, leanPrompts: _leanPromptsFor(req) }) : createServer(_descOverrides);   // A3 leanPrompts
       await ephServer.connect(ephTransport);
-      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${apiKey ? ` acct=${_logId(String(apiKey))}` : ''}`);
-      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${apiKey ? ` acct=${_logId(String(apiKey))}` : ''}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''}`);
+      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
