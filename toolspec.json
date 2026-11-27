@@ -1471,12 +1471,12 @@
   },
   {
     "name": "get_infra_projects",
-    "description": "Use this when the user asks what gas pipeline or transmission line projects are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects are planned in PJM by 2030?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from five ISOs' own project lists — ERCOT (TPIT), PJM (RTEP), MISO (MTEP Appendix A), SPP (STEP) and ISO-NE (RSP list); NOT CAISO or NYISO, and not utilities outside those ISOs. Each ISO publishes a different grain (an upgrade or facility, not a whole project), so a row count is a count of upgrades. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks what gas pipeline or transmission line projects are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects are planned in PJM by 2030?\", \"what new projects appeared since last month?\". Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "type": {
-          "description": "Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)",
+          "description": "Which project list: gas_pipeline (EIA plus FERC Natural Gas Act notices, US-wide), transmission (ERCOT, PJM, MISO, SPP, ISO-NE and CAISO plan lists, plus BPA when that source is enabled) or all (default)",
           "type": "string",
           "enum": [
             "gas_pipeline",
@@ -1484,8 +1484,12 @@
             "all"
           ]
         },
+        "iso": {
+          "description": "Transmission only: one grid operator, e.g. PJM. ERCOT, PJM, MISO, SPP, ISO-NE, CAISO, or BPA when that source is enabled; an operator not served is an error that lists the ones that are. With type=all it narrows to transmission projects",
+          "type": "string"
+        },
         "state": {
-          "description": "US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX",
+          "description": "US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects match the state(s) their ISO lists",
           "type": "string"
         },
         "status": {
