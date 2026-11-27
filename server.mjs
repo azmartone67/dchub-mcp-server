@@ -118,6 +118,9 @@ import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
 import { sealPayload as _sealTokenPayload, unsealPayload as _unsealTokenPayload } from './lib/token-seal.mjs';
 import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog, redactEmails as _redactEmails } from './lib/log-redact.mjs';
+// acct= on the [MCP] request log lines: a one-way tag of the key row's non-secret id (developer_id for an
+// mcp_dev_keys row, key_ref 'api_keys:<id>' for an api_keys-only row). Never the key or a hash of it.
+const _acctTag = (v) => { const id = v && (v.developer_id || v.key_ref); return id ? ` acct=${_logId(String(id))}` : ''; };
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
@@ -7180,6 +7183,9 @@ async function _validateKeyUncached(api_key, opts = {}) {
       key_rejected: data.valid !== true,
       tier: data.tier || 'free',
       developer_id: data.developer_id || null,
+      // 2026-11-27: the backend's non-secret reference to an api_keys-only row ('api_keys:<id>'),
+      // so the request log's acct= tag covers keys that have no mcp_dev_keys developer_id.
+      key_ref: data.key_ref || null,
       email: data.email || null,
       // r62c-conv: backend stamps source:'auto_trial' ONLY after
       // validate_trial_key() confirms a live, unexpired trial key in
@@ -43466,7 +43472,7 @@ app.post(MCP_PATHS, async (req, res) => {
           // qa-0704: mcpServer is initialized by the time this hook fires
           // (during handleRequest, after connect) — safe to capture here.
           sessionSrv.set(sid, mcpServer);
-          console.log(`[MCP] init sid=${_logId(sid)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''} active=${sessions.size}`);
+          console.log(`[MCP] init sid=${_logId(sid)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${_acctTag(validation)} active=${sessions.size}`);
         },
       });
       transport.onclose = () => {
@@ -43707,8 +43713,8 @@ app.post(MCP_PATHS, async (req, res) => {
       // A keyed caller's resources/list names its inbox, as in a session; a tools/call is unchanged.
       const ephServer = _statelessOther ? createServer(_descOverrides, undefined, undefined, { keyed: !!apiKey, leanPrompts: _leanPromptsFor(req) }) : createServer(_descOverrides);   // A3 leanPrompts
       await ephServer.connect(ephTransport);
-      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''}`);
-      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${validation && validation.developer_id ? ` acct=${_logId(String(validation.developer_id))}` : ''}`);
+      if (_statelessOther) console.log(`[MCP] stateless ${_shape.kind === 'batch' ? `batch(${_shape.n})` : String(body.method).slice(0, 40)}${sessionId ? ` stale-sid=${_logId(String(sessionId))}` : ''} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${_acctTag(validation)}`);
+      else console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}${_acctTag(validation)}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
