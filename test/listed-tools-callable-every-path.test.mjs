@@ -56,7 +56,9 @@ const OAUTH_PATH = /\/oauth$/;
 
 // A resolution refusal: the path did not find the tool at all. Anything else
 // (data, a preview, a wall, an argument-validation error) means it resolved.
-const REFUSAL = /\bUnknown tool\b|\bTool [A-Za-z0-9_.-]+ (not found|disabled)\b/;
+// 2026-11-27 (lib/unlisted-tool.mjs): a restricted endpoint refuses a real DC Hub tool it does not serve with
+// "... not available on this endpoint ...", which is a resolution refusal too.
+const REFUSAL = /\bUnknown tool\b|\bTool [A-Za-z0-9_.-]+ (not found|disabled)\b|\bnot available on this endpoint\b/;
 
 function refusalOf(r) {
   const m = r.msg;

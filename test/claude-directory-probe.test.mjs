@@ -9,6 +9,7 @@
 //
 // CONTROLS: the same calls on /mcp DO carry the commerce and the sponsor
 // block, so an empty offender list cannot mean the harness never reached them.
+import { NEVER_POINTED_AT_TOOLS, unlistedToolMessage } from '../lib/unlisted-tool.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   CLAUDE_TOOLS, CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE, scrubClaudeToolResult, transformClaudeBody,
@@ -169,7 +170,10 @@ describe('refusals', () => {
       const r = await H.call(DIR, name, {});
       expect(r.msg.result, name).toBeUndefined();
       expect(r.msg.error.code, name).toBe(-32602);
-      expect(r.msg.error.message, name).toMatch(/^Unknown tool/);
+      // 2026-11-27 (lib/unlisted-tool.mjs): a real DC Hub tool says where it is served; key and commerce
+      // tools are never pointed at and keep "Unknown tool".
+      if (NEVER_POINTED_AT_TOOLS.includes(name)) expect(r.msg.error.message, name).toMatch(/^Unknown tool/);
+      else expect(r.msg.error.message, name).toBe(unlistedToolMessage(DIR));
       expect(hitsOf(PATTERNS, r.raw).filter((h) => h !== 'removed tool named'), name).toEqual([]);
     }
   });

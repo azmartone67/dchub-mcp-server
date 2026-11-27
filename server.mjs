@@ -78,6 +78,7 @@
 
 import { withHeldDcpiLinks as _withHeldDcpiLinks } from './lib/dcpi-hold-links.mjs';
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
+import { unlistedToolError } from './lib/unlisted-tool.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
@@ -42556,6 +42557,17 @@ function _isLoopbackPeer(req) {
 }
 
 const _CORE_TOOL_SET = new Set(CORE_TOOL_NAMES);
+
+// Stability P3 (2026-11-27): a restricted endpoint answers a real DC Hub tool it does not serve with where it is
+// served, not "Unknown tool" (lib/unlisted-tool.mjs). The set of real names is what /mcp registers, read once.
+let _dchubToolNames = null;
+export function _isDchubToolName(name) {
+  if (typeof name !== 'string' || !name) return false;
+  if (!_dchubToolNames) {
+    try { _dchubToolNames = new Set(Object.keys(createServer(null, '')._registeredTools || {})); } catch (_) { return false; }
+  }
+  return _dchubToolNames.has(name);
+}
 let _coreNamesSet = false;
 const _coreSlugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
@@ -42905,7 +42917,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_b.method === 'tools/call') {
         const _n = _b.params && _b.params.name;
         if (!(_claudeProfile ? _isClaudeTool(_n) : _isDirectoryTool(_n))) {
-          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+          return _writeRpcError(res, _b.id, unlistedToolError(_n, _normPath(req), _isDchubToolName), 200);
         }
         if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
         const _a = _b.params.arguments;
@@ -42959,7 +42971,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_b.method === 'tools/call') {
         const _n = _b.params && _b.params.name;
         if (!_CORE_TOOL_SET.has(_n)) {
-          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+          return _writeRpcError(res, _b.id, unlistedToolError(_n, _normPath(req), _isDchubToolName), 200);
         }
         if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
         const _a = _b.params.arguments;

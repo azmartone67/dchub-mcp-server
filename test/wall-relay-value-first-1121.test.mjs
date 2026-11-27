@@ -27,6 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { createGitRefSandbox } from './helpers/repo-sandbox.mjs';
 import { isPaidFullOnly } from '../lib/paid-full-only.mjs';
+import { unlistedToolMessage } from '../lib/unlisted-tool.mjs';
 import * as WC from '../lib/withheld-copy.mjs';
 import * as RE from '../lib/wall-relay-everywhere.mjs';
 import * as VF from '../lib/wall-value-first.mjs';
@@ -172,6 +173,11 @@ const ACCEPT = [
 // origin/main is the baseline unless the tool is paid-only and origin/main predates that rule; then this server with
 // every item off (a fresh keyless caller: each call() draws a new IP).
 const changedSince1123 = (name) => !MAIN_HAS_GATE && isPaidFullOnly(name);
+// 2026-11-27 (lib/unlisted-tool.mjs): a restricted endpoint answers a real DC Hub tool it does not serve with where it
+// is served (origin/main before it: "Unknown tool."). Exactly that one difference is allowed; the rest of the
+// response must still be origin/main byte for byte.
+const unlistedSince1127 = (p, here, main) => main.includes('"message":"Unknown tool."')
+  && here === main.replace('"message":"Unknown tool."', `"message":"${unlistedToolMessage(p)}"`);
 const LICENCE_KEY = /\\*"licence\\*":\{/;
 // The price / plan / credit / calls-per-day ban (the brief's list; "free" too: the 2026-11-21 no-free sweep).
 const NO_PRICE = /[$€£¥]|\bper month\b|\/mo\b|\b(?:free|developer|pro|enterprise|starter)\b|\bcredits?\b|\b\d[\d,]*\s+(?:MCP\s+)?(?:calls?|full answers?|answers?)\b|\/day\b|\bper day\b|\ba day\b/i;
@@ -347,7 +353,7 @@ describe('flags OFF: origin/main byte for byte on /mcp, /mcp/claude, /mcp/chatgp
           continue;
         }
         const main = norm((await call(O, p, name, args)).msg);
-        expect(here === main, `${p} ${name}${firstDiff(here, main)}`).toBe(true);
+        expect(here === main || unlistedSince1127(p, here, main), `${p} ${name}${firstDiff(here, main)}`).toBe(true);
       }
     }
   }, 240_000);
@@ -370,7 +376,7 @@ describe('flags ON: /mcp/claude and /mcp/chatgpt stay origin/main byte for byte'
         const here = norm((await call(H, p, name, args)).msg);
         setEnv(PROD);
         const main = norm((await call(changedSince1123(name) ? H : O, p, name, args)).msg);
-        expect(here === main, `${p} ${name}${firstDiff(here, main)}`).toBe(true);
+        expect(here === main || unlistedSince1127(p, here, main), `${p} ${name}${firstDiff(here, main)}`).toBe(true);
       }
     }
   }, 240_000);
