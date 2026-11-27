@@ -8,7 +8,7 @@
 //      a gap; it now reads the power side only and leads with where the returned queue requests sit.
 import { describe, it, expect } from 'vitest';
 import { _planQuery } from '../server.mjs';
-import { buildCrossDomainAnswer, mergeQueueEcho, askedDims, HEADLINE_MAX } from '../lib/cross-domain-answer.mjs';
+import { buildCrossDomainAnswer, mergeQueueEcho, queueFact, askedDims, HEADLINE_MAX } from '../lib/cross-domain-answer.mjs';
 import { whereGridPowerAsk, dcPowerPlaceSequence } from '../lib/dc-power-place.mjs';
 import { refinedQueueFacts } from '../lib/plan-step-facts.mjs';
 
@@ -70,7 +70,7 @@ describe('6 xd-b: each asked power side gets a headline slot', () => {
 });
 
 describe('7 one count per GW figure', () => {
-  it('the operator echo folds into the queue fact: one GW, the operator count, the row count labelled', () => {
+  it('the operator echo folds into the queue fact: one GW, the operator count, never the row count', () => {
     const QA = 'Where can I get 50 MW of colocation or powered capacity with power in under 24 months in Texas, and what do grid headroom and the interconnection queue look like there?';
     const executed = [
       ex(1, 'get_market_intel', { market: 'dallas' }, { ...INTEL_NOVA, market: { name: 'Dallas' } }),
@@ -80,7 +80,8 @@ describe('7 one count per GW figure', () => {
     const ia = buildCrossDomainAnswer({ intent: QA, intent_class: 'dc_power_place', place: { label: 'Dallas', state: 'TX', iso: 'ERCOT' } }, executed, asMap(executed));
     const all = [ia.headline, ...ia.evidence, ...ia.facts.map((f) => f.text)].join(' ');
     const ev = ia.evidence.join(' ');
-    expect(ev).toContain('ERCOT interconnection queue: 461.4 GW of requested generation across 1,847 requests (ERCOT report, as of 2026-10-31; generation, not load or headroom); the queue read counts 1,766 projects for the same GW (DC Hub queue rows, a different counting basis).');
+    expect(ev).toContain('ERCOT interconnection queue: 461.4 GW of requested generation across 1,847 requests (ERCOT report, as of 2026-10-31; generation, not load or headroom).');
+    expect(all).not.toContain('1,766');   // DC Hub's row count is not ERCOT's GW basis
     expect(all).not.toMatch(/own reported generation queue/);
     expect(ia.facts.filter((f) => /461\.4 GW/.test(f.text))).toHaveLength(1);
     for (const f of ia.facts) expect(Object.keys(f).filter((k) => k.startsWith('_'))).toEqual([]);
@@ -130,5 +131,28 @@ describe('12 Q-d: where in Texas, fastest grid power', () => {
     expect(ia.headline).not.toMatch(/Data centers:/);
     expect(ia.not_established.join(' ')).not.toMatch(/facility search/);
     expect(ia.headline.length).toBeLessThanOrEqual(HEADLINE_MAX);
+  });
+});
+
+describe('ERCOT queue: one GW, ERCOT\'s own count (2026-11-27)', () => {
+  const FULL = { iso: 'ERCOT', queued_generation_gw: 461.4, queued_generation_gw_as_of: '2026-10-31', project_count: 1766,
+    queued_generation_gw_not_comparable_to: 'DC Hub per-project interconnection-queue rows',
+    queued_generation_gw_source: 'cited: ERCOT GIS Report, October 2026 (posted 2026-11-02), Summary sheet: 1,847 generation interconnection or change requests, 461,414 MW (~461.4 GW) under study as of Oct 31 2026' };
+  const MISO = { iso: 'MISO', queued_generation_gw: 250.6, project_count: 1136, last_refreshed: '2026-11-27T06:05:09Z', source_as_of_basis: 'live_feed_fetch_date' };
+  const fact = (p) => queueFact({ step: 2, tool: 'get_interconnection_queue', args: { iso: p.iso }, p });
+
+  it('a full ERCOT read pairs its GW with ERCOT\'s 1,847 requests, never DC Hub\'s 1,766 rows', () => {
+    const f = fact(FULL);
+    expect(f.text).toBe('ERCOT interconnection queue: 461.4 GW of requested generation across 1,847 requests (ISO report, as of 2026-10-31; generation, not load or headroom).');
+  });
+  it('no request count in the cited line: no count at all', () => {
+    expect(fact({ ...FULL, queued_generation_gw_source: null }).text).not.toMatch(/across/);
+  });
+  it('a preview ERCOT read (taste headline, no marker) never pairs the row count', () => {
+    const f = fact({ iso: 'ERCOT', taste: { headline: { name: 'queued_generation_gw', value: 461.4, as_of: '2026-10-31' }, project_count: { value: 1766 } } });
+    expect(f.text).not.toContain('1,766');
+  });
+  it('MISO\'s live-feed GW keeps its own row count', () => {
+    expect(fact(MISO).text).toContain('250.6 GW of requested generation across 1,136 projects');
   });
 });
