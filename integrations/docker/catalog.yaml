@@ -149,6 +149,8 @@ registry:
         description: "Use this when the user asks where retiring power plants free grid capacity: scans EIA-860M retirements to find near-term transmission grid headroom — a retiring plant is a CONCRETE headroom event…"
       - name: "get_shortlist"
         description: "Use this when the user wants to see a saved data center site shortlist."
+      - name: "get_site_context"
+        description: "Use this when the user asks what is around a point: the neighborhood of a lat/lon (nearest substations, the nearest transmission line, fiber, carriers and internet exchanges, flood, seismic and…"
       - name: "get_subsea_cables"
         description: "Use this when the user asks about subsea (submarine) cable landings near a site, or the cable catalogue."
       - name: "get_tax_incentives"

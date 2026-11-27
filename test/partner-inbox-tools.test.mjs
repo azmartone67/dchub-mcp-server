@@ -92,13 +92,13 @@ afterAll(async () => {
 const names = (s) => Object.keys(s._registeredTools).sort();
 
 describe('registration: one catalog for every caller', () => {
-  it('both tools are registered on keyed and keyless servers alike, and the catalog is 98', () => {
+  it('both tools are registered on keyed and keyless servers alike, and the catalog is 99', () => {
     const keyless = names(S.createServer(null, ''));
     const keyed = names(S.createServer(null, '', undefined, { keyed: true }));
     expect(keyless).toEqual(keyed);
     expect(keyless).toContain('read_inbox');
     expect(keyless).toContain('report_finding');
-    expect(keyless.length).toBe(98);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
+    expect(keyless.length).toBe(99);   // 99 on 2026-11-26: get_site_context; 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
     expect(S.PARTNER_TOOLS).toEqual(['read_inbox']);
   });
 
@@ -145,7 +145,7 @@ describe('over HTTP: schema, instructions, partner vs non-partner', () => {
   it('tools/list carries both for a keyless session, with the class enum on report_finding', async () => {
     const { h } = await open({});
     const list = (await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).msg.result.tools;
-    expect(list.length).toBe(98);
+    expect(list.length).toBe(99);   // 99: get_site_context
     const rf = list.find((t) => t.name === 'report_finding');
     const ri = list.find((t) => t.name === 'read_inbox');
     expect(rf && ri).toBeTruthy();

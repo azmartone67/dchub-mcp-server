@@ -38,6 +38,8 @@ const PREVIEW_SC = {
   answered_count: 2, blocks_count: 4,
   note: 'Which blocks have an answer at this point. Their values are part of the full Land & Power result.',
 };
+// GDL 2026-11-26 item 3: _siteContextFor states as_of as the Phoenix day; the read stamp moves to retrieved_at.
+const PREVIEW_DAY = { ...PREVIEW_SC, as_of: '2026-10-29', retrieved_at: '2026-10-29T12:00:00Z' };
 
 let H, fence;
 let used = 0, LIMIT = 3, scMode = 'honest';
@@ -125,7 +127,7 @@ describe('analyze_site site_context: who gets what', () => {
     LIMIT = 0;
     const r = await call(FREE_KEY);
     expect(r.asks.map((a) => a.view)).toEqual(['preview']);
-    expect(r.sc.site_context).toEqual(PREVIEW_SC);
+    expect(r.sc.site_context).toEqual(PREVIEW_DAY);
     expect(leaks(r)).toEqual([]);
   });
 
@@ -141,7 +143,7 @@ describe('analyze_site site_context: who gets what', () => {
     const r = await call(null);
     expect(r.asks.map((a) => a.view)).toEqual(['preview']);
     expect(r.sc.status).toBe('gated_preview');
-    expect(r.sc.site_context).toEqual(PREVIEW_SC);
+    expect(r.sc.site_context).toEqual(PREVIEW_DAY);
     // lib/gated-preview.mjs rebuilds the wall's text (owner copy v15); the preview rides as data only.
     expect(r.text).toContain('This is a preview, not the full site report.');
     expect(leaks(r)).toEqual([]);

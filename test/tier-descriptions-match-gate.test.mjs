@@ -45,7 +45,7 @@ const KEYLESS_CLAIM = /keyless (?:gets|returns|receives)(?! no )[^.;]*\b(verdict
 
 describe('Land & Power descriptions match the keyless wall', () => {
   it('serves the full catalog (non-vacuous)', () => {
-    expect(TOOLS.length).toBe(98);   // 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
+    expect(TOOLS.length).toBe(99);   // 99 on 2026-11-26: get_site_context default on; 94 -> 95 on 2026-11-11: get_air_permit_context; 96 on 2026-11-13: dchub_services; 97 on 2026-11-16: request_enhancement; 98 on 2026-11-20: accept_capacity_intro
   });
 
   // analyze_site left this list when B2 (#707) opened its keyless headline;

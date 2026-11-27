@@ -41,7 +41,7 @@ GET  https://dchub.cloud/api/v1/facilities?q=ashburn          # facility search
 GET  https://dchub.cloud/api/carbon/intensity?state=TX        # grid carbon intensity
 GET  https://dchub.cloud/llms.txt                             # the agent guide
 GET  https://dchub.cloud/api/v1/ai-agents.json               # machine-readable integration map
-POST https://dchub.cloud/mcp                                  # the full 98-tool MCP server
+POST https://dchub.cloud/mcp                                  # the full 99-tool MCP server
 ```
 
 ## Access and keys

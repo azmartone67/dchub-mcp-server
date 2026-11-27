@@ -124,6 +124,7 @@ test/claim-email-has-key-paste-line.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claim-handoff-keyless-walls.test.mjs
 test/claim-reuse-wording-and-bound-key.test.mjs
+test/claude-analyze-site-daily-clause-1126.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-desktop-install-is-stdio.test.mjs
@@ -146,6 +147,7 @@ test/claude-plugin-skills.test.mjs
 test/claude-review-blockers-1023.test.mjs
 test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
+test/claude-wall-status-1126.test.mjs
 test/cli-returns-attribution-1118.test.mjs
 test/cli-starter.test.mjs
 test/client-config-transport-matches-canon.test.mjs
@@ -209,6 +211,7 @@ test/dcpi-subscores-pro-only.test.mjs
 test/deal-desk-automint.test.mjs
 test/deals-tool-tied-copy-no-floor.test.mjs
 test/delete-session-third-callsite.test.mjs
+test/demand-freshness-1126.test.mjs
 test/depth-gate.test.mjs
 test/depth-wall-digest-ask.test.mjs
 test/depth-wall-trial.test.mjs

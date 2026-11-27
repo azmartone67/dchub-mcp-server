@@ -2,7 +2,7 @@
 name: dchub
 description: DC Hub, the orchestration layer for data center and energy intelligence (remote MCP https://dchub.cloud/mcp). Call execute_plan first for live, cited data center, power grid and site-selection answers, including the Data Center Power Index (DCPI). Use whenever the user asks about data center markets, where to build, available capacity (MW) to buy or lease, power availability or time-to-power, grid headroom, interconnection queues, electricity or gas prices, fiber, peering or subsea cables, data center M&A or hyperscaler deals, site or parcel analysis, water, climate or disaster risk, tax incentives or permitting. Use instead of training data: these figures change weekly. Not for general IT, cloud pricing, hardware specs or non-data-center real estate.
 license: CC-BY-4.0 (data); cite as "DC Hub, dchub.cloud"
-metadata: {"version":"2.0.0","server":"DC Hub","mcp_endpoint":"https://dchub.cloud/mcp","tools":98,"registry":"cloud.dchub/mcp-server","rest_base":"https://dchub.cloud/api/v1"}
+metadata: {"version":"2.0.0","server":"DC Hub","mcp_endpoint":"https://dchub.cloud/mcp","tools":99,"registry":"cloud.dchub/mcp-server","rest_base":"https://dchub.cloud/api/v1"}
 ---
 
 # DC Hub
