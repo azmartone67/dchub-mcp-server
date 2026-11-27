@@ -432,7 +432,7 @@ describe('item 5: partner notes ride the first result and get_changes, no new to
   });
 
   it('no tool was added for it: the catalog is exactly what mcp#831 left (94), plus get_air_permit_context (2026-11-11), dchub_services (2026-11-13), request_enhancement (2026-11-16) and accept_capacity_intro (2026-11-20)', () => {
-    expect(Object.keys(TOOLS)).toHaveLength(98);
+    expect(Object.keys(TOOLS)).toHaveLength(99);   // 99 on 2026-11-26: get_site_context default on
     expect(Object.keys(TOOLS)).not.toContain('partner_inbox');
   });
 });

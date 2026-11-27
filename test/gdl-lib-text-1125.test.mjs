@@ -9,7 +9,7 @@
 //   4. "nearest line of any voltage voltage not held 7.5 km away".
 //   5. "live demand was 105,764 MW (EIA-930 hourly, as of 2026-11-26)" said in the Phoenix evening of 2026-11-25.
 // Pure, no network.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { factsFromStep, searchFacilitiesFacts } from '../lib/plan-step-facts.mjs';
 import { queueMwClause, servingGridQueue } from '../lib/state-queue-coverage.mjs';
 import { honestCountText, rowsMetro, cityCase } from '../lib/plan-facility-lead.mjs';
@@ -144,7 +144,9 @@ describe('5: the EIA-930 demand hour is said as its America/Phoenix day', () => 
   it('02:00 UTC on 11-26 is 2026-11-25 in Phoenix; as_of keeps the machine day', () => {
     const s = { tool: 'get_grid_intelligence', step: 1, args: { iso: 'PJM' },
       p: { iso: 'PJM', as_of: '2026-11-26T02:00:00Z', taste: { headline: { name: 'demand_mw', value: 105764, as_of: '2026-11-26T02' } } } };
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-26T04:00:00Z'));   // within the fresh window
     const f = headroomFact(s);
+    vi.useRealTimers();
     expect(f.text).toContain('live demand was 105,764 MW (EIA-930 hourly, as of 2026-11-25)');
     expect(f.as_of).toBe('2026-11-26');
   });

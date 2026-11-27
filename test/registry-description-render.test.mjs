@@ -105,10 +105,19 @@ describe('check mode fails when a file differs from the render (must-fail contro
       expect(out).toMatch(/description differs from the render/);
     });
   });
-  it('a canon phrase move beyond the floor tolerance is still caught (substations 134,000+ -> 234,000+)', () => {
+  it('a canon phrase move beyond the floor tolerance is still caught (substations +100,000)', () => {
     // Figures beside a canon noun stay under the existing floor rules (5% tolerance,
     // notation-neutral), so a small walk is a warning there, not prose drift.
-    mutate('canonical/canon_phrases.json', (s) => s.replace('"substations": "134,000+"', '"substations": "234,000+"'), () => {
+    // 2026-11-27: read the live snapshot value instead of pinning "134,000+" (canon moved to 121,000+,
+    // and a pinned replace that matches nothing leaves this must-fail control vacuous).
+    const cur = /"substations": "([\d,]+)\+"/.exec(fs.readFileSync(path.join(REAL_ROOT, 'canonical/canon_phrases.json'), 'utf8'));
+    expect(cur, 'canon_phrases.json has a substations floor phrase').toBeTruthy();
+    const moved = (Number(cur[1].replace(/,/g, '')) + 100_000).toLocaleString('en-US') + '+';
+    mutate('canonical/canon_phrases.json', (s) => {
+      const out = s.replace(`"substations": "${cur[1]}+"`, `"substations": "${moved}"`);
+      expect(out, 'the mutation applied').not.toBe(s);
+      return out;
+    }, () => {
       const { ok, out } = run();
       expect(ok).toBe(false);
       expect(out).toMatch(/substation/i);
