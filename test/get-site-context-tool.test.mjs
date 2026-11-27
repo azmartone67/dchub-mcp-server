@@ -1,5 +1,5 @@
 // get_site_context (Brain 2026-11-25): the neighborhood around a point as its own tool, behind
-// DCHUB_MCP_GET_SITE_CONTEXT (default ON since 2.12.64; =0 is the kill switch). It returns exactly what analyze_site embeds as
+// DCHUB_MCP_GET_SITE_CONTEXT (default ON since 2.12.65; =0 is the kill switch). It returns exactly what analyze_site embeds as
 // `site_context` (same helper, same preview-vs-full choice); execute_plan routes "what is around
 // this point" to it and keeps a score / "should I build here" ask on analyze_site. The facility
 // ownership trio from the backend passes through get_facility / search_facilities / get_pipeline.
@@ -123,7 +123,7 @@ afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); delete
 beforeEach(() => { scMode = 'honest'; process.env[FLAG] = '1'; delete process.env.DCHUB_SITE_CONTEXT; });
 
 describe('registration follows DCHUB_MCP_GET_SITE_CONTEXT', () => {
-  it('reads the flag (default ON since 2.12.64; 0/false/no/off turn it off)', () => {
+  it('reads the flag (default ON since 2.12.65; 0/false/no/off turn it off)', () => {
     expect(S._getSiteContextToolOn({})).toBe(true);
     expect(S._getSiteContextToolOn({ [FLAG]: '' })).toBe(true);
     expect(S._getSiteContextToolOn({ [FLAG]: 'false' })).toBe(false);

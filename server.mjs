@@ -12438,7 +12438,7 @@ export function _siteContextLine(p) {
     + '. Their values are part of the full site analysis.';
 }
 // ── get_site_context (Brain 2026-11-25): the same body as a first-class tool ──
-// Registered only while DCHUB_MCP_GET_SITE_CONTEXT is on (default ON since 2.12.64; =0 turns it off), so tools/list,
+// Registered only while DCHUB_MCP_GET_SITE_CONTEXT is on (default ON since 2.12.65; =0 turns it off), so tools/list,
 // the derived tool count and every plan stay byte-identical until it is turned on. The
 // answer is exactly what analyze_site embeds as `site_context` (_siteContextFor: the view
 // is chosen from the caller, the backend's ?view=preview below full access), so the gate
@@ -12446,7 +12446,7 @@ export function _siteContextLine(p) {
 export const SITE_CONTEXT_TOOL = 'get_site_context';
 // The site-context kill switch (DCHUB_SITE_CONTEXT=0) takes the tool and its routing away with the read itself.
 export function _getSiteContextToolOn(env = process.env) {
-  // Default ON since 2.12.64 (production already ran it on); DCHUB_MCP_GET_SITE_CONTEXT=0 is the kill switch.
+  // Default ON since 2.12.65 (production already ran it on); DCHUB_MCP_GET_SITE_CONTEXT=0 is the kill switch.
   return !['0', 'false', 'no', 'off'].includes(String(env.DCHUB_MCP_GET_SITE_CONTEXT || '').trim().toLowerCase())
     && _siteContextOn(env);
 }
@@ -24575,7 +24575,7 @@ export const _EXEC_GEO_ARGS = {
   get_infra_projects:           { state: 'state' },
   get_permitting_intel:         { state: 'state' },
   get_air_permit_context:       { point: true, radius: true },
-  get_site_context:             { point: true },   // 2.12.64: default on; lat/lon only
+  get_site_context:             { point: true },   // 2.12.65: default on; lat/lon only
   get_power_availability_timeline: { state: 'state' },
   get_power_pipeline:           { state: 'state' },
   get_tax_incentives:           { state: 'state' },
@@ -28140,7 +28140,7 @@ export function _planQuery(intent, context) {
     seq.splice(0, seq.length, ..._country.seq);
     _capacityCountrySteps(seq, capStep);
   }
-  // get_site_context (DCHUB_MCP_GET_SITE_CONTEXT, default ON since 2.12.64): "what is around this point" is the neighborhood
+  // get_site_context (DCHUB_MCP_GET_SITE_CONTEXT, default ON since 2.12.65): "what is around this point" is the neighborhood
   // read, not a score. The point plan becomes that one read; a score / "should I build here" ask keeps analyze_site.
   let _scRoute = false;
   try {
@@ -38868,7 +38868,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
-  // get_site_context (Brain 2026-11-25, DCHUB_MCP_GET_SITE_CONTEXT default ON since 2.12.64): the neighborhood around a point as
+  // get_site_context (Brain 2026-11-25, DCHUB_MCP_GET_SITE_CONTEXT default ON since 2.12.65): the neighborhood around a point as
   // its own tool, the same body analyze_site embeds as `site_context` (_siteContextFor, same view choice, same
   // backend read). With the flag off it is not registered, so tools/list does not move.
   if (_getSiteContextToolOn()) {
