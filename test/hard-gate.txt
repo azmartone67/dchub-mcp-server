@@ -124,6 +124,7 @@ test/claim-email-has-key-paste-line.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claim-handoff-keyless-walls.test.mjs
 test/claim-reuse-wording-and-bound-key.test.mjs
+test/claude-analyze-site-daily-clause-1126.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-desktop-install-is-stdio.test.mjs
