@@ -71,3 +71,28 @@ describe('answers', () => {
     expect(fresh.headline).toMatch(/Right now: .*54,223 MW/);
   });
 });
+
+// 2026-11-27 live: with be's ISO-load fallback the demand figure is minutes old, but the step's provenance as_of is
+// still the EIA series' oldest hour, so the line read "demand 52,281 MW (grid operator feed, as of 2026-11-11)".
+describe('a fresh fallback demand is dated by its own hour', () => {
+  const fallback = () => ({ iso: 'ERCOT', region: 'ERCOT', demand_mw: 52281, demand_period: '2026-11-27T04:25:15Z',
+    demand_source: 'ercot:np6-625-cd(seMW)+np6-235-cd(demand)',
+    demand_eia930: { demand_mw: 54223, demand_period: '2026-11-11T00', age_hours: 387.7 },
+    freshness_sla: { layers: { demand: { as_of: '2026-11-27T04:25:15Z', sla_hours: 4 } } },
+    provenance: { as_of: '2026-11-11T00:00:00Z' }, citation: { as_of: '2026-11-11T00:00:00Z' } });
+  it('the fact names the reading day, not the EIA day', () => {
+    at(new Date('2026-11-27T04:44:00Z'));   // 21:44 Phoenix on 2026-11-26
+    const fs = factsFromStep('get_grid_data', fallback(), { iso: 'ERCOT' });
+    expect(fs[0].text).toContain('demand 52,281 MW');
+    expect(fs[0].text).toContain('as of 2026-11-26');
+    expect(fs[0].as_of).toBe('2026-11-27');
+    for (const f of fs) expect(f.text).not.toContain('2026-11-11');
+  });
+  it('the xd headroom clause names the ISO feed and the reading day', () => {
+    at(new Date('2026-11-27T04:44:00Z'));
+    const p = { ...fallback(), as_of: '2026-11-11T00:00:00Z' };
+    const f = headroomFact({ tool: 'get_grid_intelligence', step: 1, args: { iso: 'ERCOT' }, p });
+    expect(f.text).toContain("live demand was 52,281 MW (the ISO's own real-time load, as of 2026-11-26)");
+    expect(f.text).not.toMatch(/EIA-930|2026-11-1[01]/);
+  });
+});

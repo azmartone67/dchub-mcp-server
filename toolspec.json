@@ -116,7 +116,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and the power band, with the other factors named; a key (DCHUB_API_KEY, optional) adds a few full site reports each month; other scores and figures need a full-access key. Without a key, the first 2 `analyze_site` calls each UTC day from a network return the full site report; after that, no full report until UTC midnight. When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities. For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks whether a specific site or coordinate works for a data center (lat/lon, or a market name for a market-level read). Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and the power band, with the other factors named; a key (DCHUB_API_KEY, optional) adds a few full site reports each month; other scores and figures need a full-access key. Without a key, the first 2 `analyze_site` calls each UTC day from a network return the full site report; after that, no full report until UTC midnight. Those daily runs do not cover every network or client (automated, test or shared-infrastructure traffic gets the preview). When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex: \"Score 33.45,-112.07 for 100 MW.\" Next: to buy or lease capacity in these markets, call source_capacity; to register a requirement with providers, call request_capacity_intro after your human approves. For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1532,7 +1532,7 @@
   },
   {
     "name": "get_infrastructure",
-    "description": "Use this when the user asks what power infrastructure is near a site: substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Answers \"what is near this parcel\", \"how far is the nearest substation and what voltage is it\". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site). For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks what power infrastructure is near a site (lat, lon, radius_km). Returns the nearest substations (HIFLD + OpenStreetMap, one row per station, distance in km; distance and kV band, plus name, exact kV and operator where your access includes them), the nearest gas pipeline segments (where your access includes them), the nearest EIA power plants (name, MW, fuel, distance), the nearest transmission line in km, and counts of substations, transmission lines, gas pipelines and power plants within the radius. layer picks one list (substations, gas, power_plants); min_voltage_kv sets the substation voltage floor; limit sets each list length (max 25). Answers \"what is near this parcel\", \"how far is the nearest substation and what voltage is it\". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1561,11 +1561,11 @@
           "type": "number"
         },
         "layer": {
-          "description": "Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants",
+          "description": "Optional single nearest-asset list to return: substations, gas (pipelines) or power_plants; transmission returns only the counts and the nearest line",
           "type": "string"
         },
         "min_voltage_kv": {
-          "description": "Only include transmission/substations at or above this voltage in kV, e.g. 69",
+          "description": "Voltage floor in kV for the nearest-substations list, e.g. 230",
           "type": "number"
         },
         "limit": {
@@ -2258,6 +2258,40 @@
       "required": [
         "name"
       ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_site_context",
+    "description": "Use this when the user asks what is around a point: the neighborhood of a lat/lon (nearest substations, the nearest transmission line, fiber, carriers and internet exchanges, flood, seismic and wildfire hazard, zoning and moratoriums, nearby data center campuses). Each block carries its source and as_of date, or states the gap (not covered here, or no answer in time). This is context, not a score: for a 0-100 build verdict on the point use analyze_site. Below full access the answer lists which blocks have an answer at the point and their sources, never their values. Ex: \"What is around 39.04,-77.48?\" For multi-step data center or energy questions, start with execute_plan.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "description": "Point latitude in decimal degrees (-90 to 90, required), e.g. 39.04",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Point longitude in decimal degrees (-180 to 180, required), e.g. -77.48",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        }
+      }
     },
     "outputSchema": {
       "type": "object",

@@ -114,9 +114,9 @@ const findingHits = () => hits.filter((x) => x.path === '/api/v1/inbox/findings'
 const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
 
 describe('tools/list on each endpoint', () => {
-  it('/mcp lists both, 98 tools, with the owner-approved descriptions', async () => {
+  it('/mcp lists both, 99 tools, with the owner-approved descriptions', async () => {
     const t = await list(await open('/mcp'));
-    expect(t.length).toBe(98);   // 97 on 2026-11-16; 98 on 2026-11-20: accept_capacity_intro
+    expect(t.length).toBe(99);   // 99 on 2026-11-26: get_site_context; 97 on 2026-11-16; 98 on 2026-11-20: accept_capacity_intro
     const rf = t.find((x) => x.name === 'report_finding');
     const re = t.find((x) => x.name === 'request_enhancement');
     expect(rf && re).toBeTruthy();

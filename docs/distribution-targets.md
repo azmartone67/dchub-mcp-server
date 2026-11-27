@@ -19,7 +19,7 @@ unknowns = safe for institutional diligence.** That's the wedge no general tool 
 ---
 
 ## Tier A — Registries / catalogs (submit; fast, one-time)
-Prepare the metadata once (name, description, URL, 98-tool count, repo, categories:
+Prepare the metadata once (name, description, URL, 99-tool count, repo, categories:
 `data-center, energy, grid, real-estate, infrastructure, finance`).
 
 | Target | Why | How | Status |
@@ -69,7 +69,7 @@ pack (`docs/pilot-pack.md`) with each.
 
 **Pitch (gateways):** lead with governance + trust — *"authoritative federal/
 institutional sources, provenance on every response, explicit unknowns instead of
-hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 98
+hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 99
 tools, one-hour pilot pack with acceptance criteria."*
 
 ## Tier D — Vertical fit (the highest-conversion angle)

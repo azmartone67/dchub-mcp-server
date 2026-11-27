@@ -32,7 +32,7 @@ describe('every planned tool is on the execute_plan read-only allowlist', () => 
       try { p = S._planQuery(q, c); } catch { continue; }
       for (const s of (p && p.recommended_sequence) || []) {
         planned++;
-        if (!META.has(s.tool) && !S._EXEC_ALLOWED_TOOLS.includes(s.tool)) bad.add(`${s.tool} (${p.intent_class})`);
+        if (!META.has(s.tool) && !S._execStepAllowed(s.tool)) bad.add(`${s.tool} (${p.intent_class})`);
       }
     }
     expect(planned, 'control: plans have steps').toBeGreaterThan(500);
