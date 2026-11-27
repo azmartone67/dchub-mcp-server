@@ -15720,11 +15720,11 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       : ('Call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the trial)' : ' for the full result')
          + '. If it is still gated, your client did not carry the key — add header X-API-Key: ' + mint.api_key
          + ' (session binding is per-connection, so a reconnect can drop it). Save persist_command to keep it across future sessions.'),
-    // ★★★ NOT WHILE THE KEY IS REFUSED. `_refused` means this trial key is
-    //   blocked until the human's email is bound, so the caller CANNOT spend a
-    //   full answer no matter how many the per-IP counter says are left. The
-    //   sibling quota block already states this correctly —
-    //   `full_answers_remaining_today: null` with
+    // ★★★ NOT WHILE THE KEY IS REFUSED, AND NOT WHILE NOTHING IS CHARGED.
+    //   `_refused` means this trial key is blocked until the human's email is
+    //   bound, so the caller CANNOT spend a full answer no matter how many the
+    //   per-IP counter says are left. The sibling quota block already states
+    //   this correctly — `full_answers_remaining_today: null` with
     //   `full_answers_unavailable_reason: "NOT YET APPLICABLE at an anonymous
     //   seat … only charged once a durable key is bound"` — so publishing a
     //   non-zero count up here made ONE envelope contradict itself.
@@ -15735,12 +15735,28 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     //   agent reading that number retries for a full answer and gets another
     //   preview, indefinitely. The prose already gets this right (`_refused`
     //   selects leadRefused, which omits the "N more full answers" line) —
-    //   only the structured field leaked.
+    //   only the structured field leaked. `_refused` fixed that ONE reason the
+    //   counter can go uncharged.
+    //
+    //   inv-100659 (2026-11-26): the SAME frozen-2 symptom reproduced on
+    //   ai_capacity_index with the key NOT refused — `remaining_full_today: 2`
+    //   on two consecutive anon calls with different args (limit=5, then
+    //   limit=7), neither more nor less. Root cause: `remainingFull` is a pure
+    //   peek of the per-IP counter (`_trialFullRemaining`), and that counter is
+    //   incremented in exactly one place — inside `_capApplies`'s check, which
+    //   requires `autoBound` (this call's trial was actually bound to a
+    //   session). A caller that never gets a session bound (no bind on THIS or
+    //   any prior call — e.g. a stateless client that carries no session, so
+    //   `_autoBindTrialToSession`'s `!_sid` guard always returns false) can
+    //   NEVER charge that counter, so the peek forever reads the virgin cap.
+    //   `_refused` is already a subset of `!autoBound` (a refused mint never
+    //   binds), so the one predicate that actually answers "can this seat
+    //   spend it" is `autoBound`, not `!_refused` alone.
     //
     // ★ `remainingFull` itself is deliberately NOT nulled: the caller-side
     //   prewall offer (mppPrewallOffer) reads it, and suppressing that would
     //   change conversion behaviour, which is not what this fixes.
-    ...(_capKnown && !_refused ? { remaining_full_today: remainingFull } : {}),
+    ...(autoBound && _capKnown && !_refused ? { remaining_full_today: remainingFull } : {}),
     trial_unlocks_this_tool:   !stillPro && !_refused && !_stillPreview,
     ...(_refused ? { auto_trial_bind_required: true } : {}),
     unlocked_tools:            _trialUnlockedTools(),

@@ -696,6 +696,7 @@ test/queue-project-mode-1125.test.mjs
 test/queue-project-mode-off-1125.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
+test/quota-meter-unbound-anon-frozen.test.mjs
 test/quota-one-statement-1120.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
