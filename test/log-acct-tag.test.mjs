@@ -8,7 +8,16 @@ import { createHash } from 'node:crypto';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 let H, fence;
-beforeAll(async () => { fence = fenceNetwork(); H = await startHarness(); });
+// An api_keys-only key: the backend's validate names no developer_id, only key_ref (be, 2026-11-27).
+const AK_KEY = 'dchub_pro_APIKEYSONLYkey0123456789abcdef';
+const AK_REF = 'api_keys:4242';
+beforeAll(async () => {
+  fence = fenceNetwork();
+  H = await startHarness({ extraRoutes: (p, _req, body) => (p === '/api/v1/keys/validate' && body && body.api_key === AK_KEY
+    ? { body: { valid: true, tier: 'enterprise', developer_id: null, key_ref: AK_REF, email: null,
+                tier_source: 'api_keys_no_mcp_row', tier_detail: { users_plan: 'enterprise' } } }
+    : undefined) });
+});
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 const tagOf = (k) => 'h-' + createHash('sha256').update(k).digest('hex').slice(0, 8);
@@ -34,6 +43,13 @@ describe('[MCP] log line acct tag', () => {
   it('two different accounts get two different tags', () => {
     expect(tagOf(DEV_ID)).not.toBe(tagOf(DEV_ID + 'x'));
     expect(tagOf(DEV_ID)).toMatch(/^h-[0-9a-f]{8}$/);
+  });
+  it('an api_keys-only key (no developer_id) is tagged by its key_ref, never the key', async () => {
+    const lines = await linesDuring(() => H.call('/mcp', 'analyze_site', ARGS, { 'x-api-key': AK_KEY }));
+    const keyed = lines.filter((l) => /key=dchub_…/.test(l));
+    expect(keyed.length).toBeGreaterThan(0);
+    for (const l of keyed) expect(l).toContain(` acct=${tagOf(AK_REF)}`);
+    for (const l of lines) { expect(l).not.toContain(AK_KEY.slice(6)); expect(l).not.toContain(tagOf(AK_KEY)); }
   });
   it('an anonymous call logs key=none and no acct tag', async () => {
     const lines = await linesDuring(() => H.call('/mcp', 'analyze_site', ARGS));
