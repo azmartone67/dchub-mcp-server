@@ -146,6 +146,7 @@ test/claude-plugin-skills.test.mjs
 test/claude-review-blockers-1023.test.mjs
 test/claude-site-wall-unlock.test.mjs
 test/claude-wall-link-not-logged.test.mjs
+test/claude-wall-status-1126.test.mjs
 test/cli-returns-attribution-1118.test.mjs
 test/cli-starter.test.mjs
 test/client-config-transport-matches-canon.test.mjs
