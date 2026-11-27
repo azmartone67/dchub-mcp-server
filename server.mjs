@@ -17803,6 +17803,12 @@ function _keepProvenanceCredit(orig, trimmed) {
 }
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance',
   'ercotqueue_provenance', 'ercotqueue', 'attribution', 'freshness', 'large_load',
+  // 2026-11-27: get_gas_intelligence's pipeline_capacity_utilization and get_fiber_readiness's
+  // fttp_providers are read from public backend routes (/api/v1/gas/pipeline-capacity,
+  // /api/v1/fiber/providers) that serve every caller in full. The anon trim nulled util_pct and
+  // provider_count with no withheld marker, while scheduled_dth / operating_dth beside util_pct
+  // still let anyone recompute it: hiding public data, unmarked. Exact keys.
+  'pipeline_capacity_utilization', 'fttp_providers',
   // Grok QA 2026-10-22 item 3: the list of fields DC Hub does not track for a grid
   // (shapeLatestGrid) is a coverage fact, never a trimmed list.
   'not_covered',
@@ -26299,9 +26305,14 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
   try {
     const allowed = (Array.isArray(constraintIso) ? constraintIso : [])
       .map((x) => String(x).toUpperCase());
-    const found = [];
+    // 2026-11-27: a verdict with no market beside it (site_selection_canvas synthesis.verdict, the shortlist's overall
+    // call) is held apart and used only when no named verdict was read. Live xd-a led "Midland–Odessa: BUILD (80.6) ·
+    // BUILD · Upper Peninsula MI: BUILD": the bare one took a slot and pushed the third finalist out.
+    let found = [];
+    const unnamed = [];
+    const cap = rankForBuild ? 8 : 3;
     const scan = (o, depth) => {
-      if (!o || depth > 4 || found.length >= (rankForBuild ? 8 : 3)) return;
+      if (!o || depth > 4 || found.length >= cap) return;
       if (Array.isArray(o)) { for (const v of o.slice(0, 12)) scan(v, depth + 1); return; }
       if (typeof o !== 'object') return;
       const v = o.verdict, nm = o.market || o.name || o.slug || o.market_slug;
@@ -26314,16 +26325,23 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
                          && !allowed.includes(_EXEC_BA_REGION[iso]))
           || (constraintSlug && typeof nm === 'string' && !_execSameMarket(nm, constraintSlug));
         if (!outside) {
-          found.push({ verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' ? nm : null,
-                       score: (typeof o.composite_score === 'number') ? o.composite_score : null });
+          const row = { verdict: v.trim().toUpperCase(), subject: typeof nm === 'string' && nm.trim() ? nm : null,
+                        score: (typeof o.composite_score === 'number') ? o.composite_score : null };
+          if (!row.subject) { if (unnamed.length < cap) unnamed.push(row); }
+          // The same market with the same verdict is led with once; a market two reads disagree on keeps both, so an AVOID
+          // is never hidden behind another tool's BUILD.
+          else if (!found.some((f) => f.verdict === row.verdict && f.subject.toLowerCase() === row.subject.toLowerCase())) found.push(row);
         }
       }
-      for (const val of Object.values(o)) scan(val, depth + 1);
+      // 2026-11-27: rows a filter removed (excluded_by_*, the canvas's excluded_by_max_months) are not this run's
+      // verdicts; live xd-a led "Garden City: CAUTION", a market the 24-month deadline had removed.
+      for (const [k, val] of Object.entries(o)) if (!/^excluded_by_/i.test(k)) scan(val, depth + 1);
     };
     for (const e of (Array.isArray(executed) ? executed : [])) {
       if (e && skipSteps && skipSteps.has(e.step)) continue;   // undated power step: not led with
       scan(e && e.result, 0);
     }
+    if (!found.length) found = unnamed;
     if (!found.length) return BASE;
     if (rankForBuild) {
       const ord = { BUILD: 0, CAUTION: 1, AVOID: 2 };
