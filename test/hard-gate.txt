@@ -209,6 +209,7 @@ test/dcpi-subscores-pro-only.test.mjs
 test/deal-desk-automint.test.mjs
 test/deals-tool-tied-copy-no-floor.test.mjs
 test/delete-session-third-callsite.test.mjs
+test/demand-freshness-1126.test.mjs
 test/depth-gate.test.mjs
 test/depth-wall-digest-ask.test.mjs
 test/depth-wall-trial.test.mjs
