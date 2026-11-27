@@ -242,6 +242,7 @@ test/email-bound-decision-full.test.mjs
 test/email-entered.test.mjs
 test/email-hint-after-taste.test.mjs
 test/email-nudge-once-1123.test.mjs
+test/email-nudge-quoted-ask-1127.test.mjs
 test/email-nudge-shared-1123.test.mjs
 test/email-tools-data-use.test.mjs
 test/ember-monthly-global-power.test.mjs
