@@ -4044,6 +4044,55 @@ export function _gasEconomicsFigureLabels(pricing, burnerTip, asOf) {
       served_to: _keylessHenryHubOn() ? 'every caller' : 'full-access callers' },
   };
 }
+// 2026-11-26 (owner sweep: every gas addition reaches a tool): measured pipeline capacity utilization,
+// GET /api/v1/gas/pipeline-capacity (public; the pipeline's own FERC-mandated operationally available
+// capacity posting), as a `pipeline_capacity_utilization` block on get_gas_intelligence. One state, the
+// locations DC Hub can place there (the route filters its placed points to the state), the most-utilized
+// first. A pipeline the route holds (publisher permission pending) is named, never read. Null when the
+// state has no placed location, so the brief is unchanged where there is nothing measured.
+export function _gasStateCode(raw) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (/^[A-Za-z]{2}$/.test(t)) return t.toUpperCase();
+  const k = t.toLowerCase().replace(/\s+/g, ' ');
+  return _PLAN_STATE_NAMES[k] || null;
+}
+export function _gasPipelineCapacityBlock(body, st) {
+  if (!body || typeof body !== 'object' || body.ok !== true || !st) return null;
+  const feats = (Array.isArray(body.features) ? body.features : [])
+    .map((f) => (f && f.properties) || null)
+    .filter((p) => p && String(p.state || '').split(',').map((x) => x.trim().toUpperCase()).includes(st));
+  if (!feats.length) return null;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const top = [...feats].sort((a, b) => (num(b.util_pct) ?? -1) - (num(a.util_pct) ?? -1)).slice(0, 8)
+    .map((p) => ({ pipeline: p.pipeline, kind: p.kind, loc_id: p.loc_id, loc_name: p.loc_name, county: p.county,
+      zone: p.zone, flow_ind: p.flow_ind, util_pct: num(p.util_pct), operating_dth: num(p.operating_dth),
+      scheduled_dth: num(p.scheduled_dth), available_dth: num(p.available_dth), gas_day: p.gas_day, cycle: p.cycle }));
+  const codes = new Set(feats.map((p) => p.pipeline));
+  const pipelines = (Array.isArray(body.pipelines) ? body.pipelines : []).filter((p) => p && codes.has(p.code))
+    .map((p) => ({ code: p.code, name: p.name, operator: p.operator, gas_day: p.gas_day, cycle: p.cycle,
+      posted_at: p.posted_at, stale: p.stale, source_url: p.source_url, terms_url: p.terms_url }));
+  const out = {
+    state: st,
+    locations_in_state: feats.length,
+    at_or_above_90pct_in_state: feats.filter((p) => (num(p.util_pct) ?? 0) >= 90).length,
+    most_utilized: top,
+    pipelines,
+    units: body.units || 'Dth per gas day',
+    basis: body.basis || null,
+    source: 'DC Hub (dchub.cloud), from each pipeline\'s operationally available capacity posting (see pipelines[].source_url)',
+    endpoint: 'https://dchub.cloud/api/v1/gas/pipeline-capacity?state=' + st,
+  };
+  const held = Array.isArray(body.held) ? body.held.filter((h) => h && h.code).map((h) => ({ code: h.code, name: h.name, reason: h.reason })) : [];
+  if (held.length) out.not_read = held;
+  return out;
+}
+export async function _gasPipelineCapacityFor(raw) {
+  const st = _gasStateCode(raw);
+  if (!st) return null;
+  try {
+    return _gasPipelineCapacityBlock(await callAPI('/api/v1/gas/pipeline-capacity', { state: st }, { timeout: 6000 }), st);
+  } catch (_) { return null; }
+}
 export function _maskGasIntelligenceAnonymous(out) {
   const o = { ...out };
   const masked = [];
@@ -17846,12 +17895,22 @@ export function _largeLoadBlock(tracker) {
   if (Array.isArray(tracker.attribution) && tracker.attribution.length) out.attribution = tracker.attribution;
   return out;
 }
+// The tracker's ISO key for the ISO the caller asked about: ISO-NE is stored as ISONE. No ISO (the
+// all-ISO snapshot) reads ERCOT, as before: one ISO per block, never metrics from two ISOs merged.
+export function _largeLoadTrackerIso(iso) {
+  const k = String(iso == null ? '' : iso).trim().toUpperCase().replace(/[\s_-]/g, '');
+  return k || 'ERCOT';
+}
 export async function _withLargeLoad(data, iso) {
   if (!_queueMoatOn() || !data || typeof data !== 'object' || Array.isArray(data)) return data;
-  if (iso && String(iso).toUpperCase() !== 'ERCOT') return data;   // only ERCOT has rows today
+  // 2026-11-26: the tracker is read for the ISO asked (it filters by iso), so rows the backend holds for
+  // PJM or any other ISO reach the answer; it was ERCOT only. The backend echoes the iso it filtered on:
+  // an echo for another ISO is dropped, never attached under the wrong ISO.
+  const want = _largeLoadTrackerIso(iso);
   try {
-    const t = await callAPI('/api/v1/large-load/tracker', { iso: 'ERCOT' }, { internal: true, timeout: 4000 });
-    const block = _largeLoadBlock(t);
+    const t = await callAPI('/api/v1/large-load/tracker', { iso: want }, { internal: true, timeout: 4000 });
+    if (!t || typeof t !== 'object' || _largeLoadTrackerIso(t.iso || want) !== want) return data;
+    const block = _largeLoadBlock({ ...t, iso: want });
     return block ? { ...data, large_load: block } : data;
   } catch { return data; }
 }
@@ -20957,6 +21016,47 @@ export function _extractCoordArgs(args) {
 // poison a row, it silently computed the analysis at lon=0 (open ocean) and
 // returned it as the answer. This folds the aliases into canonical lat/lon and
 // DROPS the alias keys, so pass-`a`-through handlers never leak them upstream.
+// 2026-11-26 (owner sweep: every fiber addition reaches a tool): FCC Broadband Data Collection
+// fiber-to-the-premises providers around a point, from GET /api/v1/fiber/providers?bbox= (public; the
+// brands that filed FTTP availability in the H3 cells inside the box, by locations served). Rides
+// get_fiber_readiness as `fttp_providers`: the last-mile layer beside the PeeringDB carrier score. A box
+// of radius_km (cap 50 km, default 25) on each side. Null on a degraded read or no provider, so the
+// score is unchanged where FCC lists nothing. /api/v1/fiber/footprint needs a brand and returns hex
+// cells for a map, so it is not read here.
+export const FTTP_BOX_KM_DEFAULT = 25;
+export const FTTP_BOX_KM_MAX = 50;
+export function _fttpBbox(lat, lon, radiusKm) {
+  const la = Number(lat), lo = Number(lon);
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return null;
+  let r = Number(radiusKm);
+  if (!Number.isFinite(r) || r <= 0) r = FTTP_BOX_KM_DEFAULT;
+  r = Math.min(r, FTTP_BOX_KM_MAX);
+  const dLat = r / 111.32;
+  const dLon = r / (111.32 * Math.max(Math.cos((la * Math.PI) / 180), 0.01));
+  const rd = (v) => Math.round(v * 10000) / 10000;
+  return { box_km: r, bbox: [rd(Math.max(lo - dLon, -180)), rd(Math.max(la - dLat, -90)), rd(Math.min(lo + dLon, 180)), rd(Math.min(la + dLat, 90))] };
+}
+export function _fttpProvidersBlock(body, box) {
+  if (!body || typeof body !== 'object' || body.ok !== true || body.degraded || !box) return null;
+  const rows = (Array.isArray(body.providers) ? body.providers : []).filter((r) => r && r.brand);
+  if (!rows.length) return null;
+  return {
+    provider_count: rows.length,
+    top_providers: rows.slice(0, 10).map((r) => ({ brand: r.brand, locations: r.locations, hexes: r.hexes })),
+    bbox: box.bbox,
+    box_half_side_km: box.box_km,
+    basis: 'Brands that filed fiber-to-the-premises availability with the FCC Broadband Data Collection in the H3 cells inside the box, ranked by locations they report serving. Last-mile FTTP presence, not long-haul routes or carrier near-net distance.',
+    source: body.source || 'FCC Broadband Data Collection (fiber-to-the-premises filings)',
+    ...(body.providers.length >= 100 ? { truncated_at: 100 } : {}),
+  };
+}
+export async function _fttpProvidersNear(lat, lon, radiusKm) {
+  const box = _fttpBbox(lat, lon, radiusKm);
+  if (!box) return null;
+  try {
+    return _fttpProvidersBlock(await callAPI('/api/v1/fiber/providers', { bbox: box.bbox.join(',') }, { timeout: 6000 }), box);
+  } catch (_) { return null; }
+}
 export function _foldCoordArgs(args) {
   const a = args || {};
   const { lat, lon } = _extractCoordArgs(a);
@@ -37701,9 +37801,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // ERCOT's TPIT (terms §5 allow redistribution in compilations; Texas only).
   // Same tier class as get_power_pipeline: public-source facts, not
   // $-aggregates, so it sits in FREE_FULL_TOOLS next to it — a citation hook.
-  trackedTool(srv, 'get_infra_projects', 'Use this when the user asks what gas pipeline or transmission line projects are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. "which interstate gas pipelines are under construction into Louisiana?", "what 345 kV transmission projects are planned in PJM by 2030?", "what new projects appeared since last month?". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from five ISOs\' own project lists — ERCOT (TPIT), PJM (RTEP), MISO (MTEP Appendix A), SPP (STEP) and ISO-NE (RSP list); NOT CAISO or NYISO, and not utilities outside those ISOs. Each ISO publishes a different grain (an upgrade or facility, not a whole project), so a row count is a count of upgrades. Fields vary by ISO and an absent figure is null, never estimated: ERCOT has county, MVA and miles; MISO and SPP have from/to substations and some miles; PJM has no miles or endpoints; ISO-NE has no kV or miles. Common fields: owner, kV, projected in-service date, status (Planned, Conceptual, Proposed, Under Construction, On Hold, Completed; the ISO\'s own word is in source_status), and per-ISO source, release date and licence. Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source (sources.transmission.per_iso gives each ISO\'s own release date; the top-level as_of is the OLDEST). NOTE: the "Texas only" wording in the type and state parameter help is out of date — transmission covers the five ISOs above, and transmission rows carry whatever state(s) their ISO lists; rows are labelled by iso, so filter or group on that field of the result. Answers "what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).',
-    { type: z.enum(['gas_pipeline', 'transmission', 'all']).optional().describe('Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)'),
-      state: S.describe('US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX'),
+  trackedTool(srv, 'get_infra_projects', 'Use this when the user asks what gas pipeline or transmission line projects are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. "which interstate gas pipelines are under construction into Louisiana?", "what 345 kV transmission projects are planned in PJM by 2030?", "what new projects appeared since last month?". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list, plus FERC Natural Gas Act (CP docket) filings noticed in the Federal Register that EIA does not list (both public domain; a FERC row\'s stage and notice trail are in notes) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from the grid operators\' own plan lists — ERCOT (TPIT), PJM (RTEP), MISO (MTEP Appendix A), SPP (STEP), ISO-NE (RSP list) and CAISO (TPP-approved projects), plus BPA\'s Grid Expansion and Reinforcement Portfolio when DC Hub\'s BPA source is enabled (coverage_note and sources.transmission.per_iso name what each answer covers); NOT NYISO, SERTP, NorthernGrid or TVA (their plans are PDF-only or refuse automated reads), and not other utilities. Each ISO publishes a different grain (an upgrade or facility, not a whole project), so a row count is a count of upgrades. Fields vary by ISO and an absent figure is null, never estimated: ERCOT has county, MVA and miles; MISO and SPP have from/to substations and some miles; PJM has no miles or endpoints; ISO-NE has no kV or miles; CAISO has no miles (its kV is read from the project name where the name states it). Common fields: owner, kV, projected in-service date, status (Planned, Conceptual, Proposed, Under Construction, On Hold, Completed; the ISO\'s own word is in source_status), and per-ISO source, release date and licence. Filter by type (gas_pipeline, transmission or all), iso (one transmission operator), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source (sources.transmission.per_iso gives each ISO\'s own release date; the top-level as_of is the OLDEST). Transmission rows carry whatever state(s) their ISO lists and are labelled by iso. The same open transmission rows, placed approximately for a map, are GeoJSON at https://dchub.cloud/api/v1/infra-projects/transmission.geojson (see_also.map_geojson). Answers "what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).',
+    // The reviewed /mcp/chatgpt catalog keeps the old type/state wording and has no iso input
+    // (lib/chatgpt-directory.mjs DIRECTORY_HELD_PARAM_TEXT / DIRECTORY_HELD_INPUTS).
+    { type: z.enum(['gas_pipeline', 'transmission', 'all']).optional().describe('Which project list: gas_pipeline (EIA plus FERC Natural Gas Act notices, US-wide), transmission (ERCOT, PJM, MISO, SPP, ISO-NE and CAISO plan lists, plus BPA when that source is enabled) or all (default)'),
+      iso: S.describe('Transmission only: one grid operator, e.g. PJM. ERCOT, PJM, MISO, SPP, ISO-NE, CAISO, or BPA when that source is enabled; an operator not served is an error that lists the ones that are. With type=all it narrows to transmission projects'),
+      state: S.describe('US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects match the state(s) their ISO lists'),
       status: S.describe('Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled'),
       min_capacity: N.describe('Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects'),
       min_kv: N.describe('Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects'),
@@ -37714,10 +37817,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       limit: LIMIT },
     async (a) => {
       const q = { limit: Math.min((a && a.limit) || 25, 200) };
-      for (const k of ['type', 'state', 'status', 'min_capacity', 'min_kv',
+      for (const k of ['type', 'iso', 'state', 'status', 'min_capacity', 'min_kv',
         'in_service_after', 'in_service_before', 'new_since']) {
         if (a && a[k] !== undefined && a[k] !== null && a[k] !== '') q[k] = a[k];
       }
+      // The backend names New England "ISO-NE"; accept the spelling the other tools take.
+      if (q.iso && /^iso[\s_-]?ne$/i.test(String(q.iso).trim())) q.iso = 'ISO-NE';
       if (a && a.include_delisted === true) q.include_delisted = 1;
       const d = await callAPI('/api/v1/infra-projects', q);
       if (!d || d.ok !== true) {
@@ -37733,10 +37838,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         transmission_projects: d.transmission_projects,
         sources: d.sources,
         coverage_note: d.coverage_note,
-        source: 'DC Hub (dchub.cloud) — EIA natural gas pipeline projects (public domain) and ISO transmission project lists (ERCOT, PJM, MISO, SPP, ISO-NE; ERCOT terms §5, the others publish no reuse licence and are attributed and linked); each row carries source_url and license',
+        source: 'DC Hub (dchub.cloud) — EIA natural gas pipeline projects and FERC Natural Gas Act notices (public domain) and ISO transmission project lists (ERCOT, PJM, MISO, SPP, ISO-NE, CAISO, and BPA when that source is enabled; ERCOT terms §5 and BPA public domain, the others publish no reuse licence and are attributed and linked); each row carries source_url and license',
         see_also: {
           generation_projects: 'get_power_pipeline',
           existing_assets: 'get_infrastructure, get_grid_intelligence',
+          map_geojson: 'https://dchub.cloud/api/v1/infra-projects/transmission.geojson',
         },
       };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
@@ -39053,12 +39159,20 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(fiberResp) }] }, 'get_fiber_intel');
     });
 
-  trackedTool(srv, 'get_fiber_readiness', 'Use this when the user asks whether one data center site (lat/lon) is fiber-ready: near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100 (null when not scored — see carrier_data_coverage), near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"|"unknown"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool, null when not scored), fiber_coverage_km, verdict_short, carrier_data_coverage ("confirmed"|"none_in_region")}. IMPORTANT — "unknown" is NOT "bad": carrier presence comes from PeeringDB, which is global but thin outside dense US/EU metros, so DC Hub distinguishes "no carrier serves this point" from "PeeringDB does not describe this region". When carrier_data_coverage is "none_in_region" the bucket is "unknown", score/single_carrier_risk are null, and NOTHING about the site fiber has been measured — do not report it as greenfield, unserved, or a build-required site. Only carrier_data_coverage "confirmed" with carrier_count 0 means a fiber build is genuinely required. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
+  trackedTool(srv, 'get_fiber_readiness', 'Use this when the user asks whether one data center site (lat/lon) is fiber-ready: near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100 (null when not scored — see carrier_data_coverage), near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"|"unknown"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool, null when not scored), fiber_coverage_km, verdict_short, carrier_data_coverage ("confirmed"|"none_in_region")}. IMPORTANT — "unknown" is NOT "bad": carrier presence comes from PeeringDB, which is global but thin outside dense US/EU metros, so DC Hub distinguishes "no carrier serves this point" from "PeeringDB does not describe this region". When carrier_data_coverage is "none_in_region" the bucket is "unknown", score/single_carrier_risk are null, and NOTHING about the site fiber has been measured — do not report it as greenfield, unserved, or a build-required site. Only carrier_data_coverage "confirmed" with carrier_count 0 means a fiber build is genuinely required. Where the FCC Broadband Data Collection lists fiber-to-the-premises filers around the point, fttp_providers names them (brand, locations served, box searched): the last-mile layer, separate from the carrier score. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 39.04'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -77.48'),
       ...COORD_ALIASES,
       radius_km: N.describe('Search radius in km for reachable fiber carriers (default 50, range 5-200)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', _foldCoordArgs(a))) }] }));
+    async (a) => {
+      const p = _foldCoordArgs(a);
+      // The FCC fiber-to-the-premises read runs beside the score and never fails or delays it past its timeout.
+      const [d, fttp] = await Promise.all([
+        callAPI('/api/infrastructure/connectivity/score', p),
+        _fttpProvidersNear(p.lat, p.lon, p.radius_km)]);
+      const out = (fttp && d && typeof d === 'object' && !Array.isArray(d) && !d.error) ? { ...d, fttp_providers: fttp } : d;
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   // r-subsea-ix (2026-09-07): both datasets were already ingested and
   // reachable over HTTP but had NO tool — the server description advertised
@@ -39410,14 +39524,18 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // (ALWAYS_PARTIAL_PREVIEW + DEPTH_TEASE_TOOLS), exactly like grid/fiber — not by
   // trusting the route's own auth (the origin-bypass quirk makes that unreliable).
   trackedTool(srv, 'get_gas_intelligence',
-    'Use this when the user asks about gas-fired or behind-the-meter power economics for a data center in a US state — "is gas power cheaper than the grid in Texas?", "what is the gas access + pipeline situation in Virginia?". The GAS analogue of get_grid_intelligence: fuses the Data Center Gas Index (DCGI), live Henry Hub, gas-to-grid $/MWh across heat-rate scenarios, pipeline-operator presence, and the live grid gas share into one per-STATE brief. Params: region (US state code or name, e.g. "TX" | "Texas" | "Virginia"). Returns: {region, region_name, gas_access (pipeline counts + operators — PRESENCE not firm capacity), henry_hub_usd_mmbtu (live), basis_usd_mmbtu (synthetic-labeled), delivered_price_usd_mmbtu (null where the tariff table is sparse — surfaced honestly, never fabricated), live_grid_gas_share_pct, pipeline_presence (operators + parent midstreams), data_basis (per-field provenance/confidence), omitted_no_fabrication, dcgi_status, gas_to_grid_status}. ★ ★ TWO DIFFERENT STATES, do not merge them. dcgi_score and dcgi_verdict were withdrawn 2026-08-08 and RESTORED 2026-08-30 once all three defective terms were repaired — they are returned again, but a figure published before 2026-08-08 is from a different index and must not be compared with one published now (/api/v1/dcgi/methodology `corrections`). gas_to_grid_usd_per_mwh and the behind-the-meter-vs-grid delta were WITHDRAWN 2026-08-08 and RESTORED 2026-09-27 under one burner-tip price rule (EIA electric-power gas, trailing-12-month mean; `burner_tip` carries the price, window and — for a state EIA withholds — the reason the $/MWh is null). A $/MWh published before 2026-09-27 is not comparable. `dcgi_status` and `gas_to_grid_status` carry the current state of each — read them rather than assuming both moved together. DO NOT quote a DCGI score cached before 2026-08-30 or a $/MWh cached before 2026-09-27. Everything else in this brief — live Henry Hub, live ISO gas share, pipeline and parent-midstream presence — is unaffected and is what this tool is now for. Every field carries a data_basis label; gas storage / LNG / firm pipeline capacity are deliberately OMITTED (no feed). Do NOT use for electricity grid headroom (use get_grid_intelligence) or the DCGI score alone (use get_gas_index).',
+    'Use this when the user asks about gas-fired or behind-the-meter power economics for a data center in a US state — "is gas power cheaper than the grid in Texas?", "what is the gas access + pipeline situation in Virginia?". The GAS analogue of get_grid_intelligence: fuses the Data Center Gas Index (DCGI), live Henry Hub, gas-to-grid $/MWh across heat-rate scenarios, pipeline-operator presence, and the live grid gas share into one per-STATE brief. Params: region (US state code or name, e.g. "TX" | "Texas" | "Virginia"). Returns: {region, region_name, gas_access (pipeline counts + operators — PRESENCE not firm capacity), henry_hub_usd_mmbtu (live), basis_usd_mmbtu (synthetic-labeled), delivered_price_usd_mmbtu (null where the tariff table is sparse — surfaced honestly, never fabricated), live_grid_gas_share_pct, pipeline_presence (operators + parent midstreams), data_basis (per-field provenance/confidence), omitted_no_fabrication, dcgi_status, gas_to_grid_status}. ★ ★ TWO DIFFERENT STATES, do not merge them. dcgi_score and dcgi_verdict were withdrawn 2026-08-08 and RESTORED 2026-08-30 once all three defective terms were repaired — they are returned again, but a figure published before 2026-08-08 is from a different index and must not be compared with one published now (/api/v1/dcgi/methodology `corrections`). gas_to_grid_usd_per_mwh and the behind-the-meter-vs-grid delta were WITHDRAWN 2026-08-08 and RESTORED 2026-09-27 under one burner-tip price rule (EIA electric-power gas, trailing-12-month mean; `burner_tip` carries the price, window and — for a state EIA withholds — the reason the $/MWh is null). A $/MWh published before 2026-09-27 is not comparable. `dcgi_status` and `gas_to_grid_status` carry the current state of each — read them rather than assuming both moved together. DO NOT quote a DCGI score cached before 2026-08-30 or a $/MWh cached before 2026-09-27. Everything else in this brief — live Henry Hub, live ISO gas share, pipeline and parent-midstream presence — is unaffected and is what this tool is now for. Where DC Hub reads a pipeline\'s operationally available capacity posting for locations in the state, pipeline_capacity_utilization carries the scheduled share of operating capacity per location (most-utilized first, with gas day and source): booked, not metered flow, and not firm capacity open to a new load; absent where no such location is placed. Every field carries a data_basis label; gas storage / LNG / firm pipeline capacity are deliberately OMITTED (no feed). Do NOT use for electricity grid headroom (use get_grid_intelligence) or the DCGI score alone (use get_gas_index).',
     { region: S.describe('US state code or name (required), e.g. "TX", "Texas", "Virginia"'),
       state: S.describe('Alias for region — the US state code or name') },
     async (a) => {
       const raw = String((a && (a.region || a.state)) || '').trim();
       if (!raw) return { content: [{ type: 'text', text: JSON.stringify({ error: 'region required (US state code or name)', example: 'get_gas_intelligence region="TX"' }) }] };
-      const full = await callAPI(`/api/v1/gas/intelligence/${encodeURIComponent(raw)}`, {}, { internal: true });
-      const out = (full && typeof full === 'object' && !_callerIsKeyed()) ? _maskGasIntelligenceAnonymous(full) : full;
+      // The utilization read runs beside the brief and never fails or delays it past its own timeout.
+      const [full, _pcu] = await Promise.all([
+        callAPI(`/api/v1/gas/intelligence/${encodeURIComponent(raw)}`, {}, { internal: true }),
+        _gasPipelineCapacityFor(raw)]);
+      let out = (full && typeof full === 'object' && !_callerIsKeyed()) ? _maskGasIntelligenceAnonymous(full) : full;
+      if (_pcu && out && typeof out === 'object' && !Array.isArray(out) && !out.error) out = { ...out, pipeline_capacity_utilization: _pcu };
       return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
     });
 

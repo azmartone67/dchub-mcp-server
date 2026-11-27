@@ -159,31 +159,51 @@ describe('get_infra_projects', () => {
   });
 });
 
-// The tool text must say what the data covers. The backend now loads PJM, MISO,
-// SPP and ISO-NE next to ERCOT (dchub-backend #6523); the description used to
-// say "ERCOT/TEXAS ONLY", which sent agents away from rows that exist.
+// The tool text must say what the data covers. The backend loads PJM, MISO, SPP and
+// ISO-NE next to ERCOT (dchub-backend #6523), CAISO's TPP-approved projects, BPA's
+// GERP behind its own source switch, and FERC Natural Gas Act notices beside EIA.
+// The description used to say "ERCOT/TEXAS ONLY", then "NOT CAISO", both of which
+// sent agents away from rows that exist.
 //
-// The /mcp/chatgpt parameter help is frozen while the OpenAI app is in review
-// (test/chatgpt-toolset-frozen.test.mjs), so the parameter text still says
-// "Texas only"; the tool-level description therefore says so plainly instead of
-// contradicting it silently. Lift both together when the review closes.
+// 2026-11-26: the /mcp parameter help says the same; the reviewed /mcp/chatgpt
+// catalog keeps its frozen "Texas only" wording and has no iso input
+// (lib/chatgpt-directory.mjs DIRECTORY_HELD_PARAM_TEXT / DIRECTORY_HELD_INPUTS,
+// pinned by test/chatgpt-toolset-frozen.test.mjs).
 describe('get_infra_projects tool text (main catalog)', () => {
-  it('names the five ISOs, says what is NOT covered, and no longer claims Texas only', async () => {
+  it('names every transmission source it reads, says what is NOT covered, and claims Texas only nowhere', async () => {
     // Canonical text: the wire copy is cut at SLIM_DESC_MAX and this note sits past it.
     const r = await S._buildToolsListResult(null);
     const t = (r.tools || []).find((x) => x.name === 'get_infra_projects');
     expect(t, 'get_infra_projects is not advertised').toBeTruthy();
     const d = t.description;
-    expect(d).not.toMatch(/ERCOT\/TEXAS ONLY|TEXAS ONLY so far/);
-    for (const iso of ['ERCOT', 'PJM', 'MISO', 'SPP', 'ISO-NE']) expect(d, iso).toContain(iso);
-    expect(d).toMatch(/NOT CAISO or NYISO/);
+    expect(d).not.toMatch(/ERCOT\/TEXAS ONLY|TEXAS ONLY so far|Texas only|NOT CAISO/);
+    for (const iso of ['ERCOT', 'PJM', 'MISO', 'SPP', 'ISO-NE', 'CAISO', 'BPA']) expect(d, iso).toContain(iso);
+    expect(d).toMatch(/BPA\\?'s Grid Expansion and Reinforcement Portfolio when DC Hub\\?'s BPA source is enabled/);
+    expect(d).toMatch(/NOT NYISO/);
+    expect(d).toMatch(/FERC Natural Gas Act/);
     expect(d).toMatch(/null, never estimated/);          // absent figures are not invented
-    expect(d).toMatch(/Texas only.*out of date/);        // the frozen parameter help is flagged, not left to contradict
+    expect(d).toContain('/api/v1/infra-projects/transmission.geojson');
+    const props = t.inputSchema.properties;
+    expect(props.type.description).not.toMatch(/Texas only/);
+    expect(props.state.description).not.toMatch(/all TX/);
+    expect(props.iso.description).toMatch(/PJM/);
+  });
+
+  it('passes iso through, folding ISONE to the backend spelling ISO-NE', async () => {
+    const n = seen.length;
+    await call({ type: 'transmission', iso: 'PJM' });
+    await call({ iso: 'isone' });
+    expect(seen.length, 'the stub never saw the calls').toBe(n + 2);
+    expect(seen[n].get('iso')).toBe('PJM');
+    expect(seen[n + 1].get('iso')).toBe('ISO-NE');
+    const out = rowsOf(await call({ type: 'transmission' }));
+    expect(out.see_also.map_geojson).toBe('https://dchub.cloud/api/v1/infra-projects/transmission.geojson');
   });
 
   it('reports the source honestly in its output line', async () => {
     const out = rowsOf(await call({ type: 'transmission' }));
-    expect(out.source).toMatch(/ISO transmission project lists \(ERCOT, PJM, MISO, SPP, ISO-NE/);
+    expect(out.source).toMatch(/ISO transmission project lists \(ERCOT, PJM, MISO, SPP, ISO-NE, CAISO, and BPA when that source is enabled/);
+    expect(out.source).toMatch(/FERC Natural Gas Act notices/);
     expect(out.source).toMatch(/publish no reuse licence/);
     expect(out.source).not.toMatch(/and ERCOT TPIT transmission projects \(ERCOT terms/);
   });
