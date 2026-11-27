@@ -114,7 +114,7 @@ registry:
       - name: "get_infra_projects"
         description: "Use this when the user asks what gas pipeline or transmission line projects are planned, proposed, approved or under construction — the forward build-out, not the existing network."
       - name: "get_infrastructure"
-        description: "Use this when the user asks what power infrastructure is near a site: substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas…"
+        description: "Use this when the user asks what power infrastructure is near a site (lat, lon, radius_km)."
       - name: "get_intelligence_index"
         description: "Use this when the user asks how the data center market looks overall, across all markets: ONE global DC Hub index, not a per-market score, and it takes no arguments (no market filter)."
       - name: "get_interconnection_queue"

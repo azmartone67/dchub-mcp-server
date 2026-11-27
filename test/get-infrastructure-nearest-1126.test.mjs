@@ -21,7 +21,7 @@ describe('get_infrastructure: the nearest assets, not only counts', () => {
     const b = block();
     expect(b).toContain('nearest substations');
     expect(b).toContain('HIFLD + OpenStreetMap');
-    expect(b).toContain('nearest gas pipeline segments (Developer plan and up)');
+    expect(b).toContain('nearest gas pipeline segments (where your access includes them)');
     expect(b).toContain('nearest EIA power plants');
     expect(b).not.toContain('Returns distance + capacity for each, joined to HIFLD/EIA');
     expect(b).toContain("callAPI('/api/v1/infrastructure', args)");   // the nearest block arrives in `r`

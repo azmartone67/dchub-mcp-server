@@ -23055,7 +23055,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_hosting_capacity', when: 'You want the utility\'s published hosting capacity at the point, not the assets near it.',
         rejected_because: 'The question asked what infrastructure is near the point.' },
     ],
-    coverage_notes: 'get_infrastructure names the nearest substations (HIFLD + OpenStreetMap stations), gas pipeline segments and EIA plants with their distance in km (detail depends on plan), plus counts inside a box of the radius around the point.',
+    coverage_notes: 'get_infrastructure names the nearest substations (HIFLD + OpenStreetMap stations), gas pipeline segments and EIA plants with their distance in km (detail depends on access), plus counts inside a box of the radius around the point.',
   },
   {
     // 5.35 (Grok dominance evals, gap 1): the generation / fuel mix of a grid or a state (lib/plan-entities.mjs).
@@ -39012,7 +39012,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }) }] };
     });
 
-  trackedTool(srv, 'get_infrastructure', 'Use this when the user asks what power infrastructure is near a site (lat, lon, radius_km). Returns the nearest substations (HIFLD + OpenStreetMap, one row per station, distance in km; with a key: distance and kV band; on Pro also name, exact kV and operator), the nearest gas pipeline segments (Developer plan and up), the nearest EIA power plants (name, MW, fuel, distance), the nearest transmission line in km, and counts of substations, transmission lines, gas pipelines and power plants within the radius. layer picks one list (substations, gas, power_plants); min_voltage_kv sets the substation voltage floor; limit sets each list length (max 25). Answers "what is near this parcel", "how far is the nearest substation and what voltage is it". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).',
+  trackedTool(srv, 'get_infrastructure', 'Use this when the user asks what power infrastructure is near a site (lat, lon, radius_km). Returns the nearest substations (HIFLD + OpenStreetMap, one row per station, distance in km; distance and kV band, plus name, exact kV and operator where your access includes them), the nearest gas pipeline segments (where your access includes them), the nearest EIA power plants (name, MW, fuel, distance), the nearest transmission line in km, and counts of substations, transmission lines, gas pipelines and power plants within the radius. layer picks one list (substations, gas, power_plants); min_voltage_kv sets the substation voltage floor; limit sets each list length (max 25). Answers "what is near this parcel", "how far is the nearest substation and what voltage is it". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).',
     { lat: N.describe('Center latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
       lon: N.describe('Center longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
       ...COORD_ALIASES,
