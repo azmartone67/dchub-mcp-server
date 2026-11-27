@@ -904,6 +904,7 @@ test/wall-one-door-1122.test.mjs
 test/wall-one-route.test.mjs
 test/wall-pack-first-1122.test.mjs
 test/wall-paid-line-1121.test.mjs
+test/wall-relay-mint.test.mjs
 test/wall-relay-value-first-1121.test.mjs
 test/wall-short-link.test.mjs
 test/wall-tag.test.mjs

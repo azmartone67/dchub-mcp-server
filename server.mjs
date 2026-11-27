@@ -277,6 +277,7 @@ import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextA
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor, usableSessionId } from './lib/wall-via-tag.mjs';
+import { wallRelayMintOn, wallRelayMintPlan } from './lib/wall-relay-mint.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
@@ -6694,12 +6695,21 @@ export function _sessionIdToken(v) {
   return _SESSION_TOKEN_RE.test(s) ? s : null;
 }
 
-async function trackPaidHit(sessionId, toolName) {
+// lib/wall-relay-mint.mjs: the request ctx keeps each tool's in-flight paid-hit write, so the wall step can
+// ask should-mint-claim after the branch's own fire-and-forget hit has landed (no timer).
+function trackPaidHit(sessionId, toolName) {
+  const p = _trackPaidHitImpl(sessionId, toolName);
+  try { const c = getCtx(); if (c && typeof c === 'object' && toolName) (c._hiTrackP || (c._hiTrackP = new Map())).set(toolName, p); } catch (_) { /* a memo */ }
+  return p;
+}
+async function _trackPaidHitImpl(sessionId, toolName) {
   if (!_isRealSession(sessionId)) return;
   try {
     const c = getCtx();
     if (_excludedFromRelayReadout(c)) return;   // r-claude-directory: not in the relay readout
     if (isBotOrInternalCtx(c)) return;  // r72: don't track bot/probe paid-hits
+    // lib/wall-relay-mint.mjs: this request's paid hit for this tool is written, so the wall step does not write it twice.
+    try { if (c && typeof c === 'object') (c._hiTrackedTools || (c._hiTrackedTools = new Set())).add(toolName); } catch (_) { /* a memo */ }
     const variant = claimVariantFromCtx(c);
     // 2026-07-01: 3000→10000 + status logging. This fires BEFORE/concurrent
     // with the gated data fetch, so the 3s wall-clock abort expired during
@@ -29018,6 +29028,23 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
       // mcp-wall (callAPIWrite opts.wallVia). Never QA callers or the relay-readout exclusions.
       if (_rt.wall && wallViaTagOn() && wallLinkIssued(out) && !_isQaCaller(c) && !_excludedFromRelayReadout(c)) {
         _wallViaMemo.note(c.session_id, _rt.wall);
+      }
+      // Funnel leak 1 (owner 2026-11-27): a walled answer that hands out the relay link is a relay mint on its
+      // first hit (should-mint-claim wl=1), on every wall type, not only lp_wall (lib/wall-relay-mint.mjs).
+      // After the answer is on its way; never worth a response.
+      const _rm = wallRelayMintPlan({ on: wallRelayMintOn(), wall: _rt.wall, linkIssued: !!_rt.wall && wallLinkIssued(out),
+        qa: _isQaCaller(c), excluded: _excludedFromRelayReadout(c), sid: c.session_id, trackedTools: c._hiTrackedTools, tool: name });
+      if (_rm) {
+        (async () => {
+          try {
+            // should-mint-claim mints nothing for a row that is not there, so the hit lands first: this step's own
+            // write, or the branch's in-flight one (the trial-preview path fires it without awaiting).
+            if (_rm.trackHit) await trackPaidHit(_rm.sid, name);
+            else { const _p = c._hiTrackP && c._hiTrackP.get(name); if (_p) await _p; }
+            await shouldMintClaim(_rm.sid, name, { wallLink: true });
+          }
+          catch (_) { /* never worth a response */ }
+        })();
       }
     }
     // lib/handoff.mjs: every wall / relay step has run, so this is the final word: the execute_plan complement
