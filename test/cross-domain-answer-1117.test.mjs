@@ -9,7 +9,7 @@
 // Unit checks on lib/cross-domain-answer.mjs and the lead/pair/compact changes, then both questions end to end
 // through the real /mcp handler (every step a real loopback) against a stub backend shaped like the live keyless
 // payloads of 2026-11-18 04:17Z (taste headlines, withheld fields).
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
@@ -94,7 +94,11 @@ describe('the answer for (a), keyless', () => {
     ex(3, 'get_grid_intelligence', { iso: 'MISO' }, gridKeyless('MISO', 81000)),
     ex(4, 'source_capacity', { min_mw: 50, region: 'north_america' }, LISTINGS_EMPTY),
   ];
+  // The fixture's demand hour is 2026-11-18T03Z: answer within the hour after it, so it is a live reading (GDL
+  // 2026-11-26 item 1 drops "live demand" once the hour is older than DEMAND_FRESH_HOURS).
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-18T04:30:00Z'));
   const ia = buildCrossDomainAnswer({ intent: QA, intent_class: 'capacity_grid', requested_mw: 50, deadline_months: 24 }, executed, asMap(executed));
+  vi.useRealTimers();
 
   it('names the top 3 markets with their grids', () => {
     expect(ia.kind).toBe('cross_domain');
