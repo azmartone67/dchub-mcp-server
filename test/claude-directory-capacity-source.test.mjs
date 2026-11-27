@@ -14,6 +14,7 @@
 //      another tool's answer). CONTROL: /mcp still adds it, same call.
 //
 // Hard-gate qualified: real server on 127.0.0.1 against a local stub, no egress.
+import { NEVER_POINTED_AT_TOOLS, unlistedToolMessage } from '../lib/unlisted-tool.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CLAUDE_REMOVED, CLAUDE_PLANS_NOTICE } from '../lib/claude-directory.mjs';
 import { startHarness, fenceNetwork, claudeProbePatterns, hitsOf, withoutPartialLink } from './helpers/claude-directory-harness.mjs';
@@ -100,7 +101,9 @@ describe('source_capacity on /mcp/claude', () => {
     for (const n of ['accept_capacity_terms', 'request_capacity_intro']) {
       const r = await H.call(DIR, n, { slug: 'phoenix-2-mw-colocation-available-now' });
       expect(r.msg.error, n).toBeTruthy();
-      expect(r.msg.error.message, n).toMatch(/^Unknown tool/);
+      // 2026-11-27 (lib/unlisted-tool.mjs): a real DC Hub tool says where it is served, still as an error.
+      expect(r.msg.error.message, n).toBe(unlistedToolMessage(DIR));
+      expect(r.msg.result, n).toBeUndefined();
     }
   });
 });

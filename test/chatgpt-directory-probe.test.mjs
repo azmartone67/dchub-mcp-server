@@ -27,6 +27,7 @@ import {
   CHATGPT_TOOLS as DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, CHATGPT_NOTICE, scrubStructured,
   STANDARD_ANNOTATION_KEYS, EMAIL_OR_WEBHOOK_TOOLS,
 } from '../lib/chatgpt-directory.mjs';
+import { NEVER_POINTED_AT_TOOLS, unlistedToolMessage } from '../lib/unlisted-tool.mjs';
 import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
 
 const foreign = [];
@@ -188,7 +189,10 @@ describe('/mcp/chatgpt — handshake and catalog', () => {
       const msg = JSON.parse(r.body);
       expect(msg.result, name).toBeUndefined();
       expect(msg.error.code, name).toBe(-32602);
-      expect(msg.error.message, name).toMatch(/^Unknown tool/);
+      // 2026-11-27 (lib/unlisted-tool.mjs): a real DC Hub tool says where it is served; key and commerce
+      // tools are never pointed at and keep "Unknown tool".
+      if (NEVER_POINTED_AT_TOOLS.includes(name)) expect(msg.error.message, name).toMatch(/^Unknown tool/);
+      else expect(msg.error.message, name).toBe(unlistedToolMessage(DIR));
       expect(probeHits(r.raw), name).toEqual([]);
     }
   });
@@ -290,7 +294,7 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
 
   it('subscribe_digest is not callable on the profile, and says so without commerce', async () => {
     const r = await call(DIR, 'subscribe_digest', {});
-    expect(r.raw).toMatch(/Unknown tool/);
+    expect(JSON.parse(r.body).error.message).toBe(unlistedToolMessage(DIR));
     expect(probeHits(r.raw)).toEqual([]);
   });
 });

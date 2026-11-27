@@ -78,6 +78,7 @@
 
 import { withHeldDcpiLinks as _withHeldDcpiLinks } from './lib/dcpi-hold-links.mjs';
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
+import { unlistedToolError } from './lib/unlisted-tool.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
 import { planId as _planIdOf, compactReplay as _compactReplay } from './lib/plan-replay-id.mjs';
@@ -16142,13 +16143,21 @@ export function _coarsenFindSites(payload, dp = 1) {
     // and the distance to the market centre (it would place the exact anchor) are not.
     // be#9111 (Grok 2026-11-20 P1): market.distance_note states the same km in prose; a preview keeps the
     // caveat in the backend's own below-Pro wording and drops the figure.
+    // Stability P3 (2026-11-27): a withheld distance says so, as the backend's own preview does (be#9472:
+    // _distance_km_withheld / _verdict_market_distance_km_withheld, the _time_to_power_months_withheld pattern),
+    // so a null reads as withheld, not unknown. Only where there was a distance to withhold: a null that was
+    // already null (no market in range) gets no marker.
     if (cand.market && typeof cand.market === 'object' && !Array.isArray(cand.market)) {
-      c2.market = { ...cand.market, distance_km: null };
+      c2.market = { ...cand.market, distance_km: null,
+        ...(cand.market.distance_km != null ? { _distance_km_withheld: true } : {}) };
       if (typeof cand.market.distance_note === 'string') c2.market.distance_note = _previewDistanceNote(cand.market.distance_note);
     }
     // be#9314 (2026-11-23) names the verdict's market on the row with its distance; that is the same figure as
     // market.distance_km, so a preview withholds it too.
-    if (Object.prototype.hasOwnProperty.call(cand, 'verdict_market_distance_km')) c2.verdict_market_distance_km = null;
+    if (Object.prototype.hasOwnProperty.call(cand, 'verdict_market_distance_km')) {
+      c2.verdict_market_distance_km = null;
+      if (cand.verdict_market_distance_km != null) c2._verdict_market_distance_km_withheld = true;
+    }
     if (cand.time_to_power && typeof cand.time_to_power === 'object' && !Array.isArray(cand.time_to_power)) {
       const t = cand.time_to_power;
       c2.time_to_power = { ...t, time_to_power_months: null,
@@ -33128,6 +33137,8 @@ const _KEY_HELP_PATHS = {
 };
 // Every path above and the fallback were read live 2026-09-27: 200 with a
 // "Get a durable free key in this URL" flow (/connect is the generic setup page).
+// The words just before the key page link in the notice; _oneLinkProse keeps the link that follows them.
+export const KEY_NOTICE_LEAD = 'Get a new key at ';
 export function _keyHelpUrl(platform) {
   const p = String(platform || '').trim().toLowerCase();
   return 'https://dchub.cloud' + (_KEY_HELP_PATHS[p] || '/connect');
@@ -33165,7 +33176,7 @@ export function _keyNoticeLine(ctxLike) {
   const url = _keyHelpUrl(c.platform);
   if (status === 'invalid' && !c.api_key) {
     return `${_keyWhere(c.auth_source)} isn't valid, so you're getting keyless results. `
-      + `Get a new key at ${url}`;
+      + KEY_NOTICE_LEAD + url;
   }
   if (status === 'unverified') {
     return `DC Hub couldn't verify ${_keyWhere(c.auth_source, false)} `
@@ -33986,8 +33997,12 @@ function _oneLinkProse(t, human, seen) {
   // now points at sells by wall kind (the pack on a capacity wall, Developer + Pro on a
   // depth wall), so the label is the paid-sell-line canon wording, which is true of both.
   out = out.replace(_ONE_LINK_PACK_RUNG_RE_G, (seg, u) => (keep(u) ? seg : _ONE_LINK_PLANS_LABEL + give()));
-  return out.replace(_ONE_LINK_RE_G, (u) => (keep(u) ? u : give()));
+  // The invalid-key notice (_keyNoticeLine) names the public key page, the same one initialize names:
+  // that link is the fix for a bad key, not a wall pointer, so it never gives way to the wall's link.
+  return out.replace(_ONE_LINK_RE_G, (u, at, str) => (keep(u) || _isKeyNoticeLink(str, at) ? u : give()));
 }
+const _isKeyNoticeLink = (str, at) => typeof str === 'string' && at >= KEY_NOTICE_LEAD.length
+  && str.slice(at - KEY_NOTICE_LEAD.length, at) === KEY_NOTICE_LEAD;
 // `seen` is passed for a text block (one copy of the link in the text); structuredContent
 // passes none, so its fields carry the link itself.
 function _oneLinkValue(v, human, key, depth, seen) {
@@ -42546,6 +42561,17 @@ function _isLoopbackPeer(req) {
 }
 
 const _CORE_TOOL_SET = new Set(CORE_TOOL_NAMES);
+
+// Stability P3 (2026-11-27): a restricted endpoint answers a real DC Hub tool it does not serve with where it is
+// served, not "Unknown tool" (lib/unlisted-tool.mjs). The set of real names is what /mcp registers, read once.
+let _dchubToolNames = null;
+export function _isDchubToolName(name) {
+  if (typeof name !== 'string' || !name) return false;
+  if (!_dchubToolNames) {
+    try { _dchubToolNames = new Set(Object.keys(createServer(null, '')._registeredTools || {})); } catch (_) { return false; }
+  }
+  return _dchubToolNames.has(name);
+}
 let _coreNamesSet = false;
 const _coreSlugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
@@ -42895,7 +42921,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_b.method === 'tools/call') {
         const _n = _b.params && _b.params.name;
         if (!(_claudeProfile ? _isClaudeTool(_n) : _isDirectoryTool(_n))) {
-          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+          return _writeRpcError(res, _b.id, unlistedToolError(_n, _normPath(req), _isDchubToolName), 200);
         }
         if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
         const _a = _b.params.arguments;
@@ -42949,7 +42975,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_b.method === 'tools/call') {
         const _n = _b.params && _b.params.name;
         if (!_CORE_TOOL_SET.has(_n)) {
-          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+          return _writeRpcError(res, _b.id, unlistedToolError(_n, _normPath(req), _isDchubToolName), 200);
         }
         if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
         const _a = _b.params.arguments;

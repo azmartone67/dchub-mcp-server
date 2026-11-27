@@ -292,6 +292,7 @@ test/find-sites-free-coarsen.test.mjs
 test/find-sites-market-anchor-e2e-1120.test.mjs
 test/find-sites-min-mw.test.mjs
 test/find-sites-target-mw-e2e.test.mjs
+test/find-sites-withheld-distance-markers-1127.test.mjs
 test/findings-open-intake.test.mjs
 test/first-plan-depth-m22.test.mjs
 test/floor-masked-preview-offer.test.mjs
@@ -421,6 +422,7 @@ test/interconnection-queue-shape.test.mjs
 test/internal-challenge-state.test.mjs
 test/invalid-bearer.test.mjs
 test/invalid-key-anon.test.mjs
+test/invalid-key-notice-public-link-1127.test.mjs
 test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
 test/item1-wall-neutral-line.test.mjs
@@ -865,6 +867,7 @@ test/ttp-block-anon-trim.test.mjs
 test/typed-iso-is-scope.test.mjs
 test/typed-preview-rank-markets.test.mjs
 test/uncovered-constraints.test.mjs
+test/unlisted-tool-points-to-mcp-1127.test.mjs
 test/unlock-keyless-one-link-1126.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/unlock-line-ratchet.test.mjs
