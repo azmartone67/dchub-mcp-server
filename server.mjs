@@ -26318,7 +26318,9 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
                        score: (typeof o.composite_score === 'number') ? o.composite_score : null });
         }
       }
-      for (const val of Object.values(o)) scan(val, depth + 1);
+      // 2026-11-27: rows a filter removed (excluded_by_*, the canvas's excluded_by_max_months) are not this run's
+      // verdicts; live xd-a led "Garden City: CAUTION", a market the 24-month deadline had removed.
+      for (const [k, val] of Object.entries(o)) if (!/^excluded_by_/i.test(k)) scan(val, depth + 1);
     };
     for (const e of (Array.isArray(executed) ? executed : [])) {
       if (e && skipSteps && skipSteps.has(e.step)) continue;   // undated power step: not led with
