@@ -348,6 +348,7 @@ test/grid-constraints-pause-1124.test.mjs
 test/grid-constraints-phoenix-asof-1124.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
+test/grid-gas-fiber-coverage-1126.test.mjs
 test/grid-gating-one-rule.test.mjs
 test/grid-headroom-non-rto.test.mjs
 test/grid-intelligence-source-composed.test.mjs
