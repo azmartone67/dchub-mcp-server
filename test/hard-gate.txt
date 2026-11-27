@@ -77,6 +77,7 @@ test/canon-heal-gates-on-the-marker.test.mjs
 test/canon-pack-price.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
 test/canvas-echoes-callers-own-inputs.test.mjs
+test/canvas-finalist-isos-1127.test.mjs
 test/canvas-teaser-no-plan-1117.test.mjs
 test/cap-signal.test.mjs
 test/cap-trim-spares-capacity-teaser.test.mjs

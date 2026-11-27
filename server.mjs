@@ -24200,6 +24200,10 @@ export function _execHarvest(node, minted, capPerKind, depth = 0) {
     return;
   }
   for (const [k, v] of Object.entries(node)) {
+    // 2026-11-27: rows a filter removed (excluded_by_*, e.g. site_selection_canvas excluded_by_max_months: markets the deadline
+    // removed) never mint. Live xd-a: that list sits before `shortlist`, so its NYISO rows (Garden City and three other
+    // NY markets, all over 24 months) took the first ISO slot and ran a queue and a headroom step the answer then dropped.
+    if (/^excluded_by_/i.test(k)) continue;
     if (typeof v === 'string' && v) {
       let kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
       // r-invariants v2.7.4: iso mints must LOOK like ISOs — grid tools
@@ -24536,6 +24540,18 @@ export const _EXEC_TOOL_MINTS = {
   // 5.41: each shortlisted market's state, for capacity_grid's per-finalist power timeline ('<finalist_state ...>').
   site_selection_canvas: { rowsKey: 'shortlist', field: 'state', kind: 'finalist_state', upper: true },
 };
+// The distinct ISOs of a site_selection_canvas shortlist's top `cap` rows, in rank order; null when the payload has
+// no shortlist array (the generic harvest then stands). A row on no ISO-shaped grid (PACE) adds nothing.
+export function _canvasFinalistIsos(payload, cap = 3) {
+  const rows = payload && typeof payload === 'object' && Array.isArray(payload.shortlist) ? payload.shortlist : null;
+  if (!rows) return null;
+  const out = [];
+  for (const r of rows.slice(0, Math.max(1, cap))) {
+    const v = r && typeof r.iso === 'string' ? r.iso.trim() : '';
+    if (v && /^(ERCOT|PJM|MISO|CAISO|SPP|NYISO|ISO-?NE|WECC|SERC|AESO|IESO|ONS|NEM)$/i.test(v) && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
 // v2.7.8: only a real RTO/ISO is a valid `iso` ARG — WECC and SERC are
 // reliability regions (Atlanta/Southern Co and most of the desert
 // Southwest are non-RTO), and injecting them made
@@ -35900,6 +35916,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                     }
                   }
                 } catch (_e) { /* contract extraction is fail-soft */ }
+              }
+              // 2026-11-27: a shortlist's grids are its finalists' grids, the same top rows finalist_state reads, in rank order.
+              if (s.tool === 'site_selection_canvas') {
+                const iso = _canvasFinalistIsos(out.full || out.result, Math.max(maxFan, 3));
+                if (iso && iso.length) fresh.iso = iso;
               }
               for (const [kind, vals] of Object.entries(fresh)) {
                 for (const v of vals) {
