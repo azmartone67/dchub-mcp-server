@@ -222,3 +222,35 @@ describe('B) execute_plan end to end: each envelope key exactly once', () => {
     sizes[k] = { wire: [Buffer.byteLength(off.raw), Buffer.byteLength(on.raw)], sc: [offSc.length, sc.length] };
   }, 120_000);
 });
+
+describe('2026-11-27: with no live listings, the plan follows the step sized to the request', () => {
+  const cap = (args, nc = true) => ({ live_listings_matching: 0, program_status: 'upcoming',
+    browse_call: { tool: 'source_capacity', arguments: args },
+    ...(nc ? { next_call: { tool: 'source_capacity', arguments: args, why: 'grid' } } : {}) });
+  // xd-a live 2026-11-27: step 2 fanned out NYISO (a dropped CAUTION row), step 4 sized each finalist state to 50 MW.
+  const found = [
+    { step: 2, block: cap({ state: 'NY' }) },
+    { step: 2, block: cap({ location: 'MN, IA, WI' }) },
+    { step: 3, block: cap({ state: 'TX' }) },
+    { step: 4, block: cap({ state: 'TX', min_mw: 50 }, false) },
+    { step: 4, block: cap({ state: 'MI', min_mw: 50 }, false) },
+  ];
+
+  it('browse_call is the first sized block, not the first block', () => {
+    const cs = mergeCapacitySource(found);
+    expect(cs.browse_call.arguments).toEqual({ state: 'TX', min_mw: 50 });
+    expect(cs.other_places.map((p) => p.arguments)).toContainEqual({ state: 'NY' });
+  });
+
+  it('next_call never names a place other than the plan\'s own', () => {
+    const cs = mergeCapacitySource(found);
+    expect(cs.next_call.arguments).toEqual({ state: 'TX', min_mw: 50 });
+    expect(JSON.stringify(cs.next_call || {})).not.toContain('"NY"');
+  });
+
+  it('live listings still beat a sized block; equal unsized blocks keep step order', () => {
+    const live = { ...cap({ state: 'AZ' }), live_listings_matching: 1 };
+    expect(mergeCapacitySource([...found, { step: 5, block: live }]).browse_call.arguments).toEqual({ state: 'AZ' });
+    expect(mergeCapacitySource(found.slice(0, 3)).browse_call.arguments).toEqual({ state: 'NY' });
+  });
+});
