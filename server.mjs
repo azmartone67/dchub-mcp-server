@@ -160,7 +160,8 @@ import { listKeyToolAs as _listKeyToolAs, listResultKeyToolAs as _listResultKeyT
          keyToolPointerStep as _keyToolPointerStep, KEY_TOOL_LISTED as _KEY_TOOL_LISTED,
          KEY_TOOL_REGISTERED as _KEY_TOOL_REGISTERED, keyToolName as _keyToolName } from './lib/key-tool-name.mjs';
 import { planFactHeaderStep as _planFactHeaderStep, compactRequested as _planCompactRequested } from './lib/plan-fact-header.mjs';
-import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest, keyLine as _keyLineText } from './lib/wall-key-line.mjs';
+import { withKeyLineAheadOfDigest as _withKeyLineAheadOfDigest, keyLine as _keyLineText,
+  withReturningKeyLineForDigest as _withReturningKeyLineForDigest, returningKeyLineOn as _returningKeyLineOn } from './lib/wall-key-line.mjs';
 import { grokKeyStickyOn as _grokKeyStickyOn, withGrokKeepKey as _withGrokKeepKey } from './lib/grok-key-sticky.mjs';   // Grok funnel F1
 import { wallOfferFloorV2On as _wallOfferFloorV2On, grokKeyFloorEligible as _grokKeyFloorEligible, createRepeatWallCounter as _createRepeatWallCounter, isRepeatWall as _isRepeatWall } from './lib/wall-offer-floor-v2.mjs';   // Grok funnel F2   // Grok note N item 1
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -282,7 +283,8 @@ import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerW
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
          keyRuleText as _keyRuleText, DECISION_TOOLS_LINE as _DECISION_TOOLS_LINE, KEY_KEEPS as _KEY_KEEPS } from './lib/continuity-ask.mjs';
-import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache } from './lib/keyless-return-ask.mjs';
+import { keylessReturnAsk as _keylessReturnAsk, createReturningCache as _createReturningCache, ipKey as _retIpKey } from './lib/keyless-return-ask.mjs';
+import { keepThisLineStep as _keepThisLineStep } from './lib/keep-this-line.mjs';
 import * as _WD from './lib/wall-device-match.mjs';
 import { nudgeOnceShared as _nudgeOnceShared, nudgeIdentity as _nudgeIdentity, createNudgeMemo as _createNudgeMemo, NUDGE_BUCKET as _NUDGE_BUCKET } from './lib/email-nudge-once.mjs';
 import { EMAIL_ENTRY_TOOLS as _EMAIL_ENTRY_TOOLS, emailEnteredEventOn as _emailEnteredOn, createLastWallMemo,
@@ -5823,6 +5825,15 @@ function _placeWallOffers(out, offers0, name, c) {
     if (placed !== r && _keyLineOncePerTool(c)) _askOnceSeen(c.session_id, 'key_line', name);
     r = placed;
   }
+  // Returning keyless caller (Grok -> Brain 2026-11-27, lib/wall-key-line.mjs): the digest paragraph the answer already
+  // carries becomes the one-step key line.
+  for (const o of offers) {
+    if (o.place !== 'replace_digest') continue;
+    const placed = _withReturningKeyLineForDigest(r, o.line);
+    if (placed !== r && o.ask) _markEmailAsk(c, o.ask);
+    if (placed !== r && _keyLineOncePerTool(c)) _askOnceSeen(c.session_id, 'key_line', name);
+    r = placed;
+  }
   for (const o of offers) if (o.place === 'lead') r = _withOauthLeadLine(r, o.line);
   for (const o of offers) if (o.place === 'below_link') r = _depthTrial(r, o.line);
   return r;
@@ -5917,7 +5928,8 @@ export function _wallOfferFloorStep(result, name, c = getCtx()) {
     try { repeatWall = _wallOfferFloorV2On() && _isRepeatWall(_repeatWalls.record(_repeatWallIdentity(c), name)); } catch (_) { repeatWall = false; }
     const keyLineSent = !repeatWall && _keyLineOncePerTool(c) && _askOnceHas(c.session_id, 'key_line', name);
     return _placeWallOffers(out, _wallOffers(ent, { tool: name, walled: true, depth: f.rawDepth, proOnly: f.proOnly,
-      link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent }), name, c);
+      link: _humanLinkOf(out), workosEnabled, freeOfferShown, shownOffers, keyAsked: _askedForEmailInProse(out) || keyLineSent,
+      returning: _returningKeylessWall(c, ent) }), name, c);
   } catch (_) { return result; }
 }
 // DCHUB_WALL_IDENTITY_V2 (lib/wall-identity-v2.mjs, default OFF): the sign-in line on a walled answer, placed LAST in
@@ -14868,17 +14880,41 @@ async function _anonReturningLookup(ip) {
   return !!(j && j.returning === true);
 }
 let _keylessReturning = _createReturningCache({ lookup: (ip) => _anonReturningLookup(ip) });
+// the keyed ask's own caller filters (directory profiles, bots, our own traffic), minus "has a key"
+const _keylessAskEligible = (cc) => !_isCleanPlatform() && _retNudgeEligible({ ...cc, api_key: 'keyless' },
+  { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE], isBot: isBotOrInternalCtx });
+const _KEEP_THIS_ONCE = _createOncePerWeek();
 function _keylessReturnStep(result, name, c, env) {
   if (result && (_isFailureEnvelope(result) || _OWN_TELL_TOOLS.has(name) || _retHasTellLine(result))) return result;
-  return _keylessReturnAsk(result, { c, env, cache: _keylessReturning, once: _KEYLESS_ONCE,
-    // the keyed ask's own caller filters (directory profiles, bots, our own traffic), minus "has a key"
-    eligible: (cc) => !_isCleanPlatform() && _retNudgeEligible({ ...cc, api_key: 'keyless' },
-      { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE], isBot: isBotOrInternalCtx }),
-    isWall: (res) => !!(res.structuredContent && typeof res.structuredContent === 'object'
-      && !Array.isArray(res.structuredContent) && _isRelayWall(res.structuredContent, c)) });
+  const isWall = (res) => !!(res.structuredContent && typeof res.structuredContent === 'object'
+    && !Array.isArray(res.structuredContent) && _isRelayWall(res.structuredContent, c));
+  const asked = _keylessReturnAsk(result, { c, env, cache: _keylessReturning, once: _KEYLESS_ONCE,
+    eligible: _keylessAskEligible, isWall });
+  if (asked !== result) return asked;   // the return line went out: no second keep line on this answer
+  // Keep-this line (Grok -> Brain 2026-11-27, lib/keep-this-line.mjs): get_market_dcpi_rank / analyze_site keyless full
+  // answers, once per session (no session: once per IP hash per 7 days).
+  let onceKey = '';
+  try {
+    const sid = usableSessionId(c && c.session_id);
+    onceKey = sid ? 's:' + sid : (c && c.client_ip ? 'i:' + _retIpKey(c.client_ip) : '');
+  } catch (_) { onceKey = ''; }
+  return _keepThisLineStep(result, { name, c, env, once: _KEEP_THIS_ONCE, onceKey, eligible: _keylessAskEligible,
+    isWall: (res, cc) => isWall(res) || _gatedAnswer(res, name, cc) });
+}
+// Returning keyless wall (Grok -> Brain 2026-11-27): a keyless caller with no email on file whose IP the cached
+// anon-returning read already knows as seen in an earlier ISO week. peek() never waits: a miss starts the read in the
+// background and reads as "not returning" (today's wall). Not on the directory / Claude / core profiles, a clean
+// platform, a ChatGPT client, an execute_plan step, or bot / internal traffic.
+function _returningKeylessWall(c, ent) {
+  try {
+    if (!_returningKeyLineOn() || !c || c.api_key || c.email || !c.client_ip || c.loopback_step) return false;
+    if (ent && (ent.keyed || ent.bound || ent.paid)) return false;
+    if (/chatgpt|openai/i.test(String(c.platform || '')) || !_keylessAskEligible(c)) return false;
+    return _keylessReturning.peek(c.client_ip) === true;
+  } catch (_) { return false; }
 }
 export function _setKeylessReturnLookupForTest(lookup) {
-  _keylessReturning = _createReturningCache({ lookup }); _KEYLESS_ONCE.clear();
+  _keylessReturning = _createReturningCache({ lookup }); _KEYLESS_ONCE.clear(); _KEEP_THIS_ONCE.clear();
 }
 // Wall identity v2, device match (owner relay 2026-11-20, item 3): a key minted at a wall is recorded against the
 // caller's (client name, IP /24 or /48) pair; a later KEYLESS call from that exact pair within 30 days is served as
@@ -15187,7 +15223,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
 export function _clearNudgeDayForTest() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }   // a later UTC day, same week
-export function _resetReturnNudgeState() { _CONTINUITY_ONCE.clear(); _KEYLESS_ONCE.clear(); _keylessReturning.clear(); _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
+export function _resetReturnNudgeState() { _CONTINUITY_ONCE.clear(); _KEYLESS_ONCE.clear(); _KEEP_THIS_ONCE.clear(); _keylessReturning.clear(); _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); _RESUME_DAY.clear(); _RESUME_PENDING.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
