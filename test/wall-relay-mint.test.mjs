@@ -43,11 +43,14 @@ describe('server.mjs wiring', () => {
     expect(body).toMatch(/wallRelayMintPlan\(\{[^}]*wall: _rt\.wall[^}]*linkIssued: !!_rt\.wall && wallLinkIssued\(out\)/s);
     expect(body).toMatch(/shouldMintClaim\(_rm\.sid, name, \{ wallLink: true \}\)/);
     expect(body).toMatch(/if \(_rm\.trackHit\) await trackPaidHit\(_rm\.sid, name\)/);
-    // the branch's own un-awaited hit can land after the first ask: one retry, only when this step did not write it
-    expect(body).toMatch(/if \(!_m1 && !_rm\.trackHit\) \{\s*await new Promise\(\(r\) => setTimeout\(r, WALL_RELAY_MINT_RETRY_MS\)\);\s*await shouldMintClaim\(_rm\.sid, name, \{ wallLink: true \}\);/);
+    // the branch's own un-awaited hit is awaited before the ask (no timer: a late call would leak past the request)
+    expect(body).toMatch(/else \{ const _p = c\._hiTrackP && c\._hiTrackP\.get\(name\); if \(_p\) await _p; \}\s*await shouldMintClaim/);
+    expect(body).not.toMatch(/setTimeout/);
   });
-  it('trackPaidHit notes the tool on the request ctx after its bot guard', () => {
-    const t = src.slice(src.indexOf('async function trackPaidHit('), src.indexOf('export async function shouldMintClaim('));
+  it('trackPaidHit keeps its in-flight write on the ctx, and notes the tool after its bot guard', () => {
+    const w = src.slice(src.indexOf('function trackPaidHit('), src.indexOf('async function _trackPaidHitImpl('));
+    expect(w).toMatch(/c\._hiTrackP \|\| \(c\._hiTrackP = new Map\(\)\)\)\.set\(toolName, p\)/);
+    const t = src.slice(src.indexOf('async function _trackPaidHitImpl('), src.indexOf('export async function shouldMintClaim('));
     expect(t.indexOf('_hiTrackedTools')).toBeGreaterThan(t.indexOf('isBotOrInternalCtx(c)) return;'));
   });
 });

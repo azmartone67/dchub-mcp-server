@@ -274,7 +274,7 @@ import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextA
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor, usableSessionId } from './lib/wall-via-tag.mjs';
-import { wallRelayMintOn, wallRelayMintPlan, WALL_RELAY_MINT_RETRY_MS } from './lib/wall-relay-mint.mjs';
+import { wallRelayMintOn, wallRelayMintPlan } from './lib/wall-relay-mint.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
@@ -6642,7 +6642,14 @@ export function _sessionIdToken(v) {
   return _SESSION_TOKEN_RE.test(s) ? s : null;
 }
 
-async function trackPaidHit(sessionId, toolName) {
+// lib/wall-relay-mint.mjs: the request ctx keeps each tool's in-flight paid-hit write, so the wall step can
+// ask should-mint-claim after the branch's own fire-and-forget hit has landed (no timer).
+function trackPaidHit(sessionId, toolName) {
+  const p = _trackPaidHitImpl(sessionId, toolName);
+  try { const c = getCtx(); if (c && typeof c === 'object' && toolName) (c._hiTrackP || (c._hiTrackP = new Map())).set(toolName, p); } catch (_) { /* a memo */ }
+  return p;
+}
+async function _trackPaidHitImpl(sessionId, toolName) {
   if (!_isRealSession(sessionId)) return;
   try {
     const c = getCtx();
@@ -28914,14 +28921,11 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
       if (_rm) {
         (async () => {
           try {
+            // should-mint-claim mints nothing for a row that is not there, so the hit lands first: this step's own
+            // write, or the branch's in-flight one (the trial-preview path fires it without awaiting).
             if (_rm.trackHit) await trackPaidHit(_rm.sid, name);
-            // A branch that wrote the hit fire-and-forget (the trial-preview path) may not have landed it yet,
-            // and should-mint-claim mints nothing for a row that is not there: ask once more after a beat.
-            const _m1 = await shouldMintClaim(_rm.sid, name, { wallLink: true });
-            if (!_m1 && !_rm.trackHit) {
-              await new Promise((r) => setTimeout(r, WALL_RELAY_MINT_RETRY_MS));
-              await shouldMintClaim(_rm.sid, name, { wallLink: true });
-            }
+            else { const _p = c._hiTrackP && c._hiTrackP.get(name); if (_p) await _p; }
+            await shouldMintClaim(_rm.sid, name, { wallLink: true });
           }
           catch (_) { /* never worth a response */ }
         })();
