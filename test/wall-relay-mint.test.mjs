@@ -43,6 +43,8 @@ describe('server.mjs wiring', () => {
     expect(body).toMatch(/wallRelayMintPlan\(\{[^}]*wall: _rt\.wall[^}]*linkIssued: !!_rt\.wall && wallLinkIssued\(out\)/s);
     expect(body).toMatch(/shouldMintClaim\(_rm\.sid, name, \{ wallLink: true \}\)/);
     expect(body).toMatch(/if \(_rm\.trackHit\) await trackPaidHit\(_rm\.sid, name\)/);
+    // the branch's own un-awaited hit can land after the first ask: one retry, only when this step did not write it
+    expect(body).toMatch(/if \(!_m1 && !_rm\.trackHit\) \{\s*await new Promise\(\(r\) => setTimeout\(r, WALL_RELAY_MINT_RETRY_MS\)\);\s*await shouldMintClaim\(_rm\.sid, name, \{ wallLink: true \}\);/);
   });
   it('trackPaidHit notes the tool on the request ctx after its bot guard', () => {
     const t = src.slice(src.indexOf('async function trackPaidHit('), src.indexOf('export async function shouldMintClaim('));

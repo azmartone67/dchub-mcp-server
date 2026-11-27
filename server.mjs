@@ -274,7 +274,7 @@ import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextA
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks, wallRelayUrlOn, planWallSource } from './lib/wall-tag.mjs';
 import { wallViaTagOn, wallLinkIssued, createWallViaMemo, wallViaHeaderFor, usableSessionId } from './lib/wall-via-tag.mjs';
-import { wallRelayMintOn, wallRelayMintPlan } from './lib/wall-relay-mint.mjs';
+import { wallRelayMintOn, wallRelayMintPlan, WALL_RELAY_MINT_RETRY_MS } from './lib/wall-relay-mint.mjs';
 import { appendTailLine as _appendTailLine, createOncePerWeek as _createOncePerWeek,
          CONTINUITY_RETURN_AGENT as _CONTINUITY_RETURN_AGENT, KEYS_INSTR_LINE as _KEYS_INSTR_LINE,
          emailKeepsText as _emailKeepsText, KEY_RETURN_HOOK as _KEY_RETURN_HOOK, BIND_STEP_HINT as _BIND_STEP_HINT,
@@ -28913,7 +28913,16 @@ async function _wallOuterStep(fn, args, extra, name, { deferRow = false } = {}) 
         qa: _isQaCaller(c), excluded: _excludedFromRelayReadout(c), sid: c.session_id, trackedTools: c._hiTrackedTools, tool: name });
       if (_rm) {
         (async () => {
-          try { if (_rm.trackHit) await trackPaidHit(_rm.sid, name); await shouldMintClaim(_rm.sid, name, { wallLink: true }); }
+          try {
+            if (_rm.trackHit) await trackPaidHit(_rm.sid, name);
+            // A branch that wrote the hit fire-and-forget (the trial-preview path) may not have landed it yet,
+            // and should-mint-claim mints nothing for a row that is not there: ask once more after a beat.
+            const _m1 = await shouldMintClaim(_rm.sid, name, { wallLink: true });
+            if (!_m1 && !_rm.trackHit) {
+              await new Promise((r) => setTimeout(r, WALL_RELAY_MINT_RETRY_MS));
+              await shouldMintClaim(_rm.sid, name, { wallLink: true });
+            }
+          }
           catch (_) { /* never worth a response */ }
         })();
       }
