@@ -1,5 +1,5 @@
 // get_site_context (Brain 2026-11-25): the neighborhood around a point as its own tool, behind
-// DCHUB_MCP_GET_SITE_CONTEXT (default OFF). It returns exactly what analyze_site embeds as
+// DCHUB_MCP_GET_SITE_CONTEXT (default ON since 2.12.65; =0 is the kill switch). It returns exactly what analyze_site embeds as
 // `site_context` (same helper, same preview-vs-full choice); execute_plan routes "what is around
 // this point" to it and keeps a score / "should I build here" ask on analyze_site. The facility
 // ownership trio from the backend passes through get_facility / search_facilities / get_pipeline.
@@ -123,8 +123,12 @@ afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); delete
 beforeEach(() => { scMode = 'honest'; process.env[FLAG] = '1'; delete process.env.DCHUB_SITE_CONTEXT; });
 
 describe('registration follows DCHUB_MCP_GET_SITE_CONTEXT', () => {
-  it('reads the flag strictly (default OFF)', () => {
-    expect(S._getSiteContextToolOn({})).toBe(false);
+  it('reads the flag (default ON since 2.12.65; 0/false/no/off turn it off)', () => {
+    expect(S._getSiteContextToolOn({})).toBe(true);
+    expect(S._getSiteContextToolOn({ [FLAG]: '' })).toBe(true);
+    expect(S._getSiteContextToolOn({ [FLAG]: 'false' })).toBe(false);
+    expect(S._getSiteContextToolOn({ [FLAG]: 'no' })).toBe(false);
+    expect(S._getSiteContextToolOn({ [FLAG]: ' OFF ' })).toBe(false);
     expect(S._getSiteContextToolOn({ [FLAG]: '0' })).toBe(false);
     expect(S._getSiteContextToolOn({ [FLAG]: 'off' })).toBe(false);
     expect(S._getSiteContextToolOn({ [FLAG]: '1' })).toBe(true);
@@ -133,15 +137,16 @@ describe('registration follows DCHUB_MCP_GET_SITE_CONTEXT', () => {
     expect(S._getSiteContextToolOn({ [FLAG]: '1', DCHUB_SITE_CONTEXT: '0' })).toBe(false);
   });
 
-  it('flag off: the tool is absent, and tools/list is the flag-on list minus that one entry, byte for byte', async () => {
-    const off = await listTools(undefined);
-    const on = await listTools('1');
+  it('kill switch (=0): the tool is absent, and tools/list is the default list minus that one entry, byte for byte', async () => {
+    const off = await listTools('0');
+    const on = await listTools(undefined);   // default on
+    expect(JSON.stringify(on)).toBe(JSON.stringify(await listTools('1')));
     expect(off.map((t) => t.name)).not.toContain(TOOL);
     expect(on.map((t) => t.name)).toContain(TOOL);
     expect(off.length).toBeGreaterThan(50);
     expect(JSON.stringify(off)).toBe(JSON.stringify(on.filter((t) => t.name !== TOOL)));
-    // and '0' is off too
-    expect((await listTools('0')).map((t) => t.name)).not.toContain(TOOL);
+    // and 'false' is off too
+    expect((await listTools('false')).map((t) => t.name)).not.toContain(TOOL);
   });
 
   it('flag on: lat/lon plus the lng / longitude / latitude aliases are declared; the description names no plan or price', async () => {
@@ -256,9 +261,9 @@ describe('execute_plan routing', () => {
     }
   });
 
-  it('flag off: every plan is the one it was (analyze_site leads, get_site_context nowhere)', () => {
+  it('kill switch (=0): every plan is the one it was (analyze_site leads, get_site_context nowhere)', () => {
     const on = NEIGHBORHOOD.map((q) => S._planQuery(q));
-    delete process.env[FLAG];
+    process.env[FLAG] = '0';
     try {
       for (const q of [...NEIGHBORHOOD, ...SCORING]) {
         const p = S._planQuery(q);

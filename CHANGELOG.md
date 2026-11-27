@@ -10,6 +10,10 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.65 (2026-11-27)
+
+- New `get_site_context` tool: the neighborhood around a point (nearest substations, transmission, fiber, carriers and internet exchanges, flood, seismic and wildfire hazard, zoning and moratoriums, nearby data-center campuses), each block with its source and as_of date, or an explicit gap. This is context, not a score; `analyze_site` remains the 0-100 build verdict. For multi-step data center or energy questions, start with `execute_plan`. The hosted server at `https://dchub.cloud/mcp` already serves this tool.
+
 ## 2.12.64 (2026-11-26)
 
 - Tool catalog and listing metadata sync; no behaviour change.
