@@ -158,7 +158,10 @@ describe('get_site_context: same body and same gating as analyze_site.site_conte
   it('Pro gets the full body; the backend is asked without view, at the point', async () => {
     const r = await call(TOOL, PT, PRO_KEY);
     expect(r.asks).toEqual([{ view: null, lat: String(PT.lat), lng: String(PT.lon) }]);
-    expect(pick(r.body, { ...FULL_SC, view: 'full' })).toEqual({ ...FULL_SC, view: 'full' });
+    // GDL 2026-11-26 item 3: as_of is the Phoenix data day; the read stamp moves to retrieved_at.
+    const FULL_DAY = { ...FULL_SC, view: 'full', as_of: '2026-11-25', retrieved_at: '2026-11-25T12:00:00Z' };
+    expect(pick(r.body, FULL_DAY)).toEqual(FULL_DAY);
+    expect(r.body.as_of).not.toMatch(/Z$/);
   });
 
   it('lng and longitude aliases reach the backend as the same point', async () => {
@@ -175,7 +178,8 @@ describe('get_site_context: same body and same gating as analyze_site.site_conte
     for (const key of [FREE_KEY, null]) {
       const r = await call(TOOL, PT, key);
       expect(r.asks.map((a) => a.view)).toEqual(['preview']);
-      expect(pick(r.body, PREVIEW_SC)).toEqual(PREVIEW_SC);
+      const PREVIEW_DAY = { ...PREVIEW_SC, as_of: '2026-11-25', retrieved_at: '2026-11-25T12:00:00Z' };
+      expect(pick(r.body, PREVIEW_DAY)).toEqual(PREVIEW_DAY);
       expect(r.text).not.toMatch(/\$\d|\bpric(?:e|ing)\b|\b(Pro|Developer|Starter|Enterprise|Founding)\b|\bplan\b|upgrade|subscri/i);
       expect(r.text).toContain(S.SITE_CONTEXT_PREVIEW_NOTE);
       expect(leaks(r)).toEqual([]);

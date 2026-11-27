@@ -159,6 +159,32 @@ describe('E: a siting plan reads the state\'s permitting records', () => {
     // a caveat about a metro the question named still leads (planner 5.58: "areas near Chicago")
     const named = { ...cav, metro: { name: 'Chicago', slug: 'chicago', verdict: 'AVOID' } };
     expect(withSitingCaveat({ headline: `${lead} Siting read.` }, named, { after: lead }).headline.startsWith(cav.line)).toBe(true);
+    // GDL 2026-11-26 item 4: a metro only find_sites anchored ("land for 100 MW in Ohio" -> market=columbus) follows
+    // the areas; a metro the question named, or a distance warning, still leads.
+    const anchored = { ...cav, named: false, far: false, metro: { name: 'Columbus', slug: 'columbus', verdict: 'AVOID' } };
+    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, anchored, { after: lead }).headline)
+      .toBe(`${lead} ${cav.line} Siting read.`);
+    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, { ...anchored, named: true }, { after: lead }).headline.startsWith(cav.line)).toBe(true);
+    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, { ...anchored, far: true }, { after: lead }).headline.startsWith(cav.line)).toBe(true);
+  });
+  it('restrictions asked: the newest enacted moratorium follows the land lead (GDL 2026-11-26 item 4)', () => {
+    const recs = [
+      { jurisdiction: 'Licking County', state: 'OH', class: 'local_sentiment', stage: '', as_of: '2026-11-25' },
+      { jurisdiction: 'Washington Township', state: 'OH', class: 'moratorium', stage: 'enacted', as_of: '2026-11-20' },
+      { jurisdiction: 'Urbana', state: 'OH', class: 'moratorium', stage: 'enacted', as_of: '2026-10-01' },
+    ];
+    const e = { step: 6, tool: 'get_permitting_intel', args: { state: 'OH' }, status: 'executed', result: { count: 3, records: recs, as_of: '2026-11-25' } };
+    const pl = permitCheckLine([e], new Map([[e, e.result]]));
+    expect(pl.lead).toBe('Newest enacted local moratorium on file in OH: Washington Township, OH (moratorium, enacted, source date 2026-11-20).');
+    const lead = 'find_sites: 3 search areas in OH (3 shown).';
+    const a = withPermitLine({ headline: `${lead} Every area listed reads AVOID.`, evidence: [] }, pl, { after: lead, asked: true });
+    expect(a.headline.startsWith(`${lead} ${pl.lead} Every area listed reads AVOID.`)).toBe(true);
+    expect(a.headline.endsWith(pl.line)).toBe(true);
+    // not asked: the record list rides at the end only, as before
+    expect(withPermitLine({ headline: `${lead} X.`, evidence: [] }, pl, { after: lead }).headline).toBe(`${lead} X. ${pl.line}`);
+    // no enacted moratorium: no lead clause
+    const e2 = { ...e, result: { count: 1, records: [recs[0]], as_of: '2026-11-25' } };
+    expect(permitCheckLine([e2], new Map([[e2, e2.result]])).lead).toBeUndefined();
   });
 });
 

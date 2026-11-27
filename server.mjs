@@ -316,7 +316,7 @@ import { GENERATION_MIX_RE as _GENERATION_MIX_RE, generationMixAsk as _generatio
 import { fiberKind as _fiberKind, pointInfraAsk as _pointInfraAsk, subseaWhere as _subseaWhere, subseaSequence as _subseaSequence,
   fiberKindSequence as _fiberKindSequence, pointInfraSequence as _pointInfraSequence, SUBSEA_RE as _SUBSEA_RE,
   ixAsk as _fiberIxAsk, routePair as _fiberRoutePair, fiberAddress as _fiberAddress } from './lib/plan-routing.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _freeOffersLine, FREE_OFFER_EMAIL, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, analyzeSiteFreeLine as _analyzeSiteFreeLineFor, analyzeSiteKeylessDailySentence as _analyzeSiteKeylessDailySentence, ANALYZE_SITE_DAILY_EXCEPTION, FOUNDING_URL, PRO_URL, KEYLESS_FIRST_FULL_CLAUSE } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent, sourceCapacityNoFit } from './lib/coverage-gap.mjs';
 import { keyPathNextOn as _keyPathNextOn, attachKeyPathNext as _attachKeyPathNext } from './lib/key-path-next.mjs';
 import { headlinePreviewOn as _headlinePreviewOn, attachHeadlinePreview as _attachHeadlinePreview } from './lib/headline-preview.mjs';
@@ -425,7 +425,8 @@ import { buildPriceNowAnswer as _buildPriceNowAnswer, buildGasPriceAnswer as _bu
 import { permittingAsk as _permittingAsk, permittingSequence as _permittingSequence, buildPermittingAnswer as _buildPermittingAnswer } from './lib/permitting-answer.mjs';
 import { buildNamedCampusAnswer as _buildNamedCampusAnswer } from './lib/named-project-facts.mjs';
 import { sitingCaveat as _sitingCaveat, withSitingCaveat as _withSitingCaveat } from './lib/siting-caveat.mjs';
-import { permitCheckStep as _permitCheckStep, permitCheckLine as _permitCheckLine, withPermitLine as _withPermitLine } from './lib/plan-permit-check.mjs';
+import { phoenixDay as _gdlPhoenixDay } from './lib/cite-day.mjs';
+import { permitCheckStep as _permitCheckStep, permitCheckLine as _permitCheckLine, withPermitLine as _withPermitLine, PERMIT_WORD_RE as _PERMIT_WORD_RE } from './lib/plan-permit-check.mjs';
 import { nearMetroSlug as _nearMetroSlug, nearMetroRadiusKm as _nearMetroRadiusKm } from './lib/metro-anchor.mjs';
 import { siteHuntAsk as _siteHuntAsk } from './lib/site-hunt.mjs';
 import { landSearchExtras as _landSearchExtras, potentialLandOn as _potentialLandOn, potentialLandCall as _potentialLandCall,
@@ -12470,7 +12471,7 @@ export async function _siteContextFor(lat, lon, c = getCtx()) {
   try {
     const r = await callAPI(SITE_CONTEXT_PATH, { lat: la, lng: lo, ...(view === 'preview' ? { view } : {}) },
       { timeout: SITE_CONTEXT_TIMEOUT_MS });
-    return _siteContextShape(r, view);
+    return _siteContextDayAsOf(_siteContextShape(r, view));
   } catch (_) { return null; }
 }
 // A preview path keeps site_context only as the backend's preview; a full body
@@ -12501,6 +12502,14 @@ export function _getSiteContextToolOn(env = process.env) {
 // No plan and no price: the agent-facing line beside a preview.
 export const SITE_CONTEXT_PREVIEW_NOTE = 'This lists which neighborhood blocks have an answer at this point and their sources; '
   + 'the values themselves are withheld at this access level. This is context, not a score: analyze_site scores the point.';
+// GDL 2026-11-26 item 3: the tool's as_of is a data day (America/Phoenix), never the UTC read clock
+// ("2026-11-27T00:47:00Z" on a 2026-11-26 evening read); the stamp itself moves to retrieved_at.
+export function _siteContextDayAsOf(sc) {
+  if (!sc || typeof sc !== 'object' || typeof sc.as_of !== 'string' || !/T\d{2}:/.test(sc.as_of)) return sc;
+  const d = _gdlPhoenixDay(sc.as_of);
+  if (!d) return sc;
+  return { ...sc, as_of: d, retrieved_at: sc.retrieved_at || sc.as_of };
+}
 export function _siteContextToolResult(sc, lat, lon) {
   if (!sc) {
     const body = { available: false, lat, lon,
@@ -13162,8 +13171,7 @@ export function _descFollowsSwitches(name, description) {
   const d = description.split(ANALYZE_SITE_ACCESS_B2).join(served);
   return _gatedPreviewOnImpl() ? d.split(served).join(served + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
 }
-export const ANALYZE_SITE_DAILY_EXCEPTION = 'Those daily runs do not cover every network or client '
-  + '(automated, test or shared-infrastructure traffic gets the preview).';
+export { ANALYZE_SITE_DAILY_EXCEPTION };   // lib/tier-canon.mjs (one copy, /mcp/claude reads it too)
 export function _analyzeSiteDescDailySentence(env = process.env) {
   try { return _wfnSiteFullOn(env) ? _analyzeSiteKeylessDailySentence(_keylessSiteFullCap(env)) : ''; } catch (_) { return ''; }
 }
@@ -36285,7 +36293,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // says what is on file for the state, or that nothing is.
       const _intentAnswer = (!_isCleanPlatform() && _answerBlocksAllowed()
           && (sc.recommended_sequence || []).some((x) => x && x.permit_check))
-        ? _withPermitLine(_intentAnswer3, _permitCheckLine(executed, fullByEntry)) : _intentAnswer3;
+        ? _withPermitLine(_intentAnswer3, _permitCheckLine(executed, fullByEntry),
+          { after: _landLead && _landLead.headline, asked: _PERMIT_WORD_RE.test(String(sc.intent || '')) }) : _intentAnswer3;
       // Item 3 (owner funnel brief 2026-11-11): a one-market siting question ("Is Phoenix a good place to
       // build?") leads with that market's DCPI verdict and its citation line: the FIRST key of the answer,
       // ahead of the plan bookkeeping and of any email ask (which rides a later content block).
