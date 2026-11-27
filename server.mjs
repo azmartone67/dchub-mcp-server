@@ -26295,7 +26295,7 @@ export function _execDroppedSentence(items) {
 // 5.27 (live QA 2026-11-14): `rankForBuild` (a market_ranking run) lists the verdicts BUILD, then
 // CAUTION, then AVOID, and says to lead with the best buildable market: a ranking for where to build
 // led with "ashburn-va: AVOID · northern-virginia: AVOID" because those were the first two read.
-export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null, rankForBuild = false) {
+export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = null, skipSteps = null, rankForBuild = false, fullByEntry = null) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
@@ -26339,6 +26339,10 @@ export function _execAnswerGuide(executed, constraintIso = [], constraintSlug = 
     };
     for (const e of (Array.isArray(executed) ? executed : [])) {
       if (e && skipSteps && skipSteps.has(e.step)) continue;   // undated power step: not led with
+      // 2026-11-27: a canvas step's trimmed result keeps only its first shortlist row, so live xd-a never named its third
+      // finalist (Williston, ND). Its shortlist is read from the full payload first, in rank order (the cap stops the scan).
+      const full = e && e.tool === 'site_selection_canvas' && fullByEntry && fullByEntry.get ? fullByEntry.get(e) : null;
+      if (full && Array.isArray(full.shortlist)) scan({ shortlist: full.shortlist }, 0);
       scan(e && e.result, 0);
     }
     if (!found.length) found = unnamed;
@@ -36469,7 +36473,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + (_notes ? _notes + ' ' : '') + _gridLead
           + _execAnswerGuide(executed, constraintIsoSet, sc.intent_class === 'market_outlook' ? constraintSlug : null,
                              new Set(_powerEvidence.filter((x) => !x.ok).map((x) => x.step)),
-                             sc.intent_class === 'market_ranking')
+                             sc.intent_class === 'market_ranking', fullByEntry)
           + (_capNotListed ? ' ' + _capNotListed : '')
           + (_capTeaser ? ' ' + _capTeaser : '')
           // Option A (owner 2026-11-16): Capacity Source is the teaser only, so the no-fit register offer (sentence and

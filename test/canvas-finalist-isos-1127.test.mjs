@@ -95,3 +95,43 @@ describe('two reads that disagree on a market both stay', () => {
     expect(g).toMatch(/Ashburn: BUILD \(70\) · Ashburn: AVOID/);
   });
 });
+
+describe('a canvas step leads with its top finalists from the full payload', () => {
+  const v = (market, verdict, composite_score) => ({ market, verdict, ...(composite_score != null ? { composite_score } : {}) });
+  // xd-a live 2026-11-27 10:31Z: the slim result kept one shortlist row and one alternative; Williston, ND (finalist 3) was
+  // only in the full payload.
+  const slim = { shortlist: [v('Midland–Odessa', 'BUILD', 80.6)], synthesis: { verdict: 'BUILD', alternatives: [v('Upper Peninsula MI', 'BUILD')] } };
+  const full = {
+    excluded_by_max_months: { markets: [v('Garden City', 'CAUTION', 45.9)] },
+    shortlist: [v('Midland–Odessa', 'BUILD', 80.6), v('Upper Peninsula MI', 'BUILD', 77.1), v('Williston, ND', 'BUILD', 76.4),
+      v('Cheyenne', 'BUILD', 74)],
+    synthesis: { verdict: 'BUILD' },
+  };
+  const step = (tool) => ({ step: 1, tool, status: 'executed', result: slim });
+
+  it('names the top three shortlist rows, in rank order, with their scores', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    const e = step('site_selection_canvas');
+    const g = _execAnswerGuide([e], [], null, null, false, new Map([[e, full]]));
+    expect(g).toMatch(/this run returned: Midland–Odessa: BUILD \(80\.6\) · Upper Peninsula MI: BUILD \(77\.1\) · Williston, ND: BUILD \(76\.4\)\. /);
+    expect(g).not.toContain('Garden City');
+    expect(g).not.toContain('Cheyenne');
+  });
+
+  it('without a full payload the slim result still leads', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    expect(_execAnswerGuide([step('site_selection_canvas')])).toMatch(/this run returned: Midland–Odessa: BUILD \(80\.6\) · Upper Peninsula MI: BUILD\. /);
+  });
+
+  it('only a canvas step reads its full payload', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    const e = step('rank_markets');
+    expect(_execAnswerGuide([e], [], null, null, false, new Map([[e, full]]))).not.toContain('Williston');
+  });
+
+  it('the executor passes the full payloads to the guide', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+    expect(src).toMatch(/sc\.intent_class === 'market_ranking', fullByEntry\)\s*\n\s*\+ \(_capNotListed/);
+  });
+});
