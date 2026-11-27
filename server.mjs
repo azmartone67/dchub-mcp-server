@@ -18040,11 +18040,15 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = _maskPricingBlock(v);          // owner 2026-10-20: the exemption keeps the block, never its rates
     } else if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
-    } else if (toolName === 'site_selection_canvas' && (k === 'inputs' || k === 'applied_filters')) {
+    } else if (toolName === 'site_selection_canvas' && (k === 'inputs' || k === 'applied_filters' || k === 'constraint_coverage')) {
       // Grok 2026-10-23 item 7: these two blocks are the caller's OWN arguments echoed back (capacity_mw,
       // region, max_months, verdicts, limit). The metric-key sweep nulled capacity_mw and max_months on an
       // anonymous call (and marked them withheld), so the same inputs echoed differently keyless and keyed.
       // Withhold only DC Hub's data, never what the caller sent. Exact keys, this tool only.
+      // QA 2026-11-27: constraint_coverage says which of those arguments were applied
+      // (max_months {applied:false, status:'locked', reason}); it carries prose, no figures. With
+      // DCHUB_GRID_HEADROOM_TIER on, _HEADROOM_GATE_RE's `_months$` nulled it, so the answer led
+      // "Withheld here: max months": the buyer's own deadline read as hidden data, not "not applied".
       out[k] = v;
     } else if (toolName === 'get_dchub_recommendation' && (k === 'available_categories' || k === 'next_tools')) {
       // Grok 2026-10-07: the four category names are DC Hub's own description menu,
