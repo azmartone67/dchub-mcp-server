@@ -4090,7 +4090,7 @@ export async function _gasPipelineCapacityFor(raw) {
   const st = _gasStateCode(raw);
   if (!st) return null;
   try {
-    return _gasPipelineCapacityBlock(await callAPI('/api/v1/gas/pipeline-capacity', { state: st }, { timeout: 6000 }), st);
+    return _gasPipelineCapacityBlock(await callAPI('/api/v1/gas/pipeline-capacity', { state: st }, { internal: true, timeout: 6000 }), st);
   } catch (_) { return null; }
 }
 export function _maskGasIntelligenceAnonymous(out) {
@@ -21054,7 +21054,7 @@ export async function _fttpProvidersNear(lat, lon, radiusKm) {
   const box = _fttpBbox(lat, lon, radiusKm);
   if (!box) return null;
   try {
-    return _fttpProvidersBlock(await callAPI('/api/v1/fiber/providers', { bbox: box.bbox.join(',') }, { timeout: 6000 }), box);
+    return _fttpProvidersBlock(await callAPI('/api/v1/fiber/providers', { bbox: box.bbox.join(',') }, { internal: true, timeout: 6000 }), box);
   } catch (_) { return null; }
 }
 export function _foldCoordArgs(args) {

@@ -49,7 +49,7 @@ beforeAll(async () => {
         return;
       }
       if (u.pathname.startsWith('/api/v1/mcp/')) { res.end(JSON.stringify({ credits: 0, had_pack: false })); return; }
-      hits.push({ path: u.pathname, q: u.searchParams });
+      hits.push({ path: u.pathname, q: u.searchParams, ua: req.headers['user-agent'] || '', key: req.headers['x-api-key'] || '' });
       if (u.pathname.startsWith('/api/v1/gas/intelligence/')) {
         res.end(JSON.stringify({ region: 'AZ', region_name: 'Arizona', henry_hub_usd_mmbtu: 3.1, gas_access: { pipelines: 4 } }));
         return;
@@ -165,6 +165,8 @@ describe('get_gas_intelligence: pipeline capacity utilization', () => {
     const cap = hits.slice(n).filter((h) => h.path === '/api/v1/gas/pipeline-capacity');
     expect(cap.length, 'the stub never saw the utilization read').toBe(1);
     expect(cap[0].q.get('state')).toBe('AZ');
+    // A public side read is one server-side lookup, not a second metered call on the caller's key.
+    expect(cap[0].ua).toBe('dchub-mcp-server/1.0');
     expect(out.region).toBe('AZ');
     expect(out.henry_hub_usd_mmbtu).toBe(3.1);
     expect(out.pipeline_capacity_utilization.most_utilized[0].util_pct).toBe(96.5);
@@ -200,6 +202,7 @@ describe('get_fiber_readiness: FCC fiber-to-the-premises providers', () => {
     const out = bodyOf(await call('get_fiber_readiness', { lat: 39.04, lon: -77.48, radius_km: 20 }));
     const fp = hits.slice(n).filter((h) => h.path === '/api/v1/fiber/providers');
     expect(fp.length, 'the stub never saw the FTTP read').toBe(1);
+    expect(fp[0].ua).toBe('dchub-mcp-server/1.0');
     const [w, s, e, nn] = fp[0].q.get('bbox').split(',').map(Number);
     expect(w).toBeLessThan(-77.48); expect(e).toBeGreaterThan(-77.48);
     expect(s).toBeLessThan(39.04); expect(nn).toBeGreaterThan(39.04);
