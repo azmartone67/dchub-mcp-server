@@ -17803,6 +17803,12 @@ function _keepProvenanceCredit(orig, trimmed) {
 }
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance',
   'ercotqueue_provenance', 'ercotqueue', 'attribution', 'freshness', 'large_load',
+  // 2026-11-27: get_gas_intelligence's pipeline_capacity_utilization and get_fiber_readiness's
+  // fttp_providers are read from public backend routes (/api/v1/gas/pipeline-capacity,
+  // /api/v1/fiber/providers) that serve every caller in full. The anon trim nulled util_pct and
+  // provider_count with no withheld marker, while scheduled_dth / operating_dth beside util_pct
+  // still let anyone recompute it: hiding public data, unmarked. Exact keys.
+  'pipeline_capacity_utilization', 'fttp_providers',
   // Grok QA 2026-10-22 item 3: the list of fields DC Hub does not track for a grid
   // (shapeLatestGrid) is a coverage fact, never a trimmed list.
   'not_covered',

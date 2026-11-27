@@ -27,6 +27,7 @@ test/anon-attribution.test.mjs
 test/anon-facility-free-fields.test.mjs
 test/anon-hard-wall.test.mjs
 test/anon-overcap-prose-leaks.test.mjs
+test/anon-public-gas-fiber-blocks-1127.test.mjs
 test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/answer-blocks-profile-gate.test.mjs
