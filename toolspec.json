@@ -1532,7 +1532,7 @@
   },
   {
     "name": "get_infrastructure",
-    "description": "Use this when the user asks what power infrastructure is near a site: substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Answers \"what is near this parcel\", \"how far is the nearest substation and what voltage is it\". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site). For multi-step data center or energy questions, start with execute_plan.",
+    "description": "Use this when the user asks what power infrastructure is near a site (lat, lon, radius_km). Returns the nearest substations (HIFLD + OpenStreetMap, one row per station, distance in km; with a key: distance and kV band; on Pro also name, exact kV and operator), the nearest gas pipeline segments (Developer plan and up), the nearest EIA power plants (name, MW, fuel, distance), the nearest transmission line in km, and counts of substations, transmission lines, gas pipelines and power plants within the radius. layer picks one list (substations, gas, power_plants); min_voltage_kv sets the substation voltage floor; limit sets each list length (max 25). Answers \"what is near this parcel\", \"how far is the nearest substation and what voltage is it\". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site). For multi-step data center or energy questions, start with execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1561,11 +1561,11 @@
           "type": "number"
         },
         "layer": {
-          "description": "Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants",
+          "description": "Optional single nearest-asset list to return: substations, gas (pipelines) or power_plants; transmission returns only the counts and the nearest line",
           "type": "string"
         },
         "min_voltage_kv": {
-          "description": "Only include transmission/substations at or above this voltage in kV, e.g. 69",
+          "description": "Voltage floor in kV for the nearest-substations list, e.g. 230",
           "type": "number"
         },
         "limit": {
