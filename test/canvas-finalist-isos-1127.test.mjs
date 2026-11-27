@@ -43,3 +43,18 @@ describe('the executor uses it', () => {
     expect(src.indexOf('for (const [kind, vals] of Object.entries(fresh))', at)).toBeGreaterThan(at);
   });
 });
+
+describe('the answer guide leads with the shortlist, not the markets the deadline removed', () => {
+  it('excluded_by_* verdicts are not led with', async () => {
+    const { _execAnswerGuide } = await import('../server.mjs');
+    const v = (market, verdict, composite_score) => ({ market, verdict, composite_score });
+    const result = {
+      excluded_by_max_months: { count: 58, markets: [v('Garden City', 'CAUTION', 45.9), v('Commack', 'CAUTION', 45.8)] },
+      shortlist: [v('Midland–Odessa', 'BUILD', 80.6), v('Upper Peninsula MI', 'BUILD', 77)],
+    };
+    const g = _execAnswerGuide([{ step: 1, tool: 'site_selection_canvas', status: 'executed', result }]);
+    expect(g).toMatch(/LEAD WITH THE VERDICT — this run returned: Midland–Odessa: BUILD \(80\.6\) · Upper Peninsula MI: BUILD \(77\)/);
+    expect(g).not.toContain('Garden City');
+    expect(g).not.toContain('Commack');
+  });
+});
