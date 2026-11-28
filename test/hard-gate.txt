@@ -78,6 +78,7 @@ test/canon-heal-gates-on-the-marker.test.mjs
 test/canon-pack-price.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
 test/canvas-constraint-coverage-headroom-tier-1127.test.mjs
+test/canvas-coverage-notes-deadline-1128.test.mjs
 test/canvas-echoes-callers-own-inputs.test.mjs
 test/canvas-finalist-isos-1127.test.mjs
 test/canvas-teaser-no-plan-1117.test.mjs
