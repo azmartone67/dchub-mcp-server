@@ -32,5 +32,18 @@ export default defineConfig({
     // 46 GB in one worktree, 104 GB across seven, after two weeks on vitest 5.
     // server.mjs changes on nearly every run, so the cache rarely hits anyway.
     fsModuleCache: false,
+    // ★2026-11-28 — console output goes straight to the worker's stdout
+    // instead of over vitest's worker RPC. server.mjs keeps logging from
+    // background work ([tool-error], [MCP] DELETE close failed, ...) after a
+    // test file's last test returns; with interception on, each of those logs
+    // is an `onUserConsoleLog` RPC, and one still in flight when the worker
+    // tears down is rejected as
+    //   EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending
+    // which vitest counts as "1 error" and exits 1 with every test passed.
+    // Measured: 11 of the last 17 failed MCP smoke runs (7 of them on main
+    // push) failed on that alone, from a different file each time.
+    // Real unhandled errors and rejections still fail the run: only the log
+    // transport changes. Cost: logs are no longer prefixed with their test.
+    disableConsoleIntercept: true,
   },
 });
