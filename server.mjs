@@ -94,6 +94,9 @@ import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken 
 import { keylessFirstFullOn, keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack, planStepDepths as _kffPlanStepDepths, utcClock as _utcClock } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
 import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
+import { planQualityOn as _epqOn, fastestPowerRankingAsk as _epqFastestAsk, multiFactorRankingAsk as _epqMultiFactorAsk,
+  namedFactors as _epqFactors, powerAvailabilityAsk as _epqPowerAvailAsk, rankIsoArg as _epqRankIso,
+  filterRankRowsByIso as _epqFilterRankIso } from './lib/plan-quality-1127.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // r-list-swr (2026-07-11): Client + InMemoryTransport are used ONLY to build the
@@ -190,6 +193,7 @@ import * as _PR from './lib/plan-report.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
+import { geminiSafeInputSchema as _geminiSafeInputSchema } from './lib/gemini-safe-schema.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
 import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
@@ -400,7 +404,7 @@ import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } fr
 import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
 import { planLeadStep as _planLeadStep } from './lib/plan-lead-text.mjs';
 import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPriceIntent as _coloPriceIntent,
-  colocationSequence as _colocationSequence, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
+  colocationSequence as _colocationSequence, coloSupplyAsk as _coloSupplyAsk, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
   guardPlanFacilitySteps as _guardPlanFacilitySteps, facilitySlugGuard as _facilitySlugGuard,
   facilitySlugsFromSearch as _facilitySlugsFromSearch, FACILITY_SLUG_PLACEHOLDER as _FACILITY_SLUG_PLACEHOLDER,
   facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes } from './lib/colocation-plan.mjs';
@@ -451,6 +455,12 @@ import { facilitiesAsk as _facilitiesAsk, facilityJoinArgs as _facilityJoinArgs,
   SITE_CONTEXT_CLASSES as _SITE_CONTEXT_CLASSES, FIBER_TOOLS as _FJ_FIBER_TOOLS, DEFAULT_MAX_STEPS as _FJ_DEFAULT_MAX_STEPS } from './lib/facility-join.mjs';
 import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForState, capacityAsksOperational as _capacityAsksOperational, buildPipelineStatusAnswer as _buildPipelineStatusAnswer,
   buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
+// GDL 2026-11-27 (cd2): the ask names the largest / biggest campuses or facilities.
+const _PLAN_LARGEST_CAMPUS_RE = /\b(?:largest|biggest|top)\b[^.?!]{0,30}\b(?:campus(?:es)?|facilit(?:y|ies)|data\s*cent(?:er|re)s?|sites?)\b/i;
+// Two capacity stages set against each other (GDL 2026-11-27, cd2): a dc_capacity ask, never a market comparison.
+const _STATUS_A = String.raw`(?:operational|operating|existing|built|online|in\s+(?:service|operation))`;
+const _STATUS_B = String.raw`(?:under\s+construction|being\s+built|planned|announced|proposed|in\s+(?:the\s+)?pipeline|pipeline)`;
+export const _PLAN_STATUS_VS_RE = new RegExp(String.raw`\b(?:${_STATUS_A}\s+(?:vs\.?|versus|against|or|and)\s+${_STATUS_B}|${_STATUS_B}\s+(?:vs\.?|versus|against|or|and)\s+${_STATUS_A})\b`, 'i');
 import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, PAID_ONLY_TASTE_TOOLS as _PAID_ONLY_TASTE_LIST, FREE_DECISION_UNLOCKS_AT,
@@ -20692,7 +20702,14 @@ export function _projectCachedList(cachedList, { dirProfile = null, coreProfile 
   const _listFor = dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(cachedList) : cachedList;
   // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
   const _keyName = (dirProfile || coreProfile) ? ((x) => x) : _listResultKeyToolAs;
-  return pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+  const _out = pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+  // Gemini-safe schemas (lib/gemini-safe-schema.mjs): the cache holds the canonical list, so the pass runs on the wire
+  // projection. Never on the frozen /mcp/chatgpt catalog.
+  return dirProfile === DIRECTORY_PROFILE ? _out : _geminiSafeList(_out);
+}
+function _geminiSafeList(list) {
+  if (!list || !Array.isArray(list.tools)) return list;
+  return { ...list, tools: list.tools.map((t) => (t && t.inputSchema ? { ...t, inputSchema: _geminiSafeInputSchema(t.inputSchema, t.name) } : t)) };
 }
 
 // ── Served tool counts per path (QA v2.12.63, 2026-11-23, item c) ─────────────────────────────────────
@@ -22905,6 +22922,8 @@ export const _PLAN_CLASSES = [
     // primary route for non-AI market questions.
     rationale: (d) => _planStateScope(d)
       ? 'The intent names a US state, so the ranking must be SCOPED to it. ai_capacity_index and rank_markets cannot express a state — ai_capacity_index takes only horizon/limit, and rank_markets\' region accepts only global/us/canada/eu/apac/americas — so leading with either silently answers a national question and returns out-of-state markets. site_selection_canvas is the one ranking path that takes a state code (region=' + _planStateScope(d) + '), and it carries the same AI-campus axis: DCPI verdict, excess-power headroom and time-to-power.'
+      : (d.__fastestPower || d.__multiFactor)
+      ? _epqRankingRationale(d)
       : (d.ai && !d.__aiHorizon)
       ? 'An AI-campus ranking is a ranking by buildability, not by installed depth: lead with rank_markets criteria=ai_ready (DCPI composite of excess power, constraint and time to power, with each market\'s BUILD/CAUTION/AVOID verdict), then reality-check each finalist on its DCPI card and grid headroom. ai_capacity_index orders markets by depth (the most built-out first), and those are often AVOID for new load, so it is the alternative for a stated deployment horizon, not the lead.'
       : d.ai
@@ -22933,7 +22952,7 @@ export const _PLAN_CLASSES = [
       { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 2,
         why: 'Grid headroom + time-to-power for the finalists\' ISOs — an AI campus lives or dies on firm-power delivery date.',
         args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
-    ] : (d.ai && !d.__aiHorizon) ? [
+    ] : (d.__fastestPower || d.__multiFactor) ? _epqRankingSequence(d) : (d.ai && !d.__aiHorizon) ? [
       // 5.27 (live QA 2026-11-14): a ranking by suitability for an AI campus / GPU cluster.
       { step: 1, tool: 'rank_markets', depends_on: [], estimated_calls: 1,
         why: 'AI-campus buildability ranking: rank_markets criteria=ai_ready orders markets by the DCPI composite (excess power, constraint, time to power) and carries each market\'s BUILD/CAUTION/AVOID verdict, so the list leads with where new load can be built' + (d.mw ? ' (requested ' + Math.round(d.mw) + ' MW; min_capacity_mw is a market\'s EXISTING capacity, not the campus size, so it is not set)' : '') + '. Each row carries a slug for the steps below.',
@@ -23163,6 +23182,7 @@ export const _PLAN_CLASSES = [
       { step: 4, tool: 'get_market_intel', depends_on: [], estimated_calls: 1,
         why: 'Same depth for the SECOND market — side B. A head-to-head that briefs only one side is not a comparison.',
         args_hint: { market: (d.comparePair && d.comparePair.b) || '<second market, e.g. columbus>' } },
+      ..._epqComparisonGridSteps(d, 5),
     ],
     alternatives: [
       { tool: 'compare_isos', when: 'You are comparing GRIDS (ISOs) head-to-head, not markets.',
@@ -23313,6 +23333,8 @@ export const _PLAN_CLASSES = [
       [/\bunder\s+construction\b/i, 3], [/\bbeing\s+built\b/i, 2.5], [/\bunder\s+development\b/i, 2],
       [/\b(?<!gas\s|power\s|generation\s|transmission\s)pipeline\b(?!\s+(?:gas|routes?|operators?))/i, 2],
       [/\bnew\s+(?:data\s*cent\w*\s+)?supply\b/i, 2],
+      // GDL 2026-11-27 (cd2): "operational versus under construction" is this class, not market_comparison's "versus".
+      [_PLAN_STATUS_VS_RE, 4],
     ],
     rationale: (d) => {
       const sm = _planSubmarket(d);
@@ -23353,6 +23375,13 @@ export const _PLAN_CLASSES = [
         steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
           why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
           args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } });
+      }
+      // GDL 2026-11-27 (cd2): "which are the largest campuses?" reads the facilities at or above 100 MW in the place
+      // (names and operators; MW only where this access level serves it), beside the market briefs.
+      if (intelMarkets.length && st && d.__largestCampus) {
+        steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, largest_campuses: true,
+          why: `The largest campuses in ${st}: facilities of 100 MW or more, with operator. MW is shown only where this access level serves it. Independent of step 1, same wave.`,
+          args_hint: { state: st, min_capacity_mw: 100, limit: 10 } });
       }
       if (capacityPointersEnabled()) {
         steps.push({ step: steps.length + 1, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
@@ -24595,6 +24624,8 @@ export const _EXEC_TOOL_MINTS = {
   ai_capacity_index: { rowsKey: 'markets', field: 'market', kind: 'slug' },
   // 5.41: each shortlisted market's state, for capacity_grid's per-finalist power timeline ('<finalist_state ...>').
   site_selection_canvas: { rowsKey: 'shortlist', field: 'state', kind: 'finalist_state', upper: true },
+  // 5.66: each ranked market's state, for the multi-factor ranking's tax step ('<finalist_state ...>').
+  rank_markets: { rowsKey: 'results', field: 'state', kind: 'finalist_state', upper: true },
 };
 // The distinct ISOs of a site_selection_canvas shortlist's top `cap` rows, in rank order; null when the payload has
 // no shortlist array (the generic harvest then stands). A row on no ISO-shaped grid (PACE) adds nothing.
@@ -25473,6 +25504,9 @@ export function _planSignals(intent, context) {
     // 5.26: two GRIDS named ("ERCOT vs PJM") are not two markets: the word pair below read them
     // as market slugs 'ercot' and 'pjm', which no DCPI card answers. iso_comparison takes them.
     if (_planNamedIsos(text).length >= 2) return null;
+    // GDL 2026-11-27 (cd2): "operational versus under construction" compares two pipeline stages, not two markets;
+    // the word pair below read them as market slugs 'operational' and 'under-construction'.
+    if (_PLAN_STATUS_VS_RE.test(text)) return null;
     const m = text.match(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:vs\.?|versus|against)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i)
       || text.match(/\bcompare\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:and|to|with)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i);
     if (!m) return null;
@@ -25531,6 +25565,7 @@ export function _planSignals(intent, context) {
   const __facName = _namedFacility(text);
   const __pipelineStatus = _pipelineStatusOf(text);
   const __capOperational = _capacityAsksOperational(text);
+  const __largestCampus = _PLAN_LARGEST_CAMPUS_RE.test(text);
   // 5.27 (live QA sweep 2026-11-14): an AI ask is a deployment-HORIZON question ("where can 100 MW
   // land in the next 90 days") only when it says so; otherwise it is a ranking by suitability
   // (rank_markets criteria=ai_ready). And the relative window the text names ("this week").
@@ -25549,15 +25584,25 @@ export function _planSignals(intent, context) {
   })();
   // 5.32: colocation signals (metro, kW, a named facility pair, price/availability/fiber asks); null when no
   // colocation word is in the text (lib/colocation-plan.mjs).
-  const __colo = _coloSignals(text, { market, mw });
+  const __colo0 = _coloSignals(text, { market, mw });
+  // Grok 2026-11-27 (cd4): a colocation supply ask ("how much capacity ... being added") reads the brief + pipeline.
+  const __colo = __colo0 && _coloSupplyAsk(text) ? { ...__colo0, supply: true } : __colo0;
   const __facMetro = _facilityMetroArgs(text, market);
   // Grok colocation review (2026-11-17): "colocation in Ashburn" binds a corridor POINT, so scopeWidened above stays
   // null, yet the metro facility search takes no point: it reads query + state (search_facilities has no radius
   // and one `city`, and Northern Virginia is eight). Say so the way "Northern Virginia", Dallas, Atlanta and
   // Chicago already do: replay.scope_widened, which _execWidenedLine turns into the WIDENED answer_guide line.
   const scopeWidenedOut = _coloScopeWidened(__colo, coords, scopeWidened);
-  return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational };
+  // 5.66 (agent-consensus round, Grok -> Brain 2026-11-27, lib/plan-quality-1127.mjs): a "where can N MW get power
+  // fastest" ask is a DCPI ranking; a national ranking over power + fiber + tax runs all three families; a comparison
+  // that asks power availability reads grid headroom too. Kill switch DCHUB_EXECUTE_PLAN_QUALITY_DISABLE=1.
+  const __epq = _epqOn();
+  const __fastestPower = __epq && _epqFastestAsk(text, { comparePair, coords, candidateId, __address, market, state: state || stateFromPlace || ((Array.isArray(states) && states.length) ? states[0] : null), deadline, __outlook, placeScope });
+  const __multiFactor = __epq && !__fastestPower && _epqMultiFactorAsk(text, { comparePair, state: state || stateFromPlace || ((Array.isArray(states) && states.length) ? states[0] : null), coords });
+  const __powerAvail = __epq && _epqPowerAvailAsk(text);
+  const __factors = __multiFactor ? _epqFactors(text) : [];
+  return { __fastestPower, __multiFactor, __powerAvail, __factors, iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational, __largestCampus };
 }
 // The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
 // would carry without a colocation read. Pure; never throws.
@@ -27671,6 +27716,69 @@ function _outlookUnresolvedNote(hit) {
         + ' Ask to compare them, or ask about one.' };
 }
 const _PLAN_FORWARD_WINDOW_RE = /\b(?:next|coming|upcoming)\s+(?:\d{1,3}|few|several|two|three|six|twelve|eighteen)\s*(?:months?|years?|quarters?)\b/i;
+// 5.66 (agent-consensus round 2026-11-27, lib/plan-quality-1127.mjs) — the market_ranking sequence for
+// "where can N MW get power fastest [in <ISO>]" and for a national ranking over power + fiber + tax.
+// rank_markets criteria=ai_ready is the DCPI buildability ranking (Midland–Odessa led it on 2026-11-27);
+// best_overall is the most built-out ranking (Ashburn), which is the wrong axis for new load. The ISO the
+// text names is a hard filter (rank_markets iso=), so no market on another grid is ranked.
+function _epqIsoArg(d) {
+  const iso = d ? d.iso : null;
+  return iso ? _epqRankIso(iso) : null;
+}
+function _epqRankingSequence(d) {
+  const iso = _epqIsoArg(d);
+  const facs = d.__multiFactor ? (d.__factors || []) : [];
+  const steps = [
+    { step: 1, tool: 'rank_markets', depends_on: [], estimated_calls: 1,
+      why: 'DCPI buildability ranking (criteria=ai_ready): where new load can land, each market with its BUILD/CAUTION/AVOID verdict and composite' + (iso ? `, held to ${iso} markets` : '') + (d.mw ? ` (requested ${Math.round(d.mw)} MW; min_capacity_mw is a market's EXISTING capacity, so it is not set)` : '') + '. Each row carries a slug and a state for the steps below.',
+      args_hint: { criteria: 'ai_ready', region: 'us', limit: 10, ...(iso ? { iso } : {}) } },
+    { step: 2, tool: 'get_market_dcpi_rank', depends_on: [1], estimated_calls: 3,
+      why: 'DCPI card for each top-ranked finalist from step 1: verdict, composite, time to power and its basis (which inputs are modeled).',
+      args_hint: { market_slug: '<slug from a step-1 finalist>' } },
+    { step: 3, tool: 'get_grid_intelligence', depends_on: iso ? [] : [1], estimated_calls: iso ? 1 : 2,
+      why: iso ? `Grid headroom and queue context for ${iso}, the grid the question named. Grid-wide context: it does not rank markets.`
+               : 'Grid headroom for each finalist\'s grid. Grid-wide context: it does not rank markets.',
+      args_hint: { iso: iso || '<ISO serving the finalist market>' } },
+  ];
+  if (d.__multiFactor && facs.includes('fiber')) {
+    steps.push({ step: steps.length + 1, tool: 'get_metro_fiber', depends_on: [], estimated_calls: 1,
+      why: 'Fiber side of the ranking: tracked US metros by fiber density (carriers, route-miles, on-net buildings). Independent of step 1, same wave.',
+      args_hint: {} });
+  }
+  if (d.__multiFactor && facs.includes('tax')) {
+    steps.push({ step: steps.length + 1, tool: 'get_tax_incentives', depends_on: [1], estimated_calls: 1,
+      why: 'Tax side of the ranking: data-center sales-tax and property-tax incentives in the top finalist\'s state.',
+      args_hint: { state: '<finalist_state from a step-1 row>' } });
+  }
+  return steps;
+}
+function _epqRankingRationale(d) {
+  const iso = _epqIsoArg(d);
+  if (d.__multiFactor) {
+    return 'A national ranking over several factors runs every family it names in the same run: the DCPI buildability ranking (rank_markets criteria=ai_ready) for power, then the finalists\' DCPI cards, ' + (d.__factors || []).filter((f) => f !== 'power').map((f) => (f === 'fiber' ? 'the metro fiber ranking' : 'the top finalist\'s state tax incentives')).join(' and ') + '. Each side is read and dated on its own; none is folded into a single score.';
+  }
+  return 'A "where can it get power fastest" ask is a ranking of markets by DCPI buildability (rank_markets criteria=ai_ready: excess power, constraint and time to power, gated by verdict), not a grid read alone' + (iso ? `, held to ${iso} so no market on another grid is ranked` : '') + '. The finalists\' DCPI cards follow, then grid context.';
+}
+// 5.66: a market comparison that asks power availability reads grid headroom for each side's grid (one step per
+// distinct grid; PJM for both Northern Virginia and Columbus), labelled as grid-wide context.
+function _epqSlugIso(slug) {
+  if (!slug) return null;
+  const m = _dcpiMarketBySlug(slug);
+  if (m && m.rto) return m.rto;
+  for (const meta of Object.values(_CITY_ISO_META)) { if (meta && meta.slug === slug && meta.iso) return meta.iso; }
+  return null;
+}
+function _epqComparisonGridSteps(d, first) {
+  if (!d || !d.__powerAvail || !d.comparePair) return [];
+  const isos = [];
+  for (const slug of [d.comparePair.a, d.comparePair.b]) {
+    const iso = _epqSlugIso(slug);
+    if (iso && _EXEC_RTOS.has(iso) && !isos.includes(iso)) isos.push(iso);
+  }
+  return isos.map((iso, i) => ({ step: first + i, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+    why: `Power availability asked: grid headroom and time to power for ${iso}. This is grid-wide (ISO) context for ` + (isos.length === 1 ? 'both markets' : 'the market on it') + ', not a per-market figure.',
+    args_hint: { iso } }));
+}
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
   const d = _planSignals(text, context);
@@ -27710,6 +27818,9 @@ export function _planQuery(intent, context) {
     // corridor rule, extended to the market arg); it still rescues text that matched nothing.
     if (s.cls.id === 'market_ranking' && d.market && (!_facLead || _facilityLeadMarketArgBoostAllowed(_anyTextMatch))) s.score += 1.5;
     if (s.cls.id === 'market_comparison' && d.comparePair) s.score += 1.5;
+    // 5.66: a speed-of-power ranking or a multi-factor national ranking is market_ranking (lib/plan-quality-1127.mjs).
+    // +6 clears the ISO-named grid_headroom score (2.5 + 1.5 + power words) and the incentives_tax factor words.
+    if (s.cls.id === 'market_ranking' && (d.__fastestPower || d.__multiFactor)) s.score += 6;
     // market_outlook is single-market: a head-to-head or a ranking ask is not it,
     // and a named tracked metro is the evidence it is (+3 clears the ranking
     // class's bare "market" credit by more than the 1-point ambiguity margin, so
@@ -35367,6 +35478,9 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
+// The frozen /mcp/chatgpt catalog (DIRECTORY_PROFILE) keeps its reviewed schemas byte for byte.
+function _isChatgptFrozenList() { try { return getCtx()?.profile === DIRECTORY_PROFILE; } catch (_) { return false; } }
+
 // zod 4.6 (the fix for GHSA-mrhx-c7xc-m3w5, 2026-11-02) rewrites a union of bare types,
 //   anyOf: [{type: "string"}, {type: "number"}]   ->   type: ["string", "number"]
 // in every tools/list schema. The two say the same thing, but Ajv 2020-12 strict (the Claude
@@ -36346,7 +36460,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               .map((id) => _COLO_METROS.find((m) => m.id === id)).filter(Boolean),
             kw: _sig && _sig.__colo ? _sig.__colo.kw : null,
             pair: _sig && _sig.__colo ? _sig.__colo.pair : null,
-            address: _sig && _sig.__colo ? _sig.__colo.address : null }, executed, fullByEntry);
+            address: _sig && _sig.__colo ? _sig.__colo.address : null,
+            supply: !!(_sig && _sig.__colo && _sig.__colo.supply) }, executed, fullByEntry);
       // 5.35 (gap 1): a generation-mix plan leads with the percentages (lib/plan-entities.mjs).
       const _mixAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _buildGenerationMixAnswer({ intent: sc.intent, intent_class: sc.intent_class, grids: _mixGrids(_sig || {}, _STATE_ISO_META) }, executed, fullByEntry);
@@ -36407,7 +36522,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           || (() => { let _pl = null; try { _pl = _sig ? _pairPlace(_sig, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META,
                 usMarketState: _planUsMarketState, stateScope: _planStateScope }) : null; } catch (_e) { _pl = null; }
               return _buildCrossDomainAnswer({ intent: sc.intent, intent_class: sc.intent_class, requested_mw: _sig && _sig.mw,
-                deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl }, executed, fullByEntry); })();
+                deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl,
+                geography_scope: sc.geography_scope || null }, executed, fullByEntry); })();
       // 5.42 (Grok LAND L2): a land search leads with the areas find_sites named, or says none matched.
       const _landStep = (sc.recommended_sequence || []).find((x) => x && x.land_search);
       const _landLead = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
@@ -36800,14 +36916,28 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores markets daily on Excess Power and Grid Constraint, verdicts CC BY 4.0 after 30 days. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. When DC Hub has written one, a `narrative` block carries a ~100-word analyst read on the market; quote it directly with attribution to DC Hub, and do not promise one when it is absent. Use to answer "should I build here?" with structured reasoning across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. DCPI joins the grid side of a data center market (headroom, queue, modeled time-to-power) to that market; get_market_intel gives the same market\'s facility supply and pipeline, and execute_plan returns both in one answer. Verdict and composite score come with every answer; numeric sub-scores and the narrative come with a full-access key.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
-      const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
+      // 5.66: a plain name ("Midland") resolves through the DCPI market index to its slug (midland-tx); the
+      // backend's own suggestions for "midland" were midrand / milan / mclean. Only a name the index binds to
+      // one market is re-read; a slug the index already holds, or anything it cannot bind, is sent as given.
+      // The given slug is always tried first, so a slug the backend knows (columbus-oh, dallas-tx) is never
+      // rewritten; only when that read fails is the name re-read through the index and tried once more.
+      let _slug = slugify(a.market_slug) || '';
+      let data = await callAPI(`/api/v1/dcpi/scores/${_slug}`, {});
+      if (_slug && data && data.error && _epqOn() && !_dcpiMarketBySlug(_slug)) {
+        let _alt = null;
+        try { const h = _matchDcpiMarket(String(a.market_slug)); if (h && h.kind === 'hit' && h.slug && h.slug !== _slug) _alt = h.slug; } catch (_e) { _alt = null; }
+        if (_alt) {
+          const d2 = await callAPI(`/api/v1/dcpi/scores/${_alt}`, {});
+          if (d2 && !d2.error) { data = d2; _slug = _alt; }
+        }
+      }
       // r42i: surface the narrative up-top so agents see prose first,
       // then the structured scores. Most LLMs cite the lead block.
       const narrative = data?.narrative;
       const ordered = narrative
         ? { narrative, ...data }   // narrative first
         : data;
-      _dailyNextFor(ordered, slugify(a.market_slug));
+      _dailyNextFor(ordered, _slug);
       return { content: [{ type: 'text', text: JSON.stringify(ordered, null, 2) }] };
     });
 
@@ -39822,21 +39952,33 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     'Use this when the user wants a ranked list of data-center markets, including where a data center can get grid power (criteria="ai_ready", DCPI): top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Below full access: a trimmed preview; DCHUB_API_KEY is optional. Ex: "Top 10 US markets, ai_ready."',
     { criteria: S.describe('Ranking criterion: "cheapest_power", "most_capacity", "most_operators", "fastest_growing", "best_overall" (default), or "ai_ready" (DCPI buildability — where new AI load can land, for AI-campus siting; region us/global)'),
       region: S.describe('Region scope: "global", "us" (default), "canada", "eu", "apac", or "americas"'),
+      // 5.66: held off the frozen /mcp/chatgpt catalog (lib/chatgpt-directory.mjs DIRECTORY_HELD_INPUTS).
+      iso: S.describe('Optional grid filter, e.g. "ERCOT", "PJM", "MISO": only markets on that grid are ranked (a hard filter, applied before the limit). For where new load can get power, use criteria="ai_ready"; best_overall ranks the most built-out markets'),
       limit: LIMIT.describe('Number of markets to return, 1-50 (default 10)'),
       min_capacity_mw: N.describe('Minimum existing capacity filter in megawatts (MW), e.g. 100'),
       fields: z.union([z.array(z.string()), z.string()]).optional().describe('Return ONLY these row fields (array or comma string) — a token diet. The response envelope (citation, provenance, as_of, coverage, request_interpretation, the human relay line) is NEVER projected away; a projection narrows ROWS only.'),
       projection: z.enum(['siting_summary', 'market_summary', 'identity_only']).optional().describe('Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).'),
     },
     async (a) => {
-      const d = await callAPI('/api/v1/mcp/tools/rank_markets', {
+      // 5.66 (agent-consensus round 2026-11-27): iso is a hard grid filter. The backend takes no iso, so the
+      // widest page (50) is read and held to the grid here, before the caller's limit and before the
+      // per-caller mask downstream (lib/plan-quality-1127.mjs). Kill switch DCHUB_EXECUTE_PLAN_QUALITY_DISABLE=1.
+      const _isoF = _epqOn() ? _epqRankIso(a.iso) : null;
+      let d = await callAPI('/api/v1/mcp/tools/rank_markets', {
         criteria:        a.criteria        || 'best_overall',
         region:          a.region          || 'us',
-        limit:           a.limit           || 10,
+        limit:           _isoF ? 50 : (a.limit || 10),
         min_capacity_mw: a.min_capacity_mw || 0,
         // a caller who cannot read total_mw is not ranked by it (see READ_ORDERED_TOOLS)
         visible_order:   (() => { try { return getCtx()._visible_order ? 1 : undefined; } catch (_) { return undefined; } })(),
       // serverView: this tool orders and masks the rows per caller (visible_order, READ_ORDERED_TOOLS).
       }, { serverView: true });
+      if (_isoF) d = _epqFilterRankIso(d, _isoF, a.limit || 10);
+      else if (_epqOn() && a.iso && String(a.iso).trim() && d && typeof d === 'object' && !Array.isArray(d)) {
+        // An iso this filter does not know is said, never dropped silently: the rows are not held to it.
+        d.iso_filter = { iso: String(a.iso).trim().slice(0, 40), applied: false,
+          note: 'This iso is not a grid code the filter knows (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISO-NE, WECC, SERC, TVA, BPA, AESO, IESO), so the ranking is not held to it.' };
+      }
       // Say the floor was left out (see the normalisation in trackedTool): a silent drop would
       // read as "every market qualifies".
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
@@ -41656,6 +41798,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       const res = await _sdkListTools(req, extra);
       for (const t of (res && Array.isArray(res.tools)) ? res.tools : []) {
         t.inputSchema = applyOneOfAnyOf(expandTypeUnions(stripSchemaDialect(t.inputSchema)), t.name);
+        // Gemini-safe schemas (lib/gemini-safe-schema.mjs, kill switch DCHUB_GEMINI_SAFE_SCHEMA=0): every property typed,
+        // no bare-type unions, no propertyNames. Not on the frozen /mcp/chatgpt catalog.
+        if (!(opts && opts.canonicalList)) t.inputSchema = _geminiSafeInputSchema(t.inputSchema, t.name, { skip: _isChatgptFrozenList() });
         if (t.outputSchema) t.outputSchema = expandTypeUnions(stripSchemaDialect(t.outputSchema));
       }
       if (res && Array.isArray(res.tools) && res.tools.some((t) => t && t.name === _CW.ACCESS_STATUS_TOOL)) res.tools = res.tools.filter((t) => !t || t.name !== _CW.ACCESS_STATUS_TOOL);   // callable, never listed
@@ -41688,7 +41833,7 @@ app.use((req, res, next) => listingSrcCtx.run(_listingSrcFromRequest(req, getVia
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via, X-DCHub-Src');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via, X-DCHub-Src, MCP-Protocol-Version, Last-Event-ID');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
   // r-csp (2026-07-23): the ChatGPT App Directory requires a Content-Security-
   // Policy on the MCP endpoint to submit ("you defined a CSP … required to submit

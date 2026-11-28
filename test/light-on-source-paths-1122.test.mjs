@@ -127,9 +127,22 @@ describe('DCHUB_LIGHT_ON_SOURCE_PATHS', () => {
     });
   });
 
-  it('flag on: a client not on the light rules (mistral-mcp-client, claude-ai) keeps the full catalog', async () => {
+  // 2026-11-27 (owner 7:38 PM MST): mistral-mcp-client is now on the light rules (lib/light-profile.mjs LIGHT_AGENT_NAME),
+  // so it gets the light list on /mcp/mistral too; the control clients below are still not on the rules.
+  it('flag on: mistral-mcp-client (on the light rules since 2026-11-27) gets the light list on /mcp/mistral', async () => {
     await withFlag('1', async () => {
-      for (const [p, n] of [['/mcp/mistral', 'mistral-mcp-client'], ['/mcp/cursor', 'claude-ai'], ['/mcp/gemini', 'client-paths-test']]) {
+      const { list } = await listAs('/mcp/mistral', 'mistral-mcp-client');
+      // names() sorts, so compare the whole set with what a known light client (cursor-vscode) is served there.
+      const { list: cursorList } = await listAs('/mcp/cursor', 'cursor-vscode');
+      expect(names(list).length).toBeLessThan(15);
+      expect(names(list)).toContain('execute_plan');
+      expect(names(list)).toEqual(names(cursorList));
+    });
+  });
+
+  it('flag on: a client not on the light rules (claude-ai, an unknown name) keeps the full catalog', async () => {
+    await withFlag('1', async () => {
+      for (const [p, n] of [['/mcp/cursor', 'claude-ai'], ['/mcp/gemini', 'client-paths-test']]) {
         const { list } = await listAs(p, n);
         expect(names(list).length, `${n} on ${p}`).toBeGreaterThan(40);
       }
