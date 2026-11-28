@@ -118,9 +118,13 @@ describe('tools/list', () => {
     expect(ep.max_steps.description).toMatch(/Max plan steps/);   // description kept, type added
   });
 
-  it('CONTROL: the types are added on /mcp/claude only; the canonical /mcp schema keeps them untyped', () => {
+  // 2026-11-27 (Grok -> Brain change 2, lib/gemini-safe-schema.mjs): /mcp now types these too, so Gemini's
+  // function-declaration subset can load the list. /mcp/claude still types them itself (its own table).
+  it('CONTROL: /mcp is typed too since 2026-11-27, and /mcp/claude stays typed', () => {
     const canon = CANON.find((x) => x.name === 'execute_plan').inputSchema.properties;
-    expect('type' in canon.max_steps).toBe(false);
+    expect(canon.max_steps.type).toBe('integer');
+    const ep = LIST.tools.find((x) => x.name === 'execute_plan').inputSchema.properties;
+    expect(ep.max_steps.type).toBe('integer');
   });
 
   it('every canonical /mcp tool is either listed or removed, and none is both', () => {

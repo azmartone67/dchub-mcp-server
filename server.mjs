@@ -193,6 +193,7 @@ import * as _PR from './lib/plan-report.mjs';
 // G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
 // capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
 import { SLIM_PACK_NAME, SLIM_TOOLS, slimForRequest as _slimForRequest, slimProfileToolsList as _slimProfileToolsList, slimInstructionsTail as _slimInstructionsTail, toolListLabel as _toolListLabel } from './lib/slim-profile.mjs';
+import { geminiSafeInputSchema as _geminiSafeInputSchema } from './lib/gemini-safe-schema.mjs';
 import { LIGHT_PATH, LIGHT_PACK_NAME, LIGHT_TOOLS, lightToolsList as _lightToolsList, lightForRequest as _lightForRequest, lightEligiblePath as _lightEligiblePath, wantsFullCatalog as _wantsFullCatalog, FULL_CATALOG_URL as _FULL_CATALOG_URL } from './lib/light-profile.mjs';
 // A2 (owner course-correct 2026-11-21): DCHUB_LIGHT_LIST_INSTRUCTIONS_V2 (default OFF), a light-list handshake names only listed tools.
 import { cliStarterOn as _cliStarterOn, isCliStarterIdentity as _isCliStarterIdentity, cliStarterOrder as _cliStarterOrder, cliStarterInstructions as _cliStarterInstructions } from './lib/cli-starter.mjs';
@@ -20700,7 +20701,14 @@ export function _projectCachedList(cachedList, { dirProfile = null, coreProfile 
   const _listFor = dirProfile === DIRECTORY_PROFILE ? _dhHoldDailyInputs(cachedList) : cachedList;
   // 2026-11-17: the key tool shows as get_api_key here too (lib/key-tool-name.mjs); never on a directory or core profile.
   const _keyName = (dirProfile || coreProfile) ? ((x) => x) : _listResultKeyToolAs;
-  return pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+  const _out = pack ? _slim(_keyName(_packFilter(_listFor, pack))) : _slim(_keyName(_listFor));
+  // Gemini-safe schemas (lib/gemini-safe-schema.mjs): the cache holds the canonical list, so the pass runs on the wire
+  // projection. Never on the frozen /mcp/chatgpt catalog.
+  return dirProfile === DIRECTORY_PROFILE ? _out : _geminiSafeList(_out);
+}
+function _geminiSafeList(list) {
+  if (!list || !Array.isArray(list.tools)) return list;
+  return { ...list, tools: list.tools.map((t) => (t && t.inputSchema ? { ...t, inputSchema: _geminiSafeInputSchema(t.inputSchema, t.name) } : t)) };
 }
 
 // ── Served tool counts per path (QA v2.12.63, 2026-11-23, item c) ─────────────────────────────────────
@@ -35469,6 +35477,9 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
+// The frozen /mcp/chatgpt catalog (DIRECTORY_PROFILE) keeps its reviewed schemas byte for byte.
+function _isChatgptFrozenList() { try { return getCtx()?.profile === DIRECTORY_PROFILE; } catch (_) { return false; } }
+
 // zod 4.6 (the fix for GHSA-mrhx-c7xc-m3w5, 2026-11-02) rewrites a union of bare types,
 //   anyOf: [{type: "string"}, {type: "number"}]   ->   type: ["string", "number"]
 // in every tools/list schema. The two say the same thing, but Ajv 2020-12 strict (the Claude
@@ -41786,6 +41797,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       const res = await _sdkListTools(req, extra);
       for (const t of (res && Array.isArray(res.tools)) ? res.tools : []) {
         t.inputSchema = applyOneOfAnyOf(expandTypeUnions(stripSchemaDialect(t.inputSchema)), t.name);
+        // Gemini-safe schemas (lib/gemini-safe-schema.mjs, kill switch DCHUB_GEMINI_SAFE_SCHEMA=0): every property typed,
+        // no bare-type unions, no propertyNames. Not on the frozen /mcp/chatgpt catalog.
+        if (!(opts && opts.canonicalList)) t.inputSchema = _geminiSafeInputSchema(t.inputSchema, t.name, { skip: _isChatgptFrozenList() });
         if (t.outputSchema) t.outputSchema = expandTypeUnions(stripSchemaDialect(t.outputSchema));
       }
       if (res && Array.isArray(res.tools) && res.tools.some((t) => t && t.name === _CW.ACCESS_STATUS_TOOL)) res.tools = res.tools.filter((t) => !t || t.name !== _CW.ACCESS_STATUS_TOOL);   // callable, never listed
@@ -41818,7 +41832,7 @@ app.use((req, res, next) => listingSrcCtx.run(_listingSrcFromRequest(req, getVia
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via, X-DCHub-Src');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via, X-DCHub-Src, MCP-Protocol-Version, Last-Event-ID');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
   // r-csp (2026-07-23): the ChatGPT App Directory requires a Content-Security-
   // Policy on the MCP endpoint to submit ("you defined a CSP … required to submit
