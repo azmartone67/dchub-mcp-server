@@ -176,8 +176,16 @@ const changedSince1123 = (name) => !MAIN_HAS_GATE && isPaidFullOnly(name);
 // 2026-11-27 (lib/unlisted-tool.mjs): a restricted endpoint answers a real DC Hub tool it does not serve with where it
 // is served (origin/main before it: "Unknown tool."). Exactly that one difference is allowed; the rest of the
 // response must still be origin/main byte for byte.
-const unlistedSince1127 = (p, here, main) => main.includes('"message":"Unknown tool."')
-  && here === main.replace('"message":"Unknown tool."', `"message":"${unlistedToolMessage(p)}"`);
+// GDL 2026-11-27 (cd1, lib/no-future-day.mjs): between 17:00 and 23:59 Phoenix main says the next UTC day ("as of
+// 2026-11-28" at 19:00 Phoenix on 11-27); here says the Phoenix day. Only dates later than today may differ, and only
+// to today.
+const PHX_TODAY = () => new Date(Date.now() - 7 * 3600e3).toISOString().slice(0, 10);
+const clampFutureDays = (s) => { const t = PHX_TODAY(); return s
+  .replace(/\b(as of|read on) (\d{4}-\d{2}-\d{2})(?![T\d])/g, (a, w, d) => (d > t ? `${w} ${t}` : a))
+  .replace(/(\\*"(?:as_of|collected_at)\\*":\\*")(\d{4}-\d{2}-\d{2})(\\*")/g, (a, x, d, y) => (d > t ? `${x}${t}${y}` : a)); };
+const unlistedSince1127 = (p, here, main) => (main.includes('"message":"Unknown tool."')
+  && here === main.replace('"message":"Unknown tool."', `"message":"${unlistedToolMessage(p)}"`))
+  || (here !== main && here === clampFutureDays(main));
 const LICENCE_KEY = /\\*"licence\\*":\{/;
 // The price / plan / credit / calls-per-day ban (the brief's list; "free" too: the 2026-11-21 no-free sweep).
 const NO_PRICE = /[$€£¥]|\bper month\b|\/mo\b|\b(?:free|developer|pro|enterprise|starter)\b|\bcredits?\b|\b\d[\d,]*\s+(?:MCP\s+)?(?:calls?|full answers?|answers?)\b|\/day\b|\bper day\b|\ba day\b/i;

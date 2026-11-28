@@ -164,7 +164,9 @@ describe('E: a siting plan reads the state\'s permitting records', () => {
     const anchored = { ...cav, named: false, far: false, metro: { name: 'Columbus', slug: 'columbus', verdict: 'AVOID' } };
     expect(withSitingCaveat({ headline: `${lead} Siting read.` }, anchored, { after: lead }).headline)
       .toBe(`${lead} ${cav.line} Siting read.`);
-    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, { ...anchored, named: true }, { after: lead }).headline.startsWith(cav.line)).toBe(true);
+    // GDL 2026-11-27 (L2): a verdict caveat about a metro the question named follows the areas too; only distance leads.
+    expect(withSitingCaveat({ headline: `${lead} Siting read.` }, { ...anchored, named: true }, { after: lead }).headline)
+      .toBe(`${lead} ${cav.line} Siting read.`);
     expect(withSitingCaveat({ headline: `${lead} Siting read.` }, { ...anchored, far: true }, { after: lead }).headline.startsWith(cav.line)).toBe(true);
   });
   it('restrictions asked: the newest enacted moratorium follows the land lead (GDL 2026-11-26 item 4)', () => {
