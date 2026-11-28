@@ -45,6 +45,18 @@ describe('buildRankedTableLead (pure)', () => {
     expect(lines.find((l) => l.includes('midland-tx'))).toContain('| BUILD | 80.6 | unavailable |');
     expect(lines.find((l) => l.includes('el-paso'))).toContain('| BUILD | unavailable | unavailable |');
   });
+  it('as_of falls back to the DCPI card computed_at / provenance.as_of, never retrieved_at (live Texas canvas rows, 2026-11-28)', () => {
+    const t = buildRankedTableLead('market_ranking', [
+      step('site_selection_canvas', { region: 'TX' }, { shortlist: CANVAS_ROWS }),
+      step('get_market_dcpi_rank', { market_slug: 'midland-tx' }, { verdict: 'BUILD', composite_score: 80.6, computed_at: '2026-11-28T08:45:21Z' }),
+      step('get_market_dcpi_rank', { market_slug: 'el-paso' }, { verdict: 'BUILD', composite_score: 67.3,
+        provenance: { as_of: '2026-11-27T08:45:21Z', retrieved_at: '2026-11-28T09:51:37Z' } }),
+    ]);
+    const lines = t.markdown.split('\n');
+    expect(lines.find((l) => l.includes('midland-tx')).endsWith('| 2026-11-28 |')).toBe(true);
+    expect(lines.find((l) => l.includes('el-paso')).endsWith('| 2026-11-27 |')).toBe(true);
+    expect(t.markdown.startsWith('Source: DC Hub (dchub.cloud), as of 2026-11-27.')).toBe(true);
+  });
   it('no table for other intent classes, or when no ranking step returned rows', () => {
     expect(buildRankedTableLead('site_analysis', [step('rank_markets', {}, { results: RANK_ROWS })])).toBeNull();
     expect(buildRankedTableLead('market_ranking', [step('rank_markets', {}, { results: [] })])).toBeNull();
