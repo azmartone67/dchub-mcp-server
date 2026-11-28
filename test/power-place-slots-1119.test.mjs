@@ -152,6 +152,13 @@ describe('ERCOT queue: one GW, ERCOT\'s own count (2026-11-27)', () => {
     const f = fact({ iso: 'ERCOT', taste: { headline: { name: 'queued_generation_gw', value: 461.4, as_of: '2026-10-31' }, project_count: { value: 1766 } } });
     expect(f.text).not.toContain('1,766');
   });
+  it('the served queued_generation_requests field wins over the cited line', () => {
+    expect(fact({ ...FULL, queued_generation_requests: 1850 }).text).toContain('across 1,850 requests');
+    expect(fact({ ...FULL, queued_generation_requests: 1850, queued_generation_gw_source: null }).text).toContain('across 1,850 requests');
+  });
+  it('a null field falls back to the cited line', () => {
+    expect(fact({ ...FULL, queued_generation_requests: null }).text).toContain('across 1,847 requests');
+  });
   it('MISO\'s live-feed GW keeps its own row count', () => {
     expect(fact(MISO).text).toContain('250.6 GW of requested generation across 1,136 projects');
   });
