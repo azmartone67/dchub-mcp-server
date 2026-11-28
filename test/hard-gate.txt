@@ -795,6 +795,7 @@ test/serc-charlotte-1124.test.mjs
 test/server-json-npm-package.test.mjs
 test/server-json-route.test.mjs
 test/session-init-event.test.mjs
+test/session-list-event.test.mjs
 test/session-release-covers-every-map.test.mjs
 test/sessionless-bind-email-unlock-e2e.test.mjs
 test/sessionless-cap-email-ask.test.mjs

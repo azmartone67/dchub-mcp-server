@@ -351,6 +351,7 @@ import { CONNECT_PATH, CONNECT_CSP, connectPageWanted as _connectPageWanted, ren
 import { hasReadGatedFilter, dropUnreadableFilters, readGatedValues, markNotApplied, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { createMcp4xxCounter as _createMcp4xxCounter } from './lib/mcp-4xx-event.mjs';
+import { isToolsListRequest as _isToolsListRequest, chunkBytes as _listChunkBytes, sessionListEventBody as _sessionListEventBody, createListOnce as _createListOnce, createInitTimes as _createInitTimes } from './lib/session-list-event.mjs';
 import { recognizedClientFromName as _recognizedClientFromName, recognizedClientFromUa as _recognizedClientFromUa } from './lib/client-recognition.mjs';
 import * as _CA from './lib/checkout-attrib.mjs';   // checkout-attribution spec 2026-11-22 (DCHUB_CHECKOUT_ATTRIB_V1, default OFF)
 import { platformFamily as _platformFamily } from './lib/platform-family.mjs';
@@ -42885,6 +42886,45 @@ async function _serveCore(req, res, o) {
     await transport.handleRequest(req, res, body);
   });
 }
+
+// Change 4 (2026-11-27, Grok -> Brain connect-to-call telemetry): a session's FIRST tools/list is reported once
+// as event 'session_list' {session_id, initialized_at, listed_at, list_bytes, status} (lib/session-list-event.mjs), so
+// /api/v1/mcp/retention connect_to_call can split connect-without-call into never-listed vs listed-never-called.
+// Counts bytes as the response writes them, sends after 'finish'. Never changes the response. Our own QA /
+// self-test callers (X-DCHub-QA: 1, a dchub-qa UA, _UA_SELF_TEST_RE) send nothing; the backend also drops
+// client_class our_own when it reads. Kill switch
+// DCHUB_SESSION_LIST_EVENT=0.
+const _listOnce = _createListOnce();
+const _initTimes = _createInitTimes();
+export const _listOnceForTest = _listOnce;   // test seam
+app.use(MCP_PATHS, (req, res, next) => {
+  try {
+    if (req.method === 'POST' && req.body && !Array.isArray(req.body) && req.body.method === 'initialize') {
+      const at = new Date();
+      res.on('finish', () => {
+        try { const sid = res.getHeader('mcp-session-id'); if (sid && res.statusCode < 300) _initTimes.remember(String(sid), at); } catch (_) { /* telemetry only */ }
+      });
+      return next();
+    }
+    if (req.method !== 'POST' || !_isToolsListRequest(req.body)) return next();
+    const sid = String(req.headers['mcp-session-id'] || '').trim();
+    if (!sid) return next();
+    let bytes = 0;
+    const _write = res.write, _end = res.end;
+    res.write = function (chunk, ...a) { bytes += _listChunkBytes(chunk, a[0]); return _write.call(this, chunk, ...a); };
+    res.end = function (chunk, ...a) { bytes += _listChunkBytes(chunk, a[0]); return _end.call(this, chunk, ...a); };
+    res.on('finish', () => {
+      try {
+        const h = req.headers || {}, ua = String(h['user-agent'] || '');
+        const own = String(h['x-dchub-qa'] || '').trim() === '1' || /dchub-qa/i.test(ua) || _UA_SELF_TEST_RE.test(ua);
+        const ev = _sessionListEventBody({ sessionId: sid, listBytes: bytes, status: res.statusCode, own,
+          initializedAt: _initTimes.get(sid) });
+        if (ev && _listOnce.note(sid)) _postSessionInitEvent(ev, { apiBase: API_BASE, internalKey: INTERNAL_KEY });
+      } catch (_) { /* telemetry never touches a response */ }
+    });
+  } catch (_) { /* fall through untouched */ }
+  return next();
+});
 
 app.post(MCP_PATHS, async (req, res) => {
   try {
