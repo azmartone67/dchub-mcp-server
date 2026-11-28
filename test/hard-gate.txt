@@ -330,6 +330,7 @@ test/gdl-permitting-sources-1125.test.mjs
 test/gdl-plan-cite-1125.test.mjs
 test/gdl-plan-cite-e2e-1125.test.mjs
 test/gdl-plan-step-cites-1125.test.mjs
+test/gemini-safe-schema.test.mjs
 test/generate-site-analysis-keyless-preview.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/generic-light-list-1125.test.mjs
