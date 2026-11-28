@@ -252,6 +252,7 @@ import { CLAIM_TOOL as _CLAIM_TOOL, CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STA
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { answerQualityMarks as _aqMarks, markHeldRows as _aqMarkHeldRows, answerQualityMarksOn as _aqMarksOn } from './lib/answer-quality.mjs';
+import * as _FA from './lib/agent-feedback-ask.mjs';   // DCHUB_AGENT_FEEDBACK_ASK (default OFF), Change 5 2026-11-27
 import { resolveFacilityRef as _resolveFacilityRef, notFoundSuggestions as _facilityNotFoundSuggestions } from './lib/facility-ref.mjs';
 import { setWithheldLabelGate as _setWithheldLabelGate } from './lib/attribution.mjs';
 import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating, COMPOSITE_LICENSE, COMPOSITE_LICENSE_TOOLS } from './lib/attribution.mjs';
@@ -28876,6 +28877,11 @@ function _sourceLineCb(name, fn) {
       // DCPI hold #117162 (Grok QA 2026-11-25, lib/dcpi-hold-links.mjs): every /dcpi/<slug> link to a held market
       // (404 since be#9344) becomes /markets/<slug>. LAST, so it sees every link any step above wrote. Links only.
       // Kill switch DCHUB_DCPI_HOLD_LINKS=0.
+      // Change 5 (Grok -> Brain 2026-11-27, DCHUB_AGENT_FEEDBACK_ASK, default OFF): once per MCP session, a full answer
+      // gains ONE extra content item asking the agent for report_finding class agent_feedback (lib/agent-feedback-ask.mjs).
+      // After every copy rewrite; existing items and structuredContent are untouched. The line carries no link, so the
+      // held-DCPI link step below (which stays last) has nothing of its own to rewrite.
+      _final = await _feedbackAskStep(_final, name, c);
       _final = _withHeldDcpiLinks(_final);
       return _final;
     } finally {
@@ -28889,9 +28895,51 @@ function _sourceLineCb(name, fn) {
       // Brain 2026-11-23 item 6: the answer-quality marks (params._aq) on this call's held rows, read off the final
       // answer. Kill switch DCHUB_ANSWER_QUALITY_MARKS=0.
       if (_aqMarksOn()) _aqMarkHeldRows(c, name, _aqMarks(name, _final, { startedAt: _aqT0 }));
+      // Change 5: the call row of the answer that carried the feedback line says so (params._feedback_ask = 1, asks shown).
+      if (c && c._feedbackAskShown === name) _FA.markHeldRowsAsked(c, name);
       _flushTrackRows(c, name, _final);
     }
   };
+}
+// Change 5 (Grok -> Brain paste 2026-11-27): the once-per-session feedback ask (lib/agent-feedback-ask.mjs). Default OFF
+// (DCHUB_AGENT_FEEDBACK_ASK). Never on the frozen /mcp/chatgpt, the /mcp/claude and /mcp/muse review profiles, /mcp/core,
+// a clean platform, an execute_plan loopback step, QA, bots or internal callers, or a caller without a real session.
+// The replicas agree through the shared daily counter the email nudge uses (bucket agent_feedback_ask).
+const _feedbackAskMemo = _FA.createFeedbackAskMemo();
+export const _feedbackAskMemoForTest = _feedbackAskMemo;
+export async function _feedbackAskConsume(key) {
+  try {
+    const r = await fetch(new URL('/api/v1/mcp/full-cap/consume', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ identity: key, tool: _FA.FEEDBACK_ASK_BUCKET, cap: 1 }),
+      signal: AbortSignal.timeout(_NUDGE_CONSUME_TIMEOUT_MS),
+    });
+    if (!r || !r.ok) return null;
+    const j = await r.json();
+    return j && j.ok !== false && Number.isInteger(j.n) ? j.n : null;
+  } catch (_) { return null; }
+}
+export function _feedbackAskSkipCtx(c) {
+  if (!c) return true;
+  if (c.loopback_step) return true;
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return true;
+  if (_excludedFromRelayReadout(c)) return true;   // /mcp/claude and /mcp/muse arrivals
+  if (/chatgpt|openai/i.test(String(c.platform || '')) || _isCleanPlatform()) return true;
+  return false;
+}
+export async function _feedbackAskStep(result, name, c = getCtx(), consume = _feedbackAskConsume, env = process.env) {
+  try {
+    if (!_FA.feedbackAskOn(env) || !c) return result;
+    const excluded = _isQaCaller(c) || isBotOrInternalCtx(c);
+    const sid = (_isRealSession(c.session_id) && _SESSION_TOKEN_RE.test(String(c.session_id))) ? String(c.session_id) : '';
+    const r = await _FA.feedbackAskStep(result, name, {
+      env, memo: _feedbackAskMemo, consume, sessionId: sid, excluded,
+      skipProfile: _feedbackAskSkipCtx(c), gated: !excluded && !!sid && _gatedAnswer(result, name, c),
+    });
+    if (r.shown) { try { c._feedbackAskShown = name; } catch (_) { /* a frozen ctx loses the mark, never the answer */ } }
+    return r.result;
+  } catch (_) { return result; }
 }
 // #1594: one get_api_key email nudge per MCP session. Never /mcp/chatgpt or a ChatGPT client (frozen), never a loopback
 // plan step (the plan's own answer is the one the agent reads). Kill switch DCHUB_EMAIL_NUDGE_ONCE=0.
@@ -35084,6 +35132,9 @@ export const FINDING_CLASSES = Object.freeze([
   'count_drift', 'stale_payload_complete', 'leak_past_pro_gate', 'link_hygiene',
   // 2026-11-16: the public classes (any caller, any key or none)
   'wrong_number', 'missing_data', 'coverage_gap', 'bug', 'feature_request', 'other',
+  // 2026-11-27 (Change 5): what an agent found useful and missing in a full answer, kept apart from bug reports
+  // (the feedback ask names it; lib/agent-feedback-ask.mjs). Not advertised on /mcp/claude (lib/claude-directory.mjs).
+  'agent_feedback',
 ]);
 // 2026-11-16: report_finding left this list (every caller may file); read_inbox is the one partner tool.
 export const PARTNER_TOOLS = Object.freeze(['read_inbox']);
@@ -35177,8 +35228,8 @@ export async function _readInboxTool(apiKey, opts, fetchImpl) {
 // X-DC-Client-IP ride beside X-Internal-Key, and the backend honours them only with that key. A
 // caller-sent caller_tier / client / entry_tool in the arguments is never forwarded (not in
 // _FINDING_FIELDS). Public findings route to a human, never to the squasher.
-export const FINDING_TOOL_OPTIONAL = Object.freeze(['feature_request', 'coverage_gap']);
-export const FINDING_SUMMARY_REQUIRED = Object.freeze(['feature_request', 'missing_data', 'other']);
+export const FINDING_TOOL_OPTIONAL = Object.freeze(['feature_request', 'coverage_gap', 'agent_feedback']);
+export const FINDING_SUMMARY_REQUIRED = Object.freeze(['feature_request', 'missing_data', 'other', 'agent_feedback']);
 export const FINDING_DEFAULT_TOOL = 'general';
 export const FINDING_THANKS = 'Thanks. The DC Hub team reviews findings daily.';
 export const REPORT_FINDING_DESCRIPTION = "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).";
@@ -35223,6 +35274,9 @@ export async function _reportFindingTool(apiKey, a, fetchImpl, opts) {
   if (c === undefined) { try { c = getCtx(); } catch (_) { c = null; } }
   const body = {};
   for (const k of _FINDING_FIELDS) if (a && a[k] !== undefined && a[k] !== null) body[k] = a[k];
+  // Change 5: an agent_feedback finding with no tool names the tool whose answer carried the ask in this session.
+  const _fbSid = (body.class === _FA.FEEDBACK_CLASS && c && _isRealSession(c.session_id)) ? String(c.session_id) : '';
+  if (!body.tool && _fbSid) { const t = _feedbackAskMemo.toolFor(_fbSid); if (t) body.tool = t; }
   if (!body.tool && FINDING_TOOL_OPTIONAL.includes(body.class)) body.tool = FINDING_DEFAULT_TOOL;
   try {
     const r = await f(new URL('/api/v1/inbox/findings', API_BASE).toString(), {
@@ -35253,6 +35307,8 @@ export async function _reportFindingTool(apiKey, a, fetchImpl, opts) {
       return _findingFail(`Finding could not be filed just now (HTTP ${r.status}). Retry later; nothing was filed.`, 'findings_unavailable', { status: r.status });
     }
     const fid = j.finding_id ?? j.id ?? null;
+    // Change 5: a session that filed agent_feedback is never shown the feedback ask again.
+    if (_fbSid) await _FA.noteFeedbackFiled(_fbSid, { memo: _feedbackAskMemo, consume: o.consumeAsk || _feedbackAskConsume });
     const message = j.message || FINDING_THANKS;
     const receipt = { finding_id: fid, status: j.status || 'received', recurrence: j.recurrence ?? 1, message };
     // caller_tier 'partner' from the backend; route + slug alone is the pre-2026-11-16 backend's partner receipt.
@@ -41583,7 +41639,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // Literal text (scripts/sync-tools-manifest.mjs reads registrations as literals); test/findings-open-intake
   // pins it equal to REPORT_FINDING_DESCRIPTION / REQUEST_ENHANCEMENT_DESCRIPTION and lib/claude-directory.mjs.
   trackedTool(srv, 'report_finding', "Use this when DC Hub data looks wrong, missing, stale or contradictory, a tool got in your way, or your human wants something DC Hub doesn't do yet. Files it for the DC Hub team, who review findings daily. Works with or without a key. Quote the exact values you saw. Add contact_email only if your human asked for a reply. Do NOT use for data questions (use execute_plan).",
-    { class: z.enum(FINDING_CLASSES).describe('Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your human wants DC Hub to do), completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (a preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a wall that says stop while next_ask offers only another walled tool), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a gated field served to a caller it is gated from), link_hygiene (dead or wrong-shape links), other'),
+    { class: z.enum(FINDING_CLASSES).describe('Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your human wants DC Hub to do), completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (a preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a wall that says stop while next_ask offers only another walled tool), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a gated field served to a caller it is gated from), link_hygiene (dead or wrong-shape links), agent_feedback (what was useful and what was missing in a DC Hub answer), other'),
       tool: z.string().min(1).max(80).optional().describe('The DC Hub tool or endpoint it is about, e.g. analyze_site (optional for feature_request and coverage_gap)'),
       summary: z.string().min(10).max(280).optional().describe('One sentence, 10-280 characters: what you saw or what your human wants (required for feature_request, missing_data, other)'),
       user_goal: z.string().max(500).optional().describe('What your human was trying to do'),
