@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
-import { mintSessionId, clientNameFromSid, KNOWN_CLIENT_NAMES } from '../lib/session-client-tag.mjs';
+import { mintSessionId, clientNameFromSid, KNOWN_CLIENT_NAMES, CLASS_TOKENS } from '../lib/session-client-tag.mjs';
+import { LIGHT_AGENT_NAME, lightForRequest } from '../lib/light-profile.mjs';
 
 // 2026-11-25 (Grok "Cursor tool-list fixes" item 1): cursor-vscode got the full 98-tool catalog on 5 of 10 live list-only
 // sessions. Its initialize landed on one replica and its tools/list on another, which had no record of the client name
@@ -161,5 +162,28 @@ describe('lib/session-client-tag.mjs', () => {
   it('the table is append-only: indexes already minted keep their names', () => {
     expect(KNOWN_CLIENT_NAMES.slice(0, 3)).toEqual(['cursor-vscode', 'cursor', 'Visual Studio Code']);
     expect(KNOWN_CLIENT_NAMES.length).toBeLessThanOrEqual(256);
+  });
+});
+
+// 2026-11-28 (live after mcp#1824): google-adk / perplexity / mistral / devin got the light list only when tools/list hit
+// the replica that ran initialize (google-adk 10,10,99; devin 10,99,99), because their names were not in the table.
+describe('sid tag: the pattern-matched light clients (mcp#1824 follow-up)', () => {
+  const ENV = { DCHUB_INTERNAL_KEY: 'test-secret' };
+  it('names with no exact entry are carried as their class token, and the token still gets the light list', () => {
+    for (const [name, token] of [['google-adk', 'google-adk'], ['Google ADK agent', 'google-adk'], ['perplexity-mcp', 'perplexity'],
+      ['Perplexity', 'perplexity'], ['mistral-mcp-client', 'mistral'], ['Le Chat', 'mistral'], ['devin', 'devin'], ['cascade', 'devin']]) {
+      const sid = mintSessionId(name, { env: ENV });
+      expect(clientNameFromSid(sid, { env: ENV }), name).toBe(token);
+      expect(lightForRequest({ path: '/mcp', clientName: token, userAgent: 'node', env: {} }), token).toBe(true);
+    }
+  });
+  it('every class token matches LIGHT_AGENT_NAME, and exact entries still win', () => {
+    for (const [, token] of CLASS_TOKENS) expect(LIGHT_AGENT_NAME.test(token), token).toBe(true);
+    expect(clientNameFromSid(mintSessionId('cursor-vscode', { env: ENV }), { env: ENV })).toBe('cursor-vscode');
+  });
+  it('names outside every rule stay untagged', () => {
+    for (const n of ['claude-ai', 'openai-mcp', 'grok', 'mcp', 'adkins']) {
+      expect(clientNameFromSid(mintSessionId(n, { env: ENV }), { env: ENV }), n).toBeNull();
+    }
   });
 });
