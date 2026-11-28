@@ -106,7 +106,12 @@ describe('execute_plan 250 MW near Chicago (planner 5.55, anchored 5.58)', () =>
       expect(o.planner_version).toBe('5.63');
       expect(o.executed.some((e) => e.tool === 'find_sites' && (e.status === 'executed' || e.status === 'gated_preview'))).toBe(true);
       expect(o.intent_answer.siting_caveat).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index/);
-      expect(planLeadText(o)).toMatch(/^Chicago-area markets read AVOID on the Data Center Power Index \(Chicago, Elk Grove Village; PJM\), so they rank last/);
+      // GDL 2026-11-27 (L2): the areas lead and the AVOID line follows them; the far case below still leads with distance.
+      expect(planLeadText(o)).toMatch(/^find_sites: /);
+      // The short lead text may cut before the caveat sentence; each area it names carries its DCPI AVOID, and the
+      // headline keeps the full caveat after the areas.
+      expect(planLeadText(o)).toMatch(/Chicago DCPI AVOID/);
+      expect(o.intent_answer.headline).toMatch(/\. Chicago-area markets read AVOID on the Data Center Power Index \(Chicago, Elk Grove Village; PJM\), so they rank last/);
       expect(planLeadText(o)).not.toMatch(/\$\d|\bPro\b|upgrade|pricing/i);
     }, 120_000);
 

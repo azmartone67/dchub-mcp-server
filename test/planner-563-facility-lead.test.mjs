@@ -18,13 +18,13 @@ afterEach(() => {
   if (prev.d === undefined) delete process.env[DCPI_FIX]; else process.env[DCPI_FIX] = prev.d;
 });
 const P4 = 'Which data center facilities are in the Ashburn market?';
-const strip = (p) => JSON.stringify(p).replace(/"planner_version":"5\.6[34]"/g, '').replace(/"plan_id":"[^"]*"/g, '');
+const strip = (p) => JSON.stringify(p).replace(/"planner_version":"5\.6[345]"/g, '').replace(/"plan_id":"[^"]*"/g, '');
 const ASHBURN = { city: 'Ashburn', lat: 39.0438, lon: -77.4874, radius_km: 10 };
 
 describe('version', () => {
   it('PLANNER_VERSION stays 5.63 (flag-off plans byte-identical); 5.64 is the flag-on report', () => {
     expect(PLANNER_VERSION).toBe('5.63');
-    expect(FACILITY_LEAD_PLANNER_VERSION).toBe('5.64');
+    expect(FACILITY_LEAD_PLANNER_VERSION).toBe('5.65');
   });
 });
 

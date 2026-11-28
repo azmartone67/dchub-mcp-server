@@ -402,7 +402,7 @@ import { wallEntitlements as _wallEntitlementsOf, wallOffers as _wallOffers } fr
 import { planCapacityTeaserOnly as _planCapacityTeaserOnly } from './lib/plan-capacity-teaser.mjs';
 import { planLeadStep as _planLeadStep } from './lib/plan-lead-text.mjs';
 import { COLO_PATTERNS as _COLO_PATTERNS, coloSignals as _coloSignals, coloPriceIntent as _coloPriceIntent,
-  colocationSequence as _colocationSequence, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
+  colocationSequence as _colocationSequence, coloSupplyAsk as _coloSupplyAsk, coloPricingSequence as _coloPricingSequence, COLO_PRICING_NOTE as _COLO_PRICING_NOTE,
   guardPlanFacilitySteps as _guardPlanFacilitySteps, facilitySlugGuard as _facilitySlugGuard,
   facilitySlugsFromSearch as _facilitySlugsFromSearch, FACILITY_SLUG_PLACEHOLDER as _FACILITY_SLUG_PLACEHOLDER,
   facilityMetroArgs as _facilityMetroArgs, COLO_METROS as _COLO_METROS, coloFitNotes as _coloFitNotes } from './lib/colocation-plan.mjs';
@@ -453,6 +453,12 @@ import { facilitiesAsk as _facilitiesAsk, facilityJoinArgs as _facilityJoinArgs,
   SITE_CONTEXT_CLASSES as _SITE_CONTEXT_CLASSES, FIBER_TOOLS as _FJ_FIBER_TOOLS, DEFAULT_MAX_STEPS as _FJ_DEFAULT_MAX_STEPS } from './lib/facility-join.mjs';
 import { pipelineStatusOf as _pipelineStatusOf, marketsForState as _marketsForState, capacityAsksOperational as _capacityAsksOperational, buildPipelineStatusAnswer as _buildPipelineStatusAnswer,
   buildCapacitySidesAnswer as _buildCapacitySidesAnswer } from './lib/pipeline-status.mjs';
+// GDL 2026-11-27 (cd2): the ask names the largest / biggest campuses or facilities.
+const _PLAN_LARGEST_CAMPUS_RE = /\b(?:largest|biggest|top)\b[^.?!]{0,30}\b(?:campus(?:es)?|facilit(?:y|ies)|data\s*cent(?:er|re)s?|sites?)\b/i;
+// Two capacity stages set against each other (GDL 2026-11-27, cd2): a dc_capacity ask, never a market comparison.
+const _STATUS_A = String.raw`(?:operational|operating|existing|built|online|in\s+(?:service|operation))`;
+const _STATUS_B = String.raw`(?:under\s+construction|being\s+built|planned|announced|proposed|in\s+(?:the\s+)?pipeline|pipeline)`;
+export const _PLAN_STATUS_VS_RE = new RegExp(String.raw`\b(?:${_STATUS_A}\s+(?:vs\.?|versus|against|or|and)\s+${_STATUS_B}|${_STATUS_B}\s+(?:vs\.?|versus|against|or|and)\s+${_STATUS_A})\b`, 'i');
 import { streetAddressOf as _streetAddressOf, addressPointOk as _addressPointOk, addressMissAnswer as _addressMissAnswer, siteScreenVerb as _siteScreenVerb } from './lib/street-address.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, PAID_ONLY_TASTE_TOOLS as _PAID_ONLY_TASTE_LIST, FREE_DECISION_UNLOCKS_AT,
@@ -23318,6 +23324,8 @@ export const _PLAN_CLASSES = [
       [/\bunder\s+construction\b/i, 3], [/\bbeing\s+built\b/i, 2.5], [/\bunder\s+development\b/i, 2],
       [/\b(?<!gas\s|power\s|generation\s|transmission\s)pipeline\b(?!\s+(?:gas|routes?|operators?))/i, 2],
       [/\bnew\s+(?:data\s*cent\w*\s+)?supply\b/i, 2],
+      // GDL 2026-11-27 (cd2): "operational versus under construction" is this class, not market_comparison's "versus".
+      [_PLAN_STATUS_VS_RE, 4],
     ],
     rationale: (d) => {
       const sm = _planSubmarket(d);
@@ -23358,6 +23366,13 @@ export const _PLAN_CLASSES = [
         steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
           why: 'The facilities already operating' + (sm ? ` in ${sm.city}` : '') + ', with operator and status: the built side of the capacity question. Independent of step 1, same wave.',
           args_hint: { ...(st ? { state: st } : {}), ...(sm ? { city: sm.city } : {}) } });
+      }
+      // GDL 2026-11-27 (cd2): "which are the largest campuses?" reads the facilities at or above 100 MW in the place
+      // (names and operators; MW only where this access level serves it), beside the market briefs.
+      if (intelMarkets.length && st && d.__largestCampus) {
+        steps.push({ step: steps.length + 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1, largest_campuses: true,
+          why: `The largest campuses in ${st}: facilities of 100 MW or more, with operator. MW is shown only where this access level serves it. Independent of step 1, same wave.`,
+          args_hint: { state: st, min_capacity_mw: 100, limit: 10 } });
       }
       if (capacityPointersEnabled()) {
         steps.push({ step: steps.length + 1, tool: 'source_capacity', depends_on: [], estimated_calls: 1, routing: 'capacity_procurement',
@@ -25480,6 +25495,9 @@ export function _planSignals(intent, context) {
     // 5.26: two GRIDS named ("ERCOT vs PJM") are not two markets: the word pair below read them
     // as market slugs 'ercot' and 'pjm', which no DCPI card answers. iso_comparison takes them.
     if (_planNamedIsos(text).length >= 2) return null;
+    // GDL 2026-11-27 (cd2): "operational versus under construction" compares two pipeline stages, not two markets;
+    // the word pair below read them as market slugs 'operational' and 'under-construction'.
+    if (_PLAN_STATUS_VS_RE.test(text)) return null;
     const m = text.match(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:vs\.?|versus|against)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i)
       || text.match(/\bcompare\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:and|to|with)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i);
     if (!m) return null;
@@ -25538,6 +25556,7 @@ export function _planSignals(intent, context) {
   const __facName = _namedFacility(text);
   const __pipelineStatus = _pipelineStatusOf(text);
   const __capOperational = _capacityAsksOperational(text);
+  const __largestCampus = _PLAN_LARGEST_CAMPUS_RE.test(text);
   // 5.27 (live QA sweep 2026-11-14): an AI ask is a deployment-HORIZON question ("where can 100 MW
   // land in the next 90 days") only when it says so; otherwise it is a ranking by suitability
   // (rank_markets criteria=ai_ready). And the relative window the text names ("this week").
@@ -25556,7 +25575,9 @@ export function _planSignals(intent, context) {
   })();
   // 5.32: colocation signals (metro, kW, a named facility pair, price/availability/fiber asks); null when no
   // colocation word is in the text (lib/colocation-plan.mjs).
-  const __colo = _coloSignals(text, { market, mw });
+  const __colo0 = _coloSignals(text, { market, mw });
+  // Grok 2026-11-27 (cd4): a colocation supply ask ("how much capacity ... being added") reads the brief + pipeline.
+  const __colo = __colo0 && _coloSupplyAsk(text) ? { ...__colo0, supply: true } : __colo0;
   const __facMetro = _facilityMetroArgs(text, market);
   // Grok colocation review (2026-11-17): "colocation in Ashburn" binds a corridor POINT, so scopeWidened above stays
   // null, yet the metro facility search takes no point: it reads query + state (search_facilities has no radius
@@ -25572,7 +25593,7 @@ export function _planSignals(intent, context) {
   const __powerAvail = __epq && _epqPowerAvailAsk(text);
   const __factors = __multiFactor ? _epqFactors(text) : [];
   return { __fastestPower, __multiFactor, __powerAvail, __factors, iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
-    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational };
+    __outlook, radiusKm, placeScope, scopeWidened: scopeWidenedOut, states, isos, deadline, __queueAsk, __constructionAsk, __aiHorizon, __window, __newsAsk, __namedMarkets, __colo, __facMetro, __address, __facName, __pipelineStatus, __capOperational, __largestCampus };
 }
 // The colocation scope disclosure above: { widened_from, to } or null; `generic` is the text-based widening the plan
 // would carry without a colocation read. Pure; never throws.
@@ -36427,7 +36448,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
               .map((id) => _COLO_METROS.find((m) => m.id === id)).filter(Boolean),
             kw: _sig && _sig.__colo ? _sig.__colo.kw : null,
             pair: _sig && _sig.__colo ? _sig.__colo.pair : null,
-            address: _sig && _sig.__colo ? _sig.__colo.address : null }, executed, fullByEntry);
+            address: _sig && _sig.__colo ? _sig.__colo.address : null,
+            supply: !!(_sig && _sig.__colo && _sig.__colo.supply) }, executed, fullByEntry);
       // 5.35 (gap 1): a generation-mix plan leads with the percentages (lib/plan-entities.mjs).
       const _mixAnswer = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
         : _buildGenerationMixAnswer({ intent: sc.intent, intent_class: sc.intent_class, grids: _mixGrids(_sig || {}, _STATE_ISO_META) }, executed, fullByEntry);
@@ -36488,7 +36510,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           || (() => { let _pl = null; try { _pl = _sig ? _pairPlace(_sig, { rtos: _EXEC_RTOS, stateIso: _STATE_ISO_META,
                 usMarketState: _planUsMarketState, stateScope: _planStateScope }) : null; } catch (_e) { _pl = null; }
               return _buildCrossDomainAnswer({ intent: sc.intent, intent_class: sc.intent_class, requested_mw: _sig && _sig.mw,
-                deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl }, executed, fullByEntry); })();
+                deadline_months: _sig && _sig.deadline ? _sig.deadline.months : null, place: _pl,
+                geography_scope: sc.geography_scope || null }, executed, fullByEntry); })();
       // 5.42 (Grok LAND L2): a land search leads with the areas find_sites named, or says none matched.
       const _landStep = (sc.recommended_sequence || []).find((x) => x && x.land_search);
       const _landLead = _landStep && !_isCleanPlatform() && _answerBlocksAllowed()
