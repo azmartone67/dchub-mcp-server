@@ -93,7 +93,7 @@ import { buildGridRanking, gridRankingGuideLine, topQueueIso, intentNamesNonUsRe
 import { PLAN_CALLER_IP_HEADER, mintPlanCallerIpToken, consumePlanCallerIpToken } from './lib/plan-caller-ip.mjs';
 import { keylessFirstFullOn, keylessFirstFullSeat as _kffSeatFor, planStepSeat as _kffPlanStepSeatFor, keylessFirstFullCap as _keylessFirstFullCap, KEYLESS_FIRST_FULL_STATUS, KEYLESS_FIRST_FULL_ID_PREFIX, KEYLESS_FIRST_FULL_PLAN_HEADER, KEYLESS_FIRST_FULL_STEP_TIER, mintPlanFirstFullToken, consumePlanFirstFullToken, planFirstFullTokenArm, firstFullBlock as _firstFullBlock, compactFirstPlan as _compactFirstPlan, leadWithAnswer as _kffLeadWithAnswer, planDataStepsRan as _planDataStepsRan, manualNextCalls as _manualNextCalls, withFirstFullUsedBlock as _withFirstFullUsedBlock, resultHeldBack as _kffResultHeldBack, planStepDepths as _kffPlanStepDepths, utcClock as _utcClock } from './lib/keyless-first-full.mjs';
 import { firstPlanArm as _firstPlanArm, withKffArm as _withKffArm, KFF_ARM_EMAIL } from './lib/first-plan-depth-test.mjs';
-import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket } from './lib/dcpi-market-match.mjs';
+import { matchDcpiMarket as _matchDcpiMarket, dcpiMarketBySlug as _dcpiMarketBySlug, namesDcpiMarket as _namesDcpiMarket, DCPI_MARKETS as _DCPI_MARKETS, DCPI_MARKETS_AS_OF as _DCPI_MARKETS_AS_OF } from './lib/dcpi-market-match.mjs';
 import { planQualityOn as _epqOn, fastestPowerRankingAsk as _epqFastestAsk, multiFactorRankingAsk as _epqMultiFactorAsk,
   namedFactors as _epqFactors, powerAvailabilityAsk as _epqPowerAvailAsk, rankIsoArg as _epqRankIso,
   filterRankRowsByIso as _epqFilterRankIso } from './lib/plan-quality-1127.mjs';
@@ -27722,6 +27722,15 @@ const _PLAN_FORWARD_WINDOW_RE = /\b(?:next|coming|upcoming)\s+(?:\d{1,3}|few|sev
 // rank_markets criteria=ai_ready is the DCPI buildability ranking (Midland–Odessa led it on 2026-11-27);
 // best_overall is the most built-out ranking (Ashburn), which is the wrong axis for new load. The ISO the
 // text names is a hard filter (rank_markets iso=), so no market on another grid is ranked.
+// The DCPI market index as { markets: [{ slug, iso }], as_of }, for rank_markets' below-the-cutoff count. Built once.
+let _epqGridIdx = null;
+function _epqGridIndex() {
+  if (_epqGridIdx) return _epqGridIdx;
+  try {
+    _epqGridIdx = { markets: _DCPI_MARKETS.map((r) => ({ slug: r[0], iso: r[3] })), as_of: _DCPI_MARKETS_AS_OF };
+  } catch (_e) { _epqGridIdx = { markets: [], as_of: null }; }
+  return _epqGridIdx;
+}
 function _epqIsoArg(d) {
   const iso = d ? d.iso : null;
   return iso ? _epqRankIso(iso) : null;
@@ -40029,7 +40038,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         visible_order:   (() => { try { return getCtx()._visible_order ? 1 : undefined; } catch (_) { return undefined; } })(),
       // serverView: this tool orders and masks the rows per caller (visible_order, READ_ORDERED_TOOLS).
       }, { serverView: true });
-      if (_isoF) d = _epqFilterRankIso(d, _isoF, a.limit || 10);
+      if (_isoF) d = _epqFilterRankIso(d, _isoF, a.limit || 10, _epqGridIndex());
       else if (_epqOn() && a.iso && String(a.iso).trim() && d && typeof d === 'object' && !Array.isArray(d)) {
         // An iso this filter does not know is said, never dropped silently: the rows are not held to it.
         d.iso_filter = { iso: String(a.iso).trim().slice(0, 40), applied: false,
