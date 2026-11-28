@@ -77,8 +77,8 @@ async function post(path, body, headers = {}) {
 // sends it: clientInfo.name with a generic UA, and Clono and Copilot CLI by User-Agent.
 const LIGHT_CLIENTS = [
   { name: 'github-copilot-developer' }, { name: 'copilot-cli' }, { name: 'codex-mcp-client' }, { name: 'codex-cli' },
-  { name: 'cursor-vscode' }, { name: 'cursor' }, { name: 'Visual Studio Code' }, { name: 'Visual Studio Code - Insiders' },
-  { name: 'claude-code' }, { name: 'clono' }, { name: 'Clono' }, { name: 'opencode' }, { name: 'workbuddy' },
+  { name: 'Visual Studio Code' }, { name: 'Visual Studio Code - Insiders' },
+  { name: 'claude-code' }, { name: 'clono' }, { name: 'Clono' }, { name: 'workbuddy' },
   { name: 'gemini-cli-mcp-client' }, { name: 'gemini-cli' }, { name: 'windsurf-client' }, { name: 'Windsurf' },
   { name: 'codeium' }, { name: 'cline-vscode' }, { name: 'Cline' },
   { name: 'mcp', ua: 'Clono (+https://clono.sh)' }, { name: 'mcp', ua: 'copilot-cli/1.0.34' },
@@ -110,8 +110,7 @@ function toolsLine(ins) {
 
 const SIX = [
   { name: 'github-copilot-developer' }, { name: 'copilot-cli' }, { name: 'mcp', ua: 'copilot-cli/1.0.34' },
-  { name: 'codex-mcp-client' }, { name: 'codex-cli' }, { name: 'opencode' }, { name: 'mcp', ua: 'opencode/0.9.1/cli' },
-  { name: 'cursor-vscode' }, { name: 'cursor' }, { name: 'windsurf-client' }, { name: 'Windsurf' }, { name: 'codeium' },
+  { name: 'codex-mcp-client' }, { name: 'codex-cli' }, { name: 'windsurf-client' }, { name: 'Windsurf' }, { name: 'codeium' },
   { name: 'cline-vscode' }, { name: 'Cline' },
 ];
 // Light-list clients the spec does not name, and a generic client: unchanged with the flag on.

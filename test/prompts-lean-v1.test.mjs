@@ -102,7 +102,7 @@ const tick = () => new Promise((r) => setTimeout(r, 150));
 describe('A3: lean prompts for light-list clients (flag on)', () => {
   it('prompts/list for github-copilot-developer, codex-mcp-client and cursor-vscode returns 5, ask-dc-hub first', async () => {
     process.env[FLAG] = '1';
-    for (const name of ['github-copilot-developer', 'codex-mcp-client', 'cursor-vscode']) {
+    for (const name of ['github-copilot-developer', 'codex-mcp-client', 'windsurf-client']) {
       const s = await session(name);
       expect(s.sid, name).toBeTruthy();
       const prompts = await s.list();
@@ -142,7 +142,7 @@ describe('A3: lean prompts for light-list clients (flag on)', () => {
 
   it('the other four lean texts are served and start from execute_plan or a tool in the ten-tool list', async () => {
     process.env[FLAG] = '1';
-    const s = await session('cursor-vscode');
+    const s = await session('windsurf-client');
     const light = ['execute_plan', 'discover_tools', 'get_market_dcpi_rank', 'get_grid_intelligence', 'get_interconnection_queue',
       'search_facilities', 'find_sites', 'analyze_site', 'source_capacity', 'get_changes'];
     for (const [pn, args] of [['site', { location: '32.78,-96.80', capacity_mw: '100' }], ['market', { capacity_mw: '200' }],

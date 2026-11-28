@@ -48,11 +48,11 @@ beforeAll(async () => {
   PORT = httpServer.address().port;
   PACKS = [...S.MCP_PACKS.keys()];
   for (const p of [...CORE, ...PACKS]) served[p] = await init(p);
-  served['implicit light (Cursor)'] = await init('/mcp', 'cursor-vscode', { 'user-agent': 'node' });
+  served['implicit light (Windsurf)'] = await init('/mcp', 'windsurf-client', { 'user-agent': 'node' });
   served['implicit light (CLI)'] = await init('/mcp', 'x', { 'user-agent': 'copilot-cli/1.0.34' });
   served['slim ?tools=core'] = await init('/mcp?tools=core');
   for (const [k, v] of Object.entries(ENV)) { if (prevEnv[k] === undefined) delete process.env[k]; else process.env[k] = prevEnv[k]; }
-  served['implicit light, v2 off'] = await init('/mcp', 'cursor-vscode', { 'user-agent': 'node' });
+  served['implicit light, v2 off'] = await init('/mcp', 'windsurf-client', { 'user-agent': 'node' });
 }, 60_000);
 
 afterAll(async () => {
