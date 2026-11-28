@@ -6,7 +6,7 @@
 //   cd4: a colocation supply ask reads the market brief and the construction pipeline, and leads with them.
 //   L2:  an AVOID caveat about the named metro follows the search areas; only a distance warning leads.
 import { describe, it, expect } from 'vitest';
-import { countryScopedPlan, marketCity } from '../lib/country-scope.mjs';
+import { countryScopedPlan, marketCity, unscopedFacilitySearch } from '../lib/country-scope.mjs';
 import { capacityFact } from '../lib/cross-domain-answer.mjs';
 import { noFutureDayDeep, noFutureDayText } from '../lib/no-future-day.mjs';
 import { coloSupplyLine } from '../lib/pipeline-status.mjs';
@@ -192,5 +192,40 @@ describe('cd1 read-time dates say "read on"', () => {
     expect(f.text).toContain('(DC Hub pipeline, read on 2026-11-27)');
     expect(f.as_of_basis).toMatch(/^read_time/);
     expect(asOfIsReadTime({ ...p, as_of: '2026-11-20T00:00:00', last_updated: null })).toBe(false);
+  });
+});
+
+describe('cd5 live check 11-28: a colocation ask about a tracked non-US market', () => {
+  const steps = async (q, ctx = {}) => (await _planQuery(q, ctx)).recommended_sequence.map((s) => [s.tool, s.args_hint || {}]);
+  it('searches the market city in its country, never the whole database', async () => {
+    for (const ctx of [{}, { market: 'frankfurt' }]) {
+      const seq = await steps('Which colocation providers operate in Frankfurt and how much capacity do they have?', ctx);
+      const sf = seq.filter(([t]) => t === 'search_facilities');
+      expect(sf.length).toBe(1);
+      expect(sf[0][1]).toMatchObject({ country: 'DE', city: 'Frankfurt' });
+      expect(seq.map(([t]) => t)).toContain('get_market_dcpi_rank');
+    }
+  });
+  it('keeps the kW size on the scoped search', async () => {
+    const sf = (await steps('colocation in Frankfurt for 500 kW')).find(([t]) => t === 'search_facilities');
+    expect(sf[1]).toMatchObject({ country: 'DE', city: 'Frankfurt', min_capacity_mw: 0.5 });
+  });
+  it('a US colocation metro is unchanged', async () => {
+    const sf = (await steps('Which colocation providers operate in Dallas?')).find(([t]) => t === 'search_facilities');
+    expect(sf[1]).toMatchObject({ query: 'Dallas', state: 'TX' });
+    expect(sf[1].country).toBeUndefined();
+  });
+  it('unscopedFacilitySearch names only a search with no place', () => {
+    expect(unscopedFacilitySearch({ tool: 'search_facilities', args_hint: { limit: 10, min_capacity_mw: 0.5 } })).toBe(true);
+    expect(unscopedFacilitySearch({ tool: 'search_facilities', args_hint: { state: 'TX', limit: 10 } })).toBe(false);
+    expect(unscopedFacilitySearch({ tool: 'get_facility', args_hint: {} })).toBe(false);
+  });
+});
+
+describe('cd5 live check 11-28: caller-typed markets', () => {
+  it('a caller-typed US market is not filled in or rescoped', async () => {
+    const p = await _planQuery('Which colocation providers operate in Dallas?', { market: 'dallas' });
+    expect(p.recommended_sequence.some((s) => s.args_hint && s.args_hint.country === 'DE')).toBe(false);
+    expect(p.recommended_sequence.find((s) => s.tool === 'search_facilities').args_hint).toMatchObject({ state: 'TX' });
   });
 });
