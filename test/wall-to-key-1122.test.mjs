@@ -273,7 +273,7 @@ describe('wall to key 3.3: the key handed back is masked, never raw (Grok 11-22 
 describe('wall to key 3.5: key tools on the light list', () => {
   const list = (h, p, ua) => rpc(h, p, { jsonrpc: '2.0', id: rid++, method: 'tools/list', params: {} }, { 'user-agent': ua });
   it('flag on: /mcp for a coding CLI and /mcp/light list get_api_key and recover_my_key; flag off: unchanged', async () => {
-    for (const [p, ua] of [['/mcp', 'opencode/1.0.0/cli'], ['/mcp', 'codex-mcp-client/0.40'], ['/mcp/light', 'cursor/1.0']]) {
+    for (const [p, ua] of [['/mcp', 'copilot-cli/1.0.34'], ['/mcp', 'codex-mcp-client/0.40'], ['/mcp/light', 'cursor/1.0']]) {
       setEnv({});
       const off = (await list(H, p, ua)).msg.result.tools.map((t) => t.name);
       setEnv({ DCHUB_WALL_TO_KEY_V1: '1', [W.SUB_FLAGS.LEAN_KEY_TOOLS]: '1' });

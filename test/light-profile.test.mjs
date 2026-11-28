@@ -161,7 +161,6 @@ describe('client-aware default: DCHUB_LIGHT_FOR_CLI (on unless set to 0)', () =>
   const CLI_UAS = [
     'copilot-cli/1.0.34',
     'codex-mcp-client/0.121.0',
-    'opencode/2.2.4/cli',
     'WorkBuddy/5.9.6',
     'Clono (+https://clono.sh)',
     'claude-code/2.0',
@@ -198,7 +197,7 @@ describe('client-aware default: DCHUB_LIGHT_FOR_CLI (on unless set to 0)', () =>
 
   it('clientInfo.name (and X-MCP-Client) is enough when the User-Agent is generic', async () => {
     delete process.env.DCHUB_LIGHT_FOR_CLI;
-    for (const name of ['claude-code', 'gemini-cli-mcp-client', 'gemini-cli', 'github-copilot-developer', 'codex-mcp-client', 'opencode', 'Clono']) {
+    for (const name of ['claude-code', 'gemini-cli-mcp-client', 'gemini-cli', 'github-copilot-developer', 'codex-mcp-client', 'Clono']) {
       const r = await post('/mcp', LIST, { 'user-agent': 'node', 'x-mcp-client': name });
       expect(r.json.result.tools.map((t) => t.name), name).toEqual(EXPECTED_TOOLS);
       expect(r.json.result.tools[0].name, name).toBe('execute_plan');
@@ -284,16 +283,15 @@ describe('directory crawlers get the full /mcp list; Copilot CLI gets the light 
 
 // ── Owner item D2 (2026-11-14): multi-server IDE hosts get the light list on bare /mcp ─────────────────────────────
 // The full /mcp tools/list measured 220,410 bytes live on 2026-11-14 for a Cursor identity (96 tools). An IDE agent
-// loads every connected server's list into one context and caps the total tool count, so Cursor, VS Code, Windsurf
-// and Cline now get the ten-tool light list, like the coding CLIs. Any caller can still ask for the full catalog.
+// loads every connected server's list into one context and caps the total tool count, so VS Code, Windsurf
+// and Cline now get (Cursor too until 2026-11-28, option A) the ten-tool light list, like the coding CLIs. Any caller can still ask for the full catalog.
 describe('multi-server IDE hosts: light list on /mcp, full catalog on request (D2)', () => {
   // PINNED: what a multi-server host may be handed on bare /mcp.
   const MULTI_SERVER_LIST_MAX_BYTES = 100_000;
   const HOSTS = [
-    { 'user-agent': 'node', 'x-mcp-client': 'cursor-vscode' },
+    { 'user-agent': 'node', 'x-mcp-client': 'windsurf-client' },
     { 'user-agent': 'Visual Studio Code/1.106.0' },
     { 'user-agent': 'node', 'x-mcp-client': 'Visual Studio Code - Insiders' },
-    { 'user-agent': 'node', 'x-mcp-client': 'windsurf-client' },
     { 'user-agent': 'node', 'x-mcp-client': 'Windsurf' },
     { 'user-agent': 'node', 'x-mcp-client': 'cline-vscode' },
     { 'user-agent': 'node', 'x-mcp-client': 'Cline' },
@@ -320,8 +318,8 @@ describe('multi-server IDE hosts: light list on /mcp, full catalog on request (D
     expect(Buffer.byteLength(r.raw)).toBeGreaterThan(MULTI_SERVER_LIST_MAX_BYTES);
   });
 
-  it('initialize from Cursor (clientInfo only, generic UA) says the list is light and where the full one is', async () => {
-    const r = await post('/mcp', { ...INIT, params: { ...INIT.params, clientInfo: { name: 'cursor-vscode', version: '1.0' } } },
+  it('initialize from Windsurf (clientInfo only, generic UA) says the list is light and where the full one is', async () => {
+    const r = await post('/mcp', { ...INIT, params: { ...INIT.params, clientInfo: { name: 'windsurf-client', version: '1.0' } } },
       { 'user-agent': 'node' });
     expect(r.status).toBe(200);
     const ins = r.json.result.instructions || '';
@@ -362,16 +360,53 @@ describe('multi-server IDE hosts: light list on /mcp, full catalog on request (D
   });
 
   it('lightForRequest: hosts by name or UA, the full-catalog ask wins, never throws', () => {
-    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'cursor-vscode', env: {} })).toBe(true);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'windsurf-client', env: {} })).toBe(true);
     expect(G.lightForRequest({ path: '/mcp', userAgent: 'Visual Studio Code/1.106.0', env: {} })).toBe(true);
-    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'cursor-vscode', fullCatalog: true, env: {} })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp', userAgent: 'node', clientName: 'windsurf-client', fullCatalog: true, env: {} })).toBe(false);
     expect(G.lightForRequest({ path: '/mcp', userAgent: 'copilot-cli/1.0.34', fullCatalog: true, env: {} })).toBe(false);
-    expect(G.lightForRequest({ path: '/mcp', clientName: 'cursor-vscode', env: { DCHUB_LIGHT_FOR_HOSTS: 'off' } })).toBe(false);
-    expect(G.lightForRequest({ path: '/mcp/core', clientName: 'cursor-vscode', env: {} })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp', clientName: 'windsurf-client', env: { DCHUB_LIGHT_FOR_HOSTS: 'off' } })).toBe(false);
+    expect(G.lightForRequest({ path: '/mcp/core', clientName: 'windsurf-client', env: {} })).toBe(false);
     expect(G.isLightHostIdentity({ clientName: 'cursorish' })).toBe(false);
     expect(G.wantsFullCatalog({ query: { catalog: 'FULL' } })).toBe(true);
     expect(G.wantsFullCatalog({ headers: { 'x-dchub-catalog': 'full' } })).toBe(true);
     expect(G.wantsFullCatalog({ query: { catalog: 'core' } })).toBe(false);
     expect(G.wantsFullCatalog(null)).toBe(false);
+  });
+});
+
+// Owner 2026-11-28 7:58 AM MST (Grok -> Brain Change 2, option A): Cursor (cursor, cursor-vscode) and opencode get the
+// full catalog on bare /mcp, exactly what an unmatched client gets. The named short-list clients keep the short list.
+// Acceptance, as the paste wrote it: same tool count and same first-tool order as the unmatched control.
+describe('Cursor and opencode: full catalog on /mcp, like an unmatched client (option A)', () => {
+  const MOZ = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
+  const names = async (h) => (await post('/mcp', LIST, h)).json.result.tools.map((t) => t.name);
+  it('cursor, cursor-vscode and opencode (name or UA) match the unmatched control, tool for tool and in order', async () => {
+    const control = await names({ 'user-agent': MOZ });
+    expect(control.length).toBeGreaterThan(80);
+    for (const h of [
+      { 'user-agent': MOZ, 'x-mcp-client': 'cursor' },
+      { 'user-agent': MOZ, 'x-mcp-client': 'cursor-vscode' },
+      { 'user-agent': 'node', 'x-mcp-client': 'cursor-vscode' },
+      { 'user-agent': 'opencode/0.15.3/cli' },
+      { 'user-agent': 'node', 'x-mcp-client': 'opencode' },
+      { 'user-agent': 'opencode/0.15.3/cli', 'x-mcp-client': 'opencode' },
+    ]) {
+      expect(await names(h), JSON.stringify(h)).toEqual(control);
+    }
+  });
+  it('CONTROL: copilot-cli still gets the short list; VS Code github-copilot still gets the full catalog', async () => {
+    const control = await names({ 'user-agent': MOZ });
+    expect(await names({ 'user-agent': 'copilot-cli/1.0.34' })).toEqual(EXPECTED_TOOLS);
+    expect(await names({ 'user-agent': 'node', 'x-mcp-client': 'github-copilot' })).toEqual(control);
+  });
+  it('lightForRequest is false for Cursor and opencode, true for the named short-list clients', () => {
+    for (const id of [{ clientName: 'cursor' }, { clientName: 'cursor-vscode' }, { clientName: 'opencode' },
+      { userAgent: 'opencode/0.15.3/cli' }]) {
+      expect(G.lightForRequest({ path: '/mcp', ...id, env: {} }), JSON.stringify(id)).toBe(false);
+    }
+    for (const id of [{ userAgent: 'copilot-cli/1.0.34' }, { clientName: 'codex-mcp-client' }, { clientName: 'gemini-cli-mcp-client' },
+      { clientName: 'google-adk' }, { clientName: 'perplexity-mcp' }, { clientName: 'mistral-mcp-client' }, { clientName: 'windsurf-client' }]) {
+      expect(G.lightForRequest({ path: '/mcp', ...id, env: {} }), JSON.stringify(id)).toBe(true);
+    }
   });
 });

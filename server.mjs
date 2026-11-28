@@ -5184,7 +5184,7 @@ const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GRO
 // on bare /mcp when DCHUB_LIGHT_FOR_CLI is on (the default since 2026-11-12; set 0 to turn off).
 const LIGHT_PACK = Object.freeze({ pack: LIGHT_PACK_NAME, spine: false, tools: LIGHT_TOOLS, light: true });
 const LIGHT_PACK_IMPLICIT = Object.freeze({ ...LIGHT_PACK, implicit: true });
-// F3 (DCHUB_CLI_STARTER, default OFF; lib/cli-starter.mjs): the six named coding clients get the implicit light list in the
+// F3 (DCHUB_CLI_STARTER, default OFF; lib/cli-starter.mjs): the named coding clients get the implicit light list in the
 // starter order (five starter tools first, get_fiber_intel added, nothing removed).
 const LIGHT_PACK_STARTER = Object.freeze({ ...LIGHT_PACK_IMPLICIT, tools: _cliStarterOrder(LIGHT_TOOLS), starter: true });
 // Item 8 (DCHUB_GENERIC_LIGHT_LIST, default OFF; lib/generic-light-list.mjs): the treatment arm for a client the light

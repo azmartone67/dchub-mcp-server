@@ -79,8 +79,8 @@ async function post(path, body, headers = {}) {
 // sends it: clientInfo.name with a generic UA, and Clono and Copilot CLI by User-Agent.
 const LIGHT_CLIENTS = [
   { name: 'github-copilot-developer' }, { name: 'copilot-cli' }, { name: 'codex-mcp-client' }, { name: 'codex-cli' },
-  { name: 'cursor-vscode' }, { name: 'cursor' }, { name: 'Visual Studio Code' }, { name: 'Visual Studio Code - Insiders' },
-  { name: 'claude-code' }, { name: 'clono' }, { name: 'Clono' }, { name: 'opencode' }, { name: 'workbuddy' },
+  { name: 'Visual Studio Code' }, { name: 'Visual Studio Code - Insiders' },
+  { name: 'claude-code' }, { name: 'clono' }, { name: 'Clono' }, { name: 'workbuddy' },
   { name: 'gemini-cli-mcp-client' }, { name: 'gemini-cli' }, { name: 'windsurf-client' }, { name: 'Windsurf' },
   { name: 'codeium' }, { name: 'cline-vscode' }, { name: 'Cline' },
   { name: 'mcp', ua: 'Clono (+https://clono.sh)' }, { name: 'mcp', ua: 'copilot-cli/1.0.34' },
@@ -153,7 +153,7 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
 
   it('the list is described once, with no count (owner 2026-11-22): "Tools: execute_plan, .... discover_tools lists the rest."', async () => {
     process.env[FLAG] = '1';
-    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
+    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'windsurf-client' }]) {
       const hs = await handshake(c);
       expect(hs.instructions, label(c)).toMatch(/discover_tools lists the rest\./);
       expect(hs.tools.length).toBe(10);
@@ -172,7 +172,7 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
 
   it('names no connector URL but https://dchub.cloud/mcp (no /mcp/core, /mcp/oauth, /mcp/connect, /mcp/light)', async () => {
     process.env[FLAG] = '1';
-    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
+    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'windsurf-client' }]) {
       const { instructions } = await handshake(c);
       expect(instructions).not.toMatch(/dchub\.cloud\/mcp\/(core|oauth|connect|light)/);
       for (const u of instructions.match(/https:\/\/dchub\.cloud\/mcp[^\s.,;)]*/g) || []) {
@@ -207,7 +207,7 @@ describe('A2: a light-list handshake names only tools in that client\'s list (fl
 
   it('CONTROL (flag off, today): the same check finds tools named but not listed, and one count', async () => {
     delete process.env[FLAG];
-    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'cursor-vscode' }]) {
+    for (const c of [{ name: 'github-copilot-developer' }, { name: 'codex-mcp-client' }, { name: 'windsurf-client' }]) {
       const hs = await handshake(c);
       // Capabilities messaging (2026-11-26): flag off, the same paragraph names the same unlisted tools.
       expect(paragraphNotListed(hs), label(c)).toEqual(PARAGRAPH_UNLISTED_ON_LIGHT);

@@ -90,7 +90,7 @@ const withFlag = async (v, fn) => {
 describe('DCHUB_LIGHT_ON_SOURCE_PATHS', () => {
   it('flag off (unset): cursor-vscode on /mcp/cursor keeps the full catalog, as today', async () => {
     await withFlag(undefined, async () => {
-      const { init, list } = await listAs('/mcp/cursor', 'cursor-vscode');
+      const { init, list } = await listAs('/mcp/cursor', 'windsurf-client');
       expect(init.status).toBe(200);
       expect(names(list).length).toBeGreaterThan(40);
     });
@@ -98,8 +98,8 @@ describe('DCHUB_LIGHT_ON_SOURCE_PATHS', () => {
 
   it('flag on: cursor-vscode on /mcp/cursor gets exactly the /mcp light list, under 30 KB', async () => {
     await withFlag('1', async () => {
-      const bare = await listAs('/mcp', 'cursor-vscode');
-      const path = await listAs('/mcp/cursor', 'cursor-vscode');
+      const bare = await listAs('/mcp', 'windsurf-client');
+      const path = await listAs('/mcp/cursor', 'windsurf-client');
       expect(path.init.status).toBe(200);
       expect(names(path.list)).toEqual(names(bare.list));
       // 11 live (2026-11-22); one is env-gated, so the local catalog may be one short. The contract is "same as /mcp".
@@ -122,7 +122,7 @@ describe('DCHUB_LIGHT_ON_SOURCE_PATHS', () => {
 
   it('flag on: ?catalog=full on /mcp/cursor still returns the full catalog', async () => {
     await withFlag('1', async () => {
-      const { list } = await listAs('/mcp/cursor?catalog=full', 'cursor-vscode');
+      const { list } = await listAs('/mcp/cursor?catalog=full', 'windsurf-client');
       expect(names(list).length).toBeGreaterThan(40);
     });
   });
@@ -133,7 +133,7 @@ describe('DCHUB_LIGHT_ON_SOURCE_PATHS', () => {
     await withFlag('1', async () => {
       const { list } = await listAs('/mcp/mistral', 'mistral-mcp-client');
       // names() sorts, so compare the whole set with what a known light client (cursor-vscode) is served there.
-      const { list: cursorList } = await listAs('/mcp/cursor', 'cursor-vscode');
+      const { list: cursorList } = await listAs('/mcp/cursor', 'windsurf-client');
       expect(names(list).length).toBeLessThan(15);
       expect(names(list)).toContain('execute_plan');
       expect(names(list)).toEqual(names(cursorList));

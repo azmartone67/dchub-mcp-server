@@ -80,7 +80,7 @@ async function post(r, body, headers = {}) {
   return { status: res.status, headers: res.headers, json };
 }
 
-async function initOn(r, name = 'cursor-vscode') {
+async function initOn(r, name = 'windsurf-client') {
   const init = await post(r, { jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name, version: '1' } } });
   expect(init.status).toBe(200);
@@ -100,7 +100,9 @@ async function listCount(r, sid, query = '') {
   return (JSON.parse(data)?.result?.tools || []).length;
 }
 
-describe('cursor-vscode: initialize on one replica, tools/list on the other', () => {
+// Owner 2026-11-28 (option A): Cursor left the light list, so the light-list cases below use windsurf-client, which still
+// names itself in clientInfo only. The last two cases pin that cursor-vscode now gets the full catalog on either replica.
+describe('a named light host (windsurf-client): initialize on one replica, tools/list on the other', () => {
   it('the two instances hold separate module state (else this proves nothing)', () => {
     expect(A.mod).not.toBe(B.mod);
   });
@@ -126,11 +128,19 @@ describe('cursor-vscode: initialize on one replica, tools/list on the other', ()
       expect(await listCount(B, await initOn(A))).toBeGreaterThan(40);
     } finally { delete process.env.DCHUB_SID_CLIENT_TAG; }
   });
-  it('the other replica attributes the call to cursor, not the generic "mcp"', async () => {
-    const sid = await initOn(A);
-    expect(B.mod._recallPlatform(sid)).toBeTruthy();
-    expect(B.mod._recallPlatform(sid)).not.toBe('mcp');
-    expect(B.mod._recallClientName(sid)).toBe('cursor-vscode');
+  it('the other replica attributes the call to the named client, not the generic "mcp"', async () => {
+    for (const name of ['windsurf-client', 'cursor-vscode']) {
+      const sid = await initOn(A, name);
+      expect(B.mod._recallPlatform(sid)).toBeTruthy();
+      expect(B.mod._recallPlatform(sid)).not.toBe('mcp');
+      expect(B.mod._recallClientName(sid)).toBe(name);
+    }
+  });
+  it('cursor-vscode and cursor get the full catalog on the same replica and on the other one (owner 2026-11-28, option A)', async () => {
+    for (const name of ['cursor-vscode', 'cursor']) {
+      expect(await listCount(A, await initOn(A, name)), name).toBeGreaterThan(40);
+      expect(await listCount(B, await initOn(A, name)), name).toBeGreaterThan(40);
+    }
   });
 });
 
