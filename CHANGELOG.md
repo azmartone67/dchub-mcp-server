@@ -10,6 +10,11 @@ detail. The hosted server changes when `main` deploys. The npm launcher changes 
 when a new version is published, so a version is cut only when tools, tool behaviour
 or the launcher change (see "How releases are cut" at the end).
 
+## 2.12.66 (2026-11-28)
+
+- `execute_plan`: a market-ranking answer shown as a preview now leads with one markdown table: market, DCPI verdict, composite, time to power, confidence, inputs modeled, geo precision and as_of. It is built only from what that caller's own steps returned. A field the ranking step held back reads `withheld`, and a field not in the answer or not measured reads `unavailable`. Neither is ever 0 (#1834, #1835, #1838).
+- Tool descriptions: `get_infrastructure` names the nearest substations (HIFLD and OpenStreetMap), gas segments and EIA plants (#1787). `get_infra_projects`, `get_fiber_readiness` and `get_gas_economics` describe their new coverage (#1788).
+
 ## 2.12.65 (2026-11-27)
 
 - New `get_site_context` tool: the neighborhood around a point (nearest substations, transmission, fiber, carriers and internet exchanges, flood, seismic and wildfire hazard, zoning and moratoriums, nearby data-center campuses), each block with its source and as_of date, or an explicit gap. This is context, not a score; `analyze_site` remains the 0-100 build verdict. For multi-step data center or energy questions, start with `execute_plan`. The hosted server at `https://dchub.cloud/mcp` already serves this tool.
