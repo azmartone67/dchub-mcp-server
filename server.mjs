@@ -78,6 +78,7 @@
 
 import { withHeldDcpiLinks as _withHeldDcpiLinks } from './lib/dcpi-hold-links.mjs';
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
+import * as _RTL from './lib/ranked-table-lead.mjs';   // Change 1 2026-11-28, kill DCHUB_RANKED_TABLE_LEAD=0
 import { unlistedToolError } from './lib/unlisted-tool.mjs';
 import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { takeRerunToken as _takeRerunToken, computeRerun as _computeRerun, applyRerun as _applyRerun } from './lib/plan-rerun.mjs';
@@ -6386,6 +6387,18 @@ export function _licenceBlockStep(result, name, c = getCtx()) {
     // planAskedTools, via _finishWallRow) reads it from here.
     if (Object.prototype.hasOwnProperty.call(sc, '_upgrade')) c._upgradeBeforeLicence = sc._upgrade;
     return _LB.withLicenceBlock(result, block);
+  } catch (_) { return result; }
+}
+// Change 1 (Grok -> Brain 2026-11-28): the ranked table first on a gated execute_plan ranking answer. The table was
+// built in the plan from this caller's own step payloads (c._rankedTableLead); a paid answer keeps ranked_answer.
+export function _rankedTableLeadStep(result, name, c = getCtx()) {
+  try {
+    if (name !== 'execute_plan' || !c || !c._rankedTableLead || c.loopback_step || _isCleanPlatform()) return result;
+    if (c.profile || !_gatedAnswer(result, name, c)) return result;
+    // A plan that built ranked_answer (a full rank step: a paid key) already leads with it; the table is for the rest.
+    const sc = result.structuredContent && typeof result.structuredContent === 'object' ? result.structuredContent : {};
+    if (sc.ranked_answer) return result;
+    return _RTL.withRankedTableLead(result, c._rankedTableLead);
   } catch (_) { return result; }
 }
 // item 2: the LAST rewrite of a gated answer.
@@ -29003,6 +29016,9 @@ function _sourceLineCb(name, fn) {
       // After every copy rewrite; existing items and structuredContent are untouched. The line carries no link, so the
       // held-DCPI link step below (which stays last) has nothing of its own to rewrite.
       _final = await _feedbackAskStep(_final, name, c);
+      // Grok -> Brain 2026-11-28 Change 1: a gated execute_plan ranking answer leads with its ranked table, ahead of
+      // the value-first lead, the withheld list and every link (lib/ranked-table-lead.mjs). After every copy rewrite.
+      _final = _rankedTableLeadStep(_final, name, c);
       _final = _withHeldDcpiLinks(_final);
       return _final;
     } finally {
@@ -36742,6 +36758,12 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
         ...(() => { const _ra = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
+        // Grok -> Brain 2026-11-28 Change 1 (lib/ranked-table-lead.mjs): the markdown ranked table that leads a gated
+        // ranking answer, from this caller's own step payloads. Held on the ctx (no new JSON field); placed first by
+        // _rankedTableLeadStep, the last rewrite. Same surfaces as ranked_answer.
+        ...(() => { try { const _c = getCtx(); if (_c) _c._rankedTableLead = (_isCleanPlatform() || !_answerBlocksAllowed() || !_RTL.rankedTableLeadOn()) ? null
+                      : ((_RTL.buildRankedTableLead(sc.intent_class, executed, (e) => (fullByEntry && fullByEntry.get && fullByEntry.get(e)) || e.result) || {}).markdown || null); } catch (_) { /* never fails a plan */ }
+                    return {}; })(),
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
         ...(_intentAnswer ? { intent_answer: _withNotListings(_withNotListings(_intentAnswer, _capNotListed), _priceGap ? _priceGap.reason : null) } : {}),
         // r-next-recipe (2026-07-26): the second call is where habit forms —

@@ -10,6 +10,7 @@
 //   3. Lead length (warned 12 of 12): content[0].text was the whole plan as JSON. It is now a plain-language answer
 //      of at most 600 characters; the JSON is content[1] and structuredContent (lib/plan-lead-text.mjs).
 // Each fix: a pure-function test, then the real /mcp handler on a stub backend (no network past loopback).
+import { TABLE_MARKER } from '../lib/ranked-table-lead.mjs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import net from 'node:net';
 import http from 'node:http';
@@ -236,11 +237,15 @@ describe('the real /mcp handler (keyless, stub backend)', () => {
 
   it.each(Object.keys(INTENTS))('%s, fix 3: content[0] is plain language of at most 600 characters; the JSON is content[1]', (k) => {
     const r = res[k];
-    const t = r.content[0].text;
+    // Grok -> Brain 2026-11-28 Change 1: a gated market_ranking answer leads with its ranked table
+    // (lib/ranked-table-lead.mjs); the plain-language lead and the JSON then follow it, under the same rules.
+    const off = r.content[0].text.includes(TABLE_MARKER) ? 1 : 0;
+    if (off) expect(r.structuredContent.intent_class).toBe('market_ranking');
+    const t = r.content[off].text;
     expect(t.length).toBeLessThanOrEqual(600);
     expect(isJson(t)).toBe(false);
     expect(t.trimStart()[0]).not.toBe('{');
-    const b1 = JSON.parse(r.content[1].text);
+    const b1 = JSON.parse(r.content[off + 1].text);
     expect(b1._entity).toBe('plan_execution');
     expect(b1.intent).toBe(r.structuredContent.intent);
   });
