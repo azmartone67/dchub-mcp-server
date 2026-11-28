@@ -90,9 +90,20 @@ describe('C: get_site_context is cited with the Phoenix day of its as_of', () =>
     // the answer carries the site data (not "did not answer"): a cite off the serve clock matches on the 25th only
     expect(o.available, JSON.stringify(o).slice(0, 400)).not.toBe(false);
     expect(JSON.stringify(o)).toContain('TEST SUB');
-    expect(o.cite_as).toBe('DC Hub (dchub.cloud), as of 2026-11-25');
+    // Grok fix-all 2026-11-27 item 8 (owner-approved): the execute_plan owner line, and completeness from the depth.
+    expect(o.cite_as).toBe('Source: DC Hub (dchub.cloud), as of 2026-11-25');
+    expect(o.cite_as).toMatch(CITE_RE);
     expect(o.citation.cite_as).toBe(o.cite_as);
     expect(o.provenance.cite_as).toBe(o.cite_as);
+    expect(['full', 'unrestricted']).toContain(o.provenance.completeness);
+    expect(o.citation.completeness).not.toBe('unknown');
+    const vis = r.msg.result.content.map((b) => b.text).join(' ');
+    expect(vis).toContain('Cite as: DC Hub (dchub.cloud), as of 2026-11-25.');
+  }, 120_000);
+  it('a keyless preview is cited with the same owner line', async () => {
+    const o = sc(await H.call('/mcp', 'get_site_context', { lat: 39.04, lon: -77.48 }, ANON));
+    if (o.available === false) return;
+    expect(o.cite_as).toMatch(CITE_RE);
   }, 120_000);
 });
 
