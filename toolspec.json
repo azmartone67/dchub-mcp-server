@@ -80,6 +80,7 @@
       "type": "object",
       "properties": {
         "geometry": {
+          "type": "object",
           "description": "GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {\"type\":\"Polygon\",\"coordinates\":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope. Omit to look up the hosted parcel containing lat/lon instead"
         },
         "lat": {
@@ -264,6 +265,10 @@
           "type": "string"
         },
         "candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "Array (or comma-separated string) of candidate_id values from get_refined_queue — each resolves to its FROZEN mint coordinates (zero transcription drift); expired/unknown are dropped and declared in candidate_contract."
         },
         "max_latency_us": {
@@ -316,6 +321,10 @@
           "type": "string"
         },
         "sites": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
           "description": "Alternative to locations: an array of {lat, lon} (or {lat, lng}) objects, 2-4 sites"
         },
         "capacity_mw": {
@@ -431,6 +440,7 @@
           "description": "The user's infrastructure question, passed through UNCHANGED. Examples: \"how soon can a 100 MW load get power in ERCOT\" · \"evaluate 100 MW power headroom for a GPU training cluster in PJM\" · \"interconnection queue and energy prices in MISO…"
         },
         "context": {
+          "type": "object",
           "description": "Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict."
         },
         "market": {
@@ -458,9 +468,11 @@
           "type": "number"
         },
         "max_steps": {
+          "type": "integer",
           "description": "Max plan steps to execute, 1-8 (default 6)"
         },
         "max_fanout": {
+          "type": "integer",
           "description": "Max per-finalist fan-out calls for one step, 1-3 (default 2)"
         },
         "compact": {
@@ -472,6 +484,7 @@
           "type": "string"
         },
         "cohort": {
+          "type": "string",
           "description": "Optional experiment tag for adoption/retention measurement, e.g. \"cohort.front_door\". Has NO effect on routing, planning, geography or results — it is recorded only."
         }
       },
@@ -1024,14 +1037,7 @@
       "properties": {
         "facility_id": {
           "description": "Facility id from a prior search_facilities/search result (numeric or string), e.g. equinix-dc1-ashburn",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "type": "string"
         },
         "slug": {
           "description": "Facility slug from a prior search result, e.g. digital-realty-digital-realty-iad38-ashburn-5754e62d",
@@ -1039,14 +1045,7 @@
         },
         "id": {
           "description": "Alias for facility_id — a facility id/slug from a prior search result",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "type": "string"
         },
         "name": {
           "description": "Facility name as a fallback lookup when no id/slug is known, e.g. \"QTS Ashburn\"",
@@ -2643,6 +2642,7 @@
           "description": "Natural-language description of what you are trying to find out, e.g. \"rank markets for a 200MW AI campus\" or \"how much power is available in ERCOT\""
         },
         "context": {
+          "type": "object",
           "description": "Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} — sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)"
         }
       },
@@ -2723,6 +2723,10 @@
           "description": "Region scope: \"global\", \"us\" (default), \"canada\", \"eu\", \"apac\", or \"americas\"",
           "type": "string"
         },
+        "iso": {
+          "description": "Optional grid filter, e.g. \"ERCOT\", \"PJM\", \"MISO\": only markets on that grid are ranked (a hard filter, applied before the limit). For where new load can get power, use criteria=\"ai_ready\"; best_overall ranks the most built-out markets",
+          "type": "string"
+        },
         "limit": {
           "description": "Number of markets to return, 1-50 (default 10)",
           "type": "integer",
@@ -2735,17 +2739,10 @@
         },
         "fields": {
           "description": "Return ONLY these row fields (array or comma string) — a token diet. The response envelope (citation, provenance, as_of, coverage, request_interpretation, the human relay line) is NEVER projected away; a projection narrows ROWS only.",
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {
-              "type": "string"
-            }
-          ]
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "projection": {
           "description": "Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).",
@@ -2789,6 +2786,10 @@
       "type": "object",
       "properties": {
         "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
           "description": "Array of candidate objects. PREFERRED: {candidate_id: \"cand_…\", <your metric fields>} using ids from get_refined_queue — frozen coordinates/capacity/fiber_km load from the mint (zero transcription drift), your enrichments (e.g."
         },
         "shortlist_name": {
@@ -2796,9 +2797,11 @@
           "type": "string"
         },
         "constraints": {
+          "type": "object",
           "description": "Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {\"risk_resilience\": {\"min\": 70}, \"estimated_ttp_months\": {\"max\": 34}}"
         },
         "objectives": {
+          "type": "object",
           "description": "Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {\"water_stress\": -0.6, \"fiber_km\": -0.4}. Omit with shortlist_name to reuse the shortlist's saved objectives; required with candidates"
         },
         "absolute": {
@@ -3029,7 +3032,8 @@
             "coverage_gap",
             "bug",
             "feature_request",
-            "other"
+            "other",
+            "agent_feedback"
           ],
           "description": "Finding class: wrong_number (a figure that is wrong), missing_data (a field or record that should be there), coverage_gap (a place or source DC Hub does not cover), bug (a tool errored or behaved wrongly), feature_request (something your…"
         },
@@ -3057,30 +3061,11 @@
         },
         "args": {
           "description": "The arguments you called the tool with",
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "type": "object"
         },
         "quoted_fields": {
           "description": "The exact fields/values you saw (object, list or string); hashed for dedupe",
-          "anyOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            },
-            {
-              "type": "array",
-              "items": {}
-            },
-            {
-              "type": "string"
-            }
-          ]
+          "type": "object"
         },
         "observed_at": {
           "description": "ISO-8601 time you observed it",
@@ -3124,14 +3109,7 @@
       "properties": {
         "slug": {
           "description": "The listing to register a deal for: its slug or id from source_capacity. Omit to register a standing requirement for upcoming listings instead",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "type": "string"
         },
         "name": {
           "description": "Your human's full name. Nothing is sent without it; use only what they gave you, never invent it. The provider sees it only if it accepts the introduction",
@@ -3342,9 +3320,11 @@
           "description": "Name of the shortlist, e.g. \"Q3-2026-1GW-targets\" — created if new. REQUIRED."
         },
         "site": {
+          "type": "object",
           "description": "Site object. MINIMAL form is enough: {site_ref, lat, lng, capacity_mw}. Richer is better — add any analyze_site metric fields (risk_resilience, fiber_connectivity, water score…) and those become what gets re-scored later."
         },
         "objectives": {
+          "type": "object",
           "description": "OPTIONAL {field: signedWeight} map (+maximize/-minimize) if this site was ranked under explicit objectives — stored so re-scoring reuses the same criteria. Omit it and DC Hub weights the site's own metric fields equally."
         },
         "notes": {
@@ -3602,6 +3582,7 @@
           "type": "number"
         },
         "notify": {
+          "type": "object",
           "description": "Delivery: {\"webhook\":\"https://...\"} and/or {\"email\":\"you@co.com\"} — at least one required"
         }
       },
@@ -3623,14 +3604,7 @@
       "properties": {
         "saved_site_id": {
           "description": "The saved_site_id returned by save_site or list_saved_sites (required)",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "type": "string"
         },
         "trigger_type": {
           "description": "What movement fires the alert: \"dcpi_change\" (default), \"capacity_change\", or \"new_facility_nearby\"",
@@ -3764,14 +3738,7 @@
       "properties": {
         "slug": {
           "description": "One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "type": "string"
         },
         "market": {
           "description": "Browse filter: market name as it appears on a listing, e.g. \"Dallas\"",
