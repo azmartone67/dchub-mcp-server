@@ -22,28 +22,40 @@ const CANVAS_ROWS = [
 const step = (tool, args, result, status = 'executed') => ({ tool, args, status, result });
 
 describe('buildRankedTableLead (pure)', () => {
-  it('rank_markets preview rows: verdict, composite, confidence, inputs modeled, metro, as_of; held TTP is unavailable, never 0', () => {
+  it('rank_markets preview rows: verdict, composite, confidence, inputs modeled, metro, as_of; held TTP reads withheld, never 0', () => {
     const t = buildRankedTableLead('market_ranking', [
       step('rank_markets', { criteria: 'ai_ready', iso: 'ERCOT' }, { results: RANK_ROWS }, 'gated_preview'),
       step('get_market_dcpi_rank', { market_slug: 'midland-tx' }, { verdict: 'BUILD', composite_score: 80.6, as_of: '2026-11-28' }),
     ]);
     expect(t && t.source).toBe('rank_markets');
     const midland = t.markdown.split('\n').find((l) => l.includes('midland-tx'));
-    expect(midland).toBe('| 1 | Midland–Odessa, TX (midland-tx) | BUILD | 80.6 | unavailable | medium (0.62) | 1 of 3 | metro | 2026-11-28 |');
+    expect(midland).toBe('| 1 | Midland–Odessa, TX (midland-tx) | BUILD | 80.6 | withheld | medium (0.62) | 1 of 3 | metro | 2026-11-28 |');
     const abilene = t.markdown.split('\n').find((l) => l.includes('abilene-tx'));
-    expect(abilene).toContain('| CAUTION | 44.1 | unavailable |');
+    expect(abilene).toContain('| CAUTION | 44.1 | withheld |');
     expect(t.markdown).not.toMatch(/\|\s*0\s*\|/);
     expect(t.markdown.startsWith('Source: DC Hub (dchub.cloud), as of 2026-11-28.')).toBe(true);
   });
-  it('canvas preview rows: a withheld composite takes the DCPI card the plan read, else unavailable', () => {
+  it('canvas preview rows: a composite the canvas withheld reads withheld, even when the plan read a DCPI card (Grok 14:46Z)', () => {
     const t = buildRankedTableLead('market_ranking', [
       step('site_selection_canvas', { region: 'TX', capacity_mw: 200 }, { shortlist: CANVAS_ROWS }),
       step('get_market_dcpi_rank', { market_slug: 'midland-tx' }, { verdict: 'BUILD', composite_score: 80.6, as_of: '2026-11-28' }),
     ]);
     expect(t.source).toBe('site_selection_canvas');
     const lines = t.markdown.split('\n');
+    expect(lines.find((l) => l.includes('midland-tx'))).toContain('| BUILD | withheld | withheld |');
+    expect(lines.find((l) => l.includes('el-paso'))).toContain('| BUILD | withheld | withheld |');
+    expect(t.markdown).not.toContain('80.6');
+  });
+  it('a canvas row that did not withhold composite still takes the DCPI card; no card and no field reads unavailable', () => {
+    const rows = [{ market: 'Midland–Odessa', slug: 'midland-tx', state: 'TX', verdict: 'BUILD' },
+      { market: 'The Woodlands', slug: 'the-woodlands', state: 'TX', verdict: 'CAUTION' }];
+    const t = buildRankedTableLead('market_ranking', [
+      step('site_selection_canvas', { region: 'TX' }, { shortlist: rows }),
+      step('get_market_dcpi_rank', { market_slug: 'midland-tx' }, { verdict: 'BUILD', composite_score: 80.6 }),
+    ]);
+    const lines = t.markdown.split('\n');
     expect(lines.find((l) => l.includes('midland-tx'))).toContain('| BUILD | 80.6 | unavailable |');
-    expect(lines.find((l) => l.includes('el-paso'))).toContain('| BUILD | unavailable | unavailable |');
+    expect(lines.find((l) => l.includes('the-woodlands'))).toContain('| CAUTION | unavailable | unavailable |');
   });
   it('as_of falls back to the DCPI card computed_at / provenance.as_of, never retrieved_at (live Texas canvas rows, 2026-11-28)', () => {
     const t = buildRankedTableLead('market_ranking', [
@@ -112,12 +124,15 @@ describe('execute_plan keyless ranking answer (real server)', () => {
     const r = await run('/mcp', 'brain-acc', UA);
     const first = r.content[0].text;
     expect(first).toContain(TABLE_MARKER);
-    expect(first).toMatch(/\| 1 \| Midland–Odessa, TX \(midland-tx\) \| BUILD \| 80\.6 \| unavailable \|/);
+    expect(first).toMatch(/\| 1 \| Midland–Odessa, TX \(midland-tx\) \| BUILD \| 80\.6 \| withheld \|/);
     expect(first).not.toMatch(/\/u\/|\/h\/|\/r\/a\//);
     expect(first).not.toMatch(/\|\s*0\s*\|/);
     // control: the gated answer still carries its withheld lead and link, after the table
     const rest = r.content.slice(1).map((x) => x.text || '').join('\n');
     expect(rest).toMatch(/Withheld here:|preview/i);
+    // the table and the withheld list agree: a column the table marks withheld is one the list names (Grok 14:46Z)
+    expect(first).toMatch(/\| withheld \|/);
+    expect(rest).toMatch(/Withheld here:[^\n]*time to power/);
     expect(r.structuredContent.ranked_answer).toBeUndefined();   // the owner's 11-23 rule is unchanged
   }, 60_000);
   it('kill switch: DCHUB_RANKED_TABLE_LEAD=0 leaves the answer as it was', async () => {
