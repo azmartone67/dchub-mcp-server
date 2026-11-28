@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { gradeAnswer, gradeRun, diffRuns, leadOf, figuresIn, CHECKS, PASS, RED, NA, BLIND } from '../lib/engine-grade.mjs';
 import { loadQuestions, summaryMarkdown, benchRequest, MAX_CALLS } from '../scripts/engine-bench.mjs';
+import { withheldLine } from '../lib/withheld-copy.mjs';
 
 const msg = (lead, sc = {}) => ({ result: {
   content: [{ type: 'text', text: `${lead} Source: DC Hub (dchub.cloud), as of 2026-08-31. Full answer: the JSON in the next content block.` }],
@@ -71,6 +72,19 @@ describe('engine-grade: each check can go RED', () => {
     const lead = 'Northern Virginia: 412 data centers in Ashburn (as of 2026-11-01). No price figure came back for PJM; retail electricity is 9.87 cents/kWh.';
     red(Q, msg(lead, { facts: GOOD_FACTS }), 'no_contradiction');
     red(Q, msg(lead.replace('No price figure came back for PJM', 'PJM: no figure'), { facts: GOOD_FACTS }), 'no_contradiction');
+  });
+  it('grounded: a withheld field label never manufactures a false figure (queue_id #950, demand_24h -> "demand 24h")', () => {
+    // live 2026-11-27 (c01-ashburn-500kw, anon): withheldFieldLabel's generic underscore-to-space fallback turned
+    // the field demand_24h into the noun "demand 24h", and the bare "24" in that noun was read as a lead figure
+    // needing a fact behind it — it never will, since it is not data, it is a field label. Real facts (the DCPI
+    // score) must still ground normally.
+    const lead = `DCPI 20/100; Verdict: AVOID (DC Hub, as of 2026-11-27).\n`
+      + withheldLine(['demand_24h', 'peak_mw', 'min_mw', 'load_factor']);
+    const facts = [{ tool: 'get_market_dcpi_rank', as_of: '2026-11-27', text: 'DCPI 20/100 verdict AVOID.', entity: 'Ashburn' }];
+    const q = { id: 'c01-ashburn-500kw', set: 'colocation', intent: 'Colocation options in Ashburn for 500 kW', sides: ['dc'] };
+    const r = gradeAnswer(q, msg(lead, { facts }));
+    expect(r.checks.grounded.evidence, JSON.stringify(r.checks.grounded)).not.toContain('24');
+    expect(r.checks.grounded.status, JSON.stringify(r.checks.grounded)).not.toBe(RED);
   });
   it('no_contradiction: "no figure" is fine when facts[] really has none for that place', () => {
     const lead = 'Northern Virginia: 412 data centers in Ashburn (as of 2026-11-01). No price figure came back for PJM; retail electricity is 9.87 cents/kWh.';
