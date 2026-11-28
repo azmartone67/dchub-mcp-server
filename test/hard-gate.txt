@@ -798,6 +798,7 @@ test/sessionless-freekey-wall-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/sid-client-tag-cursor-light-1125.test.mjs
 test/since-last-check.test.mjs
+test/site-context-cite-1127.test.mjs
 test/site-coverage-spec2-1123.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
