@@ -721,6 +721,7 @@ test/quota-meter-charged.test.mjs
 test/quota-meter-unbound-anon-frozen.test.mjs
 test/quota-one-statement-1120.test.mjs
 test/rank-defense-staging.test.mjs
+test/rank-iso-cutoff-1128.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-email-rows-ask.test.mjs
 test/rank-markets-every-criterion-asks.test.mjs
