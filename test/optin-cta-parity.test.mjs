@@ -11,10 +11,16 @@
 // and says so — which is what it does in CI, where the backend is not checked
 // out, so the exact strings are also pinned without the backend in
 // optin-ask-on-trial-wall.test.mjs. Run it locally when either side changes.
+//
+// A backend copy that is only an old main (no edits or branch commits of its own
+// to mcp_gatekeeper.py) is read at its origin/main instead of its working file:
+// ~/code/dchub-backend sat a month behind and made this fail for every mcp
+// worktree under ~/code with "2 failures, also on main" that main did not have.
+// A copy that changes the gatekeeper on purpose is still read as it is on disk.
 import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _optinCtaCard, OPTIN_CTA_TOOLS, optinCtaEnabled } from '../server.mjs';
@@ -22,6 +28,23 @@ import { _optinCtaCard, OPTIN_CTA_TOOLS, optinCtaEnabled } from '../server.mjs';
 const here = fileURLToPath(new URL('..', import.meta.url));
 const GK = [process.env.DCHUB_BACKEND_DIR, resolve(here, '../dchub-backend'), join(homedir(), 'dchub-backend')]
   .filter(Boolean).map((d) => join(d, 'mcp_gatekeeper.py')).find((p) => existsSync(p));
+
+// The gatekeeper source to compare against, and a label saying which it is.
+function gatekeeperSource(gkPath) {
+  const dir = resolve(gkPath, '..');
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const differs = (ref) => { try { git('diff', '--quiet', ref, '--', 'mcp_gatekeeper.py'); return false; } catch { return true; } };
+  try {
+    const base = git('merge-base', 'HEAD', 'origin/main').trim();
+    if (!differs('HEAD') && !differs(base) && differs('origin/main')) {
+      const file = join(mkdtempSync(join(tmpdir(), 'optin-parity-')), 'mcp_gatekeeper.py');
+      writeFileSync(file, git('show', 'origin/main:mcp_gatekeeper.py'));
+      return { file, label: `${gkPath} at origin/main (checkout is behind)` };
+    }
+  } catch { /* not a git checkout, or no origin/main: use the file as it is */ }
+  return { file: gkPath, label: gkPath };
+}
+const SRC = GK ? gatekeeperSource(GK) : null;
 
 const PY = String.raw`
 import ast, json, os, sys
@@ -50,8 +73,8 @@ out["identified"] = ns["_optin_cta_block"]("get_grid_intelligence", ns["Tier"].I
 print(json.dumps(out, ensure_ascii=False))
 `;
 
-describe.skipIf(!GK)(`optin_cta parity with ${GK || 'mcp_gatekeeper.py (not on disk — skipped)'}`, () => {
-  const py = GK ? JSON.parse(execFileSync('python3', ['-c', PY, GK], { encoding: 'utf8' })) : null;
+describe.skipIf(!GK)(`optin_cta parity with ${SRC ? SRC.label : 'mcp_gatekeeper.py (not on disk — skipped)'}`, () => {
+  const py = GK ? JSON.parse(execFileSync('python3', ['-c', PY, SRC.file], { encoding: 'utf8' })) : null;
 
   it('same tool set', () => {
     expect([...OPTIN_CTA_TOOLS].sort()).toEqual(py.tools);
