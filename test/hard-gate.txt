@@ -707,6 +707,7 @@ test/qa-p3-cleanups-1123.test.mjs
 test/qa-probe-markers.test.mjs
 test/qa-sweep-1114-fixes.test.mjs
 test/queue-collected-date.test.mjs
+test/queue-line-file-dates-1127.test.mjs
 test/queue-project-mode-1125.test.mjs
 test/queue-project-mode-off-1125.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
