@@ -23505,7 +23505,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_refined_queue', when: 'You want individual queue projects at your size, not each finalist grid\'s queue depth.',
         rejected_because: 'The question asked where capacity is and what the grid looks like there, not for queue projects.' },
     ],
-    coverage_notes: 'site_selection_canvas ranks every caller; its time-to-power figures, and so the max_months cut, need full access (below it the shortlist says the cut was not applied). get_interconnection_queue gives queued generation GW with the ISO report date to every caller. get_grid_intelligence headroom figures (average time to power, build rate, constraint band, reserves) need full access. source_capacity lists what Capacity Source holds.',
+    coverage_notes: 'site_selection_canvas ranks every caller and applies the max_months cut for every caller (a keyless shortlist names the markets that meet the deadline with their figures withheld); the markets the cut removed, fastest first, need full access. get_interconnection_queue gives queued generation GW with the ISO report date to every caller. get_grid_intelligence headroom figures (average time to power, build rate, constraint band, reserves) need full access. source_capacity lists what Capacity Source holds.',
   },
   {
     // 5.40 (Grok energy + cross-domain round 2, 2026-11-17 night): a data-center question about ONE place's power
