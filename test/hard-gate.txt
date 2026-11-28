@@ -78,6 +78,7 @@ test/canon-heal-gates-on-the-marker.test.mjs
 test/canon-pack-price.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
 test/canvas-constraint-coverage-headroom-tier-1127.test.mjs
+test/canvas-coverage-notes-deadline-1128.test.mjs
 test/canvas-echoes-callers-own-inputs.test.mjs
 test/canvas-finalist-isos-1127.test.mjs
 test/canvas-teaser-no-plan-1117.test.mjs
@@ -271,6 +272,7 @@ test/execute-plan-invariants.test.mjs
 test/execute-plan-nevada-geo.test.mjs
 test/execute-plan-planned-tools-allowed-1123.test.mjs
 test/execute-plan-price-not-used-1125.test.mjs
+test/execute-plan-quality-1127.test.mjs
 test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-lead-header-entity-date-1125.test.mjs
@@ -285,6 +287,7 @@ test/fetch-as-of.test.mjs
 test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fiber-email-ask.test.mjs
+test/fiber-ownership-checked-1127.test.mjs
 test/fiber-routing-1124.test.mjs
 test/fiber-routing-e2e-1124.test.mjs
 test/fields-projection.test.mjs
@@ -325,6 +328,7 @@ test/gated-tool-cta.test.mjs
 test/gated-unlock-is-tokenized.test.mjs
 test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
+test/gdl-colo-depth-1127.test.mjs
 test/gdl-lib-text-1125.test.mjs
 test/gdl-permitting-sources-1125.test.mjs
 test/gdl-plan-cite-1125.test.mjs
@@ -601,6 +605,7 @@ test/paywall-extras-attribution.test.mjs
 test/paywall-output-no-monthly-price.test.mjs
 test/pc-arm-tag-visible-link.test.mjs
 test/peeringdb-licence-g4.test.mjs
+test/permitting-in-effect-1127.test.mjs
 test/permitting-legislation-class.test.mjs
 test/permitting-named-campus-1119.test.mjs
 test/permitting-named-campus-e2e-1119.test.mjs
@@ -707,6 +712,7 @@ test/qa-p3-cleanups-1123.test.mjs
 test/qa-probe-markers.test.mjs
 test/qa-sweep-1114-fixes.test.mjs
 test/queue-collected-date.test.mjs
+test/queue-line-file-dates-1127.test.mjs
 test/queue-project-mode-1125.test.mjs
 test/queue-project-mode-off-1125.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
@@ -797,6 +803,7 @@ test/sessionless-freekey-wall-ask.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/sid-client-tag-cursor-light-1125.test.mjs
 test/since-last-check.test.mjs
+test/site-context-cite-1127.test.mjs
 test/site-coverage-spec2-1123.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
